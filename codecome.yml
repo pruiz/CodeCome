@@ -1,0 +1,151 @@
+project:
+  name: "codecome-target"
+  source_path: "./src"
+  profile: "auto"
+  languages:
+    - "auto"
+
+target:
+  description: "Source code to be audited by CodeCome."
+  assumptions:
+    - "The agent must infer the target type during reconnaissance."
+    - "The source may be a web app, service, CLI tool, library, benchmark corpus, infrastructure repository, firmware tree, or mixed project."
+    - "Target-specific logic must live in skills, notes, or adapters, not in the core workflow."
+
+audit:
+  mode: "sequential"
+
+  phases:
+    - reconnaissance
+    - hypothesis_generation
+    - counter_analysis
+    - validation
+    - reporting
+
+  scope:
+    include:
+      - "src/**"
+    exclude:
+      - "src/**/.git/**"
+      - "src/**/.svn/**"
+      - "src/**/.hg/**"
+      - "src/**/node_modules/**"
+      - "src/**/vendor/**"
+      - "src/**/packages/**"
+      - "src/**/bin/**"
+      - "src/**/obj/**"
+      - "src/**/target/**"
+      - "src/**/build/**"
+      - "src/**/dist/**"
+      - "src/**/.next/**"
+      - "src/**/.gradle/**"
+      - "src/**/.idea/**"
+      - "src/**/.vscode/**"
+
+  focus:
+    - "Authentication and authorization flaws"
+    - "Injection vulnerabilities"
+    - "Memory safety issues"
+    - "Path traversal"
+    - "Unsafe deserialization"
+    - "Cryptographic misuse"
+    - "Secrets exposure"
+    - "Business logic vulnerabilities"
+    - "Supply chain risks"
+    - "Insecure configuration"
+    - "Improper input validation"
+    - "Server-side request forgery"
+    - "File upload vulnerabilities"
+    - "Race conditions"
+    - "Privilege escalation"
+
+sandboxironment:
+  type: "sandbox"
+  path: "./sandbox"
+  startup_command: "./sandbox/scripts/up.sh"
+  shell_command: "./sandbox/scripts/shell.sh"
+  reset_command: "./sandbox/scripts/reset.sh"
+  logs_command: "./sandbox/scripts/logs.sh"
+  clean_command: "./sandbox/scripts/clean.sh"
+
+validation:
+  worker_count: 1
+  allow_destructive_actions_inside_sandbox: true
+  allow_source_modification: false
+
+  allowed_write_paths:
+    - "./itemdb"
+    - "./runs"
+    - "./sandbox"
+    - "./tmp"
+    - "./tools"
+
+  methods:
+    - "static_proof"
+    - "unit_test"
+    - "integration_test"
+    - "runtime_reproduction"
+    - "sanitizer_detection"
+    - "crash_reproduction"
+    - "http_exploit"
+    - "cli_exploit"
+    - "file_based_trigger"
+    - "config_based_trigger"
+    - "symbolic_or_manual_trace"
+    - "benchmark_oracle_comparison"
+
+  confirmation_policy:
+    - "A finding may only be marked CONFIRMED when clear evidence exists."
+    - "Benchmark labels alone are not enough to mark a finding CONFIRMED."
+    - "If runtime validation is not practical, a strong static proof may be acceptable, but the limitation must be documented."
+    - "If assumptions cannot be validated, keep the finding in NEEDS_VALIDATION or move it to REJECTED."
+
+reporting:
+  format: "markdown"
+  findings_dir: "./itemdb/findings"
+  evidence_dir: "./itemdb/evidence"
+  reports_dir: "./itemdb/reports"
+  default_status: "NEEDS_VALIDATION"
+
+finding:
+  id_prefix: "CC"
+  template: "./templates/finding.md"
+
+  statuses:
+    - "NEEDS_VALIDATION"
+    - "CONFIRMED"
+    - "REJECTED"
+    - "DUPLICATE"
+
+  severities:
+    - "CRITICAL"
+    - "HIGH"
+    - "MEDIUM"
+    - "LOW"
+    - "INFO"
+
+  confidences:
+    - "LOW"
+    - "MEDIUM"
+    - "HIGH"
+    - "CONFIRMED"
+
+skills:
+  directory: "./.opencode/skills"
+  selection_policy:
+    - "Use generic skills by default."
+    - "Use target-specific skills only when the target profile, language, or framework matches."
+    - "Do not hardcode the workflow around a single target type."
+
+agents:
+  directory: "./.opencode/agents"
+  default_mode: "single_agent_sequential"
+
+future:
+  parallel_validation:
+    enabled: false
+    intended_model:
+      - "One validation worker per finding."
+      - "Each worker must have isolated runtime state."
+      - "Each worker writes only to its finding evidence directory and run directory."
+      - "Docker Compose project names or disposable VMs may be used for isolation."

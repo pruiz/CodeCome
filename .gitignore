@@ -216,3 +216,31 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+tmp/*
+!tmp/.gitkeep
+
+# CodeCome runtime artifacts
+itemdb/notes/*
+!itemdb/notes/.gitkeep
+
+itemdb/evidence/*
+!itemdb/evidence/.gitkeep
+
+itemdb/reports/*
+!itemdb/reports/.gitkeep
+
+itemdb/findings/NEEDS_VALIDATION/*
+!itemdb/findings/NEEDS_VALIDATION/.gitkeep
+
+itemdb/findings/CONFIRMED/*
+!itemdb/findings/CONFIRMED/.gitkeep
+
+itemdb/findings/REJECTED/*
+!itemdb/findings/REJECTED/.gitkeep
+
+itemdb/findings/DUPLICATE/*
+!itemdb/findings/DUPLICATE/.gitkeep
+
+runs/*
+!runs/.gitkeep

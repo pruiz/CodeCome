@@ -1,0 +1,14 @@
+services:
+  codecome-sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workspace
+    volumes:
+      - ../:/workspace
+    tty: true
+    stdin_open: true
+    security_opt:
+      - seccomp:unconfined
+    cap_add:
+      - SYS_PTRACE
