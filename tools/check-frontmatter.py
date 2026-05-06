@@ -30,6 +30,7 @@ FINDINGS_ROOT = ROOT / "itemdb" / "findings"
 STATUSES = {
     "NEEDS_VALIDATION",
     "CONFIRMED",
+    "EXPLOITED",
     "REJECTED",
     "DUPLICATE",
 }
@@ -130,8 +131,8 @@ def validate_finding(path: Path) -> List[str]:
     if confidence not in CONFIDENCES:
         errors.append(f"invalid confidence: {confidence!r}")
 
-    if confidence == "CONFIRMED" and status != "CONFIRMED":
-        errors.append("confidence CONFIRMED requires status CONFIRMED")
+    if confidence == "CONFIRMED" and status not in ("CONFIRMED", "EXPLOITED"):
+        errors.append("confidence CONFIRMED requires status CONFIRMED or EXPLOITED")
 
     validation = data.get("validation")
     if not isinstance(validation, dict):
@@ -144,6 +145,22 @@ def validate_finding(path: Path) -> List[str]:
     for list_field in ["cwe", "files", "symbols", "entry_points", "sources", "sinks", "assets_at_risk"]:
         if list_field in data and not isinstance(data[list_field], list):
             errors.append(f"{list_field} must be a list")
+
+    exploitation = data.get("exploitation")
+    if isinstance(exploitation, dict):
+        exploitation_status = exploitation.get("status")
+        valid_exploitation_statuses = {"NOT_STARTED", "IN_PROGRESS", "DEMONSTRATED", "NOT_FEASIBLE"}
+        if exploitation_status and exploitation_status not in valid_exploitation_statuses:
+            errors.append(f"invalid exploitation.status: {exploitation_status!r}")
+
+        if status == "EXPLOITED":
+            if exploitation_status != "DEMONSTRATED":
+                errors.append("EXPLOITED status requires exploitation.status DEMONSTRATED")
+            if not exploitation.get("impact_demonstrated"):
+                errors.append("EXPLOITED status requires exploitation.impact_demonstrated")
+
+    elif status == "EXPLOITED":
+        errors.append("EXPLOITED status requires exploitation block")
 
     return errors
 

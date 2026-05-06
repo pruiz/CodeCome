@@ -17,7 +17,8 @@ The workflow is intentionally simple in the initial PoC:
     Phase 2: Vulnerability hypothesis generation
     Phase 3: Counter-analysis and deduplication
     Phase 4: Finding validation
-    Phase 5: Reporting
+    Phase 5: Exploit development
+    Phase 6: Reporting
 
 ## Phase 1: Target reconnaissance
 
@@ -148,7 +149,43 @@ Possible outcomes:
 - move finding to `REJECTED`,
 - keep finding in `NEEDS_VALIDATION` with unresolved validation notes.
 
-## Phase 5: Reporting
+## Phase 5: Exploit development
+
+Goal:
+
+    Demonstrate real-world impact of confirmed vulnerabilities.
+
+Run:
+
+    make phase-5 FINDING=CC-0001
+
+Or manually:
+
+    opencode run --agent exploiter "$(sed 's#FINDING_PATH_OR_ID#CC-0001#g' prompts/phase-5-exploit.md)"
+
+Expected outputs:
+
+    itemdb/evidence/CC-0001/exploits/
+    itemdb/evidence/CC-0001/exploits/README.md
+    itemdb/evidence/CC-0001/exploits/exploit.py
+
+Useful exploitation artifacts:
+
+    exploit.py
+    exploit.sh
+    payload.bin
+    malicious-input.txt
+    captured-output.txt
+    impact-log.txt
+
+Possible outcomes:
+
+- move finding to `EXPLOITED` (with demonstrated impact),
+- keep finding in `CONFIRMED` (exploitation not feasible).
+
+The exploiter may adjust severity based on demonstrated impact.
+
+## Phase 6: Reporting
 
 Goal:
 
@@ -156,7 +193,11 @@ Goal:
 
 Run with an agent:
 
-    opencode run "$(cat prompts/phase-5-report.md)"
+    make phase-6
+
+Or manually:
+
+    opencode run --agent reporter "$(cat prompts/phase-6-report.md)"
 
 Or generate a basic local report:
 
@@ -208,6 +249,7 @@ Open sandbox shell:
 
     NEEDS_VALIDATION
         ├── CONFIRMED
+        │       └── EXPLOITED
         ├── REJECTED
         └── DUPLICATE
 
@@ -221,7 +263,8 @@ Recommended human review points:
 2. After Phase 2, review candidate findings.
 3. After Phase 3, review rejected and duplicate decisions.
 4. After Phase 4, review evidence before trusting confirmed findings.
-5. Before sharing Phase 5 reports, review language and limitations.
+5. After Phase 5, review exploit PoCs and severity adjustments.
+6. Before sharing Phase 6 reports, review language and limitations.
 
 ## Validation worker model
 

@@ -15,6 +15,7 @@ The initial PoC intentionally uses plain Markdown files instead of a database.
     ├── findings/
     │   ├── NEEDS_VALIDATION/
     │   ├── CONFIRMED/
+    │   ├── EXPLOITED/
     │   ├── REJECTED/
     │   └── DUPLICATE/
     ├── evidence/
@@ -66,6 +67,12 @@ Candidate findings that appear plausible but still require validation.
 
 Findings that have been validated with clear evidence.
 
+### `EXPLOITED/`
+
+Confirmed findings with a demonstrated proof-of-concept exploit showing real-world impact.
+
+Exploitation artifacts are stored under `itemdb/evidence/<finding-id>/exploits/`.
+
 ### `REJECTED/`
 
 Findings that were disproven, are not security-relevant, are unreachable, lack attacker control, or are otherwise not actionable.
@@ -91,7 +98,12 @@ Example:
     ├── sanitizer.log
     ├── request.http
     ├── response.txt
-    └── exploit.py
+    ├── exploit.py
+    └── exploits/
+        ├── README.md
+        ├── exploit.py
+        ├── payload.bin
+        └── captured-output.txt
 
 Evidence should be enough for a human reviewer to understand how the finding was confirmed or rejected.
 

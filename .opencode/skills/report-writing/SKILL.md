@@ -101,6 +101,8 @@ Use this structure for `itemdb/reports/report.md`:
 
     # Findings summary
 
+    # Exploited findings
+
     # Confirmed findings
 
     # Findings needing validation
@@ -278,6 +280,7 @@ Include:
 
 Before finishing a report:
 
+- exploited findings (with demonstrated impact) are highlighted first,
 - confirmed findings are summarized,
 - open findings are clearly marked as not confirmed,
 - rejected findings are not presented as vulnerabilities,

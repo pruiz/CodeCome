@@ -32,6 +32,7 @@ NOTES_ROOT = ROOT / "itemdb" / "notes"
 DEFAULT_OUTPUT = ROOT / "itemdb" / "reports" / "report.md"
 
 STATUSES = [
+    "EXPLOITED",
     "CONFIRMED",
     "NEEDS_VALIDATION",
     "REJECTED",
@@ -141,6 +142,7 @@ def table_for(rows: List[Dict[str, str]]) -> List[str]:
 
 
 def render_report(rows: List[Dict[str, str]]) -> str:
+    exploited = [row for row in rows if row["status"] == "EXPLOITED"]
     confirmed = [row for row in rows if row["status"] == "CONFIRMED"]
     needs_validation = [row for row in rows if row["status"] == "NEEDS_VALIDATION"]
     rejected = [row for row in rows if row["status"] == "REJECTED"]
@@ -157,17 +159,19 @@ def render_report(rows: List[Dict[str, str]]) -> str:
     lines.append("")
     lines.append(
         f"This report summarizes the current CodeCome workspace state. "
-        f"It includes {len(confirmed)} confirmed finding(s), "
+        f"It includes {len(exploited)} exploited finding(s), "
+        f"{len(confirmed)} confirmed finding(s), "
         f"{len(needs_validation)} finding(s) needing validation, "
         f"{len(rejected)} rejected finding(s), and "
         f"{len(duplicate)} duplicate finding(s)."
     )
     lines.append("")
 
-    if confirmed:
+    all_proven = exploited + confirmed
+    if all_proven:
         severity_rank = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
-        highest = min(confirmed, key=lambda r: severity_rank.get(r["severity"], 99))["severity"]
-        lines.append(f"Highest confirmed severity currently listed: **{highest}**.")
+        highest = min(all_proven, key=lambda r: severity_rank.get(r["severity"], 99))["severity"]
+        lines.append(f"Highest proven severity currently listed: **{highest}**.")
     else:
         lines.append("No findings are currently marked as confirmed.")
     lines.append("")
@@ -193,7 +197,8 @@ def render_report(rows: List[Dict[str, str]]) -> str:
     lines.append("2. Vulnerability hypothesis generation.")
     lines.append("3. Counter-analysis and deduplication.")
     lines.append("4. Sandboxed validation.")
-    lines.append("5. Markdown reporting.")
+    lines.append("5. Exploit development and impact demonstration.")
+    lines.append("6. Markdown reporting.")
     lines.append("")
     lines.append("This report is generated from files under `itemdb/`.")
     lines.append("")
@@ -208,6 +213,11 @@ def render_report(rows: List[Dict[str, str]]) -> str:
     lines.append("# Findings summary")
     lines.append("")
     lines.extend(table_for(rows))
+    lines.append("")
+
+    lines.append("# Exploited findings")
+    lines.append("")
+    lines.extend(table_for(exploited))
     lines.append("")
 
     lines.append("# Confirmed findings")
@@ -232,10 +242,11 @@ def render_report(rows: List[Dict[str, str]]) -> str:
 
     lines.append("# Evidence summary")
     lines.append("")
-    if confirmed:
-        for row in confirmed:
+    if exploited or confirmed:
+        for row in exploited + confirmed:
             evidence = row["evidence"] or "No evidence directory listed."
-            lines.append(f"- `{row['id']}`: `{evidence}`")
+            status_label = f" ({row['status']})" if row["status"] == "EXPLOITED" else ""
+            lines.append(f"- `{row['id']}`{status_label}: `{evidence}`")
     else:
         lines.append("No confirmed evidence is currently available.")
     lines.append("")

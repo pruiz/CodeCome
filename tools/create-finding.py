@@ -135,6 +135,13 @@ def create_finding(args: argparse.Namespace) -> Path:
         f"itemdb/evidence/{finding_id}",
     )
 
+    # Update exploitation artifacts_dir.
+    content = content.replace(
+        "itemdb/evidence/CC-0000/exploits",
+        f"itemdb/evidence/{finding_id}/exploits",
+        1,
+    )
+
     content = content.replace(
         "Briefly describe the suspected vulnerability.",
         "Pending.",

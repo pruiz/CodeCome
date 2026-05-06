@@ -1,5 +1,5 @@
 .PHONY: help check status next-id frontmatter index report
-.PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 validate-all
+.PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all
 .PHONY: sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-build-target sandbox-test-target
 
 help:
@@ -13,8 +13,10 @@ help:
 	@echo "    make phase-2                  Run hypothesis generation"
 	@echo "    make phase-3                  Run counter-analysis"
 	@echo "    make phase-4 FINDING=CC-0001  Validate one finding"
-	@echo "    make phase-5                  Generate report"
+	@echo "    make phase-5 FINDING=CC-0001  Develop exploit for one finding"
+	@echo "    make phase-6                  Generate report"
 	@echo "    make validate-all             Validate all NEEDS_VALIDATION findings"
+	@echo "    make exploit-all              Exploit all CONFIRMED findings"
 	@echo ""
 	@echo "  Workspace tools:"
 	@echo ""
@@ -57,8 +59,13 @@ phase-4:
 	opencode run --agent validator "$$(sed 's#FINDING_PATH_OR_ID#$(FINDING)#g' prompts/phase-4-validate.md)"
 
 phase-5:
-	@./tools/gate-check.py 5
-	opencode run --agent reporter "$$(cat prompts/phase-5-report.md)"
+	@test -n "$(FINDING)" || (echo "Usage: make phase-5 FINDING=CC-0001" && exit 1)
+	@./tools/gate-check.py 5 $(FINDING)
+	opencode run --agent exploiter "$$(sed 's#FINDING_PATH_OR_ID#$(FINDING)#g' prompts/phase-5-exploit.md)"
+
+phase-6:
+	@./tools/gate-check.py 6
+	opencode run --agent reporter "$$(cat prompts/phase-6-report.md)"
 
 validate-all:
 	@ids=$$(./tools/list-findings.py --status NEEDS_VALIDATION --format ids 2>/dev/null); \
@@ -71,6 +78,19 @@ validate-all:
 		echo "Validating $$f..."; \
 		echo ""; \
 		$(MAKE) phase-4 FINDING=$$f; \
+	done
+
+exploit-all:
+	@ids=$$(./tools/list-findings.py --status CONFIRMED --format ids 2>/dev/null); \
+	if [ -z "$$ids" ]; then \
+		echo "No CONFIRMED findings to exploit."; \
+		exit 0; \
+	fi; \
+	for f in $$ids; do \
+		echo ""; \
+		echo "Developing exploit for $$f..."; \
+		echo ""; \
+		$(MAKE) phase-5 FINDING=$$f; \
 	done
 
 # ---------------------------------------------------------------------------

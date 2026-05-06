@@ -32,6 +32,7 @@ INDEX_PATH = ROOT / "itemdb" / "index.md"
 STATUSES = [
     "NEEDS_VALIDATION",
     "CONFIRMED",
+    "EXPLOITED",
     "REJECTED",
     "DUPLICATE",
 ]

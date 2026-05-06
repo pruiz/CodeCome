@@ -28,6 +28,7 @@ FINDINGS_ROOT = ROOT / "itemdb" / "findings"
 STATUSES = {
     "NEEDS_VALIDATION",
     "CONFIRMED",
+    "EXPLOITED",
     "REJECTED",
     "DUPLICATE",
 }
@@ -101,7 +102,7 @@ def update_frontmatter(content: str, status: str, validation_status: Optional[st
     content = replace_scalar_frontmatter(content, "status", status)
     content = replace_scalar_frontmatter(content, "updated_at", today)
 
-    if status == "CONFIRMED":
+    if status in ("CONFIRMED", "EXPLOITED"):
         content = replace_scalar_frontmatter(content, "confidence", "CONFIRMED")
 
     if validation_status:
@@ -118,6 +119,8 @@ def move_finding(path: Path, status: str) -> Path:
 
     validation_status = None
     if status == "CONFIRMED":
+        validation_status = "CONFIRMED"
+    elif status == "EXPLOITED":
         validation_status = "CONFIRMED"
     elif status == "REJECTED":
         validation_status = "REJECTED"

@@ -19,6 +19,7 @@ Important security claims must be written to files under `itemdb/`, not left onl
 - `itemdb/notes/`: reconnaissance notes and target model.
 - `itemdb/findings/NEEDS_VALIDATION/`: candidate findings requiring validation.
 - `itemdb/findings/CONFIRMED/`: validated findings with evidence.
+- `itemdb/findings/EXPLOITED/`: confirmed findings with demonstrated real-world impact.
 - `itemdb/findings/REJECTED/`: disproven or non-actionable findings.
 - `itemdb/findings/DUPLICATE/`: duplicate findings.
 - `itemdb/evidence/`: validation evidence, grouped by finding id.
@@ -159,7 +160,26 @@ A finding may be marked `CONFIRMED` only when the evidence is clear and reproduc
 
 Benchmark labels alone are not enough for `CONFIRMED`.
 
-### Phase 5: Reporting
+### Phase 5: Exploit development
+
+Goal: demonstrate real-world impact of confirmed vulnerabilities.
+
+For selected `CONFIRMED` findings, develop proof-of-concept exploits that show what an attacker can actually achieve. This phase answers the question developers always ask: "So what? What can an attacker actually do with this?"
+
+The exploiter agent:
+
+- starts from existing validation evidence,
+- escalates impact (crash to code execution, read to secret exfiltration, bypass to full admin access),
+- produces self-contained, reproducible PoC scripts,
+- writes clear impact narratives,
+- adjusts severity based on demonstrated impact,
+- stores exploitation artifacts under `itemdb/evidence/<finding-id>/exploits/`.
+
+A finding may be moved to `EXPLOITED` only when a working proof-of-concept demonstrates concrete impact beyond the initial validation.
+
+If exploitation is not feasible within the sandbox, the finding stays in `CONFIRMED` with a documented explanation.
+
+### Phase 6: Reporting
 
 Goal: produce Markdown reports.
 
@@ -168,6 +188,7 @@ Reports should include:
 - executive summary,
 - target summary,
 - methodology,
+- exploited findings (with demonstrated impact),
 - confirmed findings,
 - rejected/duplicate summary if useful,
 - evidence references,
@@ -223,6 +244,7 @@ Use only these status values:
 
 - `NEEDS_VALIDATION`
 - `CONFIRMED`
+- `EXPLOITED`
 - `REJECTED`
 - `DUPLICATE`
 
@@ -303,23 +325,32 @@ Each phase has readiness gates that must be satisfied before it can run:
 
 ### Phase 5 readiness
 
+- A specific finding ID must be provided (e.g., `CC-0001`).
+- The finding must be in `CONFIRMED` status.
+- Validation evidence must exist under `itemdb/evidence/<finding-id>/`.
+
+### Phase 6 readiness
+
 - At least one finding must exist in any status directory.
 
 ### Orchestration model
 
 The user drives phase transitions by running:
 
-    make phase-1          # Reconnaissance
-    make phase-2          # Hypothesis generation
-    make phase-3          # Counter-analysis
+    make phase-1                  # Reconnaissance
+    make phase-2                  # Hypothesis generation
+    make phase-3                  # Counter-analysis
     make phase-4 FINDING=CC-0001  # Validate one finding
-    make phase-5          # Reporting
+    make phase-5 FINDING=CC-0001  # Develop exploit for one finding
+    make phase-6                  # Reporting
 
 Each `make` target checks readiness gates before invoking the corresponding agent.
 
 Phase 4 is invoked once per finding, not as a batch.
+Phase 5 is invoked once per finding, not as a batch.
 
 For convenience, `make validate-all` iterates over all `NEEDS_VALIDATION` findings sequentially.
+For convenience, `make exploit-all` iterates over all `CONFIRMED` findings sequentially.
 
 No automatic handoff occurs between phases. The user decides when to advance.
 

@@ -166,21 +166,53 @@ def gate_phase_4(finding_id: str) -> int:
     return 0
 
 
-def gate_phase_5() -> int:
-    """Phase 5: at least one finding must exist."""
-    print(header("Phase 5: Reporting"))
+def gate_phase_5(finding_id: str) -> int:
+    """Phase 5: finding must be CONFIRMED with evidence."""
+    print(header(f"Phase 5: Exploit Development for {finding_id}"))
+    print()
+
+    path = find_finding(finding_id)
+    if path is None:
+        print(fail(f"Finding not found: {finding_id}"))
+        print()
+        print(info("Check available findings: make status"))
+        return 1
+
+    if path.parent.name != "CONFIRMED":
+        print(warn(f"{finding_id} is in {path.parent.name}, not CONFIRMED."))
+        print()
+        print(info("Only CONFIRMED findings can have exploits developed."))
+        return 1
+
+    evidence_dir = ROOT / "itemdb" / "evidence" / finding_id
+    if not evidence_dir.exists() or not any(evidence_dir.iterdir()):
+        print(warn(f"No validation evidence found under itemdb/evidence/{finding_id}/."))
+        print()
+        print(info("Run Phase 4 first to validate the finding: make phase-4 FINDING=" + finding_id))
+        return 1
+
+    print(ok(f"Found: {path.relative_to(ROOT)}"))
+    print(ok(f"Evidence exists: itemdb/evidence/{finding_id}/"))
+    print()
+    print(f"{GREEN}{SYM_OK}{RESET} Ready to develop exploit for {finding_id}.")
+    return 0
+
+
+def gate_phase_6() -> int:
+    """Phase 6: at least one finding must exist."""
+    print(header("Phase 6: Reporting"))
     print()
 
     total = count_all_findings()
     if total == 0:
         print(fail("No findings exist in any status directory."))
         print()
-        print(info("Run Phases 1-4 first to produce findings."))
+        print(info("Run Phases 1-5 first to produce findings."))
         return 1
 
     print(ok(f"{total} finding(s) across all status directories."))
     print()
-    print(f"{GREEN}{SYM_OK}{RESET} Ready to run Phase 5.")
+    print(f"{GREEN}{SYM_OK}{RESET} Ready to run Phase 6.")
     return 0
 
 
@@ -188,8 +220,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Check readiness gates for a CodeCome phase.",
     )
-    parser.add_argument("phase", type=int, choices=[1, 2, 3, 4, 5], help="Phase number.")
-    parser.add_argument("finding_id", nargs="?", help="Finding ID (required for Phase 4).")
+    parser.add_argument("phase", type=int, choices=[1, 2, 3, 4, 5, 6], help="Phase number.")
+    parser.add_argument("finding_id", nargs="?", help="Finding ID (required for Phase 4 and 5).")
     return parser
 
 
@@ -211,7 +243,14 @@ def main() -> int:
             return 1
         return gate_phase_4(args.finding_id)
     elif args.phase == 5:
-        return gate_phase_5()
+        if not args.finding_id:
+            print(fail("Phase 5 requires a finding ID."))
+            print()
+            print(info("Usage: ./tools/gate-check.py 5 CC-0001"))
+            return 1
+        return gate_phase_5(args.finding_id)
+    elif args.phase == 6:
+        return gate_phase_6()
 
     return 1
 

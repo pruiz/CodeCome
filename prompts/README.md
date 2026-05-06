@@ -10,7 +10,8 @@ Each prompt corresponds to one workflow phase.
     phase-2-audit.md
     phase-3-review.md
     phase-4-validate.md
-    phase-5-report.md
+    phase-5-exploit.md
+    phase-6-report.md
 
 ## Recommended usage
 
@@ -20,8 +21,10 @@ Use `make` targets for the simplest workflow:
     make phase-2                  # Hypothesis generation
     make phase-3                  # Counter-analysis
     make phase-4 FINDING=CC-0001  # Validate one finding
-    make phase-5                  # Reporting
+    make phase-5 FINDING=CC-0001  # Develop exploit for one finding
+    make phase-6                  # Reporting
     make validate-all             # Validate all NEEDS_VALIDATION findings
+    make exploit-all              # Exploit all CONFIRMED findings
 
 Each `make` target checks readiness gates before invoking the corresponding agent.
 
@@ -69,9 +72,23 @@ and may move findings to:
     itemdb/findings/CONFIRMED/
     itemdb/findings/REJECTED/
 
-### Phase 5: reporting
+### Phase 5: exploit development
 
-    opencode run --agent reporter "$(cat prompts/phase-5-report.md)"
+Develop an exploit for one confirmed finding.
+
+    opencode run --agent exploiter "$(sed 's#FINDING_PATH_OR_ID#CC-0001#g' prompts/phase-5-exploit.md)"
+
+Exploitation artifacts are stored under:
+
+    itemdb/evidence/<finding-id>/exploits/
+
+and may move findings to:
+
+    itemdb/findings/EXPLOITED/
+
+### Phase 6: reporting
+
+    opencode run --agent reporter "$(cat prompts/phase-6-report.md)"
 
 A basic report can also be generated locally without AI:
 

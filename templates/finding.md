@@ -20,6 +20,14 @@ validation:
   methods: []
   evidence_dir: "itemdb/evidence/CC-0000"
   summary: ""
+exploitation:
+  status: "NOT_STARTED"
+  impact_demonstrated: ""
+  exploit_type: ""
+  severity_before: ""
+  severity_after: ""
+  artifacts_dir: "itemdb/evidence/CC-0000/exploits"
+  summary: ""
 created_at: "YYYY-MM-DD"
 updated_at: "YYYY-MM-DD"
 ---
@@ -166,6 +174,31 @@ Examples:
 - test output,
 - database state,
 - debugger notes.
+
+# Exploitation Result
+
+Pending.
+
+When exploit development is performed, record:
+
+- exploitation date,
+- exploit type developed,
+- impact achieved,
+- escalation steps taken,
+- whether severity was adjusted,
+- limitations of the demonstration.
+
+# Demonstrated Impact
+
+Pending.
+
+Describe in concrete terms what an attacker achieves:
+
+- what data was accessed, modified, or exfiltrated,
+- what privileges were gained,
+- what systems were compromised,
+- what the blast radius is,
+- what the business impact is.
 
 # Remediation idea
 

@@ -20,6 +20,7 @@ audit:
     - hypothesis_generation
     - counter_analysis
     - validation
+    - exploit_development
     - reporting
 
   scope:
@@ -116,6 +117,7 @@ finding:
   statuses:
     - "NEEDS_VALIDATION"
     - "CONFIRMED"
+    - "EXPLOITED"
     - "REJECTED"
     - "DUPLICATE"
 

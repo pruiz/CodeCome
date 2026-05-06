@@ -32,6 +32,7 @@ FINDINGS_ROOT = ROOT / "itemdb" / "findings"
 STATUSES = [
     "NEEDS_VALIDATION",
     "CONFIRMED",
+    "EXPLOITED",
     "REJECTED",
     "DUPLICATE",
 ]
