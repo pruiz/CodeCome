@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import sys
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
@@ -21,6 +22,9 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import _colors as C
 
 ROOT = Path(__file__).resolve().parents[1]
 FINDINGS_ROOT = ROOT / "itemdb" / "findings"
@@ -68,7 +72,7 @@ def load_findings(status_filter: Optional[str]) -> List[Dict[str, object]]:
 
         rows.append(
             {
-                "id": frontmatter.get("id", path.stem.split("-", 2)[0]),
+                "id": frontmatter.get("id", "-".join(path.stem.split("-", 2)[:2])),
                 "status": frontmatter.get("status", path.parent.name),
                 "severity": frontmatter.get("severity", ""),
                 "confidence": frontmatter.get("confidence", ""),
@@ -83,22 +87,30 @@ def load_findings(status_filter: Optional[str]) -> List[Dict[str, object]]:
 
 def print_plain(rows: List[Dict[str, object]]) -> None:
     if not rows:
-        print("No findings.")
+        print(C.info("No findings."))
         return
 
     for row in rows:
+        sid = str(row["id"])
+        sev = C.severity_color(str(row["severity"]))
+        conf = C.confidence_color(str(row["confidence"]))
+        stat = C.status_color(str(row["status"]))
         print(
-            f'{row["id"]} '
-            f'[{row["status"]}] '
-            f'{row["severity"]}/{row["confidence"]} '
+            f'{C.BOLD}{sid}{C.RESET} '
+            f'[{stat}] '
+            f'{sev}/{conf} '
             f'- {row["title"]} '
-            f'({row["path"]})'
+            f'{C.DIM}({row["path"]}){C.RESET}'
         )
 
 
 def print_markdown(rows: List[Dict[str, object]]) -> None:
     print("| ID | Status | Severity | Confidence | Title | Path |")
     print("|---|---|---|---|---|---|")
+
+    if not rows:
+        print("| - | - | - | - | No findings yet. | - |")
+        return
 
     for row in rows:
         print(
@@ -109,6 +121,11 @@ def print_markdown(rows: List[Dict[str, object]]) -> None:
             f'| {row["title"]} '
             f'| `{row["path"]}` |'
         )
+
+
+def print_ids(rows: List[Dict[str, object]]) -> None:
+    for row in rows:
+        print(row["id"])
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -122,7 +139,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--format",
-        choices=["plain", "markdown"],
+        choices=["plain", "markdown", "ids"],
         default="plain",
         help="Output format.",
     )
@@ -138,6 +155,8 @@ def main() -> int:
 
     if args.format == "markdown":
         print_markdown(rows)
+    elif args.format == "ids":
+        print_ids(rows)
     else:
         print_plain(rows)
 

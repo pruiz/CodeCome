@@ -25,6 +25,8 @@ Before validating a finding, read:
 - relevant files under `itemdb/notes/`
 - the assigned finding
 - relevant source files under `src/`
+- `templates/evidence-readme.md`
+- `templates/run-summary.md`
 - sandbox documentation under `sandbox/`
 
 Use target-specific skills when they apply, for example:

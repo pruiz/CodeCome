@@ -19,6 +19,9 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import _colors as C
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -40,6 +43,9 @@ REQUIRED_PATHS = [
     "templates",
     "templates/finding.md",
     "templates/target-recon.md",
+    "templates/evidence-readme.md",
+    "templates/report.md",
+    "templates/run-summary.md",
     "tools",
     ".opencode/agents",
     ".opencode/skills",
@@ -56,7 +62,7 @@ FINDING_ID_RE = re.compile(r"\bCC-(\d{4,})\b")
 
 
 def fail(message: str) -> int:
-    print(f"ERROR: {message}", file=sys.stderr)
+    print(C.fail(message), file=sys.stderr)
     return 1
 
 
@@ -120,13 +126,13 @@ def command_check(_: argparse.Namespace) -> int:
         return fail(str(exc))
 
     if missing:
-        print("Missing required paths:")
+        print(C.fail("Missing required paths:"))
         for item in missing:
-            print(f"  - {item}")
+            print(f"  {C.SYM_BULLET} {item}")
         return 1
 
     project_name = config.get("project", {}).get("name", "unknown")
-    print(f"Workspace OK: {project_name}")
+    print(C.ok(f"Workspace OK: {C.BOLD}{project_name}{C.RESET}"))
     return 0
 
 
@@ -139,13 +145,14 @@ def command_status(_: argparse.Namespace) -> int:
     project_name = config.get("project", {}).get("name", "unknown")
     source_path = config.get("project", {}).get("source_path", "./src")
 
-    print(f"Project: {project_name}")
-    print(f"Source:  {source_path}")
+    print(f"{C.BOLD}Project:{C.RESET} {project_name}")
+    print(f"{C.BOLD}Source:{C.RESET}  {source_path}")
     print()
-    print("Findings:")
+    print(f"{C.BOLD}Findings:{C.RESET}")
 
     for status, count in count_findings().items():
-        print(f"  {status:16} {count}")
+        colored_status = C.status_color(f"{status:20}")
+        print(f"  {colored_status} {count}")
 
     return 0
 

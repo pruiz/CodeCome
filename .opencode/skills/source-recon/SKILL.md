@@ -384,7 +384,8 @@ Before finishing reconnaissance, ensure that:
 - `build-model.md` exists.
 - `execution-model.md` exists.
 - `trust-boundaries.md` exists.
+- `data-flow.md` exists.
 - `validation-model.md` exists.
 - `interesting-files.md` exists.
-- important assumptions are documented.
+- `security-assumptions.md` exists.
 - no low-quality findings were created prematurely.

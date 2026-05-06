@@ -17,6 +17,8 @@ Before writing a report, read:
 - `itemdb/README.md`
 - `itemdb/index.md`
 - `.opencode/skills/report-writing/SKILL.md`
+- `templates/report.md`
+- `templates/run-summary.md`
 - relevant files under `itemdb/notes/`
 - findings under `itemdb/findings/`
 - evidence under `itemdb/evidence/`

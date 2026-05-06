@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import sys
 from datetime import date
 from pathlib import Path
 from typing import Dict, Iterable, List
@@ -21,6 +22,9 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import _colors as C
 
 ROOT = Path(__file__).resolve().parents[1]
 FINDINGS_ROOT = ROOT / "itemdb" / "findings"
@@ -76,7 +80,7 @@ def load_findings() -> List[Dict[str, str]]:
 
             rows.append(
                 {
-                    "id": str(frontmatter.get("id", path.stem.split("-", 2)[0])),
+                    "id": str(frontmatter.get("id", "-".join(path.stem.split("-", 2)[:2]))),
                     "status": str(frontmatter.get("status", path.parent.name)),
                     "severity": str(frontmatter.get("severity", "")),
                     "confidence": str(frontmatter.get("confidence", "")),
@@ -161,7 +165,8 @@ def render_report(rows: List[Dict[str, str]]) -> str:
     lines.append("")
 
     if confirmed:
-        highest = confirmed[0]["severity"]
+        severity_rank = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
+        highest = min(confirmed, key=lambda r: severity_rank.get(r["severity"], 99))["severity"]
         lines.append(f"Highest confirmed severity currently listed: **{highest}**.")
     else:
         lines.append("No findings are currently marked as confirmed.")
@@ -287,7 +292,7 @@ def main() -> int:
     rows = load_findings()
     output_path.write_text(render_report(rows), encoding="utf-8")
 
-    print(f"Rendered {output_path.relative_to(ROOT)}")
+    print(C.ok(f"Rendered {output_path.relative_to(ROOT)}"))
     return 0
 
 

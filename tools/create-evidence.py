@@ -12,9 +12,13 @@ from __future__ import annotations
 
 import argparse
 import re
+import sys
 from datetime import date
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import _colors as C
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_PATH = ROOT / "templates" / "evidence-readme.md"
@@ -74,7 +78,7 @@ def main() -> int:
     args = parser.parse_args()
 
     readme_path = create_evidence(args.finding_id, args.force)
-    print(readme_path.relative_to(ROOT))
+    print(C.ok(str(readme_path.relative_to(ROOT))))
     return 0
 
 

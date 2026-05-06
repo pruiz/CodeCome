@@ -19,6 +19,10 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import _colors as C
+
 
 ROOT = Path(__file__).resolve().parents[1]
 FINDINGS_ROOT = ROOT / "itemdb" / "findings"
@@ -152,7 +156,7 @@ def main() -> int:
     paths = iter_finding_files()
 
     if not paths:
-        print("No findings to validate.")
+        print(C.info("No findings to validate."))
         return 0
 
     total_errors = 0
@@ -161,19 +165,19 @@ def main() -> int:
         errors = validate_finding(path)
 
         if not errors:
-            print(f"OK: {path.relative_to(ROOT)}")
+            print(C.ok(str(path.relative_to(ROOT))))
             continue
 
         total_errors += len(errors)
-        print(f"ERROR: {path.relative_to(ROOT)}")
+        print(C.fail(str(path.relative_to(ROOT))))
         for error in errors:
-            print(f"  - {error}")
+            print(f"  {C.SYM_BULLET} {error}")
 
     if total_errors:
-        print(f"\nFound {total_errors} frontmatter error(s).", file=sys.stderr)
+        print(f"\n{C.fail(f'Found {total_errors} frontmatter error(s).')}", file=sys.stderr)
         return 1
 
-    print(f"\nValidated {len(paths)} finding(s).")
+    print(f"\n{C.ok(f'Validated {len(paths)} finding(s).')}")
     return 0
 
 

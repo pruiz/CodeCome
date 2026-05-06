@@ -10,6 +10,7 @@ Example:
 from __future__ import annotations
 
 import re
+import sys
 from collections import Counter
 from datetime import date
 from pathlib import Path
@@ -20,6 +21,9 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import _colors as C
 
 ROOT = Path(__file__).resolve().parents[1]
 FINDINGS_ROOT = ROOT / "itemdb" / "findings"
@@ -63,7 +67,7 @@ def load_findings() -> List[Dict[str, str]]:
 
     for path in iter_finding_files():
         frontmatter = load_frontmatter(path)
-        finding_id = str(frontmatter.get("id", path.stem.split("-", 2)[0]))
+        finding_id = str(frontmatter.get("id", "-".join(path.stem.split("-", 2)[:2])))
         evidence_dir = ""
 
         validation = frontmatter.get("validation")
@@ -141,7 +145,7 @@ def render_index(rows: List[Dict[str, str]]) -> str:
 def main() -> int:
     rows = load_findings()
     INDEX_PATH.write_text(render_index(rows), encoding="utf-8")
-    print(f"Rendered {INDEX_PATH.relative_to(ROOT)}")
+    print(C.ok(f"Rendered {INDEX_PATH.relative_to(ROOT)}"))
     return 0
 
 

@@ -19,10 +19,14 @@ from __future__ import annotations
 
 import argparse
 import re
+import sys
 from datetime import date
 from pathlib import Path
 from typing import List
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import _colors as C
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_PATH = ROOT / "templates" / "finding.md"
@@ -32,6 +36,8 @@ DEFAULT_STATUS = "NEEDS_VALIDATION"
 VALID_SEVERITIES = {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
 VALID_CONFIDENCES = {"LOW", "MEDIUM", "HIGH", "CONFIRMED"}
 FINDING_ID_RE = re.compile(r"\bCC-(\d{4,})\b")
+FINDING_ID_FORMAT_RE = re.compile(r"^CC-\d{4,}$")
+FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
 
 def slugify(value: str) -> str:
@@ -67,8 +73,16 @@ def next_finding_id() -> str:
 
 
 def replace_frontmatter_value(content: str, key: str, value: str) -> str:
+    """Replace a quoted scalar value in YAML frontmatter only (not in body)."""
+    fm_match = FRONTMATTER_RE.match(content)
     pattern = re.compile(rf'^{re.escape(key)}:\s*".*"$', re.MULTILINE)
     replacement = f'{key}: "{value}"'
+    if fm_match:
+        fm_block = content[: fm_match.end()]
+        body = content[fm_match.end() :]
+        fm_block = pattern.sub(replacement, fm_block, count=1)
+        return fm_block + body
+    # Fallback for templates: operate on whole content.
     return pattern.sub(replacement, content, count=1)
 
 
@@ -89,6 +103,9 @@ def create_finding(args: argparse.Namespace) -> Path:
         raise FileNotFoundError(f"Template not found: {TEMPLATE_PATH}")
 
     finding_id = args.id or next_finding_id()
+
+    if args.id and not FINDING_ID_FORMAT_RE.fullmatch(args.id):
+        raise ValueError(f"Invalid finding id format: {args.id!r} (expected CC-NNNN)")
     slug = args.slug or slugify(args.title)
     today = date.today().isoformat()
 
@@ -156,7 +173,7 @@ def main() -> int:
 
     output_path = create_finding(args)
     relative_path = output_path.relative_to(ROOT)
-    print(relative_path)
+    print(C.ok(str(relative_path)))
     return 0
 
 

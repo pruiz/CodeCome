@@ -304,6 +304,8 @@ Useful validation methods for C/C++ include:
 
 ## Suggested sanitizer flags
 
+<!-- Sync: sanitizer flags shared with sandbox-validation, juliet-benchmark -->
+
 For GCC or Clang:
 
     -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1

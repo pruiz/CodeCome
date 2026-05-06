@@ -19,6 +19,10 @@ Before starting reconnaissance, read:
 - `templates/target-recon.md`
 - `.opencode/skills/source-recon/SKILL.md`
 
+Also reference when writing run summaries:
+
+- `templates/run-summary.md`
+
 Use target-specific skills when they clearly apply, for example:
 
 - `.opencode/skills/c-cpp-security/SKILL.md`

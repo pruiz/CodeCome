@@ -24,18 +24,24 @@ Before creating findings, read:
 - `itemdb/notes/build-model.md`
 - `itemdb/notes/execution-model.md`
 - `itemdb/notes/trust-boundaries.md`
+- `itemdb/notes/data-flow.md`
 - `itemdb/notes/validation-model.md`
 - `itemdb/notes/interesting-files.md`
+- `itemdb/notes/security-assumptions.md`
 
 Also read relevant skills under:
 
-- `.opencode/skills/finding-format/`
-- `.opencode/skills/source-recon/`
+- `.opencode/skills/finding-format/SKILL.md`
+- `.opencode/skills/source-recon/SKILL.md`
 
 Use target-specific skills when they apply, for example:
 
-- `.opencode/skills/c-cpp-security/`
-- `.opencode/skills/juliet-benchmark/`
+- `.opencode/skills/c-cpp-security/SKILL.md`
+- `.opencode/skills/juliet-benchmark/SKILL.md`
+
+Also reference when writing run summaries:
+
+- `templates/run-summary.md`
 
 ## Mission
 
@@ -222,7 +228,7 @@ If the target is a benchmark corpus such as Juliet:
 
 If the target contains C/C++:
 
-- use `.opencode/skills/c-cpp-security/`,
+- use `.opencode/skills/c-cpp-security/SKILL.md`,
 - focus on concrete source/sink paths,
 - identify affected function and operation,
 - include sanitizer-based validation ideas when appropriate.

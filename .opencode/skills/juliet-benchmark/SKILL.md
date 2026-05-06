@@ -112,8 +112,10 @@ The generic notes are still required:
     itemdb/notes/build-model.md
     itemdb/notes/execution-model.md
     itemdb/notes/trust-boundaries.md
+    itemdb/notes/data-flow.md
     itemdb/notes/validation-model.md
     itemdb/notes/interesting-files.md
+    itemdb/notes/security-assumptions.md
 
 ## Attack surface mapping for Juliet
 
@@ -151,6 +153,8 @@ Useful methods include:
 Benchmark oracle comparison alone should not be enough for `CONFIRMED`.
 
 ## Sanitizer guidance
+
+<!-- Sync: sanitizer flags shared with c-cpp-security, sandbox-validation -->
 
 For memory safety testcases, try compiler flags such as:
 

@@ -59,7 +59,7 @@ audit:
     - "Race conditions"
     - "Privilege escalation"
 
-sandboxironment:
+environment:
   type: "sandbox"
   path: "./sandbox"
   startup_command: "./sandbox/scripts/up.sh"
@@ -77,8 +77,10 @@ validation:
     - "./itemdb"
     - "./runs"
     - "./sandbox"
+    - "./templates"
     - "./tmp"
     - "./tools"
+    - "./.opencode"
 
   methods:
     - "static_proof"

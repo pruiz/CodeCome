@@ -12,6 +12,7 @@ Important security claims must be written to files under `itemdb/`, not left onl
 
 ## Workspace layout
 
+- `codecome.yml`: project configuration and audit settings.
 - `src/`: target source code to audit.
 - `sandbox/`: sandboxed execution and validation environment.
 - `itemdb/`: file-based finding database, notes, reports, and evidence.
@@ -52,6 +53,7 @@ Unless explicitly instructed otherwise, write only under:
 - `sandbox/`
 - `templates/`
 - `tools/`
+- `tmp/`
 - `.opencode/`
 
 Do not write into `src/` except for temporary instrumentation when explicitly authorized.
@@ -273,9 +275,59 @@ Examples:
 
 If the target appears to match a skill, apply the skill, but do not hardcode the whole workflow around a single target type.
 
+## Phase handoff protocol
+
+CodeCome phases are executed sequentially and orchestrated by the user via `make` commands.
+
+Each phase has readiness gates that must be satisfied before it can run:
+
+### Phase 1 readiness
+
+- `src/` must contain target source code.
+- No other prerequisites.
+
+### Phase 2 readiness
+
+- `itemdb/notes/target-profile.md` must exist.
+- `itemdb/notes/attack-surface.md` must exist.
+- At least one reconnaissance note file must exist under `itemdb/notes/`.
+
+### Phase 3 readiness
+
+- At least one finding must exist under `itemdb/findings/NEEDS_VALIDATION/`.
+
+### Phase 4 readiness
+
+- A specific finding ID must be provided (e.g., `CC-0001`).
+- The finding must be in `NEEDS_VALIDATION` status.
+
+### Phase 5 readiness
+
+- At least one finding must exist in any status directory.
+
+### Orchestration model
+
+The user drives phase transitions by running:
+
+    make phase-1          # Reconnaissance
+    make phase-2          # Hypothesis generation
+    make phase-3          # Counter-analysis
+    make phase-4 FINDING=CC-0001  # Validate one finding
+    make phase-5          # Reporting
+
+Each `make` target checks readiness gates before invoking the corresponding agent.
+
+Phase 4 is invoked once per finding, not as a batch.
+
+For convenience, `make validate-all` iterates over all `NEEDS_VALIDATION` findings sequentially.
+
+No automatic handoff occurs between phases. The user decides when to advance.
+
 ## Run summaries
 
 When practical, write a short run summary under `runs/`.
+
+Use the template: `templates/run-summary.md`
 
 A run summary should include:
 

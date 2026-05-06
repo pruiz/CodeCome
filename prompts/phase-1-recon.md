@@ -8,10 +8,49 @@ Read:
 
 - `AGENTS.md`
 - `codecome.yml`
-- `templates/targ- `templates/targ- `templates/targ-con- `templates/targ-ski- `templates/targ- `templateUse- `templates/targ- `templates/tars - `templates/targ- `templates/tarpl- `templates/targ- `templatcpp-s- `templates/targ- `templates/targll- `templates/targ- `templates/targ-rg- `templates/targ- `templateun- `templates/targ- `templates/targ- t- `templates/targ- `templates/targ-  n- `templates/targ- `templates/targ- `tecre- `templates/targ- `templates/targ- `templates/targ-con- `tempess- `temple i- `templates/targ- `templatesmi- `templates/targ- `templates- - `templates/targ- `templates/ty,- `templates/targ- `tem,
-- buil- buil- buil- buil- buil- ,
-- buil- buil- buil- buil- buil- ,
-ieieieieieieieieieieieieieieierous ieieieieieieieieieieieieieieiero seieieieieieieieieiei
+- `templates/target-recon.md`
+- `.opencode/agents/recon.md`
+- `.opencode/skills/source-recon/SKILL.md`
+
+Use additional target-specific skills only if they clearly apply.
+
+Examples:
+
+- `.opencode/skills/c-cpp-security/SKILL.md`
+- `.opencode/skills/dotnet-security/SKILL.md`
+- `.opencode/skills/web-security/SKILL.md`
+- `.opencode/skills/juliet-benchmark/SKILL.md`
+
+## Target
+
+Analyze the source tree under:
+
+    ./src
+
+## Goal
+
+Build a target model by creating these files under `itemdb/notes/`:
+
+- `target-profile.md`
+- `attack-surface.md`
+- `build-model.md`
+- `execution-model.md`
+- `trust-boundaries.md`
+- `data-flow.md`
+- `validation-model.md`
+- `interesting-files.md`
+- `security-assumptions.md`
+
+Document:
+
+- target type,
+- languages and frameworks,
+- build system and execution model,
+- attack surfaces and entry points,
+- trust boundaries,
+- data flow paths,
+- dangerous sinks,
+- security assumptions,
 - interesting files for Phase 2,
 - validation strategy.
 

@@ -13,10 +13,14 @@ from __future__ import annotations
 import argparse
 import re
 import shutil
+import sys
 from datetime import date
 from pathlib import Path
 from typing import Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import _colors as C
 
 ROOT = Path(__file__).resolve().parents[1]
 FINDINGS_ROOT = ROOT / "itemdb" / "findings"
@@ -54,12 +58,20 @@ def find_finding(identifier: str) -> Path:
 
 
 def replace_scalar_frontmatter(content: str, key: str, value: str) -> str:
+    """Replace a quoted scalar value in YAML frontmatter only (not in body)."""
     pattern = re.compile(rf'^{re.escape(key)}:\s*".*"$', re.MULTILINE)
     replacement = f'{key}: "{value}"'
-
+    fm_match = FRONTMATTER_RE.match(content)
+    if fm_match:
+        fm_block = content[: fm_match.end()]
+        body = content[fm_match.end() :]
+        if pattern.search(fm_block):
+            fm_block = pattern.sub(replacement, fm_block, count=1)
+            return fm_block + body
+        return content
+    # No frontmatter found: fall back to whole-content search.
     if pattern.search(content):
         return pattern.sub(replacement, content, count=1)
-
     return content
 
 
@@ -144,9 +156,10 @@ def main() -> int:
     args = parser.parse_args()
 
     path = find_finding(args.finding)
+    old_status = path.parent.name
     target_path = move_finding(path, args.status)
 
-    print(target_path.relative_to(ROOT))
+    print(f"{C.ok(str(target_path.relative_to(ROOT)))} {C.transition(old_status, args.status)}")
     return 0
 
 

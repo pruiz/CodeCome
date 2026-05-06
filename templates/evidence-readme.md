@@ -1,5 +1,7 @@
 # Evidence for CC-0000
 
+Date: YYYY-MM-DD
+
 # Summary
 
 Briefly summarize what this evidence proves or disproves.

@@ -68,6 +68,8 @@ Run generic test hook:
 
 ## Sandbox boundaries
 
+<!-- Sync: sandbox boundary rules are shared with exploit-validation/SKILL.md -->
+
 Allowed inside the sandbox:
 
 - install packages,
@@ -107,6 +109,8 @@ Run summaries may be written under:
 Do not leave important evidence only in terminal output.
 
 ## Evidence capture
+
+<!-- Sync: evidence file list shared with exploit-validation/SKILL.md -->
 
 For every validation attempt, capture:
 
@@ -189,6 +193,8 @@ For C/C++ targets, consider:
 - crafted inputs,
 - small harnesses,
 - existing tests.
+
+<!-- Sync: sanitizer flags shared with c-cpp-security, juliet-benchmark -->
 
 Useful compiler flags:
 

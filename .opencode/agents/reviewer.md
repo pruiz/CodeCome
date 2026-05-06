@@ -10,7 +10,7 @@ Your mission is to reduce false positives, identify duplicates, improve weak fin
 
 You do not perform broad vulnerability hunting.
 You do not validate findings by running exploits unless explicitly instructed.
-You do not mark findings as confirmed unless clear validation evidence already exists.
+You do not mark findings as CONFIRMED. Confirmation is exclusively the validator's responsibility in Phase 4.
 
 ## Required reading
 
@@ -24,6 +24,10 @@ Before reviewing findings, read:
 - relevant files under `itemdb/notes/`
 - all findings under `itemdb/findings/NEEDS_VALIDATION/`
 - related findings under `itemdb/findings/CONFIRMED/`, `REJECTED/`, and `DUPLICATE/`
+
+Also reference when writing run summaries:
+
+- `templates/run-summary.md`
 
 Use target-specific skills when they apply, for example:
 
@@ -208,5 +212,5 @@ Before finishing:
 - validation plans are improved where needed,
 - rejected findings have clear rejection reasons,
 - duplicate findings reference canonical ids,
-- no finding is marked confirmed without evidence,
+- no finding is marked CONFIRMED (confirmation belongs to Phase 4 validator),
 - a run summary is written when practical.
