@@ -1,4 +1,4 @@
-.PHONY: help check status next-id frontmatter index report
+.PHONY: help check status next-id frontmatter reset-itemdb index report
 .PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all
 .PHONY: sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-build-target sandbox-test-target
 
@@ -108,6 +108,27 @@ next-id:
 
 frontmatter:
 	./tools/check-frontmatter.py
+
+reset-itemdb:
+	rm -f itemdb/notes/*.md
+	rm -rf itemdb/evidence/CC-*
+	rm -f itemdb/reports/*.md
+	rm -f itemdb/findings/NEEDS_VALIDATION/CC-*.md
+	rm -f itemdb/findings/CONFIRMED/CC-*.md
+	rm -f itemdb/findings/REJECTED/CC-*.md
+	rm -f itemdb/findings/DUPLICATE/CC-*.md
+	rm -f runs/*.md
+	rm -rf tmp/*
+	touch itemdb/notes/.gitkeep
+	touch itemdb/evidence/.gitkeep
+	touch itemdb/reports/.gitkeep
+	touch itemdb/findings/NEEDS_VALIDATION/.gitkeep
+	touch itemdb/findings/CONFIRMED/.gitkeep
+	touch itemdb/findings/REJECTED/.gitkeep
+	touch itemdb/findings/DUPLICATE/.gitkeep
+	touch runs/.gitkeep
+	touch tmp/.gitkeep
+	./tools/render-index.py
 
 index:
 	./tools/render-index.py
