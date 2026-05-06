@@ -2,7 +2,7 @@
 
 CodeCome is an AI-assisted vulnerability research workspace.
 
-It is designed to help language-model agents inspect source code, identify security-relevant attack surfaces, produce structured vulnerability hypotheses, and validate those hypotheses inside an isolated execution environment.
+It is designed to help language-model agents inspect source code, identify security-relevant attack surfaces, produce structured vulnerability hypotheses, validate those hypotheses inside an isolated execution environment, demonstrate real-world impact through exploit development, and produce reviewable Markdown reports.
 
 CodeCome is not intended to be a traditional static analyzer, vulnerability scanner, or web pentest tool. Its core purpose is to provide a repeatable research workflow where every potential issue becomes a reviewable artifact.
 
@@ -10,9 +10,10 @@ CodeCome is not intended to be a traditional static analyzer, vulnerability scan
 
 - Provide a reusable workspace for source code security research.
 - Support different target types: web applications, services, CLI tools, libraries, benchmark corpora, infrastructure code, and mixed repositories.
-- Keep the workflow simple enough to run with `opencode run ...`.
+- Keep the workflow simple enough to run with `make phase-1` through `make phase-6`.
 - Store findings as Markdown files that can be reviewed by humans.
 - Separate hypothesis generation from validation.
+- Demonstrate real-world impact of confirmed vulnerabilities through exploit development.
 - Support future parallel validation workers without requiring that complexity in the initial PoC.
 - Keep the first PoC file-based: no database, no RAG, no external ticketing system.
 
@@ -44,9 +45,13 @@ CodeCome uses a phased workflow:
 
    A validator agent uses the sandboxed environment under `sandbox/` to prove or disprove individual findings. Validation may involve building the target, running tests, writing small PoCs, exercising APIs, triggering CLI inputs, using sanitizers, inspecting logs, or producing a static proof.
 
-5. **Reporting**
+5. **Exploit development**
 
-   Confirmed findings are summarized into Markdown reports with technical detail and evidence references.
+   For selected confirmed findings, an exploiter agent develops proof-of-concept exploits that demonstrate real-world impact. This phase answers the question developers always ask: "So what? What can an attacker actually do with this?" The agent escalates from validation evidence (e.g., a crash) to concrete impact (e.g., code execution, data exfiltration, privilege escalation) and may adjust severity based on demonstrated impact.
+
+6. **Reporting**
+
+   Findings are summarized into Markdown reports with technical detail, demonstrated impact narratives, and evidence references. Exploited findings (with proven impact) are highlighted above confirmed findings.
 
 ## Workspace layout
 
@@ -60,6 +65,8 @@ CodeCome uses a phased workflow:
     ├── runs/
     ├── templates/
     ├── tools/
+    ├── prompts/
+    ├── docs/
     └── .opencode/
 
 ### `src/`
@@ -76,7 +83,7 @@ This may be:
 
 ### `sandbox/`
 
-Sandboxed execution environment for validation.
+Sandboxed execution environment for validation and exploit development.
 
 For the initial PoC this is expected to be Docker-based. Future versions may support per-finding containers, disposable VMs, or remote sandboxes.
 
@@ -89,8 +96,9 @@ This directory contains:
 - reconnaissance notes,
 - candidate findings,
 - confirmed findings,
+- exploited findings (with demonstrated impact),
 - rejected findings,
-- evidence,
+- evidence and exploitation artifacts,
 - reports,
 - and indexes.
 
@@ -104,24 +112,40 @@ Markdown templates used by agents and helper tools.
 
 ### `tools/`
 
-Python helper scripts for creating, listing, moving, validating, and reporting findings.
+Python helper scripts for creating, listing, moving, validating, and reporting findings. All tools support colored terminal output (respects `NO_COLOR`).
+
+### `prompts/`
+
+Reusable phase prompts for driving the workflow with OpenCode.
 
 ### `.opencode/`
 
 Agent and skill definitions used by OpenCode.
 
+Agents:
+
+- `recon` -- Phase 1: target reconnaissance
+- `auditor` -- Phase 2: vulnerability hypothesis generation
+- `reviewer` -- Phase 3: counter-analysis and deduplication
+- `validator` -- Phase 4: finding validation
+- `exploiter` -- Phase 5: exploit development and impact demonstration
+- `reporter` -- Phase 6: Markdown report generation
+
 ## Finding lifecycle
 
-Findings move through a simple lifecycle:
+Findings move through a structured lifecycle:
 
     NEEDS_VALIDATION
         ├── CONFIRMED
+        │       └── EXPLOITED
         ├── REJECTED
         └── DUPLICATE
 
-A finding should only be marked as `CONFIRMED` when there is clear evidence.
+- A finding should only be marked as `CONFIRMED` when there is clear evidence.
+- A finding should only be marked as `EXPLOITED` when a working proof-of-concept demonstrates concrete real-world impact beyond the initial validation.
+- If exploitation is not feasible, the finding stays in `CONFIRMED`.
 
-Valid evidence may include:
+Valid evidence for confirmation may include:
 
 - runtime reproduction,
 - failing/passing test,
@@ -134,94 +158,30 @@ Valid evidence may include:
 
 Benchmark labels alone are not enough to mark a finding as confirmed.
 
-## First PoC target
+## Quick start
 
-The first planned PoC target is the NIST SARD Juliet C/C++ test suite.
+1. Place target source under `src/`.
 
-Juliet is used as a benchmark target, not as a special case baked into the CodeCome core.
+2. Check workspace and sandbox:
 
-The workflow should remain generic:
+       make check
+       make sandbox-check
 
-    target reconnaissance
-    → attack surface recognition
-    → vulnerability hypotheses
-    → counter-analysis
-    → validation
-    → Markdown reporting
+3. Run the workflow:
 
-For Juliet, the attack surface may map to testcase entrypoints, bad/good functions, input simulation functions, and source/sink patterns.
+       make phase-1                  # Reconnaissance
+       make phase-2                  # Hypothesis generation
+       make phase-3                  # Counter-analysis
+       make phase-4 FINDING=CC-0001  # Validate one finding
+       make phase-5 FINDING=CC-0001  # Develop exploit for one finding
+       make phase-6                  # Generate report
 
-For a web application, the attack surface may map to routes, controllers, APIs, authentication flows, authorization checks, file uploads, and background workers.
+4. Convenience targets:
 
-For a CLI tool, the attack surface may map to command-line arguments, input files, config files, environment variables, stdin, and filesystem operations.
+       make validate-all             # Validate all NEEDS_VALIDATION findings
+       make exploit-all              # Exploit all CONFIRMED findings
 
-## Basic usage
-
-The initial PoC is intended to be driven manually with OpenCode commands.
-
-Example phases:
-
-    opencode run "CodeCome phase 1: perform target reconnaissance. Read AGENTS.md and codecome.yml. Analyze ./src and write notes under ./itemdb/notes. Do not create findings yet."
-
-    opencode run "CodeCome phase 2: generate vulnerability hypotheses from the target source. Use itemdb/notes as context. Create Markdown findings under itemdb/findings/NEEDS_VALIDATION."
-
-    opencode run "CodeCome phase 3: review all findings under itemdb/findings/NEEDS_VALIDATION. Try to disprove, deduplicate, or reject weak findings."
-
-    opencode run "CodeCome phase 4: validate itemdb/findings/NEEDS_VALIDATION/CC-0001.md using the sandbox under ./sandbox. Store evidence under itemdb/evidence/CC-0001 and update the finding."
-
-    opencode run "CodeCome phase 5: generate a Markdown report from confirmed findings."
-
-## Design principles
-
-### Findings are artifacts
-
-Every relevant issue must be written as a Markdown file.
-
-The model should not leave important security claims only in chat history or run transcripts.
-
-### Hypotheses are not confirmed bugs
-
-A plausible vulnerability is first a hypothesis.
-
-Confirmation requires evidence.
-
-### Counter-analysis is mandatory
-
-Every finding should include an attempt to disprove it.
-
-The reviewer should look for:
-
-- unreachable code paths,
-- input validation,
-- authorization checks,
-- framework-level protections,
-- false assumptions,
-- duplicate reports,
-- and missing exploitability conditions.
-
-### Validation is sandboxed
-
-The validator may freely experiment inside the sandbox environment, but should not modify target source code unless explicitly instructed.
-
-### The core is target-agnostic
-
-CodeCome should adapt to the target placed under `src/`.
-
-Target-specific behavior should live in skills, adapters, notes, or config, not in the core workflow.
-
-## Current status
-
-This repository is in early PoC stage.
-
-The initial implementation is intentionally simple:
-
-- Markdown findings.
-- File-based item database.
-- Python helper scripts.
-- Docker-based validation environment.
-- One agent at a time.
-- One validation worker at a time.
-
+Each `make` target checks readiness gates before invoking the corresponding agent. Phase 4 and Phase 5 are invoked once per finding.
 
 ## Reusable prompts
 
@@ -235,67 +195,75 @@ Available prompts:
     prompts/phase-2-audit.md
     prompts/phase-3-review.md
     prompts/phase-4-validate.md
-    prompts/phase-5-report.md
+    prompts/phase-5-exploit.md
+    prompts/phase-6-report.md
 
 ## Running the workflow
 
+The recommended way to run CodeCome is through `make` targets, which handle readiness gate checks and agent selection automatically.
+
 ### Phase 1: reconnaissance
 
-    opencode run "$(cat prompts/phase-1-recon.md)"
+    make phase-1
 
-This phase creates or updates reconnaissance notes under:
-
-    itemdb/notes/
+Creates or updates reconnaissance notes under `itemdb/notes/`.
 
 ### Phase 2: vulnerability hypothesis generation
 
-    opencode run "$(cat prompts/phase-2-audit.md)"
+    make phase-2
 
-This phase creates candidate findings under:
-
-    itemdb/findings/NEEDS_VALIDATION/
+Creates candidate findings under `itemdb/findings/NEEDS_VALIDATION/`.
 
 ### Phase 3: counter-analysis
 
-    opencode run "$(cat prompts/phase-3-review.md)"
+    make phase-3
 
-This phase reviews candidate findings, attempts to disprove them, and may move findings to:
-
-    itemdb/findings/REJECTED/
-    itemdb/findings/DUPLICATE/
+Reviews candidate findings. May move findings to `itemdb/findings/REJECTED/` or `itemdb/findings/DUPLICATE/`.
 
 ### Phase 4: validation
 
-Validate one finding at a time.
+Validate one finding at a time:
 
-Example:
+    make phase-4 FINDING=CC-0001
 
-    opencode run "$(sed 's#FINDING_PATH_OR_ID#CC-0001#g' prompts/phase-4-validate.md)"
+Stores evidence under `itemdb/evidence/<finding-id>/` and may move findings to `CONFIRMED/` or `REJECTED/`.
 
-or:
+To validate all unvalidated findings:
 
-    sed 's#FINDING_PATH_OR_ID#CC-0001#g' prompts/phase-4-validate.md | opencode run
+    make validate-all
 
-This phase stores evidence under:
+### Phase 5: exploit development
 
-    itemdb/evidence/<finding-id>/
+Develop a proof-of-concept exploit for one confirmed finding:
 
-and may move findings to:
+    make phase-5 FINDING=CC-0001
 
-    itemdb/findings/CONFIRMED/
-    itemdb/findings/REJECTED/
+Stores exploitation artifacts under `itemdb/evidence/<finding-id>/exploits/` and may move findings to `EXPLOITED/`. The exploiter may adjust severity based on demonstrated impact.
 
-### Phase 5: reporting
+To exploit all confirmed findings:
 
-    opencode run "$(cat prompts/phase-5-report.md)"
+    make exploit-all
+
+### Phase 6: reporting
+
+    make phase-6
 
 A basic local report can also be generated without an agent:
 
     make report
 
-The default report path is:
+The default report path is `itemdb/reports/report.md`.
 
-    itemdb/reports/report.md
+### Manual invocation
+
+If you prefer direct `opencode run` commands instead of `make` targets:
+
+    opencode run --agent recon "$(cat prompts/phase-1-recon.md)"
+    opencode run --agent auditor "$(cat prompts/phase-2-audit.md)"
+    opencode run --agent reviewer "$(cat prompts/phase-3-review.md)"
+    opencode run --agent validator "$(sed 's#FINDING_PATH_OR_ID#CC-0001#g' prompts/phase-4-validate.md)"
+    opencode run --agent exploiter "$(sed 's#FINDING_PATH_OR_ID#CC-0001#g' prompts/phase-5-exploit.md)"
+    opencode run --agent reporter "$(cat prompts/phase-6-report.md)"
 
 ## Local helper commands
 
@@ -334,6 +302,61 @@ Check sandbox:
 Open sandbox shell:
 
     make sandbox-shell
+
+## Design principles
+
+### Findings are artifacts
+
+Every relevant issue must be written as a Markdown file.
+
+The model should not leave important security claims only in chat history or run transcripts.
+
+### Hypotheses are not confirmed bugs
+
+A plausible vulnerability is first a hypothesis.
+
+Confirmation requires evidence.
+
+### Impact must be demonstrated
+
+Confirmed vulnerabilities should have their real-world impact demonstrated through exploit development whenever feasible. Without this, developers may dismiss findings as theoretical or low-impact.
+
+### Counter-analysis is mandatory
+
+Every finding should include an attempt to disprove it.
+
+The reviewer should look for:
+
+- unreachable code paths,
+- input validation,
+- authorization checks,
+- framework-level protections,
+- false assumptions,
+- duplicate reports,
+- and missing exploitability conditions.
+
+### Validation is sandboxed
+
+The validator and exploiter may freely experiment inside the sandbox environment, but should not modify target source code unless explicitly instructed.
+
+### The core is target-agnostic
+
+CodeCome should adapt to the target placed under `src/`.
+
+Target-specific behavior should live in skills, adapters, notes, or config, not in the core workflow.
+
+## Current status
+
+This repository is in early PoC stage.
+
+The initial implementation is intentionally simple:
+
+- Markdown findings.
+- File-based item database.
+- Python helper scripts with colored terminal output.
+- Docker-based validation environment.
+- One agent at a time.
+- One validation worker at a time.
 
 ## Target setup
 
