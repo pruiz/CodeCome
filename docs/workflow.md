@@ -358,3 +358,5 @@ Before validation:
    Or generate a full AI-driven report:
 
        make phase-6
+
+`make report` remains available as a lightweight local summary, but it is not a full substitute for Phase 6.

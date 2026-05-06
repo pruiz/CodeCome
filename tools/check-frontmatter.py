@@ -68,6 +68,7 @@ REQUIRED_FIELDS = [
     "trust_boundary",
     "assets_at_risk",
     "validation",
+    "exploitation",
     "created_at",
     "updated_at",
 ]
@@ -76,6 +77,16 @@ REQUIRED_VALIDATION_FIELDS = [
     "status",
     "methods",
     "evidence_dir",
+    "summary",
+]
+
+REQUIRED_EXPLOITATION_FIELDS = [
+    "status",
+    "impact_demonstrated",
+    "exploit_type",
+    "severity_before",
+    "severity_after",
+    "artifacts_dir",
     "summary",
 ]
 
@@ -148,10 +159,24 @@ def validate_finding(path: Path) -> List[str]:
 
     exploitation = data.get("exploitation")
     if isinstance(exploitation, dict):
+        for field in REQUIRED_EXPLOITATION_FIELDS:
+            if field not in exploitation:
+                errors.append(f"missing exploitation field: exploitation.{field}")
+
         exploitation_status = exploitation.get("status")
         valid_exploitation_statuses = {"NOT_STARTED", "IN_PROGRESS", "DEMONSTRATED", "NOT_FEASIBLE"}
         if exploitation_status and exploitation_status not in valid_exploitation_statuses:
             errors.append(f"invalid exploitation.status: {exploitation_status!r}")
+
+        artifacts_dir = exploitation.get("artifacts_dir")
+        if artifacts_dir and not isinstance(artifacts_dir, str):
+            errors.append("exploitation.artifacts_dir must be a string")
+
+        if exploitation_status == "DEMONSTRATED":
+            if not exploitation.get("impact_demonstrated"):
+                errors.append("exploitation.status DEMONSTRATED requires exploitation.impact_demonstrated")
+            if not exploitation.get("exploit_type"):
+                errors.append("exploitation.status DEMONSTRATED requires exploitation.exploit_type")
 
         if status == "EXPLOITED":
             if exploitation_status != "DEMONSTRATED":
@@ -161,6 +186,8 @@ def validate_finding(path: Path) -> List[str]:
 
     elif status == "EXPLOITED":
         errors.append("EXPLOITED status requires exploitation block")
+    else:
+        errors.append("missing required field: exploitation")
 
     return errors
 

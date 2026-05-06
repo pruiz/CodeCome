@@ -129,6 +129,7 @@ Describe the CodeCome workflow used:
 - hypothesis generation,
 - counter-analysis,
 - validation,
+- exploit development,
 - reporting.
 
 Mention whether validation was static, runtime, sandboxed, benchmark-based, HTTP-based, CLI-based, sanitizer-based, etc.
@@ -323,6 +324,7 @@ Before finishing:
 - report is written under `itemdb/reports/`,
 - target overview is included,
 - methodology is included,
+- exploited findings are highlighted first when present,
 - confirmed findings are clearly separated,
 - open findings are clearly marked as unconfirmed,
 - rejected findings are summarized correctly,

@@ -17,8 +17,14 @@ Returns exit code 0 if ready, 1 if not.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
+
+try:
+    import yaml
+except ImportError:  # pragma: no cover
+    yaml = None
 
 # Allow importing sibling modules.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -26,6 +32,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _colors import ok, fail, warn, header, info, GREEN, RESET, BOLD, SYM_OK
 
 ROOT = Path(__file__).resolve().parents[1]
+FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+EVIDENCE_TEMPLATE_MARKERS = [
+    "Briefly summarize what this evidence proves or disproves.",
+    "Describe the validation method used.",
+    "command goes here",
+    "Describe what happened.",
+]
 
 REQUIRED_NOTES = [
     "target-profile.md",
@@ -75,17 +88,61 @@ def count_all_findings() -> int:
     return sum(count_findings(s) for s in FINDING_STATUS_DIRS)
 
 
-def find_finding(finding_id: str) -> Path | None:
-    """Locate a finding file by ID."""
+def load_frontmatter(path: Path) -> dict[str, object]:
+    """Load YAML frontmatter from a finding file."""
+    if yaml is None:
+        raise RuntimeError("PyYAML is not installed. Run: pip install -r requirements.txt")
+
+    content = path.read_text(encoding="utf-8")
+    match = FRONTMATTER_RE.match(content)
+    if not match:
+        return {}
+
+    data = yaml.safe_load(match.group(1))
+    return data if isinstance(data, dict) else {}
+
+
+def find_finding(identifier: str) -> Path | None:
+    """Locate a finding file by path or ID."""
+    candidate = Path(identifier)
+    if candidate.is_absolute() and candidate.exists():
+        return candidate.resolve()
+
+    root_relative = ROOT / identifier
+    if root_relative.exists():
+        return root_relative.resolve()
+
     findings_root = ROOT / "itemdb" / "findings"
     for status in FINDING_STATUS_DIRS:
         status_dir = findings_root / status
         if not status_dir.exists():
             continue
-        matches = list(status_dir.glob(f"{finding_id}-*.md"))
+        matches = list(status_dir.glob(f"{identifier}-*.md"))
         if matches:
             return matches[0]
     return None
+
+
+def has_meaningful_evidence(finding_id: str) -> bool:
+    """Return True when the evidence directory contains more than scaffolding."""
+    evidence_dir = ROOT / "itemdb" / "evidence" / finding_id
+    if not evidence_dir.exists():
+        return False
+
+    files = [path for path in evidence_dir.rglob("*") if path.is_file()]
+    if not files:
+        return False
+
+    non_readme_files = [path for path in files if path.name != "README.md"]
+    if non_readme_files:
+        return True
+
+    readme_path = evidence_dir / "README.md"
+    if not readme_path.exists():
+        return False
+
+    content = readme_path.read_text(encoding="utf-8")
+    return not any(marker in content for marker in EVIDENCE_TEMPLATE_MARKERS)
 
 
 def gate_phase_1() -> int:
@@ -144,53 +201,64 @@ def gate_phase_3() -> int:
     return 0
 
 
-def gate_phase_4(finding_id: str) -> int:
+def gate_phase_4(identifier: str) -> int:
     """Phase 4: finding must exist and be in NEEDS_VALIDATION."""
-    print(header(f"Phase 4: Validate {finding_id}"))
+    print(header(f"Phase 4: Validate {identifier}"))
     print()
 
-    path = find_finding(finding_id)
+    path = find_finding(identifier)
     if path is None:
-        print(fail(f"Finding not found: {finding_id}"))
+        print(fail(f"Finding not found: {identifier}"))
         print()
         print(info("Check available findings: make status"))
         return 1
 
     if path.parent.name != "NEEDS_VALIDATION":
-        print(warn(f"{finding_id} is in {path.parent.name}, not NEEDS_VALIDATION."))
+        print(warn(f"{path.stem} is in {path.parent.name}, not NEEDS_VALIDATION."))
         print()
         print(info("Only NEEDS_VALIDATION findings can be validated."))
         return 1
 
     print(ok(f"Found: {path.relative_to(ROOT)}"))
     print()
-    print(f"{GREEN}{SYM_OK}{RESET} Ready to validate {finding_id}.")
+    print(f"{GREEN}{SYM_OK}{RESET} Ready to validate {path.stem}.")
     return 0
 
 
-def gate_phase_5(finding_id: str) -> int:
+def gate_phase_5(identifier: str) -> int:
     """Phase 5: finding must be CONFIRMED with evidence."""
-    print(header(f"Phase 5: Exploit Development for {finding_id}"))
+    print(header(f"Phase 5: Exploit Development for {identifier}"))
     print()
 
-    path = find_finding(finding_id)
+    path = find_finding(identifier)
     if path is None:
-        print(fail(f"Finding not found: {finding_id}"))
+        print(fail(f"Finding not found: {identifier}"))
         print()
         print(info("Check available findings: make status"))
         return 1
 
     if path.parent.name != "CONFIRMED":
-        print(warn(f"{finding_id} is in {path.parent.name}, not CONFIRMED."))
+        print(warn(f"{path.stem} is in {path.parent.name}, not CONFIRMED."))
         print()
         print(info("Only CONFIRMED findings can have exploits developed."))
         return 1
 
-    evidence_dir = ROOT / "itemdb" / "evidence" / finding_id
-    if not evidence_dir.exists() or not any(evidence_dir.iterdir()):
-        print(warn(f"No validation evidence found under itemdb/evidence/{finding_id}/."))
+    frontmatter = load_frontmatter(path)
+    validation = frontmatter.get("validation")
+    validation_status = validation.get("status") if isinstance(validation, dict) else None
+    if validation_status != "CONFIRMED":
+        print(warn(f"{path.stem} has validation.status={validation_status!r}, not 'CONFIRMED'."))
         print()
-        print(info("Run Phase 4 first to validate the finding: make phase-4 FINDING=" + finding_id))
+        print(info("Only findings with confirmed validation evidence can enter Phase 5."))
+        return 1
+
+    finding_id = str(frontmatter.get("id", "-".join(path.stem.split("-", 2)[:2])))
+
+    evidence_dir = ROOT / "itemdb" / "evidence" / finding_id
+    if not has_meaningful_evidence(finding_id):
+        print(warn(f"No meaningful validation evidence found under itemdb/evidence/{finding_id}/."))
+        print()
+        print(info("Run Phase 4 first and record actual evidence before Phase 5."))
         return 1
 
     print(ok(f"Found: {path.relative_to(ROOT)}"))
@@ -223,7 +291,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Check readiness gates for a CodeCome phase.",
     )
     parser.add_argument("phase", type=int, choices=[1, 2, 3, 4, 5, 6], help="Phase number.")
-    parser.add_argument("finding_id", nargs="?", help="Finding ID (required for Phase 4 and 5).")
+    parser.add_argument("finding_id", nargs="?", help="Finding ID or path (required for Phase 4 and 5).")
     return parser
 
 
@@ -242,6 +310,7 @@ def main() -> int:
             print(fail("Phase 4 requires a finding ID."))
             print()
             print(info("Usage: ./tools/gate-check.py 4 CC-0001"))
+            print(info("   or: ./tools/gate-check.py 4 itemdb/findings/NEEDS_VALIDATION/CC-0001-test.md"))
             return 1
         return gate_phase_4(args.finding_id)
     elif args.phase == 5:
@@ -249,6 +318,7 @@ def main() -> int:
             print(fail("Phase 5 requires a finding ID."))
             print()
             print(info("Usage: ./tools/gate-check.py 5 CC-0001"))
+            print(info("   or: ./tools/gate-check.py 5 itemdb/findings/CONFIRMED/CC-0001-test.md"))
             return 1
         return gate_phase_5(args.finding_id)
     elif args.phase == 6:

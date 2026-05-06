@@ -81,9 +81,9 @@ validate-all:
 	done
 
 exploit-all:
-	@ids=$$(./tools/list-findings.py --status CONFIRMED --format ids 2>/dev/null); \
+	@ids=$$(./tools/list-findings.py --status CONFIRMED --eligible-for-exploit --format ids 2>/dev/null); \
 	if [ -z "$$ids" ]; then \
-		echo "No CONFIRMED findings to exploit."; \
+		echo "No eligible CONFIRMED findings to exploit."; \
 		exit 0; \
 	fi; \
 	for f in $$ids; do \

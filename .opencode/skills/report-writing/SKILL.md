@@ -51,6 +51,11 @@ For the PoC, a single report is acceptable:
 
     itemdb/reports/report.md
 
+Note:
+
+- `make report` produces a lightweight local summary report.
+- `make phase-6` is the full reporting workflow and should be preferred when a human-reviewable narrative report is needed.
+
 ## Report types
 
 ### Technical report

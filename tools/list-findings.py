@@ -77,6 +77,11 @@ def load_findings(status_filter: Optional[str]) -> List[Dict[str, object]]:
                 "status": frontmatter.get("status", path.parent.name),
                 "severity": frontmatter.get("severity", ""),
                 "confidence": frontmatter.get("confidence", ""),
+                "exploitation_status": (
+                    frontmatter.get("exploitation", {}).get("status", "")
+                    if isinstance(frontmatter.get("exploitation"), dict)
+                    else ""
+                ),
                 "title": frontmatter.get("title", path.stem),
                 "path": str(path.relative_to(ROOT)),
             }
@@ -129,6 +134,15 @@ def print_ids(rows: List[Dict[str, object]]) -> None:
         print(row["id"])
 
 
+def filter_eligible_for_exploit(rows: List[Dict[str, object]]) -> List[Dict[str, object]]:
+    eligible_statuses = {"", "NOT_STARTED", "IN_PROGRESS"}
+    return [
+        row
+        for row in rows
+        if row["status"] == "CONFIRMED" and str(row.get("exploitation_status", "")) in eligible_statuses
+    ]
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="List CodeCome findings.")
 
@@ -145,6 +159,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output format.",
     )
 
+    parser.add_argument(
+        "--eligible-for-exploit",
+        action="store_true",
+        help="Only list CONFIRMED findings that have not already been exploited or marked not feasible.",
+    )
+
     return parser
 
 
@@ -153,6 +173,9 @@ def main() -> int:
     args = parser.parse_args()
 
     rows = load_findings(args.status)
+
+    if args.eligible_for_exploit:
+        rows = filter_eligible_for_exploit(rows)
 
     if args.format == "markdown":
         print_markdown(rows)

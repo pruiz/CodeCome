@@ -40,6 +40,7 @@ STATUSES = [
 ]
 
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+SECTION_RE = re.compile(r"^# (?P<title>.+?)\n(?P<body>.*?)(?=^# |\Z)", re.MULTILINE | re.DOTALL)
 
 
 def load_frontmatter(path: Path) -> Dict[str, object]:
@@ -72,12 +73,25 @@ def load_findings() -> List[Dict[str, str]]:
             frontmatter = load_frontmatter(path)
 
             validation = frontmatter.get("validation")
+            exploitation = frontmatter.get("exploitation")
             evidence_dir = ""
             validation_status = ""
+            exploitation_status = ""
+            exploitation_impact = ""
+            exploitation_type = ""
 
             if isinstance(validation, dict):
                 evidence_dir = str(validation.get("evidence_dir", ""))
                 validation_status = str(validation.get("status", ""))
+
+            if isinstance(exploitation, dict):
+                exploitation_status = str(exploitation.get("status", ""))
+                exploitation_impact = str(exploitation.get("impact_demonstrated", ""))
+                exploitation_type = str(exploitation.get("exploit_type", ""))
+
+            sections = extract_sections(path)
+            files = frontmatter.get("files")
+            affected_files = ", ".join(str(item) for item in files) if isinstance(files, list) else ""
 
             rows.append(
                 {
@@ -90,8 +104,18 @@ def load_findings() -> List[Dict[str, str]]:
                     "target_area": str(frontmatter.get("target_area", "")),
                     "title": str(frontmatter.get("title", path.stem)),
                     "validation_status": validation_status,
+                    "exploitation_status": exploitation_status,
+                    "exploitation_impact": exploitation_impact,
+                    "exploitation_type": exploitation_type,
+                    "affected_files": affected_files,
                     "finding_path": str(path.relative_to(ROOT)),
                     "evidence": evidence_dir,
+                    "summary": sections.get("Summary", "Pending."),
+                    "impact": sections.get("Impact", "Pending."),
+                    "validation_result": sections.get("Validation result", "Pending."),
+                    "remediation": sections.get("Remediation idea", "Pending."),
+                    "exploitation_result": sections.get("Exploitation Result", "Pending."),
+                    "demonstrated_impact": sections.get("Demonstrated Impact", "Pending."),
                 }
             )
 
@@ -116,6 +140,20 @@ def read_note_excerpt(name: str, max_chars: int = 1200) -> str:
     return text
 
 
+def extract_sections(path: Path) -> Dict[str, str]:
+    content = path.read_text(encoding="utf-8")
+    match = FRONTMATTER_RE.match(content)
+    body = content[match.end() :] if match else content
+    sections: Dict[str, str] = {}
+
+    for section_match in SECTION_RE.finditer(body):
+        title = section_match.group("title").strip()
+        section_body = section_match.group("body").strip()
+        sections[title] = section_body or "Pending."
+
+    return sections
+
+
 def table_for(rows: List[Dict[str, str]]) -> List[str]:
     lines = [
         "| ID | Status | Severity | Confidence | Target area | Title | Evidence |",
@@ -137,6 +175,61 @@ def table_for(rows: List[Dict[str, str]]) -> List[str]:
             f"| [{row['title']}]({row['finding_path']}) "
             f"| {evidence} |"
         )
+
+    return lines
+
+
+def render_detail_block(title: str, rows: List[Dict[str, str]], exploited: bool = False) -> List[str]:
+    lines: List[str] = [title, ""]
+
+    if not rows:
+        lines.append("None.")
+        lines.append("")
+        return lines
+
+    for row in rows:
+        lines.append(f"## {row['id']} - {row['title']}")
+        lines.append("")
+        lines.append(f"- Status: {row['status']}")
+        lines.append(f"- Severity: {row['severity']}")
+        if exploited:
+            lines.append(f"- Impact demonstrated: {row['exploitation_impact'] or 'Pending.'}")
+            lines.append(f"- Exploit type: {row['exploitation_type'] or 'Pending.'}")
+        else:
+            lines.append(f"- Confidence: {row['confidence']}")
+            lines.append(f"- Validation method: {row['validation_status'] or 'Pending.'}")
+        lines.append(f"- Target area: {row['target_area'] or 'unknown'}")
+        lines.append(f"- Affected files: {row['affected_files'] or 'Pending.'}")
+        lines.append(f"- Evidence: `{row['evidence']}`" if row['evidence'] else "- Evidence: Pending.")
+        if exploited:
+            exploit_artifacts = f"{row['evidence']}/exploits" if row['evidence'] else ""
+            lines.append(f"- Exploitation artifacts: `{exploit_artifacts}`" if exploit_artifacts else "- Exploitation artifacts: Pending.")
+        lines.append("")
+        lines.append("### Summary")
+        lines.append("")
+        lines.append(row["summary"])
+        lines.append("")
+        if exploited:
+            lines.append("### Demonstrated Impact")
+            lines.append("")
+            lines.append(row["demonstrated_impact"])
+            lines.append("")
+            lines.append("### Exploitation Result")
+            lines.append("")
+            lines.append(row["exploitation_result"])
+        else:
+            lines.append("### Impact")
+            lines.append("")
+            lines.append(row["impact"])
+            lines.append("")
+            lines.append("### Validation result")
+            lines.append("")
+            lines.append(row["validation_result"])
+        lines.append("")
+        lines.append("### Remediation idea")
+        lines.append("")
+        lines.append(row["remediation"])
+        lines.append("")
 
     return lines
 
@@ -215,15 +308,8 @@ def render_report(rows: List[Dict[str, str]]) -> str:
     lines.extend(table_for(rows))
     lines.append("")
 
-    lines.append("# Exploited findings")
-    lines.append("")
-    lines.extend(table_for(exploited))
-    lines.append("")
-
-    lines.append("# Confirmed findings")
-    lines.append("")
-    lines.extend(table_for(confirmed))
-    lines.append("")
+    lines.extend(render_detail_block("# Exploited findings", exploited, exploited=True))
+    lines.extend(render_detail_block("# Confirmed findings", confirmed))
 
     lines.append("# Findings needing validation")
     lines.append("")

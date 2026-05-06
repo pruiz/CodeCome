@@ -74,7 +74,7 @@ and may move findings to:
 
 ### Phase 5: exploit development
 
-Develop an exploit for one confirmed finding.
+Develop an exploit for one confirmed finding by id.
 
     opencode run --agent exploiter "$(sed 's#FINDING_PATH_OR_ID#CC-0001#g' prompts/phase-5-exploit.md)"
 
@@ -85,6 +85,8 @@ Exploitation artifacts are stored under:
 and may move findings to:
 
     itemdb/findings/EXPLOITED/
+
+`make exploit-all` skips findings already marked with `exploitation.status: NOT_FEASIBLE`.
 
 ### Phase 6: reporting
 
@@ -97,6 +99,8 @@ A basic report can also be generated locally without AI:
 Default report path:
 
     itemdb/reports/report.md
+
+This local report is a lightweight snapshot. Use `make phase-6` for the full reporting pass.
 
 ## Notes
 

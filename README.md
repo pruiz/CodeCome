@@ -240,7 +240,7 @@ Develop a proof-of-concept exploit for one confirmed finding:
 
 Stores exploitation artifacts under `itemdb/evidence/<finding-id>/exploits/` and may move findings to `EXPLOITED/`. The exploiter may adjust severity based on demonstrated impact.
 
-To exploit all confirmed findings:
+To exploit all confirmed findings that have not already been marked as not feasible:
 
     make exploit-all
 
@@ -264,6 +264,8 @@ If you prefer direct `opencode run` commands instead of `make` targets:
     opencode run --agent validator "$(sed 's#FINDING_PATH_OR_ID#CC-0001#g' prompts/phase-4-validate.md)"
     opencode run --agent exploiter "$(sed 's#FINDING_PATH_OR_ID#CC-0001#g' prompts/phase-5-exploit.md)"
     opencode run --agent reporter "$(cat prompts/phase-6-report.md)"
+
+`make report` is a lightweight local summary generator. Use `make phase-6` when you want the full AI-written report flow.
 
 ## Local helper commands
 
