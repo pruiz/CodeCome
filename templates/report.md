@@ -41,7 +41,8 @@ Describe the CodeCome workflow used:
 2. Vulnerability hypothesis generation.
 3. Counter-analysis and deduplication.
 4. Sandboxed validation.
-5. Markdown reporting.
+5. Exploit development and impact demonstration.
+6. Markdown reporting.
 
 Mention whether validation was:
 
@@ -72,6 +73,31 @@ Include:
 | ID | Status | Severity | Confidence | Target area | Title | Evidence |
 |---|---|---|---|---|---|---|
 | - | - | - | - | - | No findings yet. | - |
+
+# Exploited findings
+
+Exploited findings have demonstrated real-world impact through proof-of-concept exploits.
+
+For each exploited finding, include:
+
+## CC-0000 — Finding title
+
+- Status:
+- Severity: (note if adjusted, e.g., "HIGH (upgraded from MEDIUM)")
+- Impact demonstrated:
+- Exploit type:
+- Target area:
+- Affected files:
+- Evidence:
+- Exploitation artifacts:
+
+### Summary
+
+### Demonstrated Impact
+
+### Exploitation Result
+
+### Remediation idea
 
 # Confirmed findings
 

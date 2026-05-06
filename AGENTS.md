@@ -250,7 +250,7 @@ Use only these status values:
 
 ## Evidence rules
 
-For each confirmed finding, create:
+For each confirmed or exploited finding, create:
 
 - `itemdb/evidence/<finding-id>/README.md`
 
@@ -268,6 +268,17 @@ Add relevant artifacts when available:
 - debugger notes,
 - database state,
 - test output.
+
+For exploited findings, also create:
+
+- `itemdb/evidence/<finding-id>/exploits/README.md` (using `templates/exploit-readme.md`)
+
+With additional artifacts such as:
+
+- proof-of-concept exploit scripts,
+- crafted payloads,
+- captured output demonstrating impact,
+- impact logs.
 
 ## Validation safety rules
 

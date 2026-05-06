@@ -328,7 +328,7 @@ Before validation:
 
 3. Run reconnaissance:
 
-       opencode run "$(cat prompts/phase-1-recon.md)"
+       make phase-1
 
 4. Review notes under:
 
@@ -336,17 +336,25 @@ Before validation:
 
 5. Run audit:
 
-       opencode run "$(cat prompts/phase-2-audit.md)"
+       make phase-2
 
 6. Run counter-analysis:
 
-       opencode run "$(cat prompts/phase-3-review.md)"
+       make phase-3
 
 7. Validate one finding:
 
-       opencode run "$(sed 's#FINDING_PATH_OR_ID#CC-0001#g' prompts/phase-4-validate.md)"
+       make phase-4 FINDING=CC-0001
 
-8. Regenerate index and report:
+8. (Optional) Develop exploit for a confirmed finding:
+
+       make phase-5 FINDING=CC-0001
+
+9. Regenerate index and report:
 
        make index
        make report
+
+   Or generate a full AI-driven report:
+
+       make phase-6

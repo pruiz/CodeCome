@@ -8,7 +8,8 @@ Usage:
     ./tools/gate-check.py 2           # Check Phase 2 readiness
     ./tools/gate-check.py 3           # Check Phase 3 readiness
     ./tools/gate-check.py 4 CC-0001   # Check Phase 4 readiness for a specific finding
-    ./tools/gate-check.py 5           # Check Phase 5 readiness
+    ./tools/gate-check.py 5 CC-0001   # Check Phase 5 readiness for a specific finding
+    ./tools/gate-check.py 6           # Check Phase 6 readiness
 
 Returns exit code 0 if ready, 1 if not.
 """
@@ -34,6 +35,7 @@ REQUIRED_NOTES = [
 FINDING_STATUS_DIRS = [
     "NEEDS_VALIDATION",
     "CONFIRMED",
+    "EXPLOITED",
     "REJECTED",
     "DUPLICATE",
 ]

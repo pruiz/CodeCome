@@ -173,7 +173,7 @@ def render_report(rows: List[Dict[str, str]]) -> str:
         highest = min(all_proven, key=lambda r: severity_rank.get(r["severity"], 99))["severity"]
         lines.append(f"Highest proven severity currently listed: **{highest}**.")
     else:
-        lines.append("No findings are currently marked as confirmed.")
+        lines.append("No findings are currently confirmed or exploited.")
     lines.append("")
 
     lines.append("# Target overview")

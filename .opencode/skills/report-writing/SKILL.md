@@ -1,6 +1,6 @@
 # Report Writing Skill
 
-Use this skill during CodeCome Phase 5: reporting.
+Use this skill during CodeCome Phase 6: reporting.
 
 The goal of reporting is to turn reviewed findings and evidence into clear Markdown reports.
 
@@ -28,6 +28,7 @@ Read:
 - `itemdb/README.md`
 - `itemdb/index.md`
 - `itemdb/notes/`
+- `itemdb/findings/EXPLOITED/`
 - `itemdb/findings/CONFIRMED/`
 - `itemdb/findings/NEEDS_VALIDATION/`
 - `itemdb/findings/REJECTED/`

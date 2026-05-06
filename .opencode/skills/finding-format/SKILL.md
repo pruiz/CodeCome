@@ -27,6 +27,10 @@ Confirmed findings:
 
     itemdb/findings/CONFIRMED/
 
+Exploited findings (confirmed with demonstrated real-world impact):
+
+    itemdb/findings/EXPLOITED/
+
 Rejected findings:
 
     itemdb/findings/REJECTED/
@@ -90,6 +94,14 @@ Minimum fields:
       methods: []
       evidence_dir: "itemdb/evidence/CC-0001"
       summary: ""
+    exploitation:
+      status: "NOT_STARTED"
+      impact_demonstrated: ""
+      exploit_type: ""
+      severity_before: ""
+      severity_after: ""
+      artifacts_dir: "itemdb/evidence/CC-0001/exploits"
+      summary: ""
     created_at: "YYYY-MM-DD"
     updated_at: "YYYY-MM-DD"
     ---
@@ -100,6 +112,7 @@ Use only:
 
 - `NEEDS_VALIDATION`
 - `CONFIRMED`
+- `EXPLOITED`
 - `REJECTED`
 - `DUPLICATE`
 
@@ -133,7 +146,7 @@ Meaning:
 - `HIGH`: strong static evidence exists, but validation is still pending.
 - `CONFIRMED`: validated with clear evidence.
 
-A finding with confidence `CONFIRMED` must also have status `CONFIRMED`.
+A finding with confidence `CONFIRMED` must also have status `CONFIRMED` or `EXPLOITED`.
 
 ## Required sections
 
@@ -150,6 +163,8 @@ Every finding must include these sections:
     # Counter-analysis
     # Validation result
     # Evidence
+    # Exploitation Result
+    # Demonstrated Impact
     # Remediation idea
     # Notes
 
@@ -352,3 +367,28 @@ If a finding is confirmed:
 - explain limitations.
 
 Do not mark a finding confirmed without evidence.
+
+## Exploited findings
+
+If a confirmed finding has a demonstrated proof-of-concept exploit showing real-world impact:
+
+- move it to `itemdb/findings/EXPLOITED/`,
+- set `status: "EXPLOITED"`,
+- set `confidence: "CONFIRMED"`,
+- update `exploitation.status` to `"DEMONSTRATED"`,
+- fill `exploitation.impact_demonstrated` with a description of the impact achieved,
+- fill `exploitation.exploit_type` with the type of exploit (e.g., `buffer_overflow_rce`, `sqli_data_dump`),
+- record `exploitation.severity_before` and `exploitation.severity_after`,
+- adjust `severity` if the demonstrated impact warrants it,
+- update `# Exploitation Result` with details of the exploit,
+- update `# Demonstrated Impact` with a plain-language narrative,
+- store exploitation artifacts under `itemdb/evidence/<finding-id>/exploits/`.
+
+If exploitation is not feasible, the finding stays in `CONFIRMED/` with `exploitation.status` set to `"NOT_FEASIBLE"` and a documented explanation.
+
+Valid `exploitation.status` values:
+
+- `NOT_STARTED` -- exploitation has not been attempted.
+- `IN_PROGRESS` -- exploitation is underway.
+- `DEMONSTRATED` -- a working PoC demonstrates concrete impact.
+- `NOT_FEASIBLE` -- exploitation was attempted but is not feasible in the sandbox.

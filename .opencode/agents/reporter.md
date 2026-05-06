@@ -21,8 +21,8 @@ Before writing a report, read:
 - `templates/report.md`
 - `templates/run-summary.md`
 - relevant files under `itemdb/notes/`
-- findings under `itemdb/findings/`
-- evidence under `itemdb/evidence/`
+- findings under `itemdb/findings/` (including `EXPLOITED/`, `CONFIRMED/`, `NEEDS_VALIDATION/`, `REJECTED/`, `DUPLICATE/`)
+- evidence under `itemdb/evidence/` (including `exploits/` subdirectories)
 
 Use target-specific skills only when useful for explaining target context.
 
