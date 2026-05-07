@@ -30,14 +30,16 @@ After bootstrap, `sandbox/` typically contains:
     sandbox/Dockerfile
     sandbox/docker-compose.yml
     sandbox/scripts/build-target.sh
+    sandbox/scripts/build-sandbox.sh
     sandbox/scripts/check.sh
-    sandbox/scripts/clean.sh
-    sandbox/scripts/down.sh
-    sandbox/scripts/logs.sh
-    sandbox/scripts/reset.sh
-    sandbox/scripts/shell.sh
+    sandbox/scripts/up.sh            (when applicable)
     sandbox/scripts/test-target.sh
-    sandbox/scripts/up.sh
+    sandbox/scripts/down.sh          (when applicable)
+    sandbox/scripts/down.sh         (when applicable)
+    sandbox/scripts/logs.sh         (when applicable)
+    sandbox/scripts/shell.sh        (when applicable)
+    sandbox/scripts/clean.sh        (when applicable)
+    sandbox/scripts/reset.sh        (when applicable)
     sandbox/CODECOME-GENERATED.md
     sandbox/.backup-<UTC-timestamp>/  (if a previous content was replaced)
 
@@ -72,17 +74,24 @@ Environment variables:
 
 ## Validation tiers
 
-`make sandbox-validate` runs four tiers in order:
+`make sandbox-validate` runs six tiers in order:
 
 | Tier | Purpose | Default command |
 |---|---|---|
-| T1 | Image build | `sandbox/scripts/up.sh` (or `docker compose -f sandbox/docker-compose.yml build`) |
-| T2 | Sandbox sanity | `sandbox/scripts/check.sh` |
-| T3 | Target build | `sandbox/scripts/build-target.sh` |
-| T4 | Target test | `sandbox/scripts/test-target.sh` |
+| T1 | Sandbox build | `sandbox/scripts/build-sandbox.sh` (or `docker compose -f sandbox/docker-compose.yml build`) |
+| T2 | Sandbox start | `sandbox/scripts/up.sh` |
+| T3 | Sandbox sanity | `sandbox/scripts/check.sh` |
+| T4 | Target build | `sandbox/scripts/build-target.sh` |
+| T5 | Target test | `sandbox/scripts/test-target.sh` |
+| T6 | Sandbox stop | `sandbox/scripts/down.sh` |
 
 By default, validate stops at the first failed tier. Pass
 `BOOTSTRAP_ARGS='--keep-going'` to run all tiers regardless.
+
+These six capabilities are the ones Phase 2 enforces. Helper
+capabilities such as shell, logs, clean, and reset are still
+expected when they make sense for the target, but they are reported as
+helper gaps rather than hard gate failures.
 
 The validation matrix is appended to
 `sandbox/CODECOME-GENERATED.md` so each run is auditable.

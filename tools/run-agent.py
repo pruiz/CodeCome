@@ -19,6 +19,7 @@ import shlex
 import signal
 import subprocess
 import sys
+from functools import lru_cache
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any
@@ -147,6 +148,7 @@ def _extract_flag_value(tokens: list[str], flag_names: tuple[str, ...]) -> Optio
 
 
 _DISCOVERY_TIMEOUT_S = float(os.environ.get("CODECOME_MODEL_DISCOVERY_TIMEOUT", "1.0"))
+_MODEL_PROBE_TIMEOUT_S = float(os.environ.get("CODECOME_MODEL_PROBE_TIMEOUT", "20.0"))
 
 
 def _discover_opencode_default_model() -> Optional[str]:
@@ -212,6 +214,102 @@ def _discover_opencode_default_model() -> Optional[str]:
                 return str(mid)
 
     return None
+
+
+def _extract_model_from_export(export_text: str) -> Optional[str]:
+    try:
+        payload = json.loads(export_text)
+    except json.JSONDecodeError:
+        return None
+
+    if isinstance(payload, dict):
+        found = _scan_event_for_model(payload)
+        if found:
+            return found
+    return None
+
+
+def _strip_probe_unsafe_flags(command: list[str]) -> list[str]:
+    """Remove flags that would make a probe reuse or mutate a real session."""
+    stripped: list[str] = []
+    skip_next = False
+    value_flags = {"--session", "-s", "--title", "--attach", "--port", "-p"}
+    standalone_flags = {"--continue", "-c", "--fork", "--share"}
+
+    for token in command:
+        if skip_next:
+            skip_next = False
+            continue
+
+        name = token.split("=", 1)[0]
+        if name in standalone_flags:
+            continue
+        if name in value_flags:
+            if "=" not in token:
+                skip_next = True
+            continue
+
+        stripped.append(token)
+
+    return stripped
+
+
+@lru_cache(maxsize=32)
+def _probe_effective_model(probe_key: tuple[str, ...]) -> Optional[str]:
+    """Run a tiny throwaway session and read the actual chosen model.
+
+    This is only used when the wrapper would otherwise have to guess from
+    session history or show unknown. The probe session is deleted after the
+    export succeeds.
+    """
+    command = list(probe_key)
+    session_id: str | None = None
+    try:
+        result = subprocess.run(
+            command + ["Reply with exactly OK."],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=_MODEL_PROBE_TIMEOUT_S,
+        )
+        if result.returncode != 0:
+            return None
+
+        lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        if not lines:
+            return None
+
+        first = json.loads(lines[0])
+        if not isinstance(first, dict):
+            return None
+        session_id = first.get("sessionID")
+        if not isinstance(session_id, str) or not session_id:
+            return None
+
+        exported = subprocess.run(
+            ["opencode", "export", session_id],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=_MODEL_PROBE_TIMEOUT_S,
+        )
+        if exported.returncode != 0:
+            return None
+        return _extract_model_from_export(exported.stdout)
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+        return None
+    finally:
+        if session_id:
+            try:
+                subprocess.run(
+                    ["opencode", "session", "delete", session_id],
+                    cwd=ROOT,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+            except (OSError, subprocess.SubprocessError):
+                pass
 
 
 def _read_codecome_yml_agent(agent_name: str) -> tuple[Optional[str], Optional[str]]:
@@ -1502,6 +1600,31 @@ def build_child_command(args: argparse.Namespace) -> tuple[list[str], Optional[s
     return cmd, model, variant, model_source, variant_source
 
 
+def resolve_runtime_model_for_banner(
+    args: argparse.Namespace,
+    command: list[str],
+    model: Optional[str],
+    variant: Optional[str],
+    model_source: str,
+    variant_source: str,
+) -> tuple[Optional[str], Optional[str], str, str]:
+    """Prefer the actual runtime model over a historical guess.
+
+    Env/YAML/CLI-pinned values remain authoritative. When the wrapper would
+    otherwise show a best-effort historical value or unknown, run a tiny probe
+    with the same launch configuration and use the exported session metadata.
+    """
+    if model_source in {"OPENCODE_ARGS", "env CODECOME_MODEL", "codecome.yml"}:
+        return model, variant, model_source, variant_source
+
+    probe_command = _strip_probe_unsafe_flags(command)
+    probed = _probe_effective_model(tuple(probe_command))
+    if probed:
+        return probed, variant, "runtime probe", variant_source
+
+    return model, variant, model_source, variant_source
+
+
 def show_model_table(agent_name: str) -> int:
     """Print the model-resolution table for an agent and exit."""
     extra_args = shlex.split(os.environ.get("OPENCODE_ARGS", ""))
@@ -1527,6 +1650,7 @@ def show_model_table(agent_name: str) -> int:
     print(f"  {C.DIM}env CODECOME_MODEL_VARIANT{C.RESET}    variant={fmt(env_variant)}")
     print(f"  {C.DIM}codecome.yml{C.RESET}                  model={fmt(yaml_model)}  variant={fmt(yaml_variant)}")
     print(f"  {C.DIM}opencode session history{C.RESET}      model={fmt(discovered)}")
+    print(f"  {C.DIM}runtime probe{C.RESET}                 not run by show-model")
     print()
     effective_model = model or "(unknown)"
     effective_variant = variant or "(unknown)"
@@ -1572,6 +1696,9 @@ def main() -> int:
     prompt_file = ROOT / args.prompt_file
     prompt = load_prompt(prompt_file, args.finding)
     command, model, variant, model_source, variant_source = build_child_command(args)
+    model, variant, model_source, variant_source = resolve_runtime_model_for_banner(
+        args, command, model, variant, model_source, variant_source
+    )
 
     model_label = model or "(unknown)"
     variant_label = variant or "(unknown)"

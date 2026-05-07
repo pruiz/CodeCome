@@ -3,7 +3,7 @@
 
 .PHONY: help venv venv-check check status next-id frontmatter reset-itemdb index report
 .PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all
-.PHONY: sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-build-target sandbox-test-target
+.PHONY: sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-reset sandbox-build-target sandbox-test-target
 .PHONY: sandbox-list sandbox-inspect sandbox-detect sandbox-bootstrap sandbox-validate sandbox-regenerate sandbox-status show-model
 
 PYTHON := .venv/bin/python3
@@ -53,6 +53,7 @@ help:
 	@echo "    make sandbox-shell  Open sandbox shell"
 	@echo "    make sandbox-logs   Follow sandbox logs"
 	@echo "    make sandbox-clean  Stop sandbox and clean tmp"
+	@echo "    make sandbox-reset  Recreate sandbox from a known state"
 	@echo ""
 	@echo "  Sandbox bootstrap (Phase 1b):"
 	@echo ""
@@ -243,6 +244,10 @@ sandbox-logs:
 sandbox-clean:
 	@test -x sandbox/scripts/clean.sh || (echo $(SANDBOX_SCRIPT_HINT) && exit 1)
 	./sandbox/scripts/clean.sh
+
+sandbox-reset:
+	@test -x sandbox/scripts/reset.sh || (echo $(SANDBOX_SCRIPT_HINT) && exit 1)
+	./sandbox/scripts/reset.sh
 
 sandbox-build-target:
 	@test -x sandbox/scripts/build-target.sh || (echo $(SANDBOX_SCRIPT_HINT) && exit 1)

@@ -12,9 +12,9 @@ Subcommands:
   list         List available sandbox examples.
   inspect      Print manifest and previews for one example.
   detect       Scan workspace and propose ranked sandbox candidates.
-  apply        Copy an example into sandbox/ (not implemented yet).
-  validate     Run validation tiers (not implemented yet).
-  regenerate   Re-apply current sandbox example (not implemented yet).
+  apply        Copy an example into sandbox/.
+  validate     Run validation tiers.
+  regenerate   Re-apply current sandbox example.
   status       Print sandbox provenance and Phase 2 gate result.
 
 Environment variables:
@@ -188,6 +188,22 @@ _LANGUAGE_HINTS_BY_SUFFIX: Dict[str, str] = {
     ".htm": "web-static",
 }
 
+_MANIFEST_CACHE: Optional[set[str]] = None
+
+
+def declared_manifests() -> set[str]:
+    global _MANIFEST_CACHE
+    if _MANIFEST_CACHE is not None:
+        return _MANIFEST_CACHE
+
+    names = set(_LANGUAGE_HINTS_BY_FILE)
+    for example in discover_examples():
+        for name in example.applies_when.get("manifests", []):
+            if isinstance(name, str) and name.strip():
+                names.add(name.strip())
+    _MANIFEST_CACHE = names
+    return _MANIFEST_CACHE
+
 
 def _scan_recon_notes() -> Dict[str, Any]:
     """Best-effort extraction of language and manifest hints from recon notes.
@@ -228,7 +244,7 @@ def _scan_recon_notes() -> Dict[str, Any]:
             languages.append(hint)
 
     manifests: List[str] = []
-    for name in _LANGUAGE_HINTS_BY_FILE:
+    for name in declared_manifests():
         if name.lower() in text_blob:
             manifests.append(name)
 
@@ -565,6 +581,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     provenance = read_provenance()
     has_user_content = sandbox_has_user_content()
     allow_no_sandbox = bool(os.environ.get("CODECOME_ALLOW_NO_SANDBOX"))
+    capability_status = _capability_status()
 
     if provenance is not None:
         sandbox_state = "generated"
@@ -616,6 +633,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         "last_validation": last_validation,
         "phase2_gate_pass": gate_pass,
         "phase2_gate_reason": gate_reason,
+        "capabilities": capability_status,
     }
     if provenance:
         # Strip raw text from JSON output to keep it small.
@@ -630,6 +648,11 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(f"  {C.DIM}provenance:{C.RESET}       {'yes' if provenance else 'no'}")
         print(f"  {C.DIM}last validation:{C.RESET}  {last_validation or '-'}")
         print(f"  {C.DIM}allow override:{C.RESET}   {'yes' if allow_no_sandbox else 'no'}")
+        print(f"  {C.DIM}capabilities:{C.RESET}")
+        for name in ("build", "start", "check", "target-build", "test", "stop", "shell", "logs", "clean", "reset"):
+            status = capability_status[name]
+            state = "ok" if status.get("satisfied") else "missing"
+            print(f"    {name:<6} {state:<7} {status['path']}")
         if gate_pass:
             print(C.ok(f"Phase 2 sandbox gate would pass ({gate_reason})."))
         else:
@@ -1174,45 +1197,99 @@ def _has_executable(path: Path) -> bool:
 
 
 def _resolve_tier1_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str], str]:
-    """T1 image build: prefer up.sh, otherwise docker compose build.
+    """T1 sandbox build capability.
 
     Returns (kind, command, expected_path).
     kind: 'script' | 'docker' | 'missing'
-    expected_path: relative path of the canonical script that was
+    expected_path: relative path of the preferred helper that was
                    sought (or empty string when not script-bound).
     """
-    up_script = SANDBOX_ROOT / "scripts" / "up.sh"
+    build_sandbox_script = SANDBOX_ROOT / "scripts" / "build-sandbox.sh"
     compose_file = SANDBOX_ROOT / "docker-compose.yml"
-    if not docker_only and _has_executable(up_script):
-        return ("script", [str(up_script.relative_to(ROOT))], str(up_script.relative_to(ROOT)))
+    if not docker_only and _has_executable(build_sandbox_script):
+        return (
+            "script",
+            [str(build_sandbox_script.relative_to(ROOT))],
+            str(build_sandbox_script.relative_to(ROOT)),
+        )
     if not scripts_only and compose_file.exists():
         return (
             "docker",
             ["docker", "compose", "-f", str(compose_file.relative_to(ROOT)), "build"],
             "",
         )
-    return ("missing", [], str(up_script.relative_to(ROOT)))
+    return ("missing", [], str(build_sandbox_script.relative_to(ROOT)))
 
 
 def _resolve_tier2_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str], str]:
+    up_script = SANDBOX_ROOT / "scripts" / "up.sh"
+    if not docker_only and _has_executable(up_script):
+        return ("script", [str(up_script.relative_to(ROOT))], str(up_script.relative_to(ROOT)))
+    return ("missing", [], str(up_script.relative_to(ROOT)))
+
+
+def _resolve_tier3_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str], str]:
     check_script = SANDBOX_ROOT / "scripts" / "check.sh"
     if not docker_only and _has_executable(check_script):
         return ("script", [str(check_script.relative_to(ROOT))], str(check_script.relative_to(ROOT)))
     return ("missing", [], str(check_script.relative_to(ROOT)))
 
 
-def _resolve_tier3_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str], str]:
+def _resolve_tier4_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str], str]:
     build_script = SANDBOX_ROOT / "scripts" / "build-target.sh"
     if not docker_only and _has_executable(build_script):
         return ("script", [str(build_script.relative_to(ROOT))], str(build_script.relative_to(ROOT)))
     return ("missing", [], str(build_script.relative_to(ROOT)))
 
 
-def _resolve_tier4_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str], str]:
+def _resolve_tier5_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str], str]:
     test_script = SANDBOX_ROOT / "scripts" / "test-target.sh"
     if not docker_only and _has_executable(test_script):
         return ("script", [str(test_script.relative_to(ROOT))], str(test_script.relative_to(ROOT)))
     return ("missing", [], str(test_script.relative_to(ROOT)))
+
+
+def _resolve_tier6_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str], str]:
+    down_script = SANDBOX_ROOT / "scripts" / "down.sh"
+    if not docker_only and _has_executable(down_script):
+        return ("script", [str(down_script.relative_to(ROOT))], str(down_script.relative_to(ROOT)))
+    return ("missing", [], str(down_script.relative_to(ROOT)))
+
+
+def _capability_helpers() -> Dict[str, tuple[Path, str]]:
+    return {
+        "build": (SANDBOX_ROOT / "scripts" / "build-sandbox.sh", "build the sandbox environment in a repeatable way"),
+        "check": (SANDBOX_ROOT / "scripts" / "check.sh", "run sandbox sanity checks"),
+        "target-build": (SANDBOX_ROOT / "scripts" / "build-target.sh", "build the target"),
+        "test": (SANDBOX_ROOT / "scripts" / "test-target.sh", "test the target"),
+        "start": (SANDBOX_ROOT / "scripts" / "up.sh", "bring the environment up"),
+        "stop": (SANDBOX_ROOT / "scripts" / "down.sh", "stop the environment"),
+        "shell": (SANDBOX_ROOT / "scripts" / "shell.sh", "open a shell in the environment"),
+        "logs": (SANDBOX_ROOT / "scripts" / "logs.sh", "inspect environment logs"),
+        "clean": (SANDBOX_ROOT / "scripts" / "clean.sh", "clean runtime artifacts"),
+        "reset": (SANDBOX_ROOT / "scripts" / "reset.sh", "reset the environment to a known state"),
+    }
+
+
+def _capability_status() -> Dict[str, Dict[str, str | bool]]:
+    compose_file = SANDBOX_ROOT / "docker-compose.yml"
+    statuses: Dict[str, Dict[str, str | bool]] = {}
+    for name, (path, purpose) in _capability_helpers().items():
+        present = _has_executable(path)
+        statuses[name] = {
+            "present": present,
+            "path": str(path.relative_to(ROOT)),
+            "purpose": purpose,
+        }
+
+    # Image build may be satisfied by docker compose even when there is no
+    # helper script yet. Starting the environment remains a separate helper.
+    build_status = statuses["build"]
+    build_status["satisfied"] = bool(build_status["present"] or compose_file.exists())
+    for key, status in statuses.items():
+        if key != "build":
+            status["satisfied"] = bool(status["present"])
+    return statuses
 
 
 def _format_outcome(outcome: str) -> str:
@@ -1268,10 +1345,12 @@ def cmd_validate(args: argparse.Namespace) -> int:
             print(C.info("Validation will likely fail unless your sandbox can run without Docker."))
 
     tier_specs = [
-        ("T1", "Image build", _resolve_tier1_command),
-        ("T2", "Sandbox sanity", _resolve_tier2_command),
-        ("T3", "Target build", _resolve_tier3_command),
-        ("T4", "Target test", _resolve_tier4_command),
+        ("T1", "Sandbox build", _resolve_tier1_command),
+        ("T2", "Environment start", _resolve_tier2_command),
+        ("T3", "Sandbox sanity", _resolve_tier3_command),
+        ("T4", "Target build", _resolve_tier4_command),
+        ("T5", "Target test", _resolve_tier5_command),
+        ("T6", "Environment stop", _resolve_tier6_command),
     ]
 
     results: List[Dict[str, Any]] = []
@@ -1281,8 +1360,9 @@ def cmd_validate(args: argparse.Namespace) -> int:
         kind, command, expected_path = resolver(args.scripts_only, args.docker_only)
         if kind == "missing":
             reason = (
-                f"script not found: {expected_path}. "
-                "Templates are seeds; the agent must author this script during Phase 1b. "
+                f"required sandbox capability is missing: {expected_path}. "
+                "Templates are seeds; Phase 1b must leave behind a working way to "
+                "build the sandbox, start it, sanity-check it, build the target, test the target, and stop the environment. "
                 "See .opencode/skills/sandbox-bootstrap/SKILL.md."
             )
             entry = TierResult(
@@ -1303,7 +1383,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
                     f"  {tier_id:<3} {purpose:<18} {_format_outcome('failed')}  "
                     f"{C.DIM}reason: missing {expected_path}{C.RESET}"
                 )
-                print(f"    {C.DIM}Templates are seeds; author this script during Phase 1b.{C.RESET}")
+                print(f"    {C.DIM}Templates are seeds; implement the missing sandbox capability during Phase 1b.{C.RESET}")
             if not args.keep_going:
                 # Mark remaining tiers as skipped because we stopped early.
                 for skip_id, skip_purpose, _r in tier_specs[len(results):]:
@@ -1366,12 +1446,20 @@ def cmd_validate(args: argparse.Namespace) -> int:
                         print(f"  {skip_id:<3} {skip_purpose:<18} {_format_outcome('skipped')}  (prior tier failed)")
                 break
 
+    helper_status = _capability_status()
+    missing_helpers = [
+        name for name in ("shell", "logs", "clean", "reset")
+        if not bool(helper_status[name].get("satisfied"))
+    ]
+
     history_updated = _append_validation_history(results)
 
     payload = {
         "overall_outcome": overall_outcome,
         "history_updated": history_updated,
         "tiers": results,
+        "capabilities": helper_status,
+        "missing_helpers": missing_helpers,
     }
 
     if args.format == "json":
@@ -1379,6 +1467,13 @@ def cmd_validate(args: argparse.Namespace) -> int:
     else:
         print()
         print(f"  {C.BOLD}overall:{C.RESET}  {_format_outcome(overall_outcome)}")
+        if missing_helpers:
+            print(C.warn(
+                "Helper capabilities still missing: " + ", ".join(missing_helpers)
+            ))
+            print(C.info(
+                "Phase 2 enforces build/start/check/target-build/test/stop. Document missing helper capabilities in sandbox-plan.md."
+            ))
         if history_updated:
             print(C.info(f"Validation history appended to {PROVENANCE_FILE.relative_to(ROOT)}"))
         else:

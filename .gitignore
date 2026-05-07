@@ -251,6 +251,9 @@ itemdb/findings/PENDING/*
 itemdb/findings/CONFIRMED/*
 !itemdb/findings/CONFIRMED/.gitkeep
 
+itemdb/findings/EXPLOITED/*
+!itemdb/findings/EXPLOITED/.gitkeep
+
 itemdb/findings/REJECTED/*
 !itemdb/findings/REJECTED/.gitkeep
 

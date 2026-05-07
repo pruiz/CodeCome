@@ -7,15 +7,19 @@ detection cannot match a more specific stack.
 
 This template is a starting point, not a finished sandbox. During
 Phase 1b the agent must extend it into a fully functional
-`sandbox/`, including authoring missing canonical scripts:
+`sandbox/` with durable ways to:
 
-    check.sh   up.sh   down.sh   shell.sh   logs.sh
-    clean.sh   reset.sh
+    start/build the environment
+    run sandbox sanity checks
+    build the target
+    test the target
 
-The agent should also adapt the starter `build-target.sh` and
-`test-target.sh` to the actual project layout, and add
-target-specific scripts when they help. Document any extras in
-`itemdb/notes/sandbox-plan.md`. See
+Prefer helpers such as `build-sandbox.sh`, `up.sh`, `check.sh`,
+`build-target.sh`, and `test-target.sh` under `sandbox/scripts/`. Add
+operational helpers such as `down.sh`, `shell.sh`, `logs.sh`,
+`clean.sh`, and `reset.sh`
+when they make sense for the target. Document any extras or omitted
+helpers in `itemdb/notes/sandbox-plan.md`. See
 `.opencode/skills/sandbox-bootstrap/SKILL.md`.
 
 ## When to use
