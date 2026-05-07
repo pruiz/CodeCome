@@ -251,6 +251,7 @@ _WRITE_DIFF_LIMIT = int(os.environ.get("CODECOME_WRITE_DIFF_LIMIT", "50"))
 _EDIT_DIFF_LINES = int(os.environ.get("CODECOME_EDIT_DIFF_LINES", "25"))
 _READ_HIGHLIGHT_LIMIT = int(os.environ.get("CODECOME_READ_HIGHLIGHT_LIMIT", str(200 * 1024)))
 _GLOB_MATCH_CAP = int(os.environ.get("CODECOME_GLOB_MATCH_CAP", "100"))
+_INTERNAL_READ_SUPPRESS = os.environ.get("CODECOME_INTERNAL_READ_SUPPRESS", "1") not in ("0", "false", "False", "no")
 
 _READ_FILE_FRAMING_RE = re.compile(
     r"<path>(?P<path>.*?)</path>\s*"
@@ -287,6 +288,78 @@ def _relativize_path(path: str) -> str:
         return str(Path(path).relative_to(ROOT))
     except ValueError:
         return path
+
+
+_FINDING_FILENAME_RE = re.compile(r"^(CC-\d{4,})-(.+)\.md$")
+_ROOT_WORKSPACE_DOCS = {"AGENTS.md", "README.md"}
+_ROOT_WORKSPACE_CONFIGS = {"codecome.yml"}
+
+
+def _classify_internal_read(rel_path: str) -> str | None:
+    """Return a description for a suppressible internal read, or None.
+
+    rel_path is repo-relative. Absolute paths (outside the repo) return None.
+    """
+    if not rel_path or os.path.isabs(rel_path):
+        return None
+
+    parts = Path(rel_path).parts
+    if not parts:
+        return None
+
+    # Root-level workspace docs and config
+    if len(parts) == 1:
+        name = parts[0]
+        if name in _ROOT_WORKSPACE_DOCS:
+            return f"reading workspace doc: {name}"
+        if name in _ROOT_WORKSPACE_CONFIGS:
+            return f"reading workspace config: {name}"
+        return None
+
+    # .opencode/...
+    if parts[0] == ".opencode":
+        if len(parts) >= 3 and parts[1] == "agents":
+            agent_name = Path(parts[2]).stem
+            return f"loading agent: {agent_name}"
+        if len(parts) >= 3 and parts[1] == "skills":
+            skill_name = parts[2]
+            if len(parts) == 4 and parts[3] == "SKILL.md":
+                return f"loading skill: {skill_name}"
+            if len(parts) >= 4:
+                rest = "/".join(parts[3:])
+                return f"loading skill resource: {skill_name}/{rest}"
+            return f"loading skill: {skill_name}"
+        return f"loading opencode config: {rel_path}"
+
+    # itemdb/...
+    if parts[0] == "itemdb":
+        if len(parts) >= 4 and parts[1] == "findings":
+            status = parts[2]
+            filename = parts[3]
+            m = _FINDING_FILENAME_RE.match(filename)
+            if m:
+                return f"reading finding: {m.group(1)} [{status}] - {m.group(2)}"
+            return f"reading itemdb file: {rel_path}"
+        if len(parts) >= 3 and parts[1] == "notes":
+            return f"reading note: {parts[2]}"
+        if len(parts) >= 3 and parts[1] == "evidence":
+            rest = "/".join(parts[2:])
+            return f"reading evidence: {rest}"
+        if len(parts) >= 3 and parts[1] == "reports":
+            return f"reading report: {parts[2]}"
+        if len(parts) == 2 and parts[1] == "index.md":
+            return "reading items index"
+        return f"reading itemdb file: {rel_path}"
+
+    # runs/<name>.md
+    if parts[0] == "runs" and len(parts) >= 2:
+        return f"reading run summary: {parts[1]}"
+
+    # templates/<name>
+    if parts[0] == "templates" and len(parts) >= 2:
+        return f"reading template: {parts[1]}"
+
+    return None
 
 
 def _strip_read_framing(output: str) -> tuple[str, Any, str | None]:
@@ -504,14 +577,30 @@ def render_read_rich(console: Console, state: dict[str, Any]) -> bool:
 
     if kind == "file":
         body = str(payload).strip()
+        # Cache the full body before considering display suppression so
+        # subsequent write/edit diffs always have a baseline.
+        _cache_set(file_path, body)
+
+        # Display suppression for internal workspace files.
+        if _INTERNAL_READ_SUPPRESS:
+            description = _classify_internal_read(rel_path)
+            if description is not None:
+                is_partial = offset is not None or limit is not None
+                if is_partial:
+                    description = f"{description} (partial)"
+                # Build a fresh sections list for the suppressed panel:
+                # path header + dim italic description, no body.
+                suppressed: list[Any] = [Text(rel_path, style="bold cyan")]
+                suppressed.append(Text(description, style="dim italic"))
+                console.print(Panel(Group(*suppressed), title="Read", border_style=border, expand=True))
+                return True
+
         if not body:
             sections.append(Text("(empty file)", style="dim"))
         else:
             raw_body = _strip_line_numbers(body)
             lexer = _detect_lexer(file_path)
             _render_truncated_body_rich(console, sections, raw_body, _READ_DISPLAY_LINES, lexer, footer)
-        # Cache the full body (not display-truncated)
-        _cache_set(file_path, body)
 
     elif kind == "directory":
         entries = payload if isinstance(payload, list) else []
@@ -541,18 +630,32 @@ def render_read_plain(state: dict[str, Any]) -> bool:
     offset = inp.get("offset")
     limit = inp.get("limit")
 
-    print(C.header(f"read {rel_path}"))
-    if offset is not None and limit is not None:
-        print(f"  lines {offset}..{offset + limit - 1}")
-
     kind, payload, footer = _strip_read_framing(output)
 
     if kind == "file":
         body = str(payload).strip()
+        _cache_set(file_path, body)
+
+        if _INTERNAL_READ_SUPPRESS:
+            description = _classify_internal_read(rel_path)
+            if description is not None:
+                is_partial = offset is not None or limit is not None
+                suffix = " (partial)" if is_partial else ""
+                print(C.header(f"read [{description}]{suffix}"))
+                return True
+
+        print(C.header(f"read {rel_path}"))
+        if offset is not None and limit is not None:
+            print(f"  lines {offset}..{offset + limit - 1}")
         raw_body = _strip_line_numbers(body)
         _render_truncated_body_plain(raw_body, _READ_DISPLAY_LINES, footer)
-        _cache_set(file_path, body)
-    elif kind == "directory":
+        return True
+
+    print(C.header(f"read {rel_path}"))
+    if offset is not None and limit is not None:
+        print(f"  lines {offset}..{offset + limit - 1}")
+
+    if kind == "directory":
         entries = payload if isinstance(payload, list) else []
         for entry in entries:
             print(f"  {entry}")
