@@ -1771,15 +1771,44 @@ def render_tool_use(console: Console, event: dict[str, Any]) -> None:
             print(json.dumps(output_data, indent=2) if isinstance(output_data, (dict, list)) else str(output_data))
 
 
+# LLM finish reasons we have observed, classified.
+#
+# Clean terminal: the model finished the turn on its own, after emitting
+# the final assistant message.
+#
+# Mid-turn: the model emitted tool calls and is expected to be invoked
+# again with the tool results. Not terminal on its own.
+#
+# Failure terminal: the response was cut short by something other than
+# the model itself signalling end-of-turn. The wrapper currently treats
+# these as success because opencode still exits 0; we explicitly flag
+# them here so callers can fail loudly instead.
+_FINISH_TERMINAL_OK = {"stop", "end_turn"}
+_FINISH_MID_TURN = {"tool-calls", "tool_use"}
+_FINISH_FAILURE = {
+    "content-filter",   # provider safety filter aborted the response
+    "content_filter",   # alternative spelling
+    "length",           # output token cap reached
+    "max_tokens",       # alternative spelling
+    "error",
+}
+
+
 def render_step_finish(console: Console, event: dict[str, Any]) -> None:
     part = event.get("part", {})
     reason = str(part.get("reason", "unknown"))
     tokens = format_tokens(part.get("tokens", {}))
     suffix = f" ({tokens})" if tokens else ""
+    style = "dim"
+    if reason in _FINISH_FAILURE:
+        style = "bold red"
     if HAVE_RICH:
-        console.print(Text(f"step finished: {reason}{suffix}", style="dim"))
+        console.print(Text(f"step finished: {reason}{suffix}", style=style))
     else:
-        print(f"step finished: {reason}{suffix}")
+        if reason in _FINISH_FAILURE:
+            print(C.fail(f"step finished: {reason}{suffix}"))
+        else:
+            print(f"step finished: {reason}{suffix}")
 
 
 def render_unknown(console: Console, event: dict[str, Any]) -> None:
@@ -2034,37 +2063,81 @@ def main() -> int:
 
         assert process.stdout is not None
         late_model_announced = False
-        for raw_line in process.stdout:
-            line = raw_line.strip()
-            if not line:
-                continue
-            if args.debug:
-                sys.stderr.write(line + "\n")
-                sys.stderr.flush()
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
+        # Tee the raw JSONL stream to disk for post-mortem analysis.
+        # The path is under tmp/ which is intended to be ephemeral.
+        finding_tag = (args.finding or "no-finding").replace("/", "_")
+        transcript_dir = ROOT / "tmp"
+        transcript_dir.mkdir(parents=True, exist_ok=True)
+        transcript_path = transcript_dir / f"last-phase-{args.phase}-{finding_tag}.jsonl"
+        last_finish_reason: Optional[str] = None
+        last_finish_tokens: dict[str, Any] = {}
+        any_step_finish_seen = False
+        try:
+            transcript_fp: Optional[Any] = transcript_path.open("w", encoding="utf-8")
+        except OSError as exc:
+            transcript_fp = None
+            if HAVE_RICH:
+                console.print(Text(f"warning: could not open transcript {transcript_path}: {exc}", style="yellow"))
+            else:
+                print(C.warn(f"warning: could not open transcript {transcript_path}: {exc}"))
+
+        try:
+            for raw_line in process.stdout:
+                if transcript_fp is not None:
+                    try:
+                        transcript_fp.write(raw_line)
+                    except OSError:
+                        pass
+                line = raw_line.strip()
+                if not line:
+                    continue
                 if args.debug:
-                    sys.stderr.write(f"json-parse-error: {line}\n")
+                    sys.stderr.write(line + "\n")
                     sys.stderr.flush()
-                continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    if args.debug:
+                        sys.stderr.write(f"json-parse-error: {line}\n")
+                        sys.stderr.flush()
+                    continue
 
-            # Late discovery: if the JSON stream ever carries the model
-            # identity in a tool/event payload, surface it once.
-            if not late_model_announced:
-                discovered_in_stream = _scan_event_for_model(event)
-                if discovered_in_stream and discovered_in_stream != model:
-                    late_model_announced = True
-                    msg = (
-                        f"[model resolved from stream] {discovered_in_stream} "
-                        f"(banner showed {model_label})"
-                    )
-                    if HAVE_RICH:
-                        console.print(Text(msg, style="yellow"))
-                    else:
-                        print(C.warn(msg))
+                # Late discovery: if the JSON stream ever carries the model
+                # identity in a tool/event payload, surface it once.
+                if not late_model_announced:
+                    discovered_in_stream = _scan_event_for_model(event)
+                    if discovered_in_stream and discovered_in_stream != model:
+                        late_model_announced = True
+                        msg = (
+                            f"[model resolved from stream] {discovered_in_stream} "
+                            f"(banner showed {model_label})"
+                        )
+                        if HAVE_RICH:
+                            console.print(Text(msg, style="yellow"))
+                        else:
+                            print(C.warn(msg))
 
-            render_event(console, args.phase, args.label, event)
+                # Track every step_finish so we can audit the turn after
+                # the child exits. The LAST step_finish in the stream is
+                # the one that decides whether the run completed cleanly.
+                if event.get("type") == "step_finish":
+                    any_step_finish_seen = True
+                    part = event.get("part") or {}
+                    reason = part.get("reason")
+                    if isinstance(reason, str):
+                        last_finish_reason = reason
+                    tokens = part.get("tokens")
+                    if isinstance(tokens, dict):
+                        last_finish_tokens = tokens
+
+                render_event(console, args.phase, args.label, event)
+        finally:
+            if transcript_fp is not None:
+                try:
+                    transcript_fp.flush()
+                    transcript_fp.close()
+                except OSError:
+                    pass
 
         process.wait()
         returncode = process.returncode
@@ -2087,12 +2160,60 @@ def main() -> int:
     if interrupted and returncode == 0:
         returncode = 130
 
+    # Decide whether the LLM stream ended cleanly. Even when opencode
+    # itself exits 0, a non-clean finish reason (e.g. content-filter,
+    # length, error) means the model's response was cut short and the
+    # phase did not complete its intended work. Treat that as a failure
+    # so callers (Make, exploit-all, CI) can react instead of being
+    # told "Phase N completed successfully" on a half-finished run.
+    finish_warning: Optional[str] = None
+    if returncode == 0:
+        if not any_step_finish_seen:
+            finish_warning = (
+                "no step_finish events were observed in the JSON stream; "
+                "the agent likely produced no work"
+            )
+        elif last_finish_reason is None:
+            finish_warning = "step_finish observed but reason was missing"
+        elif last_finish_reason in _FINISH_FAILURE:
+            finish_warning = (
+                f"LLM stream ended with finish reason '{last_finish_reason}' "
+                "(provider truncated the response; the phase did not finish)"
+            )
+        elif last_finish_reason in _FINISH_MID_TURN:
+            finish_warning = (
+                f"LLM stream ended after a mid-turn step (reason "
+                f"'{last_finish_reason}') without a terminal 'stop'; the "
+                "agent likely ran out of iterations or was cut short by "
+                "the provider before producing a final response"
+            )
+        elif last_finish_reason not in _FINISH_TERMINAL_OK:
+            finish_warning = (
+                f"LLM stream ended with unrecognised finish reason "
+                f"'{last_finish_reason}'; treating as incomplete"
+            )
+
+    if finish_warning is not None and returncode == 0:
+        # Promote to an error so the make target / exploit-all loop fails.
+        returncode = 2
+
     if returncode == 0:
         if HAVE_RICH:
             console.print(Rule(style="green"))
             console.print(Text(f"{C.SYM_OK} Phase {args.phase} completed successfully", style="green"))
+            console.print(
+                Text(
+                    f"  finish reason: {last_finish_reason!r}  "
+                    f"transcript: {transcript_path.relative_to(ROOT)}",
+                    style="dim",
+                )
+            )
         else:
             print(C.ok(f"Phase {args.phase} completed successfully"))
+            print(
+                f"  finish reason: {last_finish_reason!r}  "
+                f"transcript: {transcript_path.relative_to(ROOT)}"
+            )
     elif returncode == 130:
         if HAVE_RICH:
             console.print(Rule(style="yellow"))
@@ -2102,9 +2223,44 @@ def main() -> int:
     else:
         if HAVE_RICH:
             console.print(Rule(style="red"))
-            console.print(Text(f"{C.SYM_FAIL} Phase {args.phase} failed with exit code {returncode}", style="red"))
+            console.print(
+                Text(
+                    f"{C.SYM_FAIL} Phase {args.phase} did not complete cleanly "
+                    f"(exit code {returncode})",
+                    style="red",
+                )
+            )
+            if finish_warning:
+                console.print(Text(f"  reason: {finish_warning}", style="red"))
+            console.print(
+                Text(
+                    f"  transcript: {transcript_path.relative_to(ROOT)}",
+                    style="dim",
+                )
+            )
+            console.print(
+                Text(
+                    "  hint: the run is likely partial; rerun the phase or "
+                    "switch to a different model/provider before retrying",
+                    style="yellow",
+                )
+            )
         else:
-            print(C.fail(f"Phase {args.phase} failed with exit code {returncode}"))
+            print(
+                C.fail(
+                    f"Phase {args.phase} did not complete cleanly "
+                    f"(exit code {returncode})"
+                )
+            )
+            if finish_warning:
+                print(C.fail(f"  reason: {finish_warning}"))
+            print(f"  transcript: {transcript_path.relative_to(ROOT)}")
+            print(
+                C.warn(
+                    "  hint: the run is likely partial; rerun the phase or "
+                    "switch to a different model/provider before retrying"
+                )
+            )
 
     return returncode
 
