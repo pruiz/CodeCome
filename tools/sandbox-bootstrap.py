@@ -522,6 +522,42 @@ def cmd_detect(args: argparse.Namespace) -> int:
     return 0
 
 
+_VALIDATION_RUN_HEADER_RE = re.compile(r"^## Validation run ", re.MULTILINE)
+_VALIDATION_TABLE_ROW_RE = re.compile(
+    r"^\|\s*(T\d)\s*\|\s*[^|]+\|\s*(passed|failed|skipped)\s*\|",
+    re.MULTILINE | re.IGNORECASE,
+)
+
+
+def _last_validation_outcome() -> Optional[str]:
+    """Inspect CODECOME-GENERATED.md for the most recent validation outcome.
+
+    Returns 'passed', 'failed', 'mixed', 'skipped', or None if no run found.
+    """
+    if not PROVENANCE_FILE.exists():
+        return None
+
+    text = PROVENANCE_FILE.read_text(encoding="utf-8", errors="replace")
+    headers = list(_VALIDATION_RUN_HEADER_RE.finditer(text))
+    if not headers:
+        return None
+
+    last_block_start = headers[-1].start()
+    block = text[last_block_start:]
+
+    outcomes = [m.group(2).lower() for m in _VALIDATION_TABLE_ROW_RE.finditer(block)]
+    if not outcomes:
+        return None
+
+    if any(o == "failed" for o in outcomes):
+        return "failed"
+    if all(o == "skipped" for o in outcomes):
+        return "skipped"
+    if any(o == "passed" for o in outcomes):
+        return "mixed" if any(o == "skipped" for o in outcomes) else "passed"
+    return None
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     provenance = read_provenance()
     has_user_content = sandbox_has_user_content()
@@ -534,14 +570,49 @@ def cmd_status(args: argparse.Namespace) -> int:
     else:
         sandbox_state = "missing"
 
-    gate_pass = sandbox_state in {"generated", "user-managed"} or allow_no_sandbox
+    last_validation = _last_validation_outcome()
+
+    # Gate logic:
+    # - missing             -> block (override wins)
+    # - generated + failed  -> block (override wins)
+    # - generated + passed  -> pass
+    # - generated + mixed   -> pass with warning (some tiers skipped)
+    # - generated + None    -> pass with warning (no validation run yet)
+    # - generated + skipped -> block (no real validation evidence)
+    # - user-managed        -> pass with warning (user owns it)
+    if allow_no_sandbox:
+        gate_pass = True
+        gate_reason = "override (CODECOME_ALLOW_NO_SANDBOX=1)"
+    elif sandbox_state == "missing":
+        gate_pass = False
+        gate_reason = "sandbox is missing"
+    elif sandbox_state == "generated" and last_validation == "failed":
+        gate_pass = False
+        gate_reason = "last validation failed"
+    elif sandbox_state == "generated" and last_validation == "skipped":
+        gate_pass = False
+        gate_reason = "last validation has no real outcomes (all tiers skipped)"
+    else:
+        gate_pass = True
+        if sandbox_state == "user-managed":
+            gate_reason = "sandbox is user-managed (validation not enforced)"
+        elif last_validation is None:
+            gate_reason = "no validation run on record"
+        elif last_validation == "passed":
+            gate_reason = "last validation passed"
+        elif last_validation == "mixed":
+            gate_reason = "last validation passed (some tiers skipped)"
+        else:
+            gate_reason = f"last validation: {last_validation}"
 
     payload: Dict[str, Any] = {
         "sandbox_state": sandbox_state,
         "sandbox_path": str(SANDBOX_ROOT.relative_to(ROOT)),
         "provenance_present": provenance is not None,
         "allow_no_sandbox": allow_no_sandbox,
+        "last_validation": last_validation,
         "phase2_gate_pass": gate_pass,
+        "phase2_gate_reason": gate_reason,
     }
     if provenance:
         # Strip raw text from JSON output to keep it small.
@@ -551,14 +622,15 @@ def cmd_status(args: argparse.Namespace) -> int:
         _emit(payload, "json")
     else:
         print(C.header("Sandbox status"))
-        print(f"  {C.DIM}path:{C.RESET}            {payload['sandbox_path']}")
-        print(f"  {C.DIM}state:{C.RESET}           {sandbox_state}")
-        print(f"  {C.DIM}provenance:{C.RESET}      {'yes' if provenance else 'no'}")
-        print(f"  {C.DIM}allow override:{C.RESET}  {'yes' if allow_no_sandbox else 'no'}")
+        print(f"  {C.DIM}path:{C.RESET}             {payload['sandbox_path']}")
+        print(f"  {C.DIM}state:{C.RESET}            {sandbox_state}")
+        print(f"  {C.DIM}provenance:{C.RESET}       {'yes' if provenance else 'no'}")
+        print(f"  {C.DIM}last validation:{C.RESET}  {last_validation or '-'}")
+        print(f"  {C.DIM}allow override:{C.RESET}   {'yes' if allow_no_sandbox else 'no'}")
         if gate_pass:
-            print(C.ok("Phase 2 sandbox gate would pass."))
+            print(C.ok(f"Phase 2 sandbox gate would pass ({gate_reason})."))
         else:
-            print(C.warn("Phase 2 sandbox gate would block."))
+            print(C.warn(f"Phase 2 sandbox gate would block: {gate_reason}."))
             print(C.info("Override with CODECOME_ALLOW_NO_SANDBOX=1"))
 
     if args.gate and not gate_pass:

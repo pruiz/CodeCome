@@ -90,6 +90,11 @@ phase-1: venv-check
 
 phase-2: venv-check
 	@$(PYTHON) tools/gate-check.py 2
+	@$(PYTHON) tools/sandbox-bootstrap.py status --gate || ( \
+		printf "\n[BLOCK] Phase 2 sandbox gate failed.\n" ; \
+		printf "Run: make sandbox-status\n" ; \
+		printf "Or override (not recommended): CODECOME_ALLOW_NO_SANDBOX=1 make phase-2\n\n" ; \
+		exit 1 )
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
 		opencode run --agent auditor "$$(cat prompts/phase-2-audit.md)"; \
 	else \
