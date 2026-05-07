@@ -19,6 +19,7 @@ import shlex
 import signal
 import subprocess
 import sys
+from dataclasses import dataclass
 from functools import lru_cache
 from collections import OrderedDict
 from pathlib import Path
@@ -588,6 +589,8 @@ _WRITE_DIFF_LIMIT = int(os.environ.get("CODECOME_WRITE_DIFF_LIMIT", "50"))
 _EDIT_DIFF_LINES = int(os.environ.get("CODECOME_EDIT_DIFF_LINES", "25"))
 _READ_HIGHLIGHT_LIMIT = int(os.environ.get("CODECOME_READ_HIGHLIGHT_LIMIT", str(200 * 1024)))
 _GLOB_MATCH_CAP = int(os.environ.get("CODECOME_GLOB_MATCH_CAP", "100"))
+_APPLY_PATCH_DIFF_LINES = int(os.environ.get("CODECOME_APPLY_PATCH_DIFF_LINES", str(_EDIT_DIFF_LINES)))
+_APPLY_PATCH_MAX_FILES = int(os.environ.get("CODECOME_APPLY_PATCH_MAX_FILES", "10"))
 _INTERNAL_READ_SUPPRESS = os.environ.get("CODECOME_INTERNAL_READ_SUPPRESS", "1") not in ("0", "false", "False", "no")
 
 _READ_FILE_FRAMING_RE = re.compile(
@@ -1229,6 +1232,259 @@ def render_edit_plain(state: dict[str, Any]) -> bool:
     return True
 
 
+# --- Apply-patch renderer -----------------------------------------------------
+
+@dataclass
+class _ParsedFilePatch:
+    op: str  # add, update, delete, rename, unknown
+    path: str
+    old_path: str
+    hunks: str  # unified-diff-ready text
+    added: int
+    removed: int
+
+
+_APPLY_PATCH_HEADER_RE = re.compile(
+    r"^\*\*\*\s*(Begin Patch|End Patch|Update File|Add File|Delete File|Rename File|Move File):?\s*(.*)",
+    re.MULTILINE,
+)
+
+
+def _parse_apply_patch_envelope(text: str) -> list[_ParsedFilePatch]:
+    """Parse the *** Begin Patch / *** Update File / *** End Patch envelope."""
+    results: list[_ParsedFilePatch] = []
+    # Split on *** headers
+    parts = _APPLY_PATCH_HEADER_RE.split(text)
+    # parts is [preamble, directive1, path1, body1, directive2, path2, body2, ...]
+    i = 1  # skip preamble
+    while i + 2 <= len(parts):
+        directive = parts[i].strip()
+        file_path = parts[i + 1].strip()
+        body = parts[i + 2] if i + 2 < len(parts) else ""
+        i += 3
+
+        if directive in ("Begin Patch", "End Patch"):
+            continue
+
+        op_map = {
+            "Update File": "update",
+            "Add File": "add",
+            "Delete File": "delete",
+            "Rename File": "rename",
+            "Move File": "rename",
+        }
+        op = op_map.get(directive, "unknown")
+        old_path = ""
+        if op == "rename" and " -> " in file_path:
+            old_path, file_path = file_path.split(" -> ", 1)
+            old_path = old_path.strip()
+            file_path = file_path.strip()
+
+        # Count +/- lines
+        body_lines = body.split("\n")
+        added = sum(1 for l in body_lines if l.startswith("+") and not l.startswith("+++"))
+        removed = sum(1 for l in body_lines if l.startswith("-") and not l.startswith("---"))
+
+        # Synthesize unified diff header
+        rel = _relativize_path(file_path)
+        old_rel = _relativize_path(old_path) if old_path else rel
+        if op == "add":
+            header = f"--- /dev/null\n+++ b/{rel}\n"
+        elif op == "delete":
+            header = f"--- a/{rel}\n+++ /dev/null\n"
+        else:
+            header = f"--- a/{old_rel}\n+++ b/{rel}\n"
+
+        hunks = header + body.strip() + "\n"
+        results.append(_ParsedFilePatch(op=op, path=file_path, old_path=old_path, hunks=hunks, added=added, removed=removed))
+
+    return results
+
+
+def _parse_apply_patch_json_list(patches: list[dict[str, Any]]) -> list[_ParsedFilePatch]:
+    """Parse {patches: [{path, diff}, ...]} variant."""
+    results: list[_ParsedFilePatch] = []
+    for p in patches:
+        path = str(p.get("path", p.get("file", "")))
+        diff_text = str(p.get("diff", p.get("patch", "")))
+        lines = diff_text.split("\n")
+        added = sum(1 for l in lines if l.startswith("+") and not l.startswith("+++"))
+        removed = sum(1 for l in lines if l.startswith("-") and not l.startswith("---"))
+        rel = _relativize_path(path)
+        header = f"--- a/{rel}\n+++ b/{rel}\n"
+        hunks = header + diff_text.strip() + "\n"
+        results.append(_ParsedFilePatch(op="update", path=path, old_path="", hunks=hunks, added=added, removed=removed))
+    return results
+
+
+def _extract_apply_patch_payload(state: dict[str, Any]) -> tuple[str, list[_ParsedFilePatch], str]:
+    """Extract and parse apply_patch input. Returns (raw_text, parsed_patches, output_str)."""
+    inp = state.get("input")
+    output = state.get("output")
+    output_str = str(output) if output is not None else ""
+
+    raw_text = ""
+    if isinstance(inp, dict):
+        raw_text = str(inp.get("patch", inp.get("input", inp.get("content", ""))))
+        # Check for {patches: [...]} variant
+        if not raw_text and isinstance(inp.get("patches"), list):
+            patches = _parse_apply_patch_json_list(inp["patches"])
+            return "", patches, output_str
+    elif isinstance(inp, str):
+        raw_text = inp
+
+    if not raw_text:
+        return "", [], output_str
+
+    # Try envelope parse
+    if "*** " in raw_text:
+        patches = _parse_apply_patch_envelope(raw_text)
+        if patches:
+            return raw_text, patches, output_str
+
+    # Fallback: raw unified diff — treat as single file
+    if raw_text.lstrip().startswith(("--- ", "diff --git")):
+        lines = raw_text.split("\n")
+        added = sum(1 for l in lines if l.startswith("+") and not l.startswith("+++"))
+        removed = sum(1 for l in lines if l.startswith("-") and not l.startswith("---"))
+        patches = [_ParsedFilePatch(op="unknown", path="(patch)", old_path="", hunks=raw_text, added=added, removed=removed)]
+        return raw_text, patches, output_str
+
+    # Could not parse; return raw text with empty patches for fallback rendering
+    return raw_text, [], output_str
+
+
+def render_apply_patch_rich(console: Console, state: dict[str, Any]) -> bool:
+    raw_text, patches, output_str = _extract_apply_patch_payload(state)
+    status = str(state.get("status", ""))
+
+    if not patches and not raw_text:
+        return False
+
+    from rich.syntax import Syntax
+
+    is_error = _is_likely_error(output_str)
+    if status == "completed":
+        border = "red" if is_error else "green"
+    else:
+        border = "yellow"
+
+    sections: list[Any] = []
+
+    if not patches:
+        # Fallback: could not parse, show raw as diff syntax
+        byte_size = len(raw_text.encode("utf-8", errors="replace"))
+        line_count = raw_text.count("\n")
+        sections.append(Text(f"Raw patch: {line_count} lines, {byte_size} bytes", style="dim"))
+        sections.append(Text())
+        truncated_lines = raw_text.split("\n")[:_WRITE_DIFF_LIMIT]
+        leftover = max(0, raw_text.count("\n") - _WRITE_DIFF_LIMIT)
+        sections.append(Syntax("\n".join(truncated_lines), "diff", theme="monokai", word_wrap=True))
+        if leftover > 0:
+            sections.append(Text(f"... {leftover} more lines", style="dim"))
+    else:
+        # Summary header
+        total_added = sum(p.added for p in patches)
+        total_removed = sum(p.removed for p in patches)
+        sections.append(Text(f"{len(patches)} file(s) changed: +{total_added} -{total_removed}", style="dim"))
+        sections.append(Text())
+
+        # Per-file rendering
+        shown = patches[:_APPLY_PATCH_MAX_FILES]
+        for fp in shown:
+            rel = _relativize_path(fp.path)
+            label = f"{fp.op:<8} {rel}  +{fp.added} -{fp.removed}"
+            sections.append(Text(label, style="bold cyan"))
+
+            diff_lines_list = fp.hunks.split("\n")
+            # Convert to list with newlines for _truncate_diff
+            diff_with_nl = [l + "\n" for l in diff_lines_list if l or diff_lines_list[-1:] != [l]]
+            truncated, leftover = _truncate_diff(diff_with_nl, _APPLY_PATCH_DIFF_LINES)
+            diff_text = "".join(truncated)
+            if diff_text.strip():
+                sections.append(Syntax(diff_text, "diff", theme="monokai", word_wrap=True))
+            if leftover > 0:
+                sections.append(Text(f"... {leftover} more lines", style="dim"))
+            sections.append(Text())
+
+        if len(patches) > _APPLY_PATCH_MAX_FILES:
+            remaining = len(patches) - _APPLY_PATCH_MAX_FILES
+            sections.append(Text(f"... and {remaining} more file(s)", style="dim"))
+
+    # Status line
+    if output_str.strip():
+        sections.append(Text(output_str.strip(), style="red" if is_error else "green"))
+
+    console.print(Panel(Group(*sections), title="Apply patch", border_style=border, expand=True))
+
+    # Cache invalidation on success
+    if status == "completed" and not is_error:
+        for fp in patches:
+            full_path = fp.path
+            if not os.path.isabs(full_path):
+                full_path = os.path.join(ROOT, full_path)
+            _cache_reread(full_path)
+
+    return True
+
+
+def render_apply_patch_plain(state: dict[str, Any]) -> bool:
+    raw_text, patches, output_str = _extract_apply_patch_payload(state)
+    status = str(state.get("status", ""))
+
+    if not patches and not raw_text:
+        return False
+
+    is_error = _is_likely_error(output_str)
+
+    if not patches:
+        # Fallback
+        line_count = raw_text.count("\n")
+        byte_size = len(raw_text.encode("utf-8", errors="replace"))
+        print(C.header(f"apply_patch (raw: {line_count} lines, {byte_size} bytes)"))
+        truncated_lines = raw_text.split("\n")[:_WRITE_DIFF_LIMIT]
+        for line in truncated_lines:
+            print(f"  {line}")
+        leftover = max(0, raw_text.count("\n") - _WRITE_DIFF_LIMIT)
+        if leftover > 0:
+            print(f"  ... {leftover} more lines")
+    else:
+        total_added = sum(p.added for p in patches)
+        total_removed = sum(p.removed for p in patches)
+        print(C.header(f"apply_patch ({len(patches)} file(s): +{total_added} -{total_removed})"))
+
+        shown = patches[:_APPLY_PATCH_MAX_FILES]
+        for fp in shown:
+            rel = _relativize_path(fp.path)
+            print(f"  {fp.op:<8} {rel}  +{fp.added} -{fp.removed}")
+            diff_with_nl = [l + "\n" for l in fp.hunks.split("\n")]
+            truncated, leftover = _truncate_diff(diff_with_nl, _APPLY_PATCH_DIFF_LINES)
+            for line in truncated:
+                print(f"    {line}", end="")
+            if leftover > 0:
+                print(f"    ... {leftover} more lines")
+
+        if len(patches) > _APPLY_PATCH_MAX_FILES:
+            remaining = len(patches) - _APPLY_PATCH_MAX_FILES
+            print(f"  ... and {remaining} more file(s)")
+
+    if output_str.strip():
+        if is_error:
+            print(f"  {C.fail(output_str.strip())}")
+        else:
+            print(f"  {C.ok(output_str.strip())}")
+
+    # Cache invalidation on success
+    if status == "completed" and not is_error:
+        for fp in patches:
+            full_path = fp.path
+            if not os.path.isabs(full_path):
+                full_path = os.path.join(ROOT, full_path)
+            _cache_reread(full_path)
+
+    return True
+
+
 # --- Glob renderer ------------------------------------------------------------
 
 def render_glob_rich(console: Console, state: dict[str, Any]) -> bool:
@@ -1421,6 +1677,11 @@ def _dispatch_tool_renderer(console: Console, tool: str, state: dict[str, Any]) 
             return render_edit_rich(console, state)
         else:
             return render_edit_plain(state)
+    elif tool_lower in ("apply_patch", "applypatch", "apply-patch"):
+        if HAVE_RICH:
+            return render_apply_patch_rich(console, state)
+        else:
+            return render_apply_patch_plain(state)
     elif tool_lower == "glob":
         _cache_invalidate_stale()
         if HAVE_RICH:

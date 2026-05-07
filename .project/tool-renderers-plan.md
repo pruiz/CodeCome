@@ -250,7 +250,10 @@ After implementation:
 
 ## Out-of-scope (deferred)
 
-- `apply_patch` renderer
 - `task` sub-agent renderer
 - Replay harness for offline testing
 - User-configurable theming
+
+## Done (previously deferred)
+
+- `apply_patch` renderer — implemented in `.project/apply-patch-renderer-plan.md`

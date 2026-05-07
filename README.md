@@ -184,7 +184,7 @@ Benchmark labels alone are not enough to mark a finding as confirmed.
 
 Each `make` target checks readiness gates before invoking the corresponding agent. Phase 4 and Phase 5 are invoked once per finding.
 
-By default, phase targets use a CodeCome-owned styled wrapper around `opencode run --format json` so assistant output, tool calls, and tool results render with consistent colors and structure.
+By default, phase targets use a CodeCome-owned styled wrapper around `opencode run --format json` so assistant output, tool calls, and tool results render with consistent colors and structure. The wrapper pretty-renders `read`, `write`, `edit`, `apply_patch`, `glob`, `bash`, `todowrite`, and `skill` tool calls; all others get a generic JSON panel.
 
 All `make` targets that invoke Python tools expect a repo-local virtualenv at `.venv/`. If it is missing or stale, the command will stop with a setup message telling you to run `make venv`.
 
