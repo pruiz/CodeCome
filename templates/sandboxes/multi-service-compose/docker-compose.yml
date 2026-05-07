@@ -1,0 +1,37 @@
+# Multi-service compose harness. The agent and the user are expected
+# to extend this file with the target's actual services. By default
+# it ships:
+#   - codecome-tools: a tooling container for invoking docker-compose,
+#     curl-based smoke tests, and ad-hoc scripts.
+# Markers:
+#   __TARGET_NAME__       Used in container names and labels.
+#   __PRIMARY_APP_PORT__  Default port published from the primary app.
+#
+# When honoring src/docker-compose.yml, prefer extending it via:
+#   docker compose -f sandbox/docker-compose.yml -f ../src/docker-compose.yml ...
+# rather than inlining its services here.
+
+services:
+  codecome-tools:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: codecome-__TARGET_NAME__-tools
+    working_dir: /workspace
+    volumes:
+      - ../:/workspace
+    tty: true
+    stdin_open: true
+    security_opt:
+      - seccomp:unconfined
+
+  # Example placeholder for the primary application service. Replace,
+  # rename, or remove based on the target.
+  codecome-app:
+    image: alpine:3.20
+    container_name: codecome-__TARGET_NAME__-app
+    command: ["/bin/sh", "-c", "echo 'Replace this service for target __TARGET_NAME__.' && sleep infinity"]
+    ports:
+      - "__PRIMARY_APP_PORT__:__PRIMARY_APP_PORT__"
+    depends_on:
+      - codecome-tools

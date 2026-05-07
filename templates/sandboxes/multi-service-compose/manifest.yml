@@ -1,0 +1,23 @@
+id: "multi-service-compose"
+display_name: "Multi-service compose harness"
+applies_when:
+  languages: []
+  manifests:
+    - "docker-compose.yml"
+    - "docker-compose.yaml"
+    - "compose.yml"
+    - "compose.yaml"
+required_tools:
+  - "docker"
+  - "docker compose"
+default_ports: []
+build_command: ""
+test_command: ""
+notes_md: "notes.md"
+caveats:
+  - "Designed to honor an existing src/docker-compose.yml when usable."
+  - "Otherwise, agent and user must extend services for the target stack."
+  - "Build-time-only stacks must be excluded from runtime services."
+template_vars:
+  - TARGET_NAME
+  - PRIMARY_APP_PORT

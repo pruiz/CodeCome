@@ -1,0 +1,29 @@
+id: "nested-virt"
+display_name: "Nested QEMU runner (firmware / binary-only edge cases)"
+applies_when:
+  languages:
+    - "asm"
+    - "embedded-c"
+  manifests:
+    - "*.bin"
+    - "*.elf"
+    - "*.img"
+    - "*.dts"
+    - "Kconfig"
+required_tools:
+  - "qemu-system-arm"
+  - "qemu-system-aarch64"
+  - "qemu-system-x86_64"
+  - "qemu-utils"
+  - "binutils"
+default_ports: []
+build_command: ""
+test_command: ""
+notes_md: "notes.md"
+caveats:
+  - "Requires KVM availability for acceptable performance."
+  - "Use only when the target cannot be exercised via plain Docker."
+  - "Justification in itemdb/notes/sandbox-plan.md is mandatory."
+template_vars:
+  - TARGET_NAME
+  - QEMU_ARCH
