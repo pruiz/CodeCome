@@ -50,6 +50,11 @@ with a clear, user-actionable explanation.
 earlier `NEEDS_VALIDATION` → `PENDING` migration. No active code uses
 `static_only` yet, so this is a forward-only convention.
 
+**Status (post-implementation):** This rename was applied
+preemptively while writing the skill, agent, prompt, and docs.
+There is no remaining `static_only` token in active code. The
+plan's commit-11 step is therefore a no-op except for this note.
+
 ## Top-level deliverables
 
 1. New tree: `templates/sandboxes/<id>/` with v1 set of baselines.
@@ -476,9 +481,12 @@ Re-ordered remainder (Option A):
 8. `validate` (script-first, docker fallback) plus tier capture.
    Skill updated to call `validate` instead of running docker
    compose ad hoc.
-9. Phase 2 gate update + override env var.
-10. Docs: `sandbox/README.md`, `README.md`, `docs/workflow.md`.
-11. Convention rename: `static_only` → `static-only`.
+9. ✅ Phase 2 gate update + override env var (commit `76622bd`).
+10. ✅ Docs + sandbox/* policy: `docs/sandbox.md`, `README.md`,
+    `docs/workflow.md`, `.gitignore`, untrack `sandbox/*`
+    (commit `1305dc2`).
+11. ✅ Convention `static_only` → `static-only`. No-op: the new
+    code never used `static_only`. Plan note added.
 
 ## Verification
 
