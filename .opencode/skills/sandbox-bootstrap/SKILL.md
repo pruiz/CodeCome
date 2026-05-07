@@ -63,11 +63,11 @@ exposed via Make targets:
 | `status [--gate]` | `make sandbox-status` | available |
 | `apply <id>` | `make sandbox-bootstrap ID=<id>` | available |
 | `regenerate` | `make sandbox-regenerate` | available |
-| `validate` | `make sandbox-validate` | not yet implemented (commit 8) |
+| `validate` | `make sandbox-validate` | available |
 
 When a subcommand is "not yet implemented" the CLI exits with code
-`64`. The **manual fallback** section below covers what to do in
-that interim case for `validate`.
+`64`. All Phase 1b subcommands are now implemented; if you ever
+hit code 64, refer to `.project/auto-sandbox-bootstrap-plan.md`.
 
 Always invoke the CLI through the project's virtualenv:
 
@@ -219,26 +219,23 @@ Do not invent variables that are not defined in `manifest.yml`.
    prior sandbox content is always moved to a fresh
    `sandbox/.backup-<timestamp>/`.
 
-7. Run validation tiers (see "Validation tiers" below).
+7. Run validation tiers:
 
-## Manual fallback (until `validate` ships)
+       make sandbox-validate
 
-While `validate` is not yet implemented, run the validation tiers
-manually after `apply` / `regenerate`:
+   Or with options:
 
-       docker compose -f sandbox/docker-compose.yml build
-       ./sandbox/scripts/check.sh
-       ./sandbox/scripts/build-target.sh   # if applicable
-       ./sandbox/scripts/test-target.sh    # if applicable
+       BOOTSTRAP_ARGS='--keep-going' make sandbox-validate
+       BOOTSTRAP_ARGS='--scripts-only' make sandbox-validate
+       BOOTSTRAP_ARGS='--docker-only' make sandbox-validate
 
-Capture per-tier outcomes (passed / failed / skipped, exit code,
-last 50 lines of stderr) into the validation matrix in
-`sandbox-plan.md`. Once `validate` lands, this manual capture
-becomes a single CLI call.
+   `validate` writes a "Validation run <ISO>" Markdown table at the
+   end of `sandbox/CODECOME-GENERATED.md` so each run is auditable.
+   Use the JSON output (`--format json`) when scripting the agent
+   loop:
 
-When the CLI exits with code `64` for any subcommand, fall back to
-the manual flow for that one subcommand and document the reason in
-`sandbox-plan.md`.
+       .venv/bin/python3 tools/sandbox-bootstrap.py --format json \
+         validate --keep-going
 
 ## Validation tiers
 

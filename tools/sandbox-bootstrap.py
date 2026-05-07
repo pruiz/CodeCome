@@ -23,11 +23,17 @@ Environment variables:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
+import shlex
+import shutil
+import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -562,11 +568,6 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 # --- Apply / regenerate -------------------------------------------------------
 
-import hashlib
-import shutil
-from datetime import datetime, timezone
-
-
 _MARKER_RE = re.compile(r"__([A-Z][A-Z0-9_]+)__")
 
 
@@ -994,6 +995,285 @@ def cmd_regenerate(args: argparse.Namespace) -> int:
     return cmd_apply(apply_args)
 
 
+# --- Validate ----------------------------------------------------------------
+
+
+@dataclass
+class TierResult:
+    tier: str
+    purpose: str
+    command: str
+    started_at: str
+    duration_seconds: float
+    exit_code: Optional[int]
+    outcome: str  # passed | failed | skipped
+    stderr_tail: str
+    stdout_tail: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "tier": self.tier,
+            "purpose": self.purpose,
+            "command": self.command,
+            "started_at": self.started_at,
+            "duration_seconds": round(self.duration_seconds, 3),
+            "exit_code": self.exit_code,
+            "outcome": self.outcome,
+            "stderr_tail": self.stderr_tail,
+            "stdout_tail": self.stdout_tail,
+        }
+
+
+_VALIDATE_STDERR_TAIL_LINES = int(os.environ.get("CODECOME_VALIDATE_TAIL_LINES", "50"))
+
+
+def _tail_lines(text: str, max_lines: int = _VALIDATE_STDERR_TAIL_LINES) -> str:
+    if not text:
+        return ""
+    lines = text.splitlines()
+    if len(lines) <= max_lines:
+        return text.rstrip()
+    return "\n".join(lines[-max_lines:])
+
+
+def _docker_available() -> bool:
+    return shutil.which("docker") is not None
+
+
+def _docker_compose_available() -> bool:
+    if not _docker_available():
+        return False
+    # `docker compose version` returns 0 when the plugin is available.
+    try:
+        result = subprocess.run(
+            ["docker", "compose", "version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0
+
+
+def _run_command(command: List[str], cwd: Path) -> TierResult:
+    """Run a command, capture stdout/stderr, return a TierResult-shaped dict."""
+    started = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    t0 = time.monotonic()
+    try:
+        result = subprocess.run(
+            command,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+        )
+        duration = time.monotonic() - t0
+        return TierResult(
+            tier="",
+            purpose="",
+            command=" ".join(shlex.quote(c) for c in command),
+            started_at=started,
+            duration_seconds=duration,
+            exit_code=result.returncode,
+            outcome="passed" if result.returncode == 0 else "failed",
+            stderr_tail=_tail_lines(result.stderr or ""),
+            stdout_tail=_tail_lines(result.stdout or ""),
+        )
+    except FileNotFoundError as exc:
+        duration = time.monotonic() - t0
+        return TierResult(
+            tier="",
+            purpose="",
+            command=" ".join(shlex.quote(c) for c in command),
+            started_at=started,
+            duration_seconds=duration,
+            exit_code=None,
+            outcome="failed",
+            stderr_tail=str(exc),
+            stdout_tail="",
+        )
+
+
+def _has_executable(path: Path) -> bool:
+    return path.is_file() and os.access(path, os.X_OK)
+
+
+def _resolve_tier1_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str]]:
+    """T1 image build: prefer up.sh, otherwise docker compose build."""
+    up_script = SANDBOX_ROOT / "scripts" / "up.sh"
+    compose_file = SANDBOX_ROOT / "docker-compose.yml"
+    if not docker_only and _has_executable(up_script):
+        return ("script", [str(up_script.relative_to(ROOT))])
+    if not scripts_only and compose_file.exists():
+        return ("docker", ["docker", "compose", "-f", str(compose_file.relative_to(ROOT)), "build"])
+    return ("missing", [])
+
+
+def _resolve_tier2_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str]]:
+    check_script = SANDBOX_ROOT / "scripts" / "check.sh"
+    if not docker_only and _has_executable(check_script):
+        return ("script", [str(check_script.relative_to(ROOT))])
+    return ("missing", [])
+
+
+def _resolve_tier3_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str]]:
+    build_script = SANDBOX_ROOT / "scripts" / "build-target.sh"
+    if not docker_only and _has_executable(build_script):
+        return ("script", [str(build_script.relative_to(ROOT))])
+    return ("missing", [])
+
+
+def _resolve_tier4_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str]]:
+    test_script = SANDBOX_ROOT / "scripts" / "test-target.sh"
+    if not docker_only and _has_executable(test_script):
+        return ("script", [str(test_script.relative_to(ROOT))])
+    return ("missing", [])
+
+
+def _format_outcome(outcome: str) -> str:
+    if outcome == "passed":
+        return f"{C.GREEN}{outcome}{C.RESET}"
+    if outcome == "failed":
+        return f"{C.RED}{outcome}{C.RESET}"
+    return f"{C.DIM}{outcome}{C.RESET}"
+
+
+def _append_validation_history(entries: List[Dict[str, Any]]) -> bool:
+    """Append a validation history block to sandbox/CODECOME-GENERATED.md.
+
+    Returns True if updated, False if no provenance file exists.
+    """
+    if not PROVENANCE_FILE.exists():
+        return False
+
+    text = PROVENANCE_FILE.read_text(encoding="utf-8")
+    block_lines = ["", f"## Validation run {_iso_now()}", ""]
+    block_lines.append("| Tier | Purpose | Outcome | Exit | Duration | Command |")
+    block_lines.append("|---|---|---|---|---|---|")
+    for entry in entries:
+        block_lines.append(
+            f"| {entry['tier']} "
+            f"| {entry['purpose']} "
+            f"| {entry['outcome']} "
+            f"| {entry.get('exit_code', '-')} "
+            f"| {entry['duration_seconds']}s "
+            f"| `{entry['command']}` |"
+        )
+    block_lines.append("")
+    text = text.rstrip() + "\n" + "\n".join(block_lines) + "\n"
+    PROVENANCE_FILE.write_text(text, encoding="utf-8")
+    return True
+
+
+def cmd_validate(args: argparse.Namespace) -> int:
+    if args.scripts_only and args.docker_only:
+        print(C.fail("--scripts-only and --docker-only are mutually exclusive."), file=sys.stderr)
+        return 2
+
+    if not SANDBOX_ROOT.exists():
+        print(C.fail("sandbox/ does not exist. Run 'apply' first."), file=sys.stderr)
+        return 1
+
+    if not _docker_compose_available() and not args.scripts_only:
+        # Allow scripts-only invocations to proceed; but warn early.
+        # We still proceed since some tiers (T2 check.sh, T3, T4) may
+        # not need docker compose directly. The script themselves call docker.
+        if args.format != "json":
+            print(C.warn("Docker / 'docker compose' not detected on host."))
+            print(C.info("Validation will likely fail unless your sandbox can run without Docker."))
+
+    tier_specs = [
+        ("T1", "Image build", _resolve_tier1_command),
+        ("T2", "Sandbox sanity", _resolve_tier2_command),
+        ("T3", "Target build", _resolve_tier3_command),
+        ("T4", "Target test", _resolve_tier4_command),
+    ]
+
+    results: List[Dict[str, Any]] = []
+    overall_outcome = "passed"
+
+    for tier_id, purpose, resolver in tier_specs:
+        kind, command = resolver(args.scripts_only, args.docker_only)
+        if kind == "missing":
+            entry = TierResult(
+                tier=tier_id,
+                purpose=purpose,
+                command="(no script or compose file resolved)",
+                started_at=_iso_now(),
+                duration_seconds=0.0,
+                exit_code=None,
+                outcome="skipped",
+                stderr_tail="",
+                stdout_tail="",
+            ).to_dict()
+            results.append(entry)
+            if args.format != "json":
+                print(f"  {tier_id:<3} {purpose:<18} {_format_outcome('skipped')}  (no resolver)")
+            continue
+
+        if args.format != "json":
+            print(f"  {tier_id:<3} {purpose:<18} running {C.DIM}{' '.join(command)}{C.RESET}")
+
+        result = _run_command(command, cwd=ROOT)
+        result.tier = tier_id
+        result.purpose = purpose
+        entry = result.to_dict()
+        results.append(entry)
+
+        if args.format != "json":
+            outcome_str = _format_outcome(result.outcome)
+            exit_str = "-" if result.exit_code is None else str(result.exit_code)
+            print(
+                f"  {tier_id:<3} {purpose:<18} {outcome_str}  "
+                f"{C.DIM}exit={exit_str}  duration={result.duration_seconds:.2f}s{C.RESET}"
+            )
+            if result.outcome == "failed" and result.stderr_tail:
+                print(f"    {C.DIM}--- stderr (last lines) ---{C.RESET}")
+                for line in result.stderr_tail.splitlines()[-15:]:
+                    print(f"    {line}")
+
+        if result.outcome == "failed":
+            overall_outcome = "failed"
+            if not args.keep_going:
+                # Mark remaining as skipped.
+                for skip_id, skip_purpose, _ in tier_specs[len(results):]:
+                    skipped = TierResult(
+                        tier=skip_id,
+                        purpose=skip_purpose,
+                        command="(skipped: prior tier failed)",
+                        started_at=_iso_now(),
+                        duration_seconds=0.0,
+                        exit_code=None,
+                        outcome="skipped",
+                        stderr_tail="",
+                        stdout_tail="",
+                    ).to_dict()
+                    results.append(skipped)
+                    if args.format != "json":
+                        print(f"  {skip_id:<3} {skip_purpose:<18} {_format_outcome('skipped')}  (prior tier failed)")
+                break
+
+    history_updated = _append_validation_history(results)
+
+    payload = {
+        "overall_outcome": overall_outcome,
+        "history_updated": history_updated,
+        "tiers": results,
+    }
+
+    if args.format == "json":
+        _emit(payload, "json")
+    else:
+        print()
+        print(f"  {C.BOLD}overall:{C.RESET}  {_format_outcome(overall_outcome)}")
+        if history_updated:
+            print(C.info(f"Validation history appended to {PROVENANCE_FILE.relative_to(ROOT)}"))
+        else:
+            print(C.warn("No CODECOME-GENERATED.md present; validation history not persisted."))
+
+    return 0 if overall_outcome == "passed" else 1
+
+
 def cmd_not_implemented(args: argparse.Namespace) -> int:
     name = getattr(args, "command", "<unknown>")
     print(
@@ -1065,24 +1345,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_validate = sub.add_parser(
         "validate",
-        help="Run validation tiers (not implemented yet).",
+        help="Run sandbox validation tiers and capture results.",
     )
     p_validate.add_argument(
         "--scripts-only",
         action="store_true",
-        help="Only run sandbox/scripts/* tiers.",
+        help="Only run sandbox/scripts/* tiers; never call docker compose directly.",
     )
     p_validate.add_argument(
         "--docker-only",
         action="store_true",
-        help="Skip sandbox/scripts/* and call docker/docker compose directly.",
+        help="Skip sandbox/scripts/* and call docker compose directly.",
     )
     p_validate.add_argument(
         "--keep-going",
         action="store_true",
         help="Run all tiers even after a failure.",
     )
-    p_validate.set_defaults(func=cmd_not_implemented)
+    p_validate.set_defaults(func=cmd_validate)
 
     p_regen = sub.add_parser(
         "regenerate",

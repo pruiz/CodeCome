@@ -104,36 +104,32 @@ Workflow:
 
 5. Apply the example:
 
-   - If the CLI subcommand `apply` is implemented, run:
-
+       BOOTSTRAP_ARGS='--var KEY1=VAL1 --var KEY2=VAL2' \
          make sandbox-bootstrap ID=<chosen-id>
 
-     and pass `--var KEY=VAL` for each marker via
-     `BOOTSTRAP_ARGS='--var KEY=VAL ...'` if needed.
+   Or, for a preview without writing:
 
-   - If `apply` is not implemented yet (CLI exits with code 64),
-     follow the manual fallback documented in
-     `.opencode/skills/sandbox-bootstrap/SKILL.md`:
-     copy `templates/sandboxes/<chosen-id>/` into `sandbox/`,
-     substitute `__VARNAME__` markers, and write
-     `sandbox/CODECOME-GENERATED.md` with provenance.
+       BOOTSTRAP_ARGS='--dry-run --var KEY=VAL' \
+         make sandbox-bootstrap ID=<chosen-id>
+
+   `apply` refuses to overwrite a user-managed `sandbox/` (one
+   without `CODECOME-GENERATED.md`). If the user has accepted the
+   loss, re-run with `--force` and the prior content is moved to
+   `sandbox/.backup-<timestamp>/`.
 
 6. Validate:
 
-   - If the CLI subcommand `validate` is implemented:
+       make sandbox-validate
 
-         make sandbox-validate
+   Use `BOOTSTRAP_ARGS='--keep-going'` to run all tiers even after
+   a failure, or `--scripts-only` / `--docker-only` to constrain
+   which mode is used.
 
-   - If not, run the script tiers manually:
-
-         docker compose -f sandbox/docker-compose.yml build
-         ./sandbox/scripts/check.sh
-         ./sandbox/scripts/build-target.sh   # if applicable
-         ./sandbox/scripts/test-target.sh    # if applicable
-
-   Capture per-tier outcomes (passed / failed / skipped, exit code,
-   last 50 lines of stderr) into the validation matrix in
-   `sandbox-plan.md`.
+   `validate` appends a "Validation run <ISO>" table to
+   `sandbox/CODECOME-GENERATED.md` and returns JSON with
+   `--format json`. Capture per-tier outcomes (passed / failed /
+   skipped, exit code, last 50 lines of stderr) into the validation
+   matrix in `sandbox-plan.md`.
 
 7. If validation fails, attempt automatic remediations within the
    retry budget (`CODECOME_BOOTSTRAP_MAX_RETRIES`, default 3). Each
