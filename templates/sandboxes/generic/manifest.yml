@@ -1,0 +1,24 @@
+id: "generic"
+display_name: "Generic Debian sandbox"
+applies_when:
+  languages: []
+  manifests: []
+required_tools:
+  - "bash"
+  - "curl"
+  - "git"
+  - "make"
+  - "python3"
+  - "ripgrep"
+  - "jq"
+default_ports: []
+build_command: ""
+test_command: ""
+notes_md: "notes.md"
+caveats:
+  - "Last-resort fallback. Used when no specific stack is detected."
+  - "Add your own tools by extending the Dockerfile or by switching to a stack-specific example."
+  - "No build or test command runs by default."
+template_vars:
+  - TARGET_NAME
+  - DEBIAN_BASE_TAG

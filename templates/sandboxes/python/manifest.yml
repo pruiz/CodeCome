@@ -1,0 +1,30 @@
+id: "python"
+display_name: "Python project"
+applies_when:
+  languages:
+    - "python"
+  manifests:
+    - "pyproject.toml"
+    - "requirements.txt"
+    - "setup.py"
+    - "setup.cfg"
+    - "Pipfile"
+    - "poetry.lock"
+required_tools:
+  - "python3"
+  - "pip"
+  - "pipx"
+  - "venv"
+default_ports:
+  - 8000
+build_command: "pip install -e ."
+test_command: "pytest"
+notes_md: "notes.md"
+caveats:
+  - "Does not include database services. Combine with multi-service-compose if needed."
+  - "Does not preinstall a specific framework. Add it during apply or post-edit."
+  - "Pinning Python version is recommended via __PYTHON_VERSION__."
+template_vars:
+  - TARGET_NAME
+  - PYTHON_VERSION
+  - APP_PORT

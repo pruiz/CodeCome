@@ -1,0 +1,31 @@
+id: "node"
+display_name: "Node.js project"
+applies_when:
+  languages:
+    - "javascript"
+    - "typescript"
+    - "node"
+  manifests:
+    - "package.json"
+    - "package-lock.json"
+    - "yarn.lock"
+    - "pnpm-lock.yaml"
+    - "tsconfig.json"
+required_tools:
+  - "node"
+  - "npm"
+  - "yarn"
+  - "pnpm"
+default_ports:
+  - 3000
+build_command: "npm install"
+test_command: "npm test"
+notes_md: "notes.md"
+caveats:
+  - "Detects package manager from lockfiles. Falls back to npm."
+  - "Does not include browsers. Use a Playwright-aware example for E2E tests."
+  - "Node 20 LTS by default. Pin via __NODE_VERSION__."
+template_vars:
+  - TARGET_NAME
+  - NODE_VERSION
+  - APP_PORT

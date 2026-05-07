@@ -1,0 +1,34 @@
+id: "c-cpp"
+display_name: "C / C++ project"
+applies_when:
+  languages:
+    - "c"
+    - "c++"
+    - "cpp"
+  manifests:
+    - "Makefile"
+    - "CMakeLists.txt"
+    - "configure"
+    - "configure.ac"
+    - "meson.build"
+required_tools:
+  - "gcc"
+  - "g++"
+  - "clang"
+  - "cmake"
+  - "make"
+  - "ninja"
+  - "gdb"
+  - "lldb"
+  - "valgrind"
+default_ports: []
+build_command: "make"
+test_command: "make test"
+notes_md: "notes.md"
+caveats:
+  - "Includes ASan/UBSan-friendly clang-tools."
+  - "No cross-compilation toolchain. Use nested-virt for firmware."
+  - "Ships strace; tweak Dockerfile if you need ptrace seccomp options."
+template_vars:
+  - TARGET_NAME
+  - DEBIAN_BASE_TAG
