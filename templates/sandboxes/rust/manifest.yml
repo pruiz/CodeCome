@@ -1,0 +1,27 @@
+id: "rust"
+display_name: "Rust project"
+applies_when:
+  languages:
+    - "rust"
+  manifests:
+    - "Cargo.toml"
+    - "Cargo.lock"
+    - "rust-toolchain"
+    - "rust-toolchain.toml"
+required_tools:
+  - "cargo"
+  - "rustc"
+  - "rustup"
+default_ports:
+  - 8080
+build_command: "cargo build"
+test_command: "cargo test"
+notes_md: "notes.md"
+caveats:
+  - "Uses the official rust image."
+  - "Pin via __RUST_TOOLCHAIN_TAG__ to match rust-toolchain.toml."
+  - "cargo target/ cache mounted under codecome-cargo-target volume."
+template_vars:
+  - TARGET_NAME
+  - RUST_TOOLCHAIN_TAG
+  - APP_PORT

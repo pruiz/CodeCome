@@ -1,0 +1,31 @@
+id: "java-maven"
+display_name: "Java + Maven project"
+applies_when:
+  languages:
+    - "java"
+    - "kotlin"
+    - "scala"
+  manifests:
+    - "pom.xml"
+    - "build.gradle"
+    - "build.gradle.kts"
+    - "settings.gradle"
+    - "settings.gradle.kts"
+required_tools:
+  - "java"
+  - "javac"
+  - "mvn"
+  - "gradle"
+default_ports:
+  - 8080
+build_command: "mvn package -DskipTests"
+test_command: "mvn test"
+notes_md: "notes.md"
+caveats:
+  - "Eclipse Temurin JDK by default. Pin via __JDK_VERSION__."
+  - "Includes Maven and Gradle. The build script picks the right one."
+  - "Local Maven cache mounted as /root/.m2 to speed up rebuilds."
+template_vars:
+  - TARGET_NAME
+  - JDK_VERSION
+  - APP_PORT

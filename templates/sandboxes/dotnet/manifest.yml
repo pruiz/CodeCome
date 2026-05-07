@@ -1,0 +1,34 @@
+id: "dotnet"
+display_name: ".NET project"
+applies_when:
+  languages:
+    - "c#"
+    - "csharp"
+    - "dotnet"
+    - ".net"
+    - "f#"
+    - "fsharp"
+    - "vb"
+  manifests:
+    - "global.json"
+    - "Directory.Build.props"
+    - "Directory.Packages.props"
+    - "*.sln"
+    - "*.csproj"
+    - "*.fsproj"
+    - "*.vbproj"
+required_tools:
+  - "dotnet"
+default_ports:
+  - 5000
+build_command: "dotnet build"
+test_command: "dotnet test"
+notes_md: "notes.md"
+caveats:
+  - "Uses the official mcr.microsoft.com/dotnet/sdk image."
+  - "Pin the SDK version via __DOTNET_SDK_TAG__ to match the target's global.json."
+  - "Does not include database services. Combine with multi-service-compose."
+template_vars:
+  - TARGET_NAME
+  - DOTNET_SDK_TAG
+  - APP_PORT

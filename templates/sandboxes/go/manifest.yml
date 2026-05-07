@@ -1,0 +1,24 @@
+id: "go"
+display_name: "Go project"
+applies_when:
+  languages:
+    - "go"
+    - "golang"
+  manifests:
+    - "go.mod"
+    - "go.sum"
+required_tools:
+  - "go"
+default_ports:
+  - 8080
+build_command: "go build ./..."
+test_command: "go test ./..."
+notes_md: "notes.md"
+caveats:
+  - "Uses the official golang image."
+  - "Pin the toolchain via __GO_VERSION__ to match go.mod."
+  - "GOPATH is set under /go; modules cache under /go/pkg/mod."
+template_vars:
+  - TARGET_NAME
+  - GO_VERSION
+  - APP_PORT
