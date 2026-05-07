@@ -86,7 +86,7 @@ def replace_frontmatter_value(content: str, key: str, value: str) -> str:
     return pattern.sub(replacement, content, count=1)
 
 
-def replace_nested_validation_value(content: str, key: str, value: str) -> str:
+def replace_nested_value(content: str, key: str, value: str) -> str:
     pattern = re.compile(rf"^  {re.escape(key)}:\s*.*$", re.MULTILINE)
     replacement = f'  {key}: "{value}"'
     return pattern.sub(replacement, content, count=1)
@@ -129,17 +129,17 @@ def create_finding(args: argparse.Namespace) -> Path:
     content = replace_frontmatter_value(content, "target_area", args.target_area)
     content = replace_frontmatter_value(content, "created_at", today)
     content = replace_frontmatter_value(content, "updated_at", today)
-    content = replace_nested_validation_value(
+    content = replace_nested_value(
         content,
         "evidence_dir",
         f"itemdb/evidence/{finding_id}",
     )
 
     # Update exploitation artifacts_dir.
-    content = content.replace(
-        "itemdb/evidence/CC-0000/exploits",
+    content = replace_nested_value(
+        content,
+        "artifacts_dir",
         f"itemdb/evidence/{finding_id}/exploits",
-        1,
     )
 
     content = content.replace(

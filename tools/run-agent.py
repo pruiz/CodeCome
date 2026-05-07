@@ -47,6 +47,33 @@ ROOT = Path(__file__).resolve().parents[1]
 MINIMUM_OPENCODE_VERSION = "1.14.39"
 
 
+def check_opencode_version() -> None:
+    try:
+        result = subprocess.run(["opencode", "--version"], capture_output=True, text=True)
+    except FileNotFoundError:
+        print(C.fail("OpenCode is not installed or not in PATH."), file=sys.stderr)
+        sys.exit(1)
+
+    if result.returncode != 0:
+        print(C.fail(f"Failed to check OpenCode version (exit code {result.returncode})."), file=sys.stderr)
+        sys.exit(1)
+
+    version_str = result.stdout.strip().split()[-1]
+
+    def parse_ver(v: str) -> tuple[int, ...]:
+        match = re.search(r"^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?", v)
+        if match:
+            return tuple(int(x) for x in match.groups() if x is not None)
+        return (0,)
+
+    actual = parse_ver(version_str)
+    required = parse_ver(MINIMUM_OPENCODE_VERSION)
+
+    if actual < required:
+        print(C.fail(f"OpenCode version is too old: found {version_str}, require >= {MINIMUM_OPENCODE_VERSION}"), file=sys.stderr)
+        sys.exit(1)
+
+
 def truthy_env(name: str) -> bool:
     value = os.environ.get(name)
     return value is not None and value not in {"", "0", "false", "False", "no", "No"}
@@ -1233,6 +1260,8 @@ def build_child_command(args: argparse.Namespace) -> list[str]:
 
 
 def main() -> int:
+    check_opencode_version()
+
     parser = build_parser()
     args = parser.parse_args()
 
