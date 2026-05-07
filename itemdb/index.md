@@ -6,7 +6,7 @@ Generated: 2026-05-06
 
 | Status | Count |
 |---|---:|
-| NEEDS_VALIDATION | 0 |
+| PENDING | 0 |
 | CONFIRMED | 0 |
 | EXPLOITED | 0 |
 | REJECTED | 0 |
