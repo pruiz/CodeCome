@@ -117,6 +117,35 @@ Workflow:
    loss, re-run with `--force` and the prior content is moved to
    `sandbox/.backup-<timestamp>/`.
 
+5b. Author missing sandbox scripts.
+
+    Templates are seeds, not finished sandboxes. Each
+    `templates/sandboxes/<id>/` ships only `Dockerfile`,
+    `docker-compose.yml`, a starter `build-target.sh`, and a
+    starter `test-target.sh`. After `apply`, the agent must
+    extend `sandbox/scripts/` with the canonical script set:
+
+        check.sh   up.sh   down.sh   shell.sh   logs.sh
+        clean.sh   reset.sh
+
+    Adapt `build-target.sh` and `test-target.sh` to the actual
+    project layout (the source may be nested under
+    `src/<name>/`, not directly under `src/`). Author additional
+    scripts when they help the target (sanitizer build, fuzzing
+    harness, debugger attach, target-specific reset, etc.).
+    Make every script executable. Document any extras in
+    `itemdb/notes/sandbox-plan.md` under "Extra scripts authored".
+
+    Do not record any validation tier as `skipped` because its
+    script is missing. Either author the script and run the
+    tier, or accept the `failed` outcome the validator emits.
+
+    Do not replace authoring a script with an in-chat manual
+    spot-check. Manual checks do not survive future runs.
+
+    See `.opencode/skills/sandbox-bootstrap/SKILL.md` for
+    authoring conventions and the canonical script set.
+
 6. Validate:
 
        make sandbox-validate
@@ -129,7 +158,9 @@ Workflow:
    `sandbox/CODECOME-GENERATED.md` and returns JSON with
    `--format json`. Capture per-tier outcomes (passed / failed /
    skipped, exit code, last 50 lines of stderr) into the validation
-   matrix in `sandbox-plan.md`.
+   matrix in `sandbox-plan.md`. A missing canonical script makes
+   the tier `failed` with reason `script not found`; that means you
+   forgot step 5b for that script.
 
 7. If validation fails, attempt automatic remediations within the
    retry budget (`CODECOME_BOOTSTRAP_MAX_RETRIES`, default 3). Each

@@ -7,6 +7,115 @@ the same `make phase-1` invocation. The goal is to ensure that
 `sandbox/` contains a working validation environment for the target
 under `src/`, so Phase 2 can rely on it.
 
+## Templates are seeds, not finished sandboxes
+
+Every directory under `templates/sandboxes/<id>/` is a **seed**.
+Each seed ships only `Dockerfile`, `docker-compose.yml`, a starter
+`scripts/build-target.sh`, and a starter `scripts/test-target.sh`.
+
+That is on purpose. The agent is expected to extend the seed into a
+fully functional sandbox tailored to the specific target. Treating
+a seed as a finished sandbox is a workflow violation.
+
+You **must**:
+
+- author missing canonical scripts (see "Canonical Phase 1b script
+  set" below) under `sandbox/scripts/`,
+- adapt the starter `build-target.sh` and `test-target.sh` to the
+  real project layout (the sample target nests its build under
+  `src/sample-c-cli/`, not `src/`; many real targets do similar),
+- add target-specific scripts when they help (sanitizer builds,
+  fuzzing harnesses, debugger attach helpers, etc.),
+- make every script executable,
+- document every authored or adapted script in
+  `itemdb/notes/sandbox-plan.md`.
+
+You **must not**:
+
+- record a validation tier as `skipped` because its script is
+  absent,
+- replace authoring a script with an in-chat manual spot-check
+  (manual checks are not durable and do not survive the next
+  `make phase-1` run),
+- assume that "the template ships only X" means "only X is
+  expected to exist".
+
+## Canonical Phase 1b script set
+
+The agent must produce all of these in `sandbox/scripts/` unless a
+target-specific reason makes one inapplicable. Inapplicability must
+be a positive statement in `sandbox-plan.md`, not the default.
+
+| Script | Purpose |
+|---|---|
+| `build-target.sh` | Build the target inside the sandbox. (Template provides starter; adapt it.) |
+| `test-target.sh`  | Run the target's tests inside the sandbox. (Template provides starter; adapt it.) |
+| `check.sh`        | Smoke-check toolchain and workspace mounts inside the container. |
+| `up.sh`           | Build images and bring the stack up. |
+| `down.sh`         | Tear the stack down. |
+| `shell.sh`        | Open an interactive shell in the sandbox. |
+| `logs.sh`         | Tail logs from the running stack. |
+| `clean.sh`        | Remove containers, volumes, and local tmp produced by validation. |
+| `reset.sh`        | Reset the sandbox to a known-good state. |
+
+Add additional scripts whenever the target benefits, for example:
+
+- `run-target.sh` — drive the target with a sample input.
+- `asan-build.sh` — build with AddressSanitizer + UBSan.
+- `fuzz-corpus.sh` — seed a fuzzing corpus.
+- `attach-debugger.sh` — attach gdb / lldb to a running container.
+- `reset-target.sh` — reset target-specific state inside the
+  container without tearing down the whole stack.
+
+Document any extras in `itemdb/notes/sandbox-plan.md` under "Extra
+scripts authored", with one line per script explaining what it does
+and how to run it.
+
+## Authoring conventions for the canonical scripts
+
+- All scripts are bash with `set -euo pipefail` at the top.
+- Path discipline: paths inside the container start with
+  `/workspace/...`; paths on the host start with `sandbox/...`.
+- Idempotency: `down.sh`, `clean.sh`, and `reset.sh` must be safe
+  to run repeatedly even when the stack is already down.
+- `check.sh` runs **inside the sandbox container**, exercising the
+  toolchain (compiler versions, package manager versions, language
+  runtime versions) and verifying the expected workspace mounts
+  exist (`/workspace/src`, `/workspace/itemdb`, `/workspace/sandbox`,
+  `/workspace/AGENTS.md`, `/workspace/codecome.yml`).
+- `up.sh` runs `docker compose -f sandbox/docker-compose.yml up -d
+  --build` (or the multi-service variant).
+- `shell.sh` runs `docker compose -f sandbox/docker-compose.yml
+  exec <service> bash` or `docker compose run --rm <service>
+  bash`.
+- `logs.sh` runs `docker compose -f sandbox/docker-compose.yml
+  logs -f`.
+- `clean.sh` runs `docker compose -f sandbox/docker-compose.yml
+  down -v` and removes any `tmp/` artifacts produced by the
+  sandbox.
+- `reset.sh` is `clean.sh` followed by `up.sh`, or a tighter
+  per-target reset when faster.
+
+## T1/T2/T3/T4 reporting rules
+
+- T1 must never be recorded as `skipped` because `up.sh` is
+  missing. Author `up.sh` first, or fall back to `docker compose
+  -f sandbox/docker-compose.yml build` and document why a real
+  `up.sh` is unnecessary in `sandbox-plan.md`.
+- T2 must never be recorded as `skipped` because `check.sh` is
+  missing. Author `check.sh`.
+- T3/T4 may legitimately be `skipped` only when the target
+  genuinely has no build or test step. The reason must be in
+  `sandbox-plan.md` (`static-only`, pre-built firmware, header-only
+  library, etc.).
+- A manual in-chat toolchain check is not a substitute for
+  `check.sh`.
+
+`tools/sandbox-bootstrap.py validate` enforces these rules: a
+missing `check.sh`, `up.sh`, `build-target.sh`, or `test-target.sh`
+is reported as **failed** (not skipped), with reason "script not
+found". The Phase 2 gate blocks on `failed`.
+
 ## Purpose
 
 Phase 1b answers:
@@ -239,16 +348,24 @@ Do not invent variables that are not defined in `manifest.yml`.
 
 ## Validation tiers
 
-| Tier | Purpose | Command (script-first) | Fallback |
+| Tier | Purpose | Required script | Fallback |
 |---|---|---|---|
-| T1 | Image build | `sandbox/scripts/up.sh` if it builds | `docker compose -f sandbox/docker-compose.yml build` |
-| T2 | Sanity | `sandbox/scripts/check.sh` | n/a |
-| T3 | Target build | `sandbox/scripts/build-target.sh` | skip if not applicable |
-| T4 | Target test | `sandbox/scripts/test-target.sh` | skip if not applicable |
+| T1 | Image build | `sandbox/scripts/up.sh` (must exist) | `docker compose -f sandbox/docker-compose.yml build` |
+| T2 | Sanity | `sandbox/scripts/check.sh` (must exist) | none — author it |
+| T3 | Target build | `sandbox/scripts/build-target.sh` (template ships starter; adapt it) | none — author it |
+| T4 | Target test | `sandbox/scripts/test-target.sh` (template ships starter; adapt it) | none — author it |
 
 For each tier capture: start time, exit code, last 50 lines of
 combined stdout+stderr, duration, outcome
 (`passed | failed | skipped`).
+
+A missing canonical script causes the tier to record `failed` with
+reason "script not found", **not** `skipped`. The Phase 2 gate
+blocks on `failed`.
+
+`skipped` is reserved for tiers that genuinely do not apply to the
+target (e.g. `static-only` builds with no executable). Such cases
+require a positive justification in `sandbox-plan.md`.
 
 Per-tier failures must be triaged. Do not move to the next tier on
 T1/T2 failure unless the user explicitly asks for `--keep-going`.

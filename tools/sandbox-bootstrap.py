@@ -1170,36 +1170,46 @@ def _has_executable(path: Path) -> bool:
     return path.is_file() and os.access(path, os.X_OK)
 
 
-def _resolve_tier1_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str]]:
-    """T1 image build: prefer up.sh, otherwise docker compose build."""
+def _resolve_tier1_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str], str]:
+    """T1 image build: prefer up.sh, otherwise docker compose build.
+
+    Returns (kind, command, expected_path).
+    kind: 'script' | 'docker' | 'missing'
+    expected_path: relative path of the canonical script that was
+                   sought (or empty string when not script-bound).
+    """
     up_script = SANDBOX_ROOT / "scripts" / "up.sh"
     compose_file = SANDBOX_ROOT / "docker-compose.yml"
     if not docker_only and _has_executable(up_script):
-        return ("script", [str(up_script.relative_to(ROOT))])
+        return ("script", [str(up_script.relative_to(ROOT))], str(up_script.relative_to(ROOT)))
     if not scripts_only and compose_file.exists():
-        return ("docker", ["docker", "compose", "-f", str(compose_file.relative_to(ROOT)), "build"])
-    return ("missing", [])
+        return (
+            "docker",
+            ["docker", "compose", "-f", str(compose_file.relative_to(ROOT)), "build"],
+            "",
+        )
+    return ("missing", [], str(up_script.relative_to(ROOT)))
 
 
-def _resolve_tier2_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str]]:
+def _resolve_tier2_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str], str]:
     check_script = SANDBOX_ROOT / "scripts" / "check.sh"
     if not docker_only and _has_executable(check_script):
-        return ("script", [str(check_script.relative_to(ROOT))])
-    return ("missing", [])
+        return ("script", [str(check_script.relative_to(ROOT))], str(check_script.relative_to(ROOT)))
+    return ("missing", [], str(check_script.relative_to(ROOT)))
 
 
-def _resolve_tier3_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str]]:
+def _resolve_tier3_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str], str]:
     build_script = SANDBOX_ROOT / "scripts" / "build-target.sh"
     if not docker_only and _has_executable(build_script):
-        return ("script", [str(build_script.relative_to(ROOT))])
-    return ("missing", [])
+        return ("script", [str(build_script.relative_to(ROOT))], str(build_script.relative_to(ROOT)))
+    return ("missing", [], str(build_script.relative_to(ROOT)))
 
 
-def _resolve_tier4_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str]]:
+def _resolve_tier4_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str], str]:
     test_script = SANDBOX_ROOT / "scripts" / "test-target.sh"
     if not docker_only and _has_executable(test_script):
-        return ("script", [str(test_script.relative_to(ROOT))])
-    return ("missing", [])
+        return ("script", [str(test_script.relative_to(ROOT))], str(test_script.relative_to(ROOT)))
+    return ("missing", [], str(test_script.relative_to(ROOT)))
 
 
 def _format_outcome(outcome: str) -> str:
@@ -1265,22 +1275,50 @@ def cmd_validate(args: argparse.Namespace) -> int:
     overall_outcome = "passed"
 
     for tier_id, purpose, resolver in tier_specs:
-        kind, command = resolver(args.scripts_only, args.docker_only)
+        kind, command, expected_path = resolver(args.scripts_only, args.docker_only)
         if kind == "missing":
+            reason = (
+                f"script not found: {expected_path}. "
+                "Templates are seeds; the agent must author this script during Phase 1b. "
+                "See .opencode/skills/sandbox-bootstrap/SKILL.md."
+            )
             entry = TierResult(
                 tier=tier_id,
                 purpose=purpose,
-                command="(no script or compose file resolved)",
+                command=f"(missing: {expected_path})",
                 started_at=_iso_now(),
                 duration_seconds=0.0,
                 exit_code=None,
-                outcome="skipped",
-                stderr_tail="",
+                outcome="failed",
+                stderr_tail=reason,
                 stdout_tail="",
             ).to_dict()
             results.append(entry)
+            overall_outcome = "failed"
             if args.format != "json":
-                print(f"  {tier_id:<3} {purpose:<18} {_format_outcome('skipped')}  (no resolver)")
+                print(
+                    f"  {tier_id:<3} {purpose:<18} {_format_outcome('failed')}  "
+                    f"{C.DIM}reason: missing {expected_path}{C.RESET}"
+                )
+                print(f"    {C.DIM}Templates are seeds; author this script during Phase 1b.{C.RESET}")
+            if not args.keep_going:
+                # Mark remaining tiers as skipped because we stopped early.
+                for skip_id, skip_purpose, _r in tier_specs[len(results):]:
+                    skipped = TierResult(
+                        tier=skip_id,
+                        purpose=skip_purpose,
+                        command="(skipped: prior tier failed)",
+                        started_at=_iso_now(),
+                        duration_seconds=0.0,
+                        exit_code=None,
+                        outcome="skipped",
+                        stderr_tail="",
+                        stdout_tail="",
+                    ).to_dict()
+                    results.append(skipped)
+                    if args.format != "json":
+                        print(f"  {skip_id:<3} {skip_purpose:<18} {_format_outcome('skipped')}  (prior tier failed)")
+                break
             continue
 
         if args.format != "json":

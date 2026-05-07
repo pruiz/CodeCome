@@ -1,5 +1,20 @@
 # Notes for the Terraform IaC review sandbox baseline
 
+## Seed reminder
+
+This template is a starting point, not a finished sandbox. During
+Phase 1b the agent must extend it into a fully functional
+`sandbox/`, including authoring missing canonical scripts:
+
+    check.sh   up.sh   down.sh   shell.sh   logs.sh
+    clean.sh   reset.sh
+
+The agent should also adapt the starter `build-target.sh` and
+`test-target.sh` to the actual project layout, and add
+target-specific scripts when they help. Document any extras in
+`itemdb/notes/sandbox-plan.md`. See
+`.opencode/skills/sandbox-bootstrap/SKILL.md`.
+
 ## When to use
 
 - Repository is primarily `.tf` Terraform code.
