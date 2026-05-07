@@ -207,17 +207,31 @@ Available prompts:
 
 The recommended way to run CodeCome is through `make` targets, which handle readiness gate checks and agent selection automatically.
 
-### Phase 1: reconnaissance
+### Phase 1: reconnaissance + sandbox bootstrap
 
     make phase-1
 
-Creates or updates reconnaissance notes under `itemdb/notes/`.
+Phase 1 has two sub-stages run together:
+
+- **1a — Source reconnaissance**: creates or updates reconnaissance notes under `itemdb/notes/`.
+- **1b — Sandbox bootstrap**: picks a curated baseline from `templates/sandboxes/<id>/`, applies it to `sandbox/` (with marker substitution), validates it, and writes `itemdb/notes/sandbox-plan.md` plus `sandbox/CODECOME-GENERATED.md`.
+
+`sandbox/` is semi-ephemeral; Phase 1b regenerates its contents based on what is in `src/`. Manual sandbox CLI commands:
+
+    make sandbox-list
+    make sandbox-detect
+    make sandbox-inspect ID=python
+    make sandbox-bootstrap ID=python
+    make sandbox-validate
+    make sandbox-status
+
+See `docs/sandbox.md` for the full bootstrap workflow.
 
 ### Phase 2: vulnerability hypothesis generation
 
     make phase-2
 
-Creates candidate findings under `itemdb/findings/PENDING/`.
+Creates candidate findings under `itemdb/findings/PENDING/`. Phase 2 is gated by the sandbox: it blocks if `sandbox/` is missing or if the most recent validation failed. Override with `CODECOME_ALLOW_NO_SANDBOX=1`.
 
 ### Phase 3: counter-analysis
 

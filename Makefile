@@ -210,28 +210,38 @@ report: venv-check
 # Sandbox
 # ---------------------------------------------------------------------------
 
+SANDBOX_SCRIPT_HINT := "Run 'make phase-1' (sub-stage 1b) to bootstrap sandbox/ from templates/sandboxes/."
+
 sandbox-check:
+	@test -x sandbox/scripts/check.sh || (echo $(SANDBOX_SCRIPT_HINT) && exit 1)
 	./sandbox/scripts/check.sh
 
 sandbox-up:
+	@test -x sandbox/scripts/up.sh || (echo $(SANDBOX_SCRIPT_HINT) && exit 1)
 	./sandbox/scripts/up.sh
 
 sandbox-down:
+	@test -x sandbox/scripts/down.sh || (echo $(SANDBOX_SCRIPT_HINT) && exit 1)
 	./sandbox/scripts/down.sh
 
 sandbox-shell:
+	@test -x sandbox/scripts/shell.sh || (echo $(SANDBOX_SCRIPT_HINT) && exit 1)
 	./sandbox/scripts/shell.sh
 
 sandbox-logs:
+	@test -x sandbox/scripts/logs.sh || (echo $(SANDBOX_SCRIPT_HINT) && exit 1)
 	./sandbox/scripts/logs.sh
 
 sandbox-clean:
+	@test -x sandbox/scripts/clean.sh || (echo $(SANDBOX_SCRIPT_HINT) && exit 1)
 	./sandbox/scripts/clean.sh
 
 sandbox-build-target:
+	@test -x sandbox/scripts/build-target.sh || (echo $(SANDBOX_SCRIPT_HINT) && exit 1)
 	./sandbox/scripts/build-target.sh
 
 sandbox-test-target:
+	@test -x sandbox/scripts/test-target.sh || (echo $(SANDBOX_SCRIPT_HINT) && exit 1)
 	./sandbox/scripts/test-target.sh
 
 # ---------------------------------------------------------------------------

@@ -223,9 +223,18 @@ tmp/*
 # CodeCome runtime artifacts
 itemdb/index.md
 
-# Sandbox bootstrap runtime state
-sandbox/CODECOME-GENERATED.md
-sandbox/.backup-*
+# Sandbox is semi-ephemeral. Phase 1b regenerates the contents from
+# templates/sandboxes/<id>/. Keep the directory itself via .gitkeep,
+# but treat everything inside as runtime state.
+sandbox/*
+!sandbox/.gitkeep
+
+# Build artifacts produced by sandbox runs against src/.
+src/**/bin/
+src/**/build/
+src/**/dist/
+src/**/target/
+src/**/obj/
 
 itemdb/notes/*
 !itemdb/notes/.gitkeep

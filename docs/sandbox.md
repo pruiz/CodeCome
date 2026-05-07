@@ -1,87 +1,108 @@
 # CodeCome Sandbox
 
-The CodeCome sandbox is the local execution environment used to validate findings.
+The CodeCome sandbox is the local execution environment used to
+validate findings.
 
 It lives under:
 
     sandbox/
 
-The sandbox is intentionally separate from the target source code under:
+The sandbox is intentionally separate from the target source code
+under:
 
     src/
 
-## Purpose
+## Phase 1b auto-bootstrap
 
-The sandbox is used for:
+`sandbox/` is **semi-ephemeral**. CodeCome regenerates its contents
+during Phase 1b based on what the recon agent learned about `src/`.
+Curated baselines live under:
 
-- building targets,
-- running targets,
-- running tests,
-- executing local proof-of-concept inputs,
-- using sanitizers,
-- using debuggers,
-- collecting logs,
-- producing validation evidence.
+    templates/sandboxes/<id>/
 
-## Default implementation
+For each baseline the agent picks (e.g. `python`, `c-cpp`,
+`multi-service-compose`), `tools/sandbox-bootstrap.py apply <id>`
+copies the files into `sandbox/`, substitutes `__VARNAME__`
+markers, and writes provenance into `sandbox/CODECOME-GENERATED.md`.
 
-The initial sandbox uses Docker Compose.
-
-Main files:
+After bootstrap, `sandbox/` typically contains:
 
     sandbox/Dockerfile
     sandbox/docker-compose.yml
-    sandbox/README.md
-    sandbox/scripts/
+    sandbox/scripts/build-target.sh
+    sandbox/scripts/check.sh
+    sandbox/scripts/clean.sh
+    sandbox/scripts/down.sh
+    sandbox/scripts/logs.sh
+    sandbox/scripts/reset.sh
+    sandbox/scripts/shell.sh
+    sandbox/scripts/test-target.sh
+    sandbox/scripts/up.sh
+    sandbox/CODECOME-GENERATED.md
+    sandbox/.backup-<UTC-timestamp>/  (if a previous content was replaced)
 
-The default image is currently optimized for C/C++ validation.
+`sandbox/CODECOME-GENERATED.md` and `sandbox/.backup-*/` are git-ignored.
+Everything else in `sandbox/` is also ignored, except `sandbox/.gitkeep`.
 
-## Common commands
+## Bootstrap CLI
 
-Check sandbox:
+| Command | Make target |
+|---|---|
+| List examples | `make sandbox-list` |
+| Inspect one example | `make sandbox-inspect ID=python` |
+| Detect candidates from src/ | `make sandbox-detect` |
+| Apply an example | `make sandbox-bootstrap ID=python` |
+| Re-apply with backup | `make sandbox-regenerate` |
+| Run validation tiers | `make sandbox-validate` |
+| Show provenance and gate | `make sandbox-status` |
 
-    make sandbox-check
+Pass extra args via `BOOTSTRAP_ARGS`:
 
-Start sandbox:
+    BOOTSTRAP_ARGS='--var TARGET_NAME=demo --var PYTHON_VERSION=3.12 --dry-run' \
+      make sandbox-bootstrap ID=python
 
-    make sandbox-up
+Environment variables:
 
-Stop sandbox:
+| Var | Default | Purpose |
+|---|---|---|
+| `CODECOME_ALLOW_NO_SANDBOX` | unset | Soft override of the Phase 2 sandbox gate. |
+| `CODECOME_BOOTSTRAP_MAX_RETRIES` | 3 | Agent remediation budget. |
+| `CODECOME_BOOTSTRAP_DRY_RUN` | unset | Force `--dry-run` on `apply`/`regenerate`. |
+| `CODECOME_VALIDATE_TAIL_LINES` | 50 | Lines of stderr/stdout captured per tier. |
 
-    make sandbox-down
+## Validation tiers
 
-Open shell:
+`make sandbox-validate` runs four tiers in order:
 
-    make sandbox-shell
+| Tier | Purpose | Default command |
+|---|---|---|
+| T1 | Image build | `sandbox/scripts/up.sh` (or `docker compose -f sandbox/docker-compose.yml build`) |
+| T2 | Sandbox sanity | `sandbox/scripts/check.sh` |
+| T3 | Target build | `sandbox/scripts/build-target.sh` |
+| T4 | Target test | `sandbox/scripts/test-target.sh` |
 
-Show logs:
+By default, validate stops at the first failed tier. Pass
+`BOOTSTRAP_ARGS='--keep-going'` to run all tiers regardless.
 
-    make sandbox-logs
+The validation matrix is appended to
+`sandbox/CODECOME-GENERATED.md` so each run is auditable.
 
-Clean sandbox:
+## Phase 2 sandbox gate
 
-    make sandbox-clean
+Before running `make phase-2`, the gate inspects the most recent
+validation outcome:
 
-Run generic build hook:
+| State | Outcome |
+|---|---|
+| sandbox missing | block |
+| validation failed | block |
+| validation passed | pass |
+| validation mixed (passed+skipped) | pass with warning |
+| no validation run yet | pass with warning |
+| user-managed sandbox | pass (user owns it) |
 
-    make sandbox-build-target
-
-Run generic test hook:
-
-    make sandbox-test-target
-
-## Direct script usage
-
-The Make targets call these scripts:
-
-    ./sandbox/scripts/check.sh
-    ./sandbox/scripts/up.sh
-    ./sandbox/scripts/down.sh
-    ./sandbox/scripts/shell.sh
-    ./sandbox/scripts/logs.sh
-    ./sandbox/scripts/clean.sh
-    ./sandbox/scripts/build-target.sh
-    ./sandbox/scripts/test-target.sh
+Override the gate with `CODECOME_ALLOW_NO_SANDBOX=1`. Always
+documents the override in the sandbox-plan halt section.
 
 ## Sandbox boundaries
 
@@ -144,60 +165,17 @@ Useful evidence files:
     itemdb/evidence/CC-0001/static-proof.md
     itemdb/evidence/CC-0001/limitations.md
 
-## C/C++ validation
+## Special validation models
 
-The default sandbox includes common C/C++ tooling:
+Two escape hatches exist when Docker is not enough or not needed:
 
-- GCC
-- G++
-- Clang
-- CMake
-- Make
-- Ninja
-- GDB
-- LLDB
-- Valgrind
-- strace
-
-Useful sanitizer build flags:
-
-    -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1
-
-Example:
-
-    clang -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1 src/example.c -o tmp/example-asan
-    ./tmp/example-asan
-
-Capture:
-
-- compiler command,
-- runtime command,
-- input payload,
-- sanitizer output,
-- crash trace,
-- relevant source lines,
-- observed behavior,
-- expected safe behavior.
-
-## Extending the sandbox
-
-The default image does not include every stack.
-
-For .NET, Node.js, Java, Go, Rust, browsers, database servers, or other target-specific dependencies, extend:
-
-    sandbox/Dockerfile
-
-or create target-specific scripts under:
-
-    sandbox/scripts/
-
-Examples:
-
-    sandbox/scripts/run-target.sh
-    sandbox/scripts/reset-target.sh
-    sandbox/scripts/build-cwe.sh
-    sandbox/scripts/run-testcase.sh
-    sandbox/scripts/asan-build.sh
+- `static-only`: target cannot be executed locally (firmware,
+  binary-only, license-restricted, corpus-too-large). Requires
+  explicit justification in `itemdb/notes/sandbox-plan.md`.
+- `nested-virt`: target requires QEMU-in-Docker. Apply the
+  `nested-virt` example from `templates/sandboxes/`. KVM
+  acceleration is enabled by default; comment out the `/dev/kvm`
+  device on hosts without it.
 
 ## Future isolation model
 
@@ -215,4 +193,5 @@ Each worker should write only to:
     itemdb/evidence/<finding-id>/
     runs/
 
-and should not share mutable runtime state with other validation workers.
+and should not share mutable runtime state with other validation
+workers.
