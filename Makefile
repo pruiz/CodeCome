@@ -161,6 +161,7 @@ reset-itemdb: venv-check
 	rm -f itemdb/reports/*.md
 	rm -f itemdb/findings/PENDING/CC-*.md
 	rm -f itemdb/findings/CONFIRMED/CC-*.md
+	rm -f itemdb/findings/EXPLOITED/CC-*.md
 	rm -f itemdb/findings/REJECTED/CC-*.md
 	rm -f itemdb/findings/DUPLICATE/CC-*.md
 	rm -f runs/*.md
@@ -170,6 +171,7 @@ reset-itemdb: venv-check
 	touch itemdb/reports/.gitkeep
 	touch itemdb/findings/PENDING/.gitkeep
 	touch itemdb/findings/CONFIRMED/.gitkeep
+	touch itemdb/findings/EXPLOITED/.gitkeep
 	touch itemdb/findings/REJECTED/.gitkeep
 	touch itemdb/findings/DUPLICATE/.gitkeep
 	touch runs/.gitkeep

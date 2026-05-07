@@ -221,6 +221,8 @@ tmp/*
 !tmp/.gitkeep
 
 # CodeCome runtime artifacts
+itemdb/index.md
+
 itemdb/notes/*
 !itemdb/notes/.gitkeep
 

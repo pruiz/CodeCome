@@ -699,7 +699,6 @@ def render_write_rich(console: Console, state: dict[str, Any]) -> bool:
         sections.append(Text())
         sections.append(Text(output_str.strip(), style="red"))
         console.print(Panel(Group(*sections), title="Write", border_style=border, expand=True))
-        _cache_set(file_path, new_content)
         return True
 
     prev = _cache_get(file_path)
@@ -756,7 +755,6 @@ def render_write_plain(state: dict[str, Any]) -> bool:
 
     if is_error:
         print(C.fail(output_str.strip()))
-        _cache_set(file_path, new_content)
         return True
 
     prev = _cache_get(file_path)

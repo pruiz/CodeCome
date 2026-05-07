@@ -28,7 +28,7 @@ Goal:
 
 Run:
 
-    opencode run "$(cat prompts/phase-1-recon.md)"
+    opencode run --agent recon "$(cat prompts/phase-1-recon.md)"
 
 Expected outputs:
 
