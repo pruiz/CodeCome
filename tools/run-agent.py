@@ -1287,11 +1287,20 @@ def main() -> int:
         console.print(Text(f"agent={args.agent}  prompt={args.prompt_file}", style="dim"))
         if args.finding:
             console.print(Text(f"finding={args.finding}", style="dim"))
+        if str(args.phase) == "1":
+            console.print(Text(
+                "Phase 1 has two sub-stages: 1a recon notes, 1b sandbox bootstrap.",
+                style="cyan",
+            ))
     else:
         print(C.header(f"Phase {args.phase}: {args.label}"))
         print(C.info(f"agent={args.agent}  prompt={args.prompt_file}"))
         if args.finding:
             print(C.info(f"finding={args.finding}"))
+        if str(args.phase) == "1":
+            print(C.info(
+                "Phase 1 has two sub-stages: 1a recon notes, 1b sandbox bootstrap."
+            ))
         print(C.warn("rich is not installed; using plain structured output fallback"))
 
     process: subprocess.Popen[str] | None = None

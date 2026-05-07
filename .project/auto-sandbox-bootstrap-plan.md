@@ -438,22 +438,47 @@ CLI flags mirror env vars where applicable.
 To keep diffs reviewable, ship in this order. Each step is its own
 commit.
 
-1. Skeleton: `tools/sandbox-bootstrap.py` with `list`, `inspect`,
+Phase 1 user-visible behavior is prioritized: agent-facing pieces
+ship next, before the heavier `apply`/`validate` machinery. Until
+those land, the skill documents an explicit manual fallback (copy
+example files, fill markers textually, run `docker compose build`).
+
+Already shipped:
+
+1. ✅ Skeleton: `tools/sandbox-bootstrap.py` with `list`, `inspect`,
    `status`, `detect`. `.gitignore` updates. New Make targets
    (functional for `list`/`status`/`detect` only).
-2. v1 examples — group A: `generic`, `c-cpp`, `python`, `node`.
-3. v1 examples — group B: `dotnet`, `go`, `java-maven`, `rust`.
-4. v1 examples — group C: `php`, `ruby`, `web-static`,
+2. ✅ v1 examples — group A: `generic`, `c-cpp`, `python`, `node`.
+3. ✅ v1 examples — group B: `dotnet`, `go`, `java-maven`, `rust`.
+4. ✅ v1 examples — group C: `php`, `ruby`, `web-static`,
    `iac-terraform`.
-5. v1 examples — group D: `multi-service-compose`, `nested-virt`.
-6. `apply` + `regenerate` (with `--dry-run`) + provenance writer.
-7. `validate` (script-first, docker fallback) + tier capture.
-8. Skill: `.opencode/skills/sandbox-bootstrap/SKILL.md`.
-9. Agent + prompt updates: `.opencode/agents/recon.md`,
-   `prompts/phase-1-recon.md`.
-10. Phase 2 gate update + override env var.
-11. Docs: `sandbox/README.md`, `README.md`, `docs/workflow.md`.
-12. Convention rename: `static_only` → `static-only`.
+5. ✅ v1 examples — group D: `multi-service-compose`, `nested-virt`.
+
+Re-ordered remainder (Option A):
+
+6. **Agent-facing first**: skill, agent, prompt, and Phase 1b banner.
+   - `.opencode/skills/sandbox-bootstrap/SKILL.md` describes
+     detection, honoring `src/`, marker substitution, validation
+     tiers, halt protocol, and the explicit manual fallback used
+     until the `apply`/`validate` subcommands ship.
+   - `.opencode/agents/recon.md` adds the `## Phase 1b: Sandbox
+     bootstrap` section and lists `itemdb/notes/sandbox-plan.md` as
+     a required output.
+   - `prompts/phase-1-recon.md` instructs the agent through Phase
+     1a then Phase 1b.
+   - `tools/run-agent.py` (or the Make target itself) prints a
+     visible "Phase 1b: sandbox bootstrap" banner when Phase 1
+     starts so the new sub-stage is observable from the user side
+     even before agent behavior catches up fully.
+7. `apply` + `regenerate` (with `--dry-run`) + provenance writer.
+   Once shipped, the skill drops the manual fallback and instructs
+   the agent to call `apply`/`regenerate` instead.
+8. `validate` (script-first, docker fallback) plus tier capture.
+   Skill updated to call `validate` instead of running docker
+   compose ad hoc.
+9. Phase 2 gate update + override env var.
+10. Docs: `sandbox/README.md`, `README.md`, `docs/workflow.md`.
+11. Convention rename: `static_only` → `static-only`.
 
 ## Verification
 

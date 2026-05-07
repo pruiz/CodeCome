@@ -85,7 +85,7 @@ phase-1: venv-check
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
 		opencode run --agent recon "$$(cat prompts/phase-1-recon.md)"; \
 	else \
-		$(PYTHON) tools/run-agent.py --phase 1 --label "Target Reconnaissance" --agent recon --prompt-file prompts/phase-1-recon.md; \
+		$(PYTHON) tools/run-agent.py --phase 1 --label "Target Reconnaissance + Sandbox Bootstrap" --agent recon --prompt-file prompts/phase-1-recon.md; \
 	fi
 
 phase-2: venv-check

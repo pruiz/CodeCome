@@ -18,6 +18,7 @@ Before starting reconnaissance, read:
 - `codecome.yml`
 - `templates/target-recon.md`
 - `.opencode/skills/source-recon/SKILL.md`
+- `.opencode/skills/sandbox-bootstrap/SKILL.md`
 
 Also reference when writing run summaries:
 
@@ -53,6 +54,15 @@ Infer:
 
 ## Output files
 
+Phase 1 has two sub-stages:
+
+- Phase 1a: source reconnaissance.
+- Phase 1b: sandbox bootstrap.
+
+Both sub-stages must produce durable artifacts under `itemdb/notes/`.
+
+### Phase 1a (recon notes)
+
 Create or update these required files:
 
     itemdb/notes/target-profile.md
@@ -75,6 +85,22 @@ Optional target-specific notes may also be created when useful:
     itemdb/notes/benchmark-notes.md
     itemdb/notes/crypto-usage.md
     itemdb/notes/iac-resources.md
+
+### Phase 1b (sandbox bootstrap)
+
+Required:
+
+    itemdb/notes/sandbox-plan.md
+
+Optional but expected when bootstrap actually runs:
+
+    sandbox/CODECOME-GENERATED.md
+    sandbox/<files derived from templates/sandboxes/<id>/>
+
+Phase 1b must run after Phase 1a in the same `make phase-1`
+invocation. Use `.opencode/skills/sandbox-bootstrap/SKILL.md` for the
+detailed decision flow, the manual fallback, the validation tiers,
+and the halt protocol.
 
 ## Reconnaissance rules
 
@@ -263,9 +289,50 @@ Example:
     - [unknown] The target has no complete documented build command yet.
     - [risky] Several parser-like files perform manual buffer management.
 
+## Phase 1b: Sandbox bootstrap
+
+After Phase 1a notes are complete, run Phase 1b in the same
+invocation. Goal: ensure `sandbox/` is a working validation
+environment for the target under `src/`.
+
+Mandatory output: `itemdb/notes/sandbox-plan.md`.
+
+Steps (full detail in `.opencode/skills/sandbox-bootstrap/SKILL.md`):
+
+1. Inspect `sandbox/` state via `make sandbox-status` (or
+   `.venv/bin/python3 tools/sandbox-bootstrap.py status`).
+2. Inspect existing `src/` runtime artifacts: `Dockerfile`,
+   `docker-compose.yml`, `Makefile`, `scripts/`, `README*`,
+   `INSTALL*`, `RUN*`, `docs/`. Decide what to honor.
+3. Run `make sandbox-detect` to see ranked candidates from
+   `templates/sandboxes/`.
+4. Choose one (or `multi-service-compose` if the target spans
+   several services).
+5. If the `apply` and `validate` subcommands of
+   `tools/sandbox-bootstrap.py` are available, use them. If they
+   are not yet implemented (CLI exits with code 64), use the manual
+   fallback documented in the skill.
+6. Substitute markers (`__VARNAME__`) using values from recon
+   notes and target documentation.
+7. Run validation tiers (T1 build, T2 check, T3 build-target, T4
+   test-target).
+8. Write `sandbox/CODECOME-GENERATED.md` with provenance.
+9. Update `itemdb/notes/sandbox-plan.md` with the validation
+   matrix, honoring decision, marker values, and any halt notice.
+
+If validation fails and remediation cannot succeed within the retry
+budget (default 3, configurable via
+`CODECOME_BOOTSTRAP_MAX_RETRIES`), halt and document the halt
+protocol in `sandbox-plan.md`.
+
+The default `validation_model` is `docker`. Use `static-only` or
+`nested-virt` only with explicit justification in `sandbox-plan.md`.
+
 ## Completion checklist
 
 Before finishing:
+
+Phase 1a:
 
 - all required notes exist,
 - target type is stated with confidence,
@@ -276,3 +343,16 @@ Before finishing:
 - uncertainty is documented,
 - no low-quality findings were created,
 - a run summary is written when practical.
+
+Phase 1b:
+
+- `itemdb/notes/sandbox-plan.md` exists,
+- honoring decision is documented,
+- chosen example id is recorded,
+- marker values are listed,
+- validation matrix is filled in,
+- `validation_model` is stated,
+- if bootstrap halted, halt notice and required user inputs are
+  documented,
+- if bootstrap succeeded, `sandbox/CODECOME-GENERATED.md` exists
+  with provenance.
