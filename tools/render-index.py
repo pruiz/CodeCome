@@ -30,7 +30,7 @@ FINDINGS_ROOT = ROOT / "itemdb" / "findings"
 INDEX_PATH = ROOT / "itemdb" / "index.md"
 
 STATUSES = [
-    "NEEDS_VALIDATION",
+    "PENDING",
     "CONFIRMED",
     "EXPLOITED",
     "REJECTED",

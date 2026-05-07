@@ -31,7 +31,7 @@ import _colors as C
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_PATH = ROOT / "templates" / "finding.md"
 FINDINGS_ROOT = ROOT / "itemdb" / "findings"
-DEFAULT_STATUS = "NEEDS_VALIDATION"
+DEFAULT_STATUS = "PENDING"
 
 VALID_SEVERITIES = {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
 VALID_CONFIDENCES = {"LOW", "MEDIUM", "HIGH", "CONFIRMED"}

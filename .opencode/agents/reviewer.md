@@ -22,7 +22,7 @@ Before reviewing findings, read:
 - `.opencode/skills/finding-format/SKILL.md`
 - `.opencode/skills/counter-analysis/SKILL.md`
 - relevant files under `itemdb/notes/`
-- all findings under `itemdb/findings/NEEDS_VALIDATION/`
+- all findings under `itemdb/findings/PENDING/`
 - related findings under `itemdb/findings/CONFIRMED/`, `REJECTED/`, and `DUPLICATE/`
 
 Also reference when writing run summaries:
@@ -38,7 +38,7 @@ Use target-specific skills when they apply, for example:
 
 For each candidate finding, determine whether it should be:
 
-- kept in `NEEDS_VALIDATION`,
+- kept in `PENDING`,
 - moved to `REJECTED`,
 - moved to `DUPLICATE`,
 - or improved before validation.
@@ -62,7 +62,7 @@ For each finding, ask:
 
 ## Allowed outcomes
 
-### Keep in `NEEDS_VALIDATION`
+### Keep in `PENDING`
 
 Keep the finding open when it remains plausible and needs validation.
 

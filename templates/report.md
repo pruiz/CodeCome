@@ -186,7 +186,7 @@ Examples:
 
 Examples:
 
-- Validate remaining findings under `itemdb/findings/NEEDS_VALIDATION/`.
+- Validate remaining findings under `itemdb/findings/PENDING/`.
 - Improve target-specific sandbox support.
 - Add or refine target-specific skills.
 - Review confirmed findings manually.

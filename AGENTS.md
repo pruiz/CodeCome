@@ -17,7 +17,7 @@ Important security claims must be written to files under `itemdb/`, not left onl
 - `sandbox/`: sandboxed execution and validation environment.
 - `itemdb/`: file-based finding database, notes, reports, and evidence.
 - `itemdb/notes/`: reconnaissance notes and target model.
-- `itemdb/findings/NEEDS_VALIDATION/`: candidate findings requiring validation.
+- `itemdb/findings/PENDING/`: candidate findings requiring validation.
 - `itemdb/findings/CONFIRMED/`: validated findings with evidence.
 - `itemdb/findings/EXPLOITED/`: confirmed findings with demonstrated real-world impact.
 - `itemdb/findings/REJECTED/`: disproven or non-actionable findings.
@@ -102,7 +102,7 @@ Goal: create precise candidate findings.
 
 Write findings under:
 
-- `itemdb/findings/NEEDS_VALIDATION/`
+- `itemdb/findings/PENDING/`
 
 Each finding must:
 
@@ -120,7 +120,7 @@ Each finding must:
 
 Goal: disprove weak findings.
 
-For each finding under `NEEDS_VALIDATION`:
+For each finding under `PENDING`:
 
 - look for existing mitigations,
 - check reachability,
@@ -242,7 +242,7 @@ Do not over-focus on CVSS in the PoC. Prefer clear technical impact.
 
 Use only these status values:
 
-- `NEEDS_VALIDATION`
+- `PENDING`
 - `CONFIRMED`
 - `EXPLOITED`
 - `REJECTED`
@@ -327,12 +327,12 @@ Each phase has readiness gates that must be satisfied before it can run:
 
 ### Phase 3 readiness
 
-- At least one finding must exist under `itemdb/findings/NEEDS_VALIDATION/`.
+- At least one finding must exist under `itemdb/findings/PENDING/`.
 
 ### Phase 4 readiness
 
 - A specific finding ID must be provided (e.g., `CC-0001`).
-- The finding must be in `NEEDS_VALIDATION` status.
+- The finding must be in `PENDING` status.
 
 ### Phase 5 readiness
 
@@ -360,7 +360,7 @@ Each `make` target checks readiness gates before invoking the corresponding agen
 Phase 4 is invoked once per finding, not as a batch.
 Phase 5 is invoked once per finding, not as a batch.
 
-For convenience, `make validate-all` iterates over all `NEEDS_VALIDATION` findings sequentially.
+For convenience, `make validate-all` iterates over all `PENDING` findings sequentially.
 For convenience, `make exploit-all` iterates over all `CONFIRMED` findings sequentially.
 
 No automatic handoff occurs between phases. The user decides when to advance.

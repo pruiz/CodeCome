@@ -46,7 +46,7 @@ REQUIRED_NOTES = [
 ]
 
 FINDING_STATUS_DIRS = [
-    "NEEDS_VALIDATION",
+    "PENDING",
     "CONFIRMED",
     "EXPLOITED",
     "REJECTED",
@@ -184,25 +184,25 @@ def gate_phase_2() -> int:
 
 
 def gate_phase_3() -> int:
-    """Phase 3: at least one NEEDS_VALIDATION finding must exist."""
+    """Phase 3: at least one PENDING finding must exist."""
     print(header("Phase 3: Counter-analysis"))
     print()
 
-    nv_count = count_findings("NEEDS_VALIDATION")
+    nv_count = count_findings("PENDING")
     if nv_count == 0:
-        print(fail("No findings in NEEDS_VALIDATION."))
+        print(fail("No findings in PENDING."))
         print()
         print(info("Run Phase 2 first: make phase-2"))
         return 1
 
-    print(ok(f"{nv_count} finding(s) in NEEDS_VALIDATION."))
+    print(ok(f"{nv_count} finding(s) in PENDING."))
     print()
     print(f"{GREEN}{SYM_OK}{RESET} Ready to run Phase 3.")
     return 0
 
 
 def gate_phase_4(identifier: str) -> int:
-    """Phase 4: finding must exist and be in NEEDS_VALIDATION."""
+    """Phase 4: finding must exist and be in PENDING."""
     print(header(f"Phase 4: Validate {identifier}"))
     print()
 
@@ -213,10 +213,10 @@ def gate_phase_4(identifier: str) -> int:
         print(info("Check available findings: make status"))
         return 1
 
-    if path.parent.name != "NEEDS_VALIDATION":
-        print(warn(f"{path.stem} is in {path.parent.name}, not NEEDS_VALIDATION."))
+    if path.parent.name != "PENDING":
+        print(warn(f"{path.stem} is in {path.parent.name}, not PENDING."))
         print()
-        print(info("Only NEEDS_VALIDATION findings can be validated."))
+        print(info("Only PENDING findings can be validated."))
         return 1
 
     print(ok(f"Found: {path.relative_to(ROOT)}"))
@@ -310,7 +310,7 @@ def main() -> int:
             print(fail("Phase 4 requires a finding ID."))
             print()
             print(info("Usage: ./tools/gate-check.py 4 CC-0001"))
-            print(info("   or: ./tools/gate-check.py 4 itemdb/findings/NEEDS_VALIDATION/CC-0001-test.md"))
+            print(info("   or: ./tools/gate-check.py 4 itemdb/findings/PENDING/CC-0001-test.md"))
             return 1
         return gate_phase_4(args.finding_id)
     elif args.phase == 5:

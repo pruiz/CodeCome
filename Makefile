@@ -18,7 +18,7 @@ help:
 	@echo "    make phase-4 FINDING=CC-0001  Validate one finding"
 	@echo "    make phase-5 FINDING=CC-0001  Develop exploit for one finding"
 	@echo "    make phase-6                  Generate report"
-	@echo "    make validate-all             Validate all NEEDS_VALIDATION findings"
+	@echo "    make validate-all             Validate all PENDING findings"
 	@echo "    make exploit-all              Exploit all CONFIRMED findings"
 	@echo ""
 	@echo "  Wrapper controls:"
@@ -114,9 +114,9 @@ phase-6: venv-check
 	fi
 
 validate-all: venv-check
-	@ids=$$($(PYTHON) tools/list-findings.py --status NEEDS_VALIDATION --format ids 2>/dev/null); \
+	@ids=$$($(PYTHON) tools/list-findings.py --status PENDING --format ids 2>/dev/null); \
 	if [ -z "$$ids" ]; then \
-		echo "No NEEDS_VALIDATION findings to validate."; \
+		echo "No PENDING findings to validate."; \
 		exit 0; \
 	fi; \
 	for f in $$ids; do \
@@ -159,7 +159,7 @@ reset-itemdb: venv-check
 	rm -f itemdb/notes/*.md
 	rm -rf itemdb/evidence/CC-*
 	rm -f itemdb/reports/*.md
-	rm -f itemdb/findings/NEEDS_VALIDATION/CC-*.md
+	rm -f itemdb/findings/PENDING/CC-*.md
 	rm -f itemdb/findings/CONFIRMED/CC-*.md
 	rm -f itemdb/findings/REJECTED/CC-*.md
 	rm -f itemdb/findings/DUPLICATE/CC-*.md
@@ -168,7 +168,7 @@ reset-itemdb: venv-check
 	touch itemdb/notes/.gitkeep
 	touch itemdb/evidence/.gitkeep
 	touch itemdb/reports/.gitkeep
-	touch itemdb/findings/NEEDS_VALIDATION/.gitkeep
+	touch itemdb/findings/PENDING/.gitkeep
 	touch itemdb/findings/CONFIRMED/.gitkeep
 	touch itemdb/findings/REJECTED/.gitkeep
 	touch itemdb/findings/DUPLICATE/.gitkeep

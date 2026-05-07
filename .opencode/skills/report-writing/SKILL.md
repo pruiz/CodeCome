@@ -30,7 +30,7 @@ Read:
 - `itemdb/notes/`
 - `itemdb/findings/EXPLOITED/`
 - `itemdb/findings/CONFIRMED/`
-- `itemdb/findings/NEEDS_VALIDATION/`
+- `itemdb/findings/PENDING/`
 - `itemdb/findings/REJECTED/`
 - `itemdb/findings/DUPLICATE/`
 - `itemdb/evidence/`
@@ -158,7 +158,7 @@ Link to evidence files instead.
 
 ## Needs-validation section
 
-For findings still under `NEEDS_VALIDATION`, summarize:
+For findings still under `PENDING`, summarize:
 
 - id,
 - title,

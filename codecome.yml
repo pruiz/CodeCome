@@ -101,21 +101,21 @@ validation:
     - "A finding may only be marked CONFIRMED when clear evidence exists."
     - "Benchmark labels alone are not enough to mark a finding CONFIRMED."
     - "If runtime validation is not practical, a strong static proof may be acceptable, but the limitation must be documented."
-    - "If assumptions cannot be validated, keep the finding in NEEDS_VALIDATION or move it to REJECTED."
+    - "If assumptions cannot be validated, keep the finding in PENDING or move it to REJECTED."
 
 reporting:
   format: "markdown"
   findings_dir: "./itemdb/findings"
   evidence_dir: "./itemdb/evidence"
   reports_dir: "./itemdb/reports"
-  default_status: "NEEDS_VALIDATION"
+  default_status: "PENDING"
 
 finding:
   id_prefix: "CC"
   template: "./templates/finding.md"
 
   statuses:
-    - "NEEDS_VALIDATION"
+    - "PENDING"
     - "CONFIRMED"
     - "EXPLOITED"
     - "REJECTED"

@@ -15,7 +15,7 @@ with the finding id or path to validate.
 Examples:
 
     CC-0001
-    itemdb/findings/NEEDS_VALIDATION/CC-0001-missing-owner-check.md
+    itemdb/findings/PENDING/CC-0001-missing-owner-check.md
 
 ## Assigned finding
 
@@ -161,7 +161,7 @@ If validation cannot be completed, do not fake confirmation.
 
 Keep the finding under:
 
-    itemdb/findings/NEEDS_VALIDATION/
+    itemdb/findings/PENDING/
 
 Update `# Validation result` with:
 

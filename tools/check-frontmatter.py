@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FINDINGS_ROOT = ROOT / "itemdb" / "findings"
 
 STATUSES = {
-    "NEEDS_VALIDATION",
+    "PENDING",
     "CONFIRMED",
     "EXPLOITED",
     "REJECTED",

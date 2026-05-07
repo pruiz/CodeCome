@@ -230,8 +230,8 @@ itemdb/evidence/*
 itemdb/reports/*
 !itemdb/reports/.gitkeep
 
-itemdb/findings/NEEDS_VALIDATION/*
-!itemdb/findings/NEEDS_VALIDATION/.gitkeep
+itemdb/findings/PENDING/*
+!itemdb/findings/PENDING/.gitkeep
 
 itemdb/findings/CONFIRMED/*
 !itemdb/findings/CONFIRMED/.gitkeep

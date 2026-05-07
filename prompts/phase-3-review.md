@@ -13,7 +13,7 @@ Read:
 - `.opencode/skills/finding-format/SKILL.md`
 - `.opencode/skills/counter-analysis/SKILL.md`
 - all relevant files under `itemdb/notes/`
-- all candidate findings under `itemdb/findings/NEEDS_VALIDATION/`
+- all candidate findings under `itemdb/findings/PENDING/`
 - related findings under `itemdb/findings/CONFIRMED/`, `REJECTED/`, and `DUPLICATE/`
 
 Use additional target-specific skills only if they clearly apply.
@@ -27,7 +27,7 @@ Examples:
 
 Review all findings under:
 
-    itemdb/findings/NEEDS_VALIDATION/
+    itemdb/findings/PENDING/
 
 Try to disprove, weaken, deduplicate, or improve each finding.
 
@@ -53,7 +53,7 @@ For each finding, ask:
 
 ## Allowed outcomes
 
-### Keep in NEEDS_VALIDATION
+### Keep in PENDING
 
 Keep the finding open when it remains plausible.
 
@@ -147,7 +147,7 @@ Instead:
 At the end, summarize:
 
 - findings reviewed,
-- findings kept in NEEDS_VALIDATION,
+- findings kept in PENDING,
 - findings moved to REJECTED,
 - findings moved to DUPLICATE,
 - major confidence changes,

@@ -35,7 +35,7 @@ CodeCome uses a phased workflow:
 
 2. **Hypothesis generation**
 
-   The agent creates precise vulnerability hypotheses as Markdown findings under `itemdb/findings/NEEDS_VALIDATION/`.
+   The agent creates precise vulnerability hypotheses as Markdown findings under `itemdb/findings/PENDING/`.
 
 3. **Counter-analysis**
 
@@ -135,7 +135,7 @@ Agents:
 
 Findings move through a structured lifecycle:
 
-    NEEDS_VALIDATION
+    PENDING
         ├── CONFIRMED
         │       └── EXPLOITED
         ├── REJECTED
@@ -179,7 +179,7 @@ Benchmark labels alone are not enough to mark a finding as confirmed.
 
 4. Convenience targets:
 
-       make validate-all             # Validate all NEEDS_VALIDATION findings
+       make validate-all             # Validate all PENDING findings
        make exploit-all              # Exploit all CONFIRMED findings
 
 Each `make` target checks readiness gates before invoking the corresponding agent. Phase 4 and Phase 5 are invoked once per finding.
@@ -217,7 +217,7 @@ Creates or updates reconnaissance notes under `itemdb/notes/`.
 
     make phase-2
 
-Creates candidate findings under `itemdb/findings/NEEDS_VALIDATION/`.
+Creates candidate findings under `itemdb/findings/PENDING/`.
 
 ### Phase 3: counter-analysis
 

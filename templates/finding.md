@@ -1,7 +1,7 @@
 ---
 id: "CC-0000"
 title: "Short vulnerability title"
-status: "NEEDS_VALIDATION"
+status: "PENDING"
 severity: "MEDIUM"
 confidence: "LOW"
 category: "Unclassified"

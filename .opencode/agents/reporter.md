@@ -21,7 +21,7 @@ Before writing a report, read:
 - `templates/report.md`
 - `templates/run-summary.md`
 - relevant files under `itemdb/notes/`
-- findings under `itemdb/findings/` (including `EXPLOITED/`, `CONFIRMED/`, `NEEDS_VALIDATION/`, `REJECTED/`, `DUPLICATE/`)
+- findings under `itemdb/findings/` (including `EXPLOITED/`, `CONFIRMED/`, `PENDING/`, `REJECTED/`, `DUPLICATE/`)
 - evidence under `itemdb/evidence/` (including `exploits/` subdirectories)
 
 Use target-specific skills only when useful for explaining target context.
@@ -197,7 +197,7 @@ Reference evidence files by relative path.
 
 ## Findings needing validation
 
-For findings still in `NEEDS_VALIDATION`, include:
+For findings still in `PENDING`, include:
 
 - id,
 - title,

@@ -269,7 +269,7 @@ Document:
 - sandbox changes needed,
 - recommended next action.
 
-Keep the finding in `NEEDS_VALIDATION`.
+Keep the finding in `PENDING`.
 
 ## Completion checklist
 

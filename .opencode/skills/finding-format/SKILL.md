@@ -21,7 +21,7 @@ A finding must describe a concrete vulnerability hypothesis or confirmed vulnera
 
 Candidate findings:
 
-    itemdb/findings/NEEDS_VALIDATION/
+    itemdb/findings/PENDING/
 
 Confirmed findings:
 
@@ -75,7 +75,7 @@ Minimum fields:
     ---
     id: "CC-0001"
     title: "Short vulnerability title"
-    status: "NEEDS_VALIDATION"
+    status: "PENDING"
     severity: "MEDIUM"
     confidence: "LOW"
     category: "Unclassified"
@@ -110,7 +110,7 @@ Minimum fields:
 
 Use only:
 
-- `NEEDS_VALIDATION`
+- `PENDING`
 - `CONFIRMED`
 - `EXPLOITED`
 - `REJECTED`

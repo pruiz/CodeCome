@@ -13,7 +13,7 @@ The initial PoC intentionally uses plain Markdown files instead of a database.
     ├── index.md
     ├── notes/
     ├── findings/
-    │   ├── NEEDS_VALIDATION/
+    │   ├── PENDING/
     │   ├── CONFIRMED/
     │   ├── EXPLOITED/
     │   ├── REJECTED/
@@ -59,7 +59,7 @@ Use lowercase, hyphen-separated slugs after the id.
 
 ## Finding status directories
 
-### `NEEDS_VALIDATION/`
+### `PENDING/`
 
 Candidate findings that appear plausible but still require validation.
 

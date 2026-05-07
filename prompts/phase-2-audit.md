@@ -35,7 +35,7 @@ Use Phase 1 reconnaissance notes under:
 
 Create precise vulnerability hypotheses as Markdown findings under:
 
-    itemdb/findings/NEEDS_VALIDATION/
+    itemdb/findings/PENDING/
 
 Do not validate findings in this phase.
 
@@ -49,7 +49,7 @@ For each candidate finding, create a Markdown file using:
 
 Store it under:
 
-    itemdb/findings/NEEDS_VALIDATION/
+    itemdb/findings/PENDING/
 
 Use filenames like:
 
@@ -122,7 +122,7 @@ Do not use:
 
 All new findings must use:
 
-    status: "NEEDS_VALIDATION"
+    status: "PENDING"
 
 ## Counter-analysis
 

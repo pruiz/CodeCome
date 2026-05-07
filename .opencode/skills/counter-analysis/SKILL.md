@@ -12,7 +12,7 @@ Do not look for new findings unless they are directly related to the finding bei
 
 For each finding under:
 
-    itemdb/findings/NEEDS_VALIDATION/
+    itemdb/findings/PENDING/
 
 determine whether it is:
 
@@ -42,7 +42,7 @@ Update the finding in place, or move it to the appropriate status directory.
 
 Possible outcomes:
 
-- keep in `NEEDS_VALIDATION/`,
+- keep in `PENDING/`,
 - move to `REJECTED/`,
 - move to `DUPLICATE/`.
 
@@ -241,7 +241,7 @@ Update `# Notes` with:
 
 ## Keep-for-validation format
 
-When keeping a finding in `NEEDS_VALIDATION`, update `# Counter-analysis` with:
+When keeping a finding in `PENDING`, update `# Counter-analysis` with:
 
 - why it remains plausible,
 - what evidence supports it,

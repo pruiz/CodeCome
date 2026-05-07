@@ -67,7 +67,7 @@ Run:
 
 Expected outputs:
 
-    itemdb/findings/NEEDS_VALIDATION/CC-XXXX-short-title.md
+    itemdb/findings/PENDING/CC-XXXX-short-title.md
 
 Each finding must include:
 
@@ -81,7 +81,7 @@ Each finding must include:
 
 All new findings must have:
 
-    status: "NEEDS_VALIDATION"
+    status: "PENDING"
 
 New findings must not have:
 
@@ -104,7 +104,7 @@ Expected actions:
 - lower or raise confidence,
 - move disproven findings to `REJECTED`,
 - move duplicate findings to `DUPLICATE`,
-- leave plausible findings in `NEEDS_VALIDATION`.
+- leave plausible findings in `PENDING`.
 
 Phase 3 should not normally mark findings as `CONFIRMED`.
 
@@ -147,7 +147,7 @@ Possible outcomes:
 
 - move finding to `CONFIRMED`,
 - move finding to `REJECTED`,
-- keep finding in `NEEDS_VALIDATION` with unresolved validation notes.
+- keep finding in `PENDING` with unresolved validation notes.
 
 ## Phase 5: Exploit development
 
@@ -247,7 +247,7 @@ Open sandbox shell:
 
 ## Finding lifecycle
 
-    NEEDS_VALIDATION
+    PENDING
         ├── CONFIRMED
         │       └── EXPLOITED
         ├── REJECTED

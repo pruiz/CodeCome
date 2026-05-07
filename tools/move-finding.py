@@ -5,7 +5,7 @@ Move a CodeCome finding to another status directory and update frontmatter.
 Examples:
 
     ./tools/move-finding.py CC-0001 CONFIRMED
-    ./tools/move-finding.py itemdb/findings/NEEDS_VALIDATION/CC-0001-test.md REJECTED
+    ./tools/move-finding.py itemdb/findings/PENDING/CC-0001-test.md REJECTED
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FINDINGS_ROOT = ROOT / "itemdb" / "findings"
 
 STATUSES = {
-    "NEEDS_VALIDATION",
+    "PENDING",
     "CONFIRMED",
     "EXPLOITED",
     "REJECTED",

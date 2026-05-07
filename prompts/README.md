@@ -24,7 +24,7 @@ Use `make` targets for the simplest workflow:
     make phase-4 FINDING=CC-0001  # Validate one finding
     make phase-5 FINDING=CC-0001  # Develop exploit for one finding
     make phase-6                  # Reporting
-    make validate-all             # Validate all NEEDS_VALIDATION findings
+    make validate-all             # Validate all PENDING findings
     make exploit-all              # Exploit all CONFIRMED findings
 
 Each `make` target checks readiness gates before invoking the corresponding agent.
@@ -51,7 +51,7 @@ Creates or updates target reconnaissance notes under:
 
 Creates candidate findings under:
 
-    itemdb/findings/NEEDS_VALIDATION/
+    itemdb/findings/PENDING/
 
 ### Phase 3: counter-analysis
 

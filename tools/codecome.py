@@ -32,7 +32,7 @@ REQUIRED_PATHS = [
     "src",
     "sandbox",
     "itemdb",
-    "itemdb/findings/NEEDS_VALIDATION",
+    "itemdb/findings/PENDING",
     "itemdb/findings/CONFIRMED",
     "itemdb/findings/EXPLOITED",
     "itemdb/findings/REJECTED",
@@ -54,7 +54,7 @@ REQUIRED_PATHS = [
 ]
 
 FINDING_STATUS_DIRS = [
-    "NEEDS_VALIDATION",
+    "PENDING",
     "CONFIRMED",
     "EXPLOITED",
     "REJECTED",

@@ -34,7 +34,7 @@ DEFAULT_OUTPUT = ROOT / "itemdb" / "reports" / "report.md"
 STATUSES = [
     "EXPLOITED",
     "CONFIRMED",
-    "NEEDS_VALIDATION",
+    "PENDING",
     "REJECTED",
     "DUPLICATE",
 ]
@@ -237,7 +237,7 @@ def render_detail_block(title: str, rows: List[Dict[str, str]], exploited: bool 
 def render_report(rows: List[Dict[str, str]]) -> str:
     exploited = [row for row in rows if row["status"] == "EXPLOITED"]
     confirmed = [row for row in rows if row["status"] == "CONFIRMED"]
-    needs_validation = [row for row in rows if row["status"] == "NEEDS_VALIDATION"]
+    pending = [row for row in rows if row["status"] == "PENDING"]
     rejected = [row for row in rows if row["status"] == "REJECTED"]
     duplicate = [row for row in rows if row["status"] == "DUPLICATE"]
 
@@ -254,7 +254,7 @@ def render_report(rows: List[Dict[str, str]]) -> str:
         f"This report summarizes the current CodeCome workspace state. "
         f"It includes {len(exploited)} exploited finding(s), "
         f"{len(confirmed)} confirmed finding(s), "
-        f"{len(needs_validation)} finding(s) needing validation, "
+        f"{len(pending)} finding(s) needing validation, "
         f"{len(rejected)} rejected finding(s), and "
         f"{len(duplicate)} duplicate finding(s)."
     )
@@ -313,7 +313,7 @@ def render_report(rows: List[Dict[str, str]]) -> str:
 
     lines.append("# Findings needing validation")
     lines.append("")
-    lines.extend(table_for(needs_validation))
+    lines.extend(table_for(pending))
     lines.append("")
 
     lines.append("# Rejected findings")
@@ -348,8 +348,8 @@ def render_report(rows: List[Dict[str, str]]) -> str:
 
     lines.append("# Recommended next steps")
     lines.append("")
-    if needs_validation:
-        lines.append("- Validate remaining findings under `itemdb/findings/NEEDS_VALIDATION/`.")
+    if pending:
+        lines.append("- Validate remaining findings under `itemdb/findings/PENDING/`.")
     else:
         lines.append("- Run reconnaissance and hypothesis generation to create findings.")
     lines.append("- Review generated findings manually.")

@@ -41,7 +41,7 @@ For the assigned finding, determine whether it is:
 
 - `CONFIRMED`,
 - `REJECTED`,
-- or still `NEEDS_VALIDATION`.
+- or still `PENDING`.
 
 Validation must produce durable evidence under:
 
@@ -224,7 +224,7 @@ Update `# Validation result` with the rejection reason.
 
 If validation cannot be completed, keep the finding in:
 
-    itemdb/findings/NEEDS_VALIDATION/
+    itemdb/findings/PENDING/
 
 Do not fake confirmation.
 

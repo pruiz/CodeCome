@@ -10,7 +10,7 @@ You do not broadly rewrite the target source code.
 
 Your main output is a set of precise Markdown findings under:
 
-    itemdb/findings/NEEDS_VALIDATION/
+    itemdb/findings/PENDING/
 
 ## Required reading
 
@@ -100,7 +100,7 @@ Do not mark anything as `CONFIRMED`.
 
 New findings must have:
 
-    status: "NEEDS_VALIDATION"
+    status: "PENDING"
 
 Confidence may be:
 
@@ -120,7 +120,7 @@ Use the template:
 
 Store findings under:
 
-    itemdb/findings/NEEDS_VALIDATION/
+    itemdb/findings/PENDING/
 
 Use filenames like:
 
@@ -237,7 +237,7 @@ If the target contains C/C++:
 
 Before finishing:
 
-- each finding is in `itemdb/findings/NEEDS_VALIDATION/`,
+- each finding is in `itemdb/findings/PENDING/`,
 - each finding uses valid frontmatter,
 - each finding has a unique id,
 - each finding has a specific validation plan,
