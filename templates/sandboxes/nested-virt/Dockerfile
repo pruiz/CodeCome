@@ -1,5 +1,5 @@
 # CodeCome nested QEMU sandbox.
-# Marker convention: __VARNAME__ tokens.
+# Marker convention: see README.md for VARNAME tokens.
 #
 # Use only when the target genuinely needs nested virtualization
 # (firmware, kernel, binary-only blobs, foreign architecture).

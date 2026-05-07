@@ -61,13 +61,13 @@ exposed via Make targets:
 | `inspect <id>` | `make sandbox-inspect ID=<id>` | available |
 | `detect` | `make sandbox-detect` | available |
 | `status [--gate]` | `make sandbox-status` | available |
-| `apply <id>` | `make sandbox-bootstrap ID=<id>` | not yet implemented (commit 7) |
+| `apply <id>` | `make sandbox-bootstrap ID=<id>` | available |
+| `regenerate` | `make sandbox-regenerate` | available |
 | `validate` | `make sandbox-validate` | not yet implemented (commit 8) |
-| `regenerate` | `make sandbox-regenerate` | not yet implemented (commit 8) |
 
 When a subcommand is "not yet implemented" the CLI exits with code
-`64` and a message pointing to this plan. Use the **manual fallback**
-section below in the meantime.
+`64`. The **manual fallback** section below covers what to do in
+that interim case for `validate`.
 
 Always invoke the CLI through the project's virtualenv:
 
@@ -179,57 +179,66 @@ Two ways to substitute markers:
 
 Do not invent variables that are not defined in `manifest.yml`.
 
-## Manual fallback (until `apply`/`validate` ship)
-
-While the `apply`, `regenerate`, and `validate` subcommands are not
-yet implemented, perform Phase 1b manually using the working
-read-only subcommands and shell:
+## Preferred flow (using the CLI)
 
 1. Run `make sandbox-detect` to see ranked candidates.
 2. Run `make sandbox-inspect ID=<chosen-example>` to see the
    manifest, file list, and markers.
 3. Run `make sandbox-status` to see if `sandbox/` is empty,
    user-managed, or generated.
-4. If `sandbox/` is user-managed and Phase 2 will run, attempt
-   validation with the existing scripts. Capture the result in
-   `sandbox-plan.md`.
-5. If a fresh sandbox must be generated, copy the example into
-   place, then substitute markers:
+4. If `sandbox/` is user-managed (no `CODECOME-GENERATED.md`) and
+   Phase 2 will run, attempt validation against the existing
+   scripts first. If it passes, capture the result in
+   `sandbox-plan.md` and move on. If it fails, halt with the halt
+   protocol and request user guidance — do not silently overwrite
+   user-managed content.
+5. To bootstrap a fresh sandbox, prefer:
 
-       mkdir -p sandbox/.backup-$(date -u +%Y%m%dT%H%M%SZ)
-       cp -a sandbox/* sandbox/.backup-$(date -u +%Y%m%dT%H%M%SZ)/ 2>/dev/null || true
-       cp -a templates/sandboxes/<example>/. sandbox/
+       BOOTSTRAP_ARGS='--var KEY1=VAL1 --var KEY2=VAL2' \
+         make sandbox-bootstrap ID=<chosen-example>
 
-   Then edit each file under `sandbox/` and replace
-   `__VARNAME__` tokens. Make scripts executable as needed.
+   Or, if invoking the CLI directly:
 
-6. Run `docker compose -f sandbox/docker-compose.yml build` and
-   `./sandbox/scripts/check.sh` to validate. Capture output into
-   the validation matrix.
-7. Write the provenance manually as a top-of-file YAML frontmatter
-   in `sandbox/CODECOME-GENERATED.md`:
+       .venv/bin/python3 tools/sandbox-bootstrap.py apply <id> \
+         --var KEY1=VAL1 --var KEY2=VAL2
 
-       ---
-       generated_at: "<ISO timestamp>"
-       source_example: "<example id>"
-       markers:
-         TARGET_NAME: "<value>"
-         APP_PORT: "<value>"
-       validation:
-         - tier: "T1"
-           outcome: "passed"
-           command: "docker compose ... build"
-           exit_code: 0
-       ---
+   Use `--dry-run` first to preview which files would be written
+   and which markers are still unfilled. Use `--force` only when
+   `sandbox/` has user-managed content that the user has accepted
+   to lose (the prior content will be moved to
+   `sandbox/.backup-<timestamp>/`).
 
-8. Update `sandbox-plan.md` with all required sections.
+6. To re-apply after a manifest update or a marker change:
 
-Do not skip the provenance file. Phase 7 (regenerate) will rely on
-it being present.
+       make sandbox-regenerate
+       # or with overrides:
+       BOOTSTRAP_ARGS='--var PYTHON_VERSION=3.13' make sandbox-regenerate
 
-When `apply`/`validate` ship, this manual fallback is replaced by
-direct CLI calls. The skill will be updated to drop the fallback
-section at that time.
+   Regenerate reads `sandbox/CODECOME-GENERATED.md` for the source
+   example id and the previous markers. CLI overrides win. The
+   prior sandbox content is always moved to a fresh
+   `sandbox/.backup-<timestamp>/`.
+
+7. Run validation tiers (see "Validation tiers" below).
+
+## Manual fallback (until `validate` ships)
+
+While `validate` is not yet implemented, run the validation tiers
+manually after `apply` / `regenerate`:
+
+       docker compose -f sandbox/docker-compose.yml build
+       ./sandbox/scripts/check.sh
+       ./sandbox/scripts/build-target.sh   # if applicable
+       ./sandbox/scripts/test-target.sh    # if applicable
+
+Capture per-tier outcomes (passed / failed / skipped, exit code,
+last 50 lines of stderr) into the validation matrix in
+`sandbox-plan.md`. Once `validate` lands, this manual capture
+becomes a single CLI call.
+
+When the CLI exits with code `64` for any subcommand, fall back to
+the manual flow for that one subcommand and document the reason in
+`sandbox-plan.md`.
 
 ## Validation tiers
 

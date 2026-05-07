@@ -1,5 +1,5 @@
 # CodeCome C/C++ sandbox baseline.
-# Marker convention: __VARNAME__ tokens.
+# Marker convention: see README.md for VARNAME tokens.
 
 FROM debian:__DEBIAN_BASE_TAG__
 

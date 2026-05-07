@@ -1,5 +1,5 @@
 # CodeCome static-web sandbox baseline.
-# Marker convention: __VARNAME__ tokens.
+# Marker convention: see README.md for VARNAME tokens.
 
 FROM nginx:1.27-bookworm
 

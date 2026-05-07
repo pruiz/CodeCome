@@ -1,5 +1,5 @@
 # CodeCome .NET sandbox baseline.
-# Marker convention: __VARNAME__ tokens.
+# Marker convention: see README.md for VARNAME tokens.
 
 FROM mcr.microsoft.com/dotnet/sdk:__DOTNET_SDK_TAG__
 

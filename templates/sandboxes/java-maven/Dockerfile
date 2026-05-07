@@ -1,5 +1,5 @@
 # CodeCome Java sandbox baseline.
-# Marker convention: __VARNAME__ tokens.
+# Marker convention: see README.md for VARNAME tokens.
 
 FROM eclipse-temurin:__JDK_VERSION__-jdk-jammy
 

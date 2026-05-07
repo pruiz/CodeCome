@@ -1,5 +1,5 @@
 # CodeCome Terraform IaC review sandbox.
-# Marker convention: __VARNAME__ tokens.
+# Marker convention: see README.md for VARNAME tokens.
 
 FROM hashicorp/terraform:__TERRAFORM_VERSION__
 

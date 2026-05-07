@@ -1,5 +1,5 @@
 # CodeCome Rust sandbox baseline.
-# Marker convention: __VARNAME__ tokens.
+# Marker convention: see README.md for VARNAME tokens.
 
 FROM rust:__RUST_TOOLCHAIN_TAG__-bookworm
 

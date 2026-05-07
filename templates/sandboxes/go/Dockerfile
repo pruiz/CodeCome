@@ -1,5 +1,5 @@
 # CodeCome Go sandbox baseline.
-# Marker convention: __VARNAME__ tokens.
+# Marker convention: see README.md for VARNAME tokens.
 
 FROM golang:__GO_VERSION__-bookworm
 

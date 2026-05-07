@@ -1,5 +1,5 @@
 # CodeCome PHP sandbox baseline.
-# Marker convention: __VARNAME__ tokens.
+# Marker convention: see README.md for VARNAME tokens.
 
 FROM php:__PHP_VERSION__-cli-bookworm
 

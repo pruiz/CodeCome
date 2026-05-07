@@ -1,6 +1,5 @@
 # CodeCome generic sandbox baseline.
-# Marker convention: __VARNAME__ tokens are replaced by the bootstrap
-# CLI (--var KEY=VAL) or by the agent during Phase 1b.
+# Marker convention: see README.md for VARNAME tokens.
 
 FROM debian:__DEBIAN_BASE_TAG__
 
