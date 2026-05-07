@@ -1,0 +1,13 @@
+server {
+  listen __APP_PORT__;
+  server_name _;
+
+  root /workspace/src;
+  index index.html;
+
+  autoindex on;
+
+  location / {
+    try_files $uri $uri/ =404;
+  }
+}

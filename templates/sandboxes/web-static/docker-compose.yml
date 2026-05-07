@@ -1,0 +1,16 @@
+services:
+  codecome-sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workspace
+    volumes:
+      - ../:/workspace:ro
+    tty: true
+    stdin_open: true
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      APP_PORT: __APP_PORT__
+    ports:
+      - "__APP_PORT__:__APP_PORT__"

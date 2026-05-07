@@ -1,0 +1,27 @@
+id: "iac-terraform"
+display_name: "Terraform IaC review"
+applies_when:
+  languages:
+    - "hcl"
+    - "terraform"
+  manifests:
+    - "main.tf"
+    - "variables.tf"
+    - "providers.tf"
+    - "*.tf"
+    - ".terraform-version"
+    - ".tflint.hcl"
+required_tools:
+  - "terraform"
+  - "tflint"
+default_ports: []
+build_command: "terraform init -backend=false"
+test_command: "terraform validate"
+notes_md: "notes.md"
+caveats:
+  - "Uses HashiCorp's official terraform image."
+  - "No provider authentication is configured by design."
+  - "tflint and tfsec are useful additions for static review."
+template_vars:
+  - TARGET_NAME
+  - TERRAFORM_VERSION

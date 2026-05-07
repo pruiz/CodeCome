@@ -1,0 +1,26 @@
+id: "web-static"
+display_name: "Static web content"
+applies_when:
+  languages:
+    - "html"
+    - "css"
+    - "javascript"
+  manifests:
+    - "index.html"
+    - "robots.txt"
+    - "sitemap.xml"
+required_tools:
+  - "nginx"
+  - "curl"
+default_ports:
+  - 8080
+build_command: ""
+test_command: "curl -fsSL http://localhost:__APP_PORT__/ >/dev/null"
+notes_md: "notes.md"
+caveats:
+  - "Serves static files from /workspace/src via nginx."
+  - "Useful for static site review or pre-built JS bundles."
+  - "Not appropriate for SPA dev servers; use node example instead."
+template_vars:
+  - TARGET_NAME
+  - APP_PORT

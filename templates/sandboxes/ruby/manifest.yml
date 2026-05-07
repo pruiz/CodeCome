@@ -1,0 +1,27 @@
+id: "ruby"
+display_name: "Ruby project"
+applies_when:
+  languages:
+    - "ruby"
+  manifests:
+    - "Gemfile"
+    - "Gemfile.lock"
+    - "Rakefile"
+    - "*.gemspec"
+required_tools:
+  - "ruby"
+  - "bundler"
+  - "rake"
+default_ports:
+  - 3000
+build_command: "bundle install"
+test_command: "bundle exec rake test"
+notes_md: "notes.md"
+caveats:
+  - "Uses the official ruby image."
+  - "Pin via __RUBY_VERSION__ to match Gemfile.lock RUBY VERSION."
+  - "Bundler caches under codecome-bundle volume."
+template_vars:
+  - TARGET_NAME
+  - RUBY_VERSION
+  - APP_PORT

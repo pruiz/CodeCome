@@ -1,0 +1,24 @@
+id: "php"
+display_name: "PHP project"
+applies_when:
+  languages:
+    - "php"
+  manifests:
+    - "composer.json"
+    - "composer.lock"
+required_tools:
+  - "php"
+  - "composer"
+default_ports:
+  - 8000
+build_command: "composer install"
+test_command: "vendor/bin/phpunit"
+notes_md: "notes.md"
+caveats:
+  - "Uses the official php-cli image."
+  - "Pin via __PHP_VERSION__ to match composer.json constraints."
+  - "Composer 2.x. PSR-4 autoloading assumed."
+template_vars:
+  - TARGET_NAME
+  - PHP_VERSION
+  - APP_PORT
