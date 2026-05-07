@@ -79,6 +79,93 @@ def truthy_env(name: str) -> bool:
     return value is not None and value not in {"", "0", "false", "False", "no", "No"}
 
 
+# --- Model resolution ---------------------------------------------------------
+
+_MODEL_FLAG_NAMES = ("--model", "-m")
+_VARIANT_FLAG_NAMES = ("--variant",)
+
+
+def _extract_flag_value(tokens: list[str], flag_names: tuple[str, ...]) -> Optional[str]:
+    """Return the value of the first matching flag in tokens, or None.
+
+    Supports both `--flag value` and `--flag=value` forms.
+    """
+    for i, tok in enumerate(tokens):
+        for flag in flag_names:
+            if tok == flag and i + 1 < len(tokens):
+                return tokens[i + 1]
+            prefix = flag + "="
+            if tok.startswith(prefix):
+                return tok[len(prefix):]
+    return None
+
+
+def _read_codecome_yml_agent(agent_name: str) -> tuple[Optional[str], Optional[str]]:
+    """Return (model, variant) from codecome.yml agents.<name>, or (None, None)."""
+    config_path = ROOT / "codecome.yml"
+    if not config_path.exists():
+        return None, None
+    try:
+        import yaml  # type: ignore
+    except ImportError:
+        return None, None
+    try:
+        with config_path.open("r", encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+    except Exception:  # noqa: BLE001
+        return None, None
+    if not isinstance(data, dict):
+        return None, None
+    agents = data.get("agents")
+    if not isinstance(agents, dict):
+        return None, None
+    entry = agents.get(agent_name)
+    if not isinstance(entry, dict):
+        return None, None
+    model = entry.get("model")
+    variant = entry.get("variant")
+    return (str(model) if model else None, str(variant) if variant else None)
+
+
+def resolve_model_and_variant(
+    agent_name: str,
+    opencode_args_tokens: list[str],
+) -> tuple[Optional[str], Optional[str], str, str]:
+    """Resolve effective model and variant with source labels.
+
+    Returns (model, variant, model_source, variant_source).
+    Source values: 'OPENCODE_ARGS', 'env CODECOME_MODEL',
+    'env CODECOME_MODEL_VARIANT', 'codecome.yml', or '(unknown)'.
+    """
+    model_from_args = _extract_flag_value(opencode_args_tokens, _MODEL_FLAG_NAMES)
+    variant_from_args = _extract_flag_value(opencode_args_tokens, _VARIANT_FLAG_NAMES)
+
+    env_model = (os.environ.get("CODECOME_MODEL") or "").strip() or None
+    env_variant = (os.environ.get("CODECOME_MODEL_VARIANT") or "").strip() or None
+
+    yaml_model, yaml_variant = _read_codecome_yml_agent(agent_name)
+
+    if model_from_args:
+        model, model_source = model_from_args, "OPENCODE_ARGS"
+    elif env_model:
+        model, model_source = env_model, "env CODECOME_MODEL"
+    elif yaml_model:
+        model, model_source = yaml_model, "codecome.yml"
+    else:
+        model, model_source = None, "(unknown)"
+
+    if variant_from_args:
+        variant, variant_source = variant_from_args, "OPENCODE_ARGS"
+    elif env_variant:
+        variant, variant_source = env_variant, "env CODECOME_MODEL_VARIANT"
+    elif yaml_variant:
+        variant, variant_source = yaml_variant, "codecome.yml"
+    else:
+        variant, variant_source = None, "(unknown)"
+
+    return model, variant, model_source, variant_source
+
+
 def resolve_color_mode(flag: str) -> str:
     if flag != "auto":
         return flag
@@ -1249,14 +1336,33 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def build_child_command(args: argparse.Namespace) -> list[str]:
+def build_child_command(args: argparse.Namespace) -> tuple[list[str], Optional[str], Optional[str], str, str]:
+    """Return the child command and the resolved model/variant + sources.
+
+    Appends --model/--variant from env or codecome.yml only when
+    OPENCODE_ARGS does not already pass them.
+    """
     cmd = ["opencode", "run", "--format", "json", "--agent", args.agent]
     if truthy_env("CODECOME_THINKING"):
         cmd.append("--thinking")
 
     extra_args = shlex.split(os.environ.get("OPENCODE_ARGS", ""))
     cmd.extend(extra_args)
-    return cmd
+
+    model, variant, model_source, variant_source = resolve_model_and_variant(
+        args.agent, extra_args
+    )
+
+    # Append --model/--variant to enforce env/yaml-resolved values when
+    # OPENCODE_ARGS did not already pass them. OPENCODE_ARGS (and any
+    # earlier --model/-m/--variant in cmd) always wins because we never
+    # touch values that came from there.
+    if model and model_source != "OPENCODE_ARGS":
+        cmd.extend(["--model", model])
+    if variant and variant_source != "OPENCODE_ARGS":
+        cmd.extend(["--variant", variant])
+
+    return cmd, model, variant, model_source, variant_source
 
 
 def main() -> int:
@@ -1280,11 +1386,27 @@ def main() -> int:
     console = build_console(color_mode)
     prompt_file = ROOT / args.prompt_file
     prompt = load_prompt(prompt_file, args.finding)
-    command = build_child_command(args)
+    command, model, variant, model_source, variant_source = build_child_command(args)
+
+    model_label = model or "(unknown)"
+    variant_label = variant or "(unknown)"
 
     if HAVE_RICH:
         console.print(Rule(title=f"Phase {args.phase}: {args.label}", style="bold cyan"))
         console.print(Text(f"agent={args.agent}  prompt={args.prompt_file}", style="dim"))
+        # Always show model. Only show variant when it has a real value
+        # (variant is genuinely optional in opencode).
+        if variant is not None:
+            console.print(Text(
+                f"model={model_label}  variant={variant_label}  "
+                f"(model source: {model_source}, variant source: {variant_source})",
+                style="dim",
+            ))
+        else:
+            console.print(Text(
+                f"model={model_label}  (source: {model_source})",
+                style="dim",
+            ))
         if args.finding:
             console.print(Text(f"finding={args.finding}", style="dim"))
         if str(args.phase) == "1":
@@ -1295,6 +1417,13 @@ def main() -> int:
     else:
         print(C.header(f"Phase {args.phase}: {args.label}"))
         print(C.info(f"agent={args.agent}  prompt={args.prompt_file}"))
+        if variant is not None:
+            print(C.info(
+                f"model={model_label}  variant={variant_label}  "
+                f"(model source: {model_source}, variant source: {variant_source})"
+            ))
+        else:
+            print(C.info(f"model={model_label}  (source: {model_source})"))
         if args.finding:
             print(C.info(f"finding={args.finding}"))
         if str(args.phase) == "1":

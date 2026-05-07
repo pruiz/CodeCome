@@ -27,6 +27,8 @@ help:
 	@echo "    CODECOME_USE_WRAPPER=0       Bypass styled wrapper and use raw opencode run"
 	@echo "    CODECOME_THINKING=1          Enable --thinking in wrapper-driven phase runs"
 	@echo "    OPENCODE_ARGS='...'          Extra flags passed through to opencode run"
+	@echo "    CODECOME_MODEL=<id>          Pin the model per phase (e.g. anthropic/claude-opus-4-7)"
+	@echo "    CODECOME_MODEL_VARIANT=<v>   Pin the model variant (e.g. high, max)"
 	@echo ""
 	@echo "  Workspace tools:"
 	@echo ""

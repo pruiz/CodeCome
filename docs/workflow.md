@@ -417,3 +417,15 @@ Wrapper controls:
     CODECOME_USE_WRAPPER=0   # bypass wrapper and use raw opencode run
     CODECOME_THINKING=1      # enable thinking blocks for wrapper-driven phase runs
     OPENCODE_ARGS='...'      # extra flags forwarded to opencode run
+    CODECOME_MODEL=<id>          # pin the model per phase
+    CODECOME_MODEL_VARIANT=<v>   # pin the model variant
+
+Model and variant resolution priority (highest wins):
+
+1. `OPENCODE_ARGS='--model … --variant …'`
+2. `CODECOME_MODEL` / `CODECOME_MODEL_VARIANT`
+3. `codecome.yml` `agents.<name>.model` / `agents.<name>.variant`
+4. unknown (banner shows the gap; nothing is appended)
+
+When sources 2 or 3 win, the wrapper appends `--model` / `--variant`
+to the spawned `opencode run` so the banner is enforced.

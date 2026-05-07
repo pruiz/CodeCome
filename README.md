@@ -280,6 +280,10 @@ The phase targets support these environment variables:
     CODECOME_USE_WRAPPER=0   # bypass the styled wrapper and use raw opencode run
     CODECOME_THINKING=1      # pass --thinking through the wrapper
     OPENCODE_ARGS='...'      # extra flags forwarded to opencode run
+    CODECOME_MODEL=<id>      # pin the model per phase, e.g. anthropic/claude-opus-4-7
+    CODECOME_MODEL_VARIANT=<v>  # pin the model variant, e.g. high, max
+
+The wrapper resolves the effective model in this order: `OPENCODE_ARGS` (`--model …` / `--variant …`) > env (`CODECOME_MODEL`, `CODECOME_MODEL_VARIANT`) > `codecome.yml` (`agents.<name>.model` / `.variant`) > unknown. The chosen value is shown in the phase header banner along with its source. When the resolved value comes from env or YAML, the wrapper appends `--model` / `--variant` to `opencode run` so the banner is the truth.
 
 The wrapper currently targets OpenCode 1.14.39 or newer.
 
