@@ -8,12 +8,15 @@ Minimum supported OpenCode version: 1.14.39
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import os
+import re
 import shlex
 import signal
 import subprocess
 import sys
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -236,15 +239,586 @@ def render_todowrite_plain(state: dict[str, Any]) -> bool:
     return True
 
 
+# --- Shared helper utilities --------------------------------------------------
+
+_SNAPSHOT_CACHE: OrderedDict[str, tuple[str, float]] = OrderedDict()
+_SNAPSHOT_CACHE_CAP = int(os.environ.get("CODECOME_WRITE_CACHE_CAP", "200"))
+_WRITE_CACHE_ENABLED = os.environ.get("CODECOME_WRITE_CACHE", "1") not in ("0", "false", "False", "no")
+
+_EXCERPT_LINES = int(os.environ.get("CODECOME_EXCERPT_LINES", "5"))
+_WRITE_DIFF_LIMIT = int(os.environ.get("CODECOME_WRITE_DIFF_LIMIT", "50"))
+_WRITE_FULL_LINES = int(os.environ.get("CODECOME_WRITE_FULL_LINES", "25"))
+_WRITE_FULL_BYTES = int(os.environ.get("CODECOME_WRITE_FULL_BYTES", "1024"))
+_READ_HIGHLIGHT_LIMIT = int(os.environ.get("CODECOME_READ_HIGHLIGHT_LIMIT", str(200 * 1024)))
+_GLOB_MATCH_CAP = int(os.environ.get("CODECOME_GLOB_MATCH_CAP", "100"))
+
+_READ_FRAMING_RE = re.compile(
+    r"<path>(?P<path>.*?)</path>\s*"
+    r"<type>(?P<type>.*?)</type>\s*"
+    r"<content>\s*\n(?P<content>.*?)\n\s*</content>",
+    re.DOTALL,
+)
+
+_LEXER_MAP = {
+    ".c": "c", ".h": "c", ".cpp": "cpp", ".cc": "cpp", ".cxx": "cpp",
+    ".hpp": "cpp", ".hh": "cpp", ".cs": "csharp", ".java": "java",
+    ".py": "python", ".rb": "ruby", ".rs": "rust", ".go": "go",
+    ".js": "javascript", ".ts": "typescript", ".tsx": "tsx", ".jsx": "jsx",
+    ".sh": "bash", ".bash": "bash", ".zsh": "bash",
+    ".yml": "yaml", ".yaml": "yaml", ".json": "json", ".toml": "toml",
+    ".xml": "xml", ".html": "html", ".css": "css", ".sql": "sql",
+    ".md": "markdown", ".mk": "make", ".cmake": "cmake",
+    ".dockerfile": "docker", ".tf": "hcl", ".hcl": "hcl",
+}
+
+
+def _relativize_path(path: str) -> str:
+    try:
+        return str(Path(path).relative_to(ROOT))
+    except ValueError:
+        return path
+
+
+def _strip_read_framing(output: str) -> tuple[str | None, dict[str, str]]:
+    match = _READ_FRAMING_RE.search(output)
+    if not match:
+        return None, {}
+    return match.group("content"), {
+        "path": match.group("path"),
+        "type": match.group("type"),
+    }
+
+
+def _count_lines_and_bytes(text: str) -> tuple[int, int]:
+    return text.count("\n") + (1 if text and not text.endswith("\n") else 0), len(text.encode("utf-8", errors="replace"))
+
+
+def _detect_lexer(path: str) -> str:
+    ext = Path(path).suffix.lower()
+    if Path(path).name.lower() == "makefile":
+        return "make"
+    if Path(path).name.lower() == "dockerfile":
+        return "docker"
+    return _LEXER_MAP.get(ext, "text")
+
+
+def _format_excerpt(text: str, max_lines: int) -> tuple[str, int]:
+    lines = text.split("\n")
+    if len(lines) <= max_lines:
+        return text, 0
+    return "\n".join(lines[:max_lines]), len(lines) - max_lines
+
+
+def _is_likely_error(text: str) -> bool:
+    lower = text.lower()
+    return any(marker in lower for marker in (
+        "error", "traceback", "command not found", "failed", "permission denied",
+        "no such file", "exception",
+    ))
+
+
+def _compute_diff(old: str, new: str, context: int = 3) -> list[str]:
+    old_lines = old.splitlines(keepends=True)
+    new_lines = new.splitlines(keepends=True)
+    return list(difflib.unified_diff(old_lines, new_lines, fromfile="old", tofile="new", n=context))
+
+
+def _truncate_diff(diff_lines: list[str], max_lines: int) -> tuple[list[str], int]:
+    if len(diff_lines) <= max_lines:
+        return diff_lines, 0
+    return diff_lines[:max_lines], len(diff_lines) - max_lines
+
+
+def _current_mtime(path: str) -> float | None:
+    try:
+        return os.stat(path).st_mtime
+    except OSError:
+        return None
+
+
+def _cache_set(path: str, content: str) -> None:
+    if not _WRITE_CACHE_ENABLED:
+        return
+    mtime = _current_mtime(path)
+    if mtime is None:
+        return
+    _SNAPSHOT_CACHE[path] = (content, mtime)
+    _SNAPSHOT_CACHE.move_to_end(path)
+    while len(_SNAPSHOT_CACHE) > _SNAPSHOT_CACHE_CAP:
+        _SNAPSHOT_CACHE.popitem(last=False)
+
+
+def _cache_get(path: str) -> str | None:
+    if not _WRITE_CACHE_ENABLED:
+        return None
+    entry = _SNAPSHOT_CACHE.get(path)
+    if entry is None:
+        return None
+    content, recorded_mtime = entry
+    return content
+
+
+def _cache_invalidate_stale() -> None:
+    if not _WRITE_CACHE_ENABLED:
+        return
+    stale = []
+    for path, (_, recorded_mtime) in _SNAPSHOT_CACHE.items():
+        actual = _current_mtime(path)
+        if actual is None or actual != recorded_mtime:
+            stale.append(path)
+    for path in stale:
+        del _SNAPSHOT_CACHE[path]
+
+
+# --- Read renderer ------------------------------------------------------------
+
+def render_read_rich(console: Console, state: dict[str, Any]) -> bool:
+    inp = state.get("input")
+    output = state.get("output")
+    if not isinstance(inp, dict) or not isinstance(output, str):
+        return False
+
+    file_path = str(inp.get("filePath", ""))
+    if not file_path:
+        return False
+
+    rel_path = _relativize_path(file_path)
+    offset = inp.get("offset")
+    limit = inp.get("limit")
+
+    from rich.syntax import Syntax
+
+    sections: list[Any] = [Text(rel_path, style="bold cyan")]
+
+    if offset is not None and limit is not None:
+        sections.append(Text(f"lines {offset}..{offset + limit - 1}", style="dim"))
+
+    content, meta = _strip_read_framing(output)
+    file_type = meta.get("type", "file")
+
+    border = "green" if state.get("status") == "completed" else "yellow"
+
+    if _is_likely_error(output) and content is None:
+        sections.append(Text())
+        sections.append(Text(output.strip(), style="red"))
+        console.print(Panel(Group(*sections), title="Read", border_style="red", expand=True))
+        return True
+
+    if content is not None and file_type == "file":
+        stripped = content.strip()
+        if not stripped:
+            sections.append(Text())
+            sections.append(Text("(empty file)", style="dim"))
+        elif len(stripped.encode("utf-8", errors="replace")) > _READ_HIGHLIGHT_LIMIT:
+            sections.append(Text())
+            sections.append(Text(stripped))
+        else:
+            # Strip line number prefixes for syntax highlighting
+            raw_lines = []
+            for line in stripped.split("\n"):
+                colon_idx = line.find(": ")
+                if colon_idx >= 0 and colon_idx <= 6 and line[:colon_idx].strip().isdigit():
+                    raw_lines.append(line[colon_idx + 2:])
+                else:
+                    raw_lines.append(line)
+            raw_content = "\n".join(raw_lines)
+            lexer = _detect_lexer(file_path)
+            sections.append(Text())
+            sections.append(Syntax(raw_content, lexer, theme="monokai", line_numbers=True, word_wrap=True))
+    elif content is None and file_type != "file":
+        # Directory listing
+        sections.append(Text())
+        for entry in output.strip().split("\n"):
+            entry = entry.strip()
+            if not entry or entry.startswith("<"):
+                continue
+            if entry.endswith("/"):
+                sections.append(Text(f"  {entry}", style="bold blue"))
+            else:
+                sections.append(Text(f"  {entry}"))
+    else:
+        # Directory from framing or other
+        sections.append(Text())
+        for entry in (content or output).strip().split("\n"):
+            entry = entry.strip()
+            if not entry:
+                continue
+            if entry.endswith("/"):
+                sections.append(Text(f"  {entry}", style="bold blue"))
+            else:
+                sections.append(Text(f"  {entry}"))
+
+    console.print(Panel(Group(*sections), title="Read", border_style=border, expand=True))
+
+    # Update snapshot cache
+    if content is not None and file_type == "file":
+        _cache_set(file_path, content.strip())
+
+    return True
+
+
+def render_read_plain(state: dict[str, Any]) -> bool:
+    inp = state.get("input")
+    output = state.get("output")
+    if not isinstance(inp, dict) or not isinstance(output, str):
+        return False
+
+    file_path = str(inp.get("filePath", ""))
+    if not file_path:
+        return False
+
+    rel_path = _relativize_path(file_path)
+    offset = inp.get("offset")
+    limit = inp.get("limit")
+
+    print(C.header(f"read {rel_path}"))
+    if offset is not None and limit is not None:
+        print(f"  lines {offset}..{offset + limit - 1}")
+
+    content, meta = _strip_read_framing(output)
+    if content is not None:
+        print(content.strip())
+        _cache_set(file_path, content.strip())
+    else:
+        print(output.strip())
+
+    return True
+
+
+# --- Write renderer -----------------------------------------------------------
+
+def render_write_rich(console: Console, state: dict[str, Any]) -> bool:
+    inp = state.get("input")
+    output = state.get("output")
+    if not isinstance(inp, dict):
+        return False
+
+    file_path = str(inp.get("filePath", ""))
+    new_content = str(inp.get("content", ""))
+    output_str = str(output) if output is not None else ""
+
+    if not file_path:
+        return False
+
+    from rich.syntax import Syntax
+
+    rel_path = _relativize_path(file_path)
+    n_lines, n_bytes = _count_lines_and_bytes(new_content)
+
+    is_error = output is not None and not output_str.startswith("Wrote file")
+    border = "red" if is_error else "green"
+
+    sections: list[Any] = [
+        Text(rel_path, style="bold cyan"),
+        Text(f"{n_lines} lines, {n_bytes} bytes", style="dim"),
+    ]
+
+    if is_error:
+        sections.append(Text())
+        sections.append(Text(output_str.strip(), style="red"))
+        console.print(Panel(Group(*sections), title="Write", border_style=border, expand=True))
+        _cache_set(file_path, new_content)
+        return True
+
+    prev = _cache_get(file_path)
+    lexer = _detect_lexer(file_path)
+
+    if prev is not None:
+        diff_lines = _compute_diff(prev, new_content)
+        if not diff_lines:
+            sections.append(Text("(no changes)", style="dim"))
+        else:
+            added = sum(1 for l in diff_lines if l.startswith("+") and not l.startswith("+++"))
+            removed = sum(1 for l in diff_lines if l.startswith("-") and not l.startswith("---"))
+            sections.append(Text(f"diff: -{removed} +{added}", style="dim"))
+            sections.append(Text())
+            truncated, leftover = _truncate_diff(diff_lines, _WRITE_DIFF_LIMIT)
+            diff_text = "".join(truncated)
+            sections.append(Syntax(diff_text, "diff", theme="monokai", word_wrap=True))
+            if leftover > 0:
+                sections.append(Text(f"... diff truncated ({leftover} more lines)", style="dim"))
+    else:
+        sections.append(Text("(new file)", style="dim"))
+        sections.append(Text())
+        if n_lines <= _WRITE_FULL_LINES and n_bytes <= _WRITE_FULL_BYTES:
+            sections.append(Syntax(new_content, lexer, theme="monokai", word_wrap=True))
+        else:
+            excerpt, remaining = _format_excerpt(new_content, _EXCERPT_LINES)
+            sections.append(Syntax(excerpt, lexer, theme="monokai", word_wrap=True))
+            if remaining > 0:
+                sections.append(Text(f"... {remaining} more lines", style="dim"))
+
+    sections.append(Text())
+    sections.append(Text(output_str.strip(), style="green" if not is_error else "red"))
+
+    console.print(Panel(Group(*sections), title="Write", border_style=border, expand=True))
+    _cache_set(file_path, new_content)
+    return True
+
+
+def render_write_plain(state: dict[str, Any]) -> bool:
+    inp = state.get("input")
+    output = state.get("output")
+    if not isinstance(inp, dict):
+        return False
+
+    file_path = str(inp.get("filePath", ""))
+    new_content = str(inp.get("content", ""))
+    output_str = str(output) if output is not None else ""
+
+    if not file_path:
+        return False
+
+    rel_path = _relativize_path(file_path)
+    n_lines, n_bytes = _count_lines_and_bytes(new_content)
+
+    print(C.header(f"write {rel_path}"))
+    print(f"  {n_lines} lines, {n_bytes} bytes")
+
+    is_error = output is not None and not output_str.startswith("Wrote file")
+
+    if is_error:
+        print(C.fail(output_str.strip()))
+        _cache_set(file_path, new_content)
+        return True
+
+    prev = _cache_get(file_path)
+
+    if prev is not None:
+        diff_lines = _compute_diff(prev, new_content)
+        if not diff_lines:
+            print("  (no changes)")
+        else:
+            added = sum(1 for l in diff_lines if l.startswith("+") and not l.startswith("+++"))
+            removed = sum(1 for l in diff_lines if l.startswith("-") and not l.startswith("---"))
+            print(f"  diff: -{removed} +{added}")
+            truncated, leftover = _truncate_diff(diff_lines, _WRITE_DIFF_LIMIT)
+            for line in truncated:
+                print(f"  {line}", end="")
+            if leftover > 0:
+                print(f"  ... diff truncated ({leftover} more lines)")
+    else:
+        print("  (new file)")
+        if n_lines <= _WRITE_FULL_LINES and n_bytes <= _WRITE_FULL_BYTES:
+            print(new_content)
+        else:
+            excerpt, remaining = _format_excerpt(new_content, _EXCERPT_LINES)
+            print(excerpt)
+            if remaining > 0:
+                print(f"  ... {remaining} more lines")
+
+    print(f"  {output_str.strip()}")
+    _cache_set(file_path, new_content)
+    return True
+
+
+# --- Glob renderer ------------------------------------------------------------
+
+def render_glob_rich(console: Console, state: dict[str, Any]) -> bool:
+    inp = state.get("input")
+    output = state.get("output")
+    if not isinstance(inp, dict) or not isinstance(output, str):
+        return False
+
+    pattern = str(inp.get("pattern", ""))
+    search_path = str(inp.get("path", ""))
+
+    matches = [m.strip() for m in output.strip().split("\n") if m.strip()]
+    n_matches = len(matches)
+
+    border = "green" if n_matches > 0 else "dim"
+
+    sections: list[Any] = [
+        Text(f"pattern={pattern}  path={_relativize_path(search_path) if search_path else '.'}", style="dim"),
+        Text(),
+    ]
+
+    if n_matches == 0:
+        sections.append(Text("(no matches)", style="dim"))
+    else:
+        shown = matches[:_GLOB_MATCH_CAP]
+        for m in shown:
+            try:
+                rel = str(Path(m).relative_to(search_path)) if search_path else m
+            except ValueError:
+                rel = _relativize_path(m)
+            sections.append(Text(f"  {rel}"))
+        if n_matches > _GLOB_MATCH_CAP:
+            sections.append(Text(f"  ... and {n_matches - _GLOB_MATCH_CAP} more", style="dim"))
+
+    sections.append(Text())
+    sections.append(Text(f"{n_matches} match(es)", style="dim"))
+
+    console.print(Panel(Group(*sections), title="Glob", border_style=border, expand=True))
+    return True
+
+
+def render_glob_plain(state: dict[str, Any]) -> bool:
+    inp = state.get("input")
+    output = state.get("output")
+    if not isinstance(inp, dict) or not isinstance(output, str):
+        return False
+
+    pattern = str(inp.get("pattern", ""))
+    search_path = str(inp.get("path", ""))
+
+    matches = [m.strip() for m in output.strip().split("\n") if m.strip()]
+    n_matches = len(matches)
+
+    print(C.header(f"glob {pattern} in {_relativize_path(search_path) if search_path else '.'}"))
+
+    if n_matches == 0:
+        print("  (no matches)")
+    else:
+        shown = matches[:_GLOB_MATCH_CAP]
+        for m in shown:
+            try:
+                rel = str(Path(m).relative_to(search_path)) if search_path else m
+            except ValueError:
+                rel = _relativize_path(m)
+            print(f"  {rel}")
+        if n_matches > _GLOB_MATCH_CAP:
+            print(f"  ... and {n_matches - _GLOB_MATCH_CAP} more")
+
+    print(f"  {n_matches} match(es)")
+    return True
+
+
+# --- Bash renderer ------------------------------------------------------------
+
+def render_bash_rich(console: Console, state: dict[str, Any]) -> bool:
+    inp = state.get("input")
+    output = state.get("output")
+    if not isinstance(inp, dict):
+        return False
+
+    command = str(inp.get("command", ""))
+    description = inp.get("description", "")
+    output_str = str(output) if output is not None else ""
+
+    if not command:
+        return False
+
+    is_error = _is_likely_error(output_str)
+    border = "red" if is_error else ("green" if state.get("status") == "completed" else "yellow")
+
+    sections: list[Any] = [
+        Text(f"$ {command}", style="bold cyan"),
+    ]
+    if description:
+        sections.append(Text(str(description), style="dim italic"))
+
+    sections.append(Text())
+
+    if output_str.strip():
+        sections.append(Text("Output", style="bold green"))
+        sections.append(Text(output_str.strip()))
+    else:
+        sections.append(Text("(no output)", style="dim"))
+
+    console.print(Panel(Group(*sections), title="Bash", border_style=border, expand=True))
+    return True
+
+
+def render_bash_plain(state: dict[str, Any]) -> bool:
+    inp = state.get("input")
+    output = state.get("output")
+    if not isinstance(inp, dict):
+        return False
+
+    command = str(inp.get("command", ""))
+    description = inp.get("description", "")
+    output_str = str(output) if output is not None else ""
+
+    if not command:
+        return False
+
+    print(C.header(f"bash $ {command}"))
+    if description:
+        print(f"  # {description}")
+
+    if output_str.strip():
+        print(output_str.strip())
+    else:
+        print("  (no output)")
+
+    return True
+
+
+# --- Skill renderer -----------------------------------------------------------
+
+def render_skill_rich(console: Console, state: dict[str, Any]) -> bool:
+    inp = state.get("input")
+    if not isinstance(inp, dict):
+        return False
+
+    name = str(inp.get("name", ""))
+    if not name:
+        label = "(unknown skill)"
+        style = "dim"
+    else:
+        label = f"loaded skill: {name}"
+        style = ""
+
+    console.print(Panel(Text(label, style=style), title="Skill", border_style="dim", expand=True))
+    return True
+
+
+def render_skill_plain(state: dict[str, Any]) -> bool:
+    inp = state.get("input")
+    if not isinstance(inp, dict):
+        return False
+
+    name = str(inp.get("name", ""))
+    if not name:
+        print(C.header("skill (unknown)"))
+    else:
+        print(C.header(f"skill {name}"))
+    return True
+
+
 # --- Tool dispatch ------------------------------------------------------------
 
 def _dispatch_tool_renderer(console: Console, tool: str, state: dict[str, Any]) -> bool:
     """Try tool-specific rendering. Returns True if handled."""
-    if tool == "todowrite":
+    tool_lower = tool.strip().lower()
+    if tool_lower == "todowrite":
         if HAVE_RICH:
             return render_todowrite_rich(console, state)
         else:
             return render_todowrite_plain(state)
+    elif tool_lower == "read":
+        # Invalidate stale cache entries before non-write events
+        _cache_invalidate_stale()
+        if HAVE_RICH:
+            return render_read_rich(console, state)
+        else:
+            return render_read_plain(state)
+    elif tool_lower == "write":
+        if HAVE_RICH:
+            return render_write_rich(console, state)
+        else:
+            return render_write_plain(state)
+    elif tool_lower == "glob":
+        _cache_invalidate_stale()
+        if HAVE_RICH:
+            return render_glob_rich(console, state)
+        else:
+            return render_glob_plain(state)
+    elif tool_lower == "bash":
+        _cache_invalidate_stale()
+        if HAVE_RICH:
+            return render_bash_rich(console, state)
+        else:
+            return render_bash_plain(state)
+    elif tool_lower == "skill":
+        _cache_invalidate_stale()
+        if HAVE_RICH:
+            return render_skill_rich(console, state)
+        else:
+            return render_skill_plain(state)
+    else:
+        _cache_invalidate_stale()
     return False
 
 
@@ -356,6 +930,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--finding", help="Finding id for prompt substitution.")
     parser.add_argument("--color", choices=["auto", "always", "never"], default="auto")
     parser.add_argument("--debug", action="store_true", help="Mirror raw JSON events to stderr.")
+    parser.add_argument("--excerpt-lines", type=int, help="Lines shown in write excerpt (default: 5, env: CODECOME_EXCERPT_LINES).")
+    parser.add_argument("--write-diff-limit", type=int, help="Max diff lines shown for write (default: 50, env: CODECOME_WRITE_DIFF_LIMIT).")
+    parser.add_argument("--write-full-lines", type=int, help="Max lines for full content display on new files (default: 25, env: CODECOME_WRITE_FULL_LINES).")
+    parser.add_argument("--write-full-bytes", type=int, help="Max bytes for full content display on new files (default: 1024, env: CODECOME_WRITE_FULL_BYTES).")
     return parser
 
 
@@ -372,6 +950,17 @@ def build_child_command(args: argparse.Namespace) -> list[str]:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+
+    # CLI flags override env var defaults for tunables.
+    global _EXCERPT_LINES, _WRITE_DIFF_LIMIT, _WRITE_FULL_LINES, _WRITE_FULL_BYTES
+    if args.excerpt_lines is not None:
+        _EXCERPT_LINES = args.excerpt_lines
+    if args.write_diff_limit is not None:
+        _WRITE_DIFF_LIMIT = args.write_diff_limit
+    if args.write_full_lines is not None:
+        _WRITE_FULL_LINES = args.write_full_lines
+    if args.write_full_bytes is not None:
+        _WRITE_FULL_BYTES = args.write_full_bytes
 
     color_mode = resolve_color_mode(args.color)
     console = build_console(color_mode)
