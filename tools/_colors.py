@@ -1,3 +1,6 @@
+# Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later OR AGPL-3.0-or-later
+
 """
 Shared terminal color and symbol utilities for CodeCome CLI tools.
 

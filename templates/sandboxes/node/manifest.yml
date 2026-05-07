@@ -1,3 +1,6 @@
+# Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
+# SPDX-License-Identifier: MIT
+
 id: "node"
 display_name: "Node.js project"
 applies_when:

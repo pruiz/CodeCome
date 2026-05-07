@@ -1,3 +1,6 @@
+# Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
+# SPDX-License-Identifier: MIT
+
 # Multi-service compose harness. The agent and the user are expected
 # to extend this file with the target's actual services. By default
 # it ships:

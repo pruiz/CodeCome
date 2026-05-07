@@ -144,3 +144,23 @@ It should include:
 4. Do not delete rejected findings; move them to `REJECTED/`.
 5. Do not overwrite human review notes.
 6. Prefer Markdown that is easy to review in Git diffs.
+
+## License
+
+CodeCome is dual-licensed under your choice of:
+
+- GNU General Public License version 3 or later (`GPL-3.0-or-later`), or
+- GNU Affero General Public License version 3 or later (`AGPL-3.0-or-later`).
+
+SPDX expression: `GPL-3.0-or-later OR AGPL-3.0-or-later`.
+
+The files under `templates/sandboxes/` are an exception: they are
+licensed under the **MIT License** so they can be copied into user
+workspaces without imposing copyleft obligations on those user
+projects.
+
+See `LICENSE`, `AGPL-LICENSE`, `templates/sandboxes/LICENSE`, and
+`NOTICE`. Contributions are accepted under the terms described in
+`CONTRIBUTING.md`.
+
+Copyright (C) 2025-2026 Pablo Ruiz García &lt;pablo.ruiz@gmail.com&gt;.

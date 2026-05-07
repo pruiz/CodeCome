@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
+# SPDX-License-Identifier: MIT
+
 # CodeCome Terraform "build" hook. Marker: __TARGET_NAME__.
 # Treats `terraform init -backend=false` and `terraform validate` as
 # the static-review build step. Provider auth is intentionally absent.

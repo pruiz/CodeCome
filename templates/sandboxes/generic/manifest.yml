@@ -1,3 +1,6 @@
+# Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
+# SPDX-License-Identifier: MIT
+
 id: "generic"
 display_name: "Generic Debian sandbox"
 applies_when:

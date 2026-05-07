@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
+# SPDX-License-Identifier: MIT
+
 # CodeCome generic build hook. The agent may extend this for the
 # specific target. Marker: __TARGET_NAME__.
 set -euo pipefail

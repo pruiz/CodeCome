@@ -1,3 +1,6 @@
+# Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
+# SPDX-License-Identifier: MIT
+
 # CodeCome multi-service compose tooling image.
 # This image is the *tooling* container for the multi-service stack.
 # Real service images (app, db, cache, ...) belong in compose.

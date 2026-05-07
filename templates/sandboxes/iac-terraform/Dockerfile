@@ -1,3 +1,6 @@
+# Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
+# SPDX-License-Identifier: MIT
+
 # CodeCome Terraform IaC review sandbox.
 # Marker convention: see README.md for VARNAME tokens.
 

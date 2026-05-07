@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
+# SPDX-License-Identifier: MIT
+
 # CodeCome nested-virt build hook. Marker: __TARGET_NAME__.
 # This sandbox is rarely a "build" environment in the conventional
 # sense; the target is usually pre-built. Use this hook to verify

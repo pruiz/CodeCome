@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
+# SPDX-License-Identifier: MIT
+
 # CodeCome nested-virt smoke test. Marker: __TARGET_NAME__.
 # This is intentionally a placeholder. Replace with the actual QEMU
 # invocation for the target firmware / image / payload.

@@ -1,0 +1,85 @@
+CodeCome
+========
+
+AI-assisted vulnerability research workspace.
+
+Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
+
+
+Licensing
+---------
+
+CodeCome is dual-licensed under your choice of:
+
+  * GNU General Public License version 3 or later, or
+  * GNU Affero General Public License version 3 or later.
+
+SPDX expression for the project as a whole:
+
+    GPL-3.0-or-later OR AGPL-3.0-or-later
+
+This dual license lets you use CodeCome under the GPL when you
+do not run it as a network service, and under the AGPL when you
+do, with consistent share-back obligations for modifications.
+
+Full license texts are provided in:
+
+  * LICENSE       (GPL-3.0)
+  * AGPL-LICENSE  (AGPL-3.0)
+
+
+Subtree exception: templates/sandboxes/
+---------------------------------------
+
+The files inside `templates/sandboxes/` are licensed under the
+MIT License. SPDX expression: `MIT`.
+
+These files are seed sandbox templates that the CodeCome Phase 1b
+bootstrap CLI copies into user workspaces. The MIT license is
+intentional: it lets users freely incorporate the seeds into their
+own (potentially proprietary) projects without any copyleft
+obligation.
+
+Full text of the MIT license that applies to this subtree:
+
+  * templates/sandboxes/LICENSE
+
+
+Contributions
+-------------
+
+Contributions are accepted under the project's licensing terms.
+By contributing you agree to the Contributor License Agreement
+described in `CONTRIBUTING.md`. The CLA grants the project owner
+the right to relicense or dual-license contributions, including
+for commercial dual licensing.
+
+
+Where to find each license header
+---------------------------------
+
+Each authored source file carries a short SPDX header:
+
+  * Python files (`tools/*.py`):
+        # Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
+        # SPDX-License-Identifier: GPL-3.0-or-later OR AGPL-3.0-or-later
+
+  * Makefile (top of file):
+        # Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
+        # SPDX-License-Identifier: GPL-3.0-or-later OR AGPL-3.0-or-later
+
+  * Files under `templates/sandboxes/<id>/` (Dockerfile,
+    docker-compose.yml, manifest.yml, scripts/*.sh):
+        # Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
+        # SPDX-License-Identifier: MIT
+
+  * Markdown documentation: a `## License` section at the bottom
+    of user-facing documents references this NOTICE.
+
+
+Disclaimer
+----------
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+See the GPL/AGPL or MIT license texts for the full disclaimer
+applicable to each subtree.
