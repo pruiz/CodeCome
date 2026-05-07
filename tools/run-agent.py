@@ -79,6 +79,49 @@ def truthy_env(name: str) -> bool:
     return value is not None and value not in {"", "0", "false", "False", "no", "No"}
 
 
+# --- Stream-based late model discovery ---------------------------------------
+
+_MODEL_BEARING_KEYS = ("modelID", "providerID", "model")
+
+
+def _scan_event_for_model(payload: Any) -> Optional[str]:
+    """Recursively walk an event payload looking for a model identity.
+
+    Returns a 'providerID/modelID' string if both are found in the
+    same dict, else just the value of the first useful key found, or
+    None.
+    """
+    if isinstance(payload, dict):
+        # Same-dict providerID + modelID combo wins.
+        pid = payload.get("providerID")
+        mid = payload.get("modelID") or (
+            payload.get("model") if isinstance(payload.get("model"), str) else None
+        )
+        if isinstance(mid, dict):
+            inner_pid = mid.get("providerID")
+            inner_id = mid.get("id") or mid.get("modelID")
+            if inner_pid and inner_id:
+                return f"{inner_pid}/{inner_id}"
+            if inner_id:
+                return str(inner_id)
+        if pid and mid and isinstance(mid, str):
+            return f"{pid}/{mid}"
+        if isinstance(mid, str) and mid:
+            return mid
+
+        for v in payload.values():
+            found = _scan_event_for_model(v)
+            if found:
+                return found
+        return None
+    if isinstance(payload, list):
+        for item in payload:
+            found = _scan_event_for_model(item)
+            if found:
+                return found
+    return None
+
+
 # --- Model resolution ---------------------------------------------------------
 
 _MODEL_FLAG_NAMES = ("--model", "-m")
@@ -97,6 +140,74 @@ def _extract_flag_value(tokens: list[str], flag_names: tuple[str, ...]) -> Optio
             prefix = flag + "="
             if tok.startswith(prefix):
                 return tok[len(prefix):]
+    return None
+
+
+_DISCOVERY_TIMEOUT_S = float(os.environ.get("CODECOME_MODEL_DISCOVERY_TIMEOUT", "1.0"))
+
+
+def _discover_opencode_default_model() -> Optional[str]:
+    """Best-effort: return the model used in the most recent opencode
+    session for this project's worktree, or None.
+
+    Implementation: query the opencode SQLite DB via `opencode db`,
+    asking for the latest session.model JSON for this worktree;
+    fall back to the latest session globally.
+
+    Honors a 1-second timeout. Errors are silently ignored.
+    """
+    worktree = str(ROOT)
+
+    queries = [
+        # Project-scoped first.
+        (
+            "SELECT s.model FROM session s "
+            "JOIN project p ON s.project_id = p.id "
+            f"WHERE p.worktree = '{worktree}' AND s.model IS NOT NULL "
+            "ORDER BY s.time_updated DESC LIMIT 1"
+        ),
+        # Global fallback.
+        (
+            "SELECT s.model FROM session s "
+            "WHERE s.model IS NOT NULL "
+            "ORDER BY s.time_updated DESC LIMIT 1"
+        ),
+    ]
+
+    for query in queries:
+        try:
+            result = subprocess.run(
+                ["opencode", "db", query, "--format", "tsv"],
+                capture_output=True,
+                text=True,
+                timeout=_DISCOVERY_TIMEOUT_S,
+            )
+        except (FileNotFoundError, subprocess.SubprocessError, OSError):
+            return None
+        if result.returncode != 0:
+            continue
+
+        # Output looks like:
+        #   model
+        #   {"id":"gpt-5.4","providerID":"github-copilot"}
+        lines = [ln for ln in (result.stdout or "").splitlines() if ln.strip()]
+        if len(lines) < 2:
+            continue
+        raw = lines[-1]
+        try:
+            obj = json.loads(raw)
+        except json.JSONDecodeError:
+            # Some opencode versions may print bare strings.
+            return raw if raw and raw != "model" else None
+
+        if isinstance(obj, dict):
+            mid = obj.get("id") or obj.get("modelID")
+            pid = obj.get("providerID")
+            if pid and mid:
+                return f"{pid}/{mid}"
+            if mid:
+                return str(mid)
+
     return None
 
 
@@ -130,12 +241,18 @@ def _read_codecome_yml_agent(agent_name: str) -> tuple[Optional[str], Optional[s
 def resolve_model_and_variant(
     agent_name: str,
     opencode_args_tokens: list[str],
+    *,
+    discover_default: bool = True,
 ) -> tuple[Optional[str], Optional[str], str, str]:
     """Resolve effective model and variant with source labels.
 
     Returns (model, variant, model_source, variant_source).
     Source values: 'OPENCODE_ARGS', 'env CODECOME_MODEL',
-    'env CODECOME_MODEL_VARIANT', 'codecome.yml', or '(unknown)'.
+    'env CODECOME_MODEL_VARIANT', 'codecome.yml',
+    'opencode session history', or '(unknown)'.
+
+    `discover_default=True` enables the (slow-ish) opencode db probe
+    when none of the configured sources resolved a model.
     """
     model_from_args = _extract_flag_value(opencode_args_tokens, _MODEL_FLAG_NAMES)
     variant_from_args = _extract_flag_value(opencode_args_tokens, _VARIANT_FLAG_NAMES)
@@ -152,7 +269,11 @@ def resolve_model_and_variant(
     elif yaml_model:
         model, model_source = yaml_model, "codecome.yml"
     else:
-        model, model_source = None, "(unknown)"
+        discovered = _discover_opencode_default_model() if discover_default else None
+        if discovered:
+            model, model_source = discovered, "opencode session history"
+        else:
+            model, model_source = None, "(unknown)"
 
     if variant_from_args:
         variant, variant_source = variant_from_args, "OPENCODE_ARGS"
@@ -161,6 +282,7 @@ def resolve_model_and_variant(
     elif yaml_variant:
         variant, variant_source = yaml_variant, "codecome.yml"
     else:
+        # Discovery doesn't carry variant (no DB column).
         variant, variant_source = None, "(unknown)"
 
     return model, variant, model_source, variant_source
@@ -1322,10 +1444,10 @@ def render_event(console: Console, phase: str, label: str, event: dict[str, Any]
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run a CodeCome phase with structured output.")
-    parser.add_argument("--phase", required=True, help="Phase number.")
-    parser.add_argument("--label", required=True, help="Human-readable phase label.")
-    parser.add_argument("--agent", required=True, help="OpenCode agent name.")
-    parser.add_argument("--prompt-file", required=True, help="Prompt file path relative to repo root.")
+    parser.add_argument("--phase", help="Phase number (required unless --show-model).")
+    parser.add_argument("--label", help="Human-readable phase label (required unless --show-model).")
+    parser.add_argument("--agent", help="OpenCode agent name.")
+    parser.add_argument("--prompt-file", help="Prompt file path relative to repo root (required unless --show-model).")
     parser.add_argument("--finding", help="Finding id for prompt substitution.")
     parser.add_argument("--color", choices=["auto", "always", "never"], default="auto")
     parser.add_argument("--debug", action="store_true", help="Mirror raw JSON events to stderr.")
@@ -1333,6 +1455,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--write-content-lines", type=int, help="Max lines shown for new-file write content (default: 25, env: CODECOME_WRITE_CONTENT_LINES).")
     parser.add_argument("--write-diff-limit", type=int, help="Max diff lines shown for write (default: 50, env: CODECOME_WRITE_DIFF_LIMIT).")
     parser.add_argument("--edit-diff-lines", type=int, help="Max diff lines shown for edit (default: 25, env: CODECOME_EDIT_DIFF_LINES).")
+    parser.add_argument(
+        "--show-model",
+        action="store_true",
+        help="Print the model-resolution table for --agent and exit. No phase is launched.",
+    )
     return parser
 
 
@@ -1356,13 +1483,55 @@ def build_child_command(args: argparse.Namespace) -> tuple[list[str], Optional[s
     # Append --model/--variant to enforce env/yaml-resolved values when
     # OPENCODE_ARGS did not already pass them. OPENCODE_ARGS (and any
     # earlier --model/-m/--variant in cmd) always wins because we never
-    # touch values that came from there.
-    if model and model_source != "OPENCODE_ARGS":
+    # touch values that came from there. Discovered defaults
+    # ('opencode session history') are display-only and are NOT
+    # enforced — opencode will pick its own default anyway, and
+    # forcing it would surprise users when they switch models in the
+    # TUI between phases.
+    _ENFORCING_SOURCES = {"env CODECOME_MODEL", "codecome.yml"}
+    _ENFORCING_VARIANT_SOURCES = {"env CODECOME_MODEL_VARIANT", "codecome.yml"}
+
+    if model and model_source in _ENFORCING_SOURCES:
         cmd.extend(["--model", model])
-    if variant and variant_source != "OPENCODE_ARGS":
+    if variant and variant_source in _ENFORCING_VARIANT_SOURCES:
         cmd.extend(["--variant", variant])
 
     return cmd, model, variant, model_source, variant_source
+
+
+def show_model_table(agent_name: str) -> int:
+    """Print the model-resolution table for an agent and exit."""
+    extra_args = shlex.split(os.environ.get("OPENCODE_ARGS", ""))
+
+    args_model = _extract_flag_value(extra_args, _MODEL_FLAG_NAMES)
+    args_variant = _extract_flag_value(extra_args, _VARIANT_FLAG_NAMES)
+    env_model = (os.environ.get("CODECOME_MODEL") or "").strip() or None
+    env_variant = (os.environ.get("CODECOME_MODEL_VARIANT") or "").strip() or None
+    yaml_model, yaml_variant = _read_codecome_yml_agent(agent_name)
+    discovered = _discover_opencode_default_model()
+
+    model, variant, model_source, variant_source = resolve_model_and_variant(
+        agent_name, extra_args
+    )
+
+    def fmt(v: Optional[str]) -> str:
+        return v if v else "(not set)"
+
+    print(C.header(f"Model resolution for agent {agent_name}:"))
+    print()
+    print(f"  {C.DIM}OPENCODE_ARGS{C.RESET}                 model={fmt(args_model)}  variant={fmt(args_variant)}")
+    print(f"  {C.DIM}env CODECOME_MODEL{C.RESET}            model={fmt(env_model)}")
+    print(f"  {C.DIM}env CODECOME_MODEL_VARIANT{C.RESET}    variant={fmt(env_variant)}")
+    print(f"  {C.DIM}codecome.yml{C.RESET}                  model={fmt(yaml_model)}  variant={fmt(yaml_variant)}")
+    print(f"  {C.DIM}opencode session history{C.RESET}      model={fmt(discovered)}")
+    print()
+    effective_model = model or "(unknown)"
+    effective_variant = variant or "(unknown)"
+    print(f"  {C.BOLD}effective{C.RESET}                     "
+          f"model={effective_model}  variant={effective_variant}")
+    print(f"  {C.DIM}sources{C.RESET}                       "
+          f"model: {model_source}  variant: {variant_source}")
+    return 0
 
 
 def main() -> int:
@@ -1370,6 +1539,19 @@ def main() -> int:
 
     parser = build_parser()
     args = parser.parse_args()
+
+    # --show-model short-circuit: print the resolution table and exit.
+    if args.show_model:
+        agent_name = args.agent or "recon"
+        return show_model_table(agent_name)
+
+    # The phase-launching mode requires the usual arguments.
+    missing = [n for n in ("phase", "label", "agent", "prompt_file") if getattr(args, n) is None]
+    if missing:
+        parser.error(
+            "the following arguments are required when not using --show-model: "
+            + ", ".join("--" + n.replace("_", "-") for n in missing)
+        )
 
     # CLI flags override env var defaults for tunables.
     global _READ_DISPLAY_LINES, _WRITE_CONTENT_LINES, _WRITE_DIFF_LIMIT, _EDIT_DIFF_LINES
@@ -1391,22 +1573,25 @@ def main() -> int:
     model_label = model or "(unknown)"
     variant_label = variant or "(unknown)"
 
+    # Build the single-line banner. Order: agent  model  variant?  prompt
+    # followed by a trailing parenthetical with the resolution source(s).
+    parts = [f"agent={args.agent}", f"model={model_label}"]
+    if variant is not None:
+        parts.append(f"variant={variant_label}")
+    parts.append(f"prompt={args.prompt_file}")
+
+    if variant is not None:
+        sources_tail = (
+            f"(model source: {model_source}, variant source: {variant_source})"
+        )
+    else:
+        sources_tail = f"(model source: {model_source})"
+
+    main_line = "  ".join(parts) + "  " + sources_tail
+
     if HAVE_RICH:
         console.print(Rule(title=f"Phase {args.phase}: {args.label}", style="bold cyan"))
-        console.print(Text(f"agent={args.agent}  prompt={args.prompt_file}", style="dim"))
-        # Always show model. Only show variant when it has a real value
-        # (variant is genuinely optional in opencode).
-        if variant is not None:
-            console.print(Text(
-                f"model={model_label}  variant={variant_label}  "
-                f"(model source: {model_source}, variant source: {variant_source})",
-                style="dim",
-            ))
-        else:
-            console.print(Text(
-                f"model={model_label}  (source: {model_source})",
-                style="dim",
-            ))
+        console.print(Text(main_line, style="dim"))
         if args.finding:
             console.print(Text(f"finding={args.finding}", style="dim"))
         if str(args.phase) == "1":
@@ -1416,14 +1601,7 @@ def main() -> int:
             ))
     else:
         print(C.header(f"Phase {args.phase}: {args.label}"))
-        print(C.info(f"agent={args.agent}  prompt={args.prompt_file}"))
-        if variant is not None:
-            print(C.info(
-                f"model={model_label}  variant={variant_label}  "
-                f"(model source: {model_source}, variant source: {variant_source})"
-            ))
-        else:
-            print(C.info(f"model={model_label}  (source: {model_source})"))
+        print(C.info(main_line))
         if args.finding:
             print(C.info(f"finding={args.finding}"))
         if str(args.phase) == "1":
@@ -1464,6 +1642,7 @@ def main() -> int:
         process.stdin.close()
 
         assert process.stdout is not None
+        late_model_announced = False
         for raw_line in process.stdout:
             line = raw_line.strip()
             if not line:
@@ -1478,6 +1657,22 @@ def main() -> int:
                     sys.stderr.write(f"json-parse-error: {line}\n")
                     sys.stderr.flush()
                 continue
+
+            # Late discovery: if the JSON stream ever carries the model
+            # identity in a tool/event payload, surface it once.
+            if not late_model_announced:
+                discovered_in_stream = _scan_event_for_model(event)
+                if discovered_in_stream and discovered_in_stream != model:
+                    late_model_announced = True
+                    msg = (
+                        f"[model resolved from stream] {discovered_in_stream} "
+                        f"(banner showed {model_label})"
+                    )
+                    if HAVE_RICH:
+                        console.print(Text(msg, style="yellow"))
+                    else:
+                        print(C.warn(msg))
+
             render_event(console, args.phase, args.label, event)
 
         process.wait()

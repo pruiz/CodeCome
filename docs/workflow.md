@@ -425,7 +425,15 @@ Model and variant resolution priority (highest wins):
 1. `OPENCODE_ARGS='--model … --variant …'`
 2. `CODECOME_MODEL` / `CODECOME_MODEL_VARIANT`
 3. `codecome.yml` `agents.<name>.model` / `agents.<name>.variant`
-4. unknown (banner shows the gap; nothing is appended)
+4. The model from your most recent OpenCode session for this
+   project (best-effort, read from OpenCode's local DB).
+5. unknown (banner shows the gap; nothing is appended)
 
 When sources 2 or 3 win, the wrapper appends `--model` / `--variant`
-to the spawned `opencode run` so the banner is enforced.
+to the spawned `opencode run` so the banner is enforced. Source 4
+is display-only and never enforced.
+
+To see the full resolution table without launching a phase:
+
+    make show-model
+    make show-model AGENT=auditor

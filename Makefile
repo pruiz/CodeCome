@@ -1,7 +1,7 @@
 .PHONY: help venv venv-check check status next-id frontmatter reset-itemdb index report
 .PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all
 .PHONY: sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-build-target sandbox-test-target
-.PHONY: sandbox-list sandbox-inspect sandbox-detect sandbox-bootstrap sandbox-validate sandbox-regenerate sandbox-status
+.PHONY: sandbox-list sandbox-inspect sandbox-detect sandbox-bootstrap sandbox-validate sandbox-regenerate sandbox-status show-model
 
 PYTHON := .venv/bin/python3
 
@@ -29,6 +29,9 @@ help:
 	@echo "    OPENCODE_ARGS='...'          Extra flags passed through to opencode run"
 	@echo "    CODECOME_MODEL=<id>          Pin the model per phase (e.g. anthropic/claude-opus-4-7)"
 	@echo "    CODECOME_MODEL_VARIANT=<v>   Pin the model variant (e.g. high, max)"
+	@echo ""
+	@echo "    make show-model              Print the model resolution table for an agent"
+	@echo "    make show-model AGENT=auditor"
 	@echo ""
 	@echo "  Workspace tools:"
 	@echo ""
@@ -272,3 +275,10 @@ sandbox-regenerate: venv-check
 
 sandbox-status: venv-check
 	$(PYTHON) tools/sandbox-bootstrap.py status
+
+# Print the model that would be picked for a given AGENT (default: recon).
+# Usage:
+#   make show-model
+#   make show-model AGENT=auditor
+show-model: venv-check
+	@$(PYTHON) tools/run-agent.py --show-model --agent $(or $(AGENT),recon)
