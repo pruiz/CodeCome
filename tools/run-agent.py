@@ -245,18 +245,28 @@ _SNAPSHOT_CACHE: OrderedDict[str, tuple[str, float]] = OrderedDict()
 _SNAPSHOT_CACHE_CAP = int(os.environ.get("CODECOME_WRITE_CACHE_CAP", "200"))
 _WRITE_CACHE_ENABLED = os.environ.get("CODECOME_WRITE_CACHE", "1") not in ("0", "false", "False", "no")
 
-_EXCERPT_LINES = int(os.environ.get("CODECOME_EXCERPT_LINES", "5"))
+_READ_DISPLAY_LINES = int(os.environ.get("CODECOME_READ_DISPLAY_LINES", "10"))
+_WRITE_CONTENT_LINES = int(os.environ.get("CODECOME_WRITE_CONTENT_LINES", "25"))
 _WRITE_DIFF_LIMIT = int(os.environ.get("CODECOME_WRITE_DIFF_LIMIT", "50"))
-_WRITE_FULL_LINES = int(os.environ.get("CODECOME_WRITE_FULL_LINES", "25"))
-_WRITE_FULL_BYTES = int(os.environ.get("CODECOME_WRITE_FULL_BYTES", "1024"))
+_EDIT_DIFF_LINES = int(os.environ.get("CODECOME_EDIT_DIFF_LINES", "25"))
 _READ_HIGHLIGHT_LIMIT = int(os.environ.get("CODECOME_READ_HIGHLIGHT_LIMIT", str(200 * 1024)))
 _GLOB_MATCH_CAP = int(os.environ.get("CODECOME_GLOB_MATCH_CAP", "100"))
 
-_READ_FRAMING_RE = re.compile(
+_READ_FILE_FRAMING_RE = re.compile(
     r"<path>(?P<path>.*?)</path>\s*"
     r"<type>(?P<type>.*?)</type>\s*"
     r"<content>\s*\n(?P<content>.*?)\n\s*</content>",
     re.DOTALL,
+)
+_READ_DIR_FRAMING_RE = re.compile(
+    r"<path>(?P<path>.*?)</path>\s*"
+    r"<type>directory</type>\s*"
+    r"<entries>\s*\n(?P<entries>.*?)\n\s*</entries>",
+    re.DOTALL,
+)
+_READ_SUMMARY_RE = re.compile(
+    r"\((?:End of file|Showing lines|Buffer has more lines)[^\)]*\)\s*$",
+    re.MULTILINE,
 )
 
 _LEXER_MAP = {
@@ -279,14 +289,45 @@ def _relativize_path(path: str) -> str:
         return path
 
 
-def _strip_read_framing(output: str) -> tuple[str | None, dict[str, str]]:
-    match = _READ_FRAMING_RE.search(output)
-    if not match:
-        return None, {}
-    return match.group("content"), {
-        "path": match.group("path"),
-        "type": match.group("type"),
-    }
+def _strip_read_framing(output: str) -> tuple[str, Any, str | None]:
+    """Parse OpenCode read tool output.
+
+    Returns a 3-tuple:
+      - kind: "file" | "directory" | "unknown"
+      - payload: str (file body) | list[str] (directory entries) | None
+      - footer: the trailing summary/entries-count line, or None
+    """
+    # Try file framing
+    m = _READ_FILE_FRAMING_RE.search(output)
+    if m:
+        body = m.group("content")
+        # Separate trailing summary line from body
+        summary_m = _READ_SUMMARY_RE.search(body)
+        if summary_m:
+            footer = summary_m.group(0).strip()
+            body = body[:summary_m.start()].rstrip()
+        else:
+            footer = None
+        return "file", body, footer
+
+    # Try directory framing
+    d = _READ_DIR_FRAMING_RE.search(output)
+    if d:
+        raw_entries = d.group("entries")
+        entries = []
+        footer = None
+        for line in raw_entries.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            # The "(N entries)" summary is the footer
+            if line.startswith("(") and "entries" in line and line.endswith(")"):
+                footer = line
+            else:
+                entries.append(line)
+        return "directory", entries, footer
+
+    return "unknown", None, None
 
 
 def _count_lines_and_bytes(text: str) -> tuple[int, int]:
@@ -307,6 +348,63 @@ def _format_excerpt(text: str, max_lines: int) -> tuple[str, int]:
     if len(lines) <= max_lines:
         return text, 0
     return "\n".join(lines[:max_lines]), len(lines) - max_lines
+
+
+def _strip_line_numbers(text: str) -> str:
+    """Remove OpenCode line-number prefixes like '  1: '."""
+    raw_lines = []
+    for line in text.split("\n"):
+        colon_idx = line.find(": ")
+        if colon_idx >= 0 and colon_idx <= 6 and line[:colon_idx].strip().isdigit():
+            raw_lines.append(line[colon_idx + 2:])
+        else:
+            raw_lines.append(line)
+    return "\n".join(raw_lines)
+
+
+def _render_truncated_body_rich(
+    console: Console,
+    sections: list[Any],
+    body: str,
+    cap: int,
+    lexer: str,
+    footer: str | None,
+) -> None:
+    """Append Syntax block (capped), '... K more lines', and footer to sections."""
+    from rich.syntax import Syntax
+
+    body_lines = body.split("\n")
+    total = len(body_lines)
+    visible_lines = body_lines[:cap]
+    leftover = max(0, total - cap)
+
+    visible = "\n".join(visible_lines)
+    if len(visible.encode("utf-8", errors="replace")) > _READ_HIGHLIGHT_LIMIT:
+        sections.append(Text(visible))
+    else:
+        sections.append(Syntax(visible, lexer, theme="monokai", line_numbers=True, word_wrap=True))
+
+    if leftover > 0:
+        sections.append(Text(f"... {leftover} more lines", style="dim"))
+    if footer:
+        sections.append(Text(footer, style="dim"))
+
+
+def _render_truncated_body_plain(
+    body: str,
+    cap: int,
+    footer: str | None,
+) -> None:
+    """Print body lines (capped), '... K more lines', and footer."""
+    body_lines = body.split("\n")
+    total = len(body_lines)
+    for line in body_lines[:cap]:
+        print(line)
+    leftover = max(0, total - cap)
+    if leftover > 0:
+        print(f"  ... {leftover} more lines")
+    if footer:
+        print(f"  {footer}")
 
 
 def _is_likely_error(text: str) -> bool:
@@ -386,74 +484,46 @@ def render_read_rich(console: Console, state: dict[str, Any]) -> bool:
     offset = inp.get("offset")
     limit = inp.get("limit")
 
-    from rich.syntax import Syntax
-
+    border = "green" if state.get("status") == "completed" else "yellow"
     sections: list[Any] = [Text(rel_path, style="bold cyan")]
-
     if offset is not None and limit is not None:
         sections.append(Text(f"lines {offset}..{offset + limit - 1}", style="dim"))
 
-    content, meta = _strip_read_framing(output)
-    file_type = meta.get("type", "file")
+    kind, payload, footer = _strip_read_framing(output)
 
-    border = "green" if state.get("status") == "completed" else "yellow"
-
-    if _is_likely_error(output) and content is None:
-        sections.append(Text())
-        sections.append(Text(output.strip(), style="red"))
-        console.print(Panel(Group(*sections), title="Read", border_style="red", expand=True))
+    if kind == "unknown":
+        if _is_likely_error(output):
+            sections.append(Text())
+            sections.append(Text(output.strip(), style="red"))
+            console.print(Panel(Group(*sections), title="Read", border_style="red", expand=True))
+        else:
+            return False
         return True
 
-    if content is not None and file_type == "file":
-        stripped = content.strip()
-        if not stripped:
-            sections.append(Text())
+    sections.append(Text())
+
+    if kind == "file":
+        body = str(payload).strip()
+        if not body:
             sections.append(Text("(empty file)", style="dim"))
-        elif len(stripped.encode("utf-8", errors="replace")) > _READ_HIGHLIGHT_LIMIT:
-            sections.append(Text())
-            sections.append(Text(stripped))
         else:
-            # Strip line number prefixes for syntax highlighting
-            raw_lines = []
-            for line in stripped.split("\n"):
-                colon_idx = line.find(": ")
-                if colon_idx >= 0 and colon_idx <= 6 and line[:colon_idx].strip().isdigit():
-                    raw_lines.append(line[colon_idx + 2:])
-                else:
-                    raw_lines.append(line)
-            raw_content = "\n".join(raw_lines)
+            raw_body = _strip_line_numbers(body)
             lexer = _detect_lexer(file_path)
-            sections.append(Text())
-            sections.append(Syntax(raw_content, lexer, theme="monokai", line_numbers=True, word_wrap=True))
-    elif content is None and file_type != "file":
-        # Directory listing
-        sections.append(Text())
-        for entry in output.strip().split("\n"):
-            entry = entry.strip()
-            if not entry or entry.startswith("<"):
-                continue
+            _render_truncated_body_rich(console, sections, raw_body, _READ_DISPLAY_LINES, lexer, footer)
+        # Cache the full body (not display-truncated)
+        _cache_set(file_path, body)
+
+    elif kind == "directory":
+        entries = payload if isinstance(payload, list) else []
+        for entry in entries:
             if entry.endswith("/"):
                 sections.append(Text(f"  {entry}", style="bold blue"))
             else:
                 sections.append(Text(f"  {entry}"))
-    else:
-        # Directory from framing or other
-        sections.append(Text())
-        for entry in (content or output).strip().split("\n"):
-            entry = entry.strip()
-            if not entry:
-                continue
-            if entry.endswith("/"):
-                sections.append(Text(f"  {entry}", style="bold blue"))
-            else:
-                sections.append(Text(f"  {entry}"))
+        if footer:
+            sections.append(Text(footer, style="dim"))
 
     console.print(Panel(Group(*sections), title="Read", border_style=border, expand=True))
-
-    # Update snapshot cache
-    if content is not None and file_type == "file":
-        _cache_set(file_path, content.strip())
-
     return True
 
 
@@ -475,10 +545,19 @@ def render_read_plain(state: dict[str, Any]) -> bool:
     if offset is not None and limit is not None:
         print(f"  lines {offset}..{offset + limit - 1}")
 
-    content, meta = _strip_read_framing(output)
-    if content is not None:
-        print(content.strip())
-        _cache_set(file_path, content.strip())
+    kind, payload, footer = _strip_read_framing(output)
+
+    if kind == "file":
+        body = str(payload).strip()
+        raw_body = _strip_line_numbers(body)
+        _render_truncated_body_plain(raw_body, _READ_DISPLAY_LINES, footer)
+        _cache_set(file_path, body)
+    elif kind == "directory":
+        entries = payload if isinstance(payload, list) else []
+        for entry in entries:
+            print(f"  {entry}")
+        if footer:
+            print(f"  {footer}")
     else:
         print(output.strip())
 
@@ -522,6 +601,7 @@ def render_write_rich(console: Console, state: dict[str, Any]) -> bool:
 
     prev = _cache_get(file_path)
     lexer = _detect_lexer(file_path)
+    status_text = output_str.strip()
 
     if prev is not None:
         diff_lines = _compute_diff(prev, new_content)
@@ -536,20 +616,14 @@ def render_write_rich(console: Console, state: dict[str, Any]) -> bool:
             diff_text = "".join(truncated)
             sections.append(Syntax(diff_text, "diff", theme="monokai", word_wrap=True))
             if leftover > 0:
-                sections.append(Text(f"... diff truncated ({leftover} more lines)", style="dim"))
+                sections.append(Text(f"... {leftover} more lines", style="dim"))
     else:
         sections.append(Text("(new file)", style="dim"))
         sections.append(Text())
-        if n_lines <= _WRITE_FULL_LINES and n_bytes <= _WRITE_FULL_BYTES:
-            sections.append(Syntax(new_content, lexer, theme="monokai", word_wrap=True))
-        else:
-            excerpt, remaining = _format_excerpt(new_content, _EXCERPT_LINES)
-            sections.append(Syntax(excerpt, lexer, theme="monokai", word_wrap=True))
-            if remaining > 0:
-                sections.append(Text(f"... {remaining} more lines", style="dim"))
+        _render_truncated_body_rich(console, sections, new_content, _WRITE_CONTENT_LINES, lexer, None)
 
     sections.append(Text())
-    sections.append(Text(output_str.strip(), style="green" if not is_error else "red"))
+    sections.append(Text(status_text, style="green" if not is_error else "red"))
 
     console.print(Panel(Group(*sections), title="Write", border_style=border, expand=True))
     _cache_set(file_path, new_content)
@@ -596,19 +670,124 @@ def render_write_plain(state: dict[str, Any]) -> bool:
             for line in truncated:
                 print(f"  {line}", end="")
             if leftover > 0:
-                print(f"  ... diff truncated ({leftover} more lines)")
+                print(f"  ... {leftover} more lines")
     else:
         print("  (new file)")
-        if n_lines <= _WRITE_FULL_LINES and n_bytes <= _WRITE_FULL_BYTES:
-            print(new_content)
-        else:
-            excerpt, remaining = _format_excerpt(new_content, _EXCERPT_LINES)
-            print(excerpt)
-            if remaining > 0:
-                print(f"  ... {remaining} more lines")
+        _render_truncated_body_plain(new_content, _WRITE_CONTENT_LINES, None)
 
     print(f"  {output_str.strip()}")
     _cache_set(file_path, new_content)
+    return True
+
+
+# --- Edit renderer ------------------------------------------------------------
+
+def _cache_reread(file_path: str) -> None:
+    """Invalidate cache for path and re-read from disk."""
+    if not _WRITE_CACHE_ENABLED:
+        return
+    if file_path in _SNAPSHOT_CACHE:
+        del _SNAPSHOT_CACHE[file_path]
+    try:
+        content = Path(file_path).read_text(encoding="utf-8", errors="replace")
+        _cache_set(file_path, content)
+    except OSError:
+        pass  # File gone; cache entry already removed
+
+
+def render_edit_rich(console: Console, state: dict[str, Any]) -> bool:
+    inp = state.get("input")
+    output = state.get("output")
+    if not isinstance(inp, dict):
+        return False
+
+    file_path = str(inp.get("filePath", ""))
+    old_string = inp.get("oldString")
+    new_string = inp.get("newString")
+    replace_all = bool(inp.get("replaceAll", False))
+
+    if not file_path or old_string is None or new_string is None:
+        return False
+
+    from rich.syntax import Syntax
+
+    rel_path = _relativize_path(file_path)
+    output_str = str(output) if output is not None else ""
+    is_error = _is_likely_error(output_str) or (output is not None and "successfully" not in output_str.lower() and "applied" not in output_str.lower())
+    border = "red" if is_error else "green"
+    scope = "replace all" if replace_all else "replace 1 occurrence"
+
+    sections: list[Any] = [
+        Text(rel_path, style="bold cyan"),
+        Text(scope, style="dim"),
+        Text(),
+    ]
+
+    diff_lines = _compute_diff(str(old_string), str(new_string))
+    if not diff_lines:
+        sections.append(Text("(no changes in edit)", style="dim"))
+    else:
+        added = sum(1 for l in diff_lines if l.startswith("+") and not l.startswith("+++"))
+        removed = sum(1 for l in diff_lines if l.startswith("-") and not l.startswith("---"))
+        sections.append(Text(f"diff: -{removed} +{added}", style="dim"))
+        sections.append(Text())
+        truncated, leftover = _truncate_diff(diff_lines, _EDIT_DIFF_LINES)
+        diff_text = "".join(truncated)
+        sections.append(Syntax(diff_text, "diff", theme="monokai", word_wrap=True))
+        if leftover > 0:
+            sections.append(Text(f"... {leftover} more lines", style="dim"))
+
+    sections.append(Text())
+    sections.append(Text(output_str.strip(), style="red" if is_error else "green"))
+
+    console.print(Panel(Group(*sections), title="Edit", border_style=border, expand=True))
+
+    # Re-read cache after edit
+    if _cache_get(file_path) is not None or file_path in _SNAPSHOT_CACHE:
+        _cache_reread(file_path)
+
+    return True
+
+
+def render_edit_plain(state: dict[str, Any]) -> bool:
+    inp = state.get("input")
+    output = state.get("output")
+    if not isinstance(inp, dict):
+        return False
+
+    file_path = str(inp.get("filePath", ""))
+    old_string = inp.get("oldString")
+    new_string = inp.get("newString")
+    replace_all = bool(inp.get("replaceAll", False))
+
+    if not file_path or old_string is None or new_string is None:
+        return False
+
+    rel_path = _relativize_path(file_path)
+    output_str = str(output) if output is not None else ""
+    scope = "replace all" if replace_all else "replace 1 occurrence"
+
+    print(C.header(f"edit {rel_path}"))
+    print(f"  {scope}")
+
+    diff_lines = _compute_diff(str(old_string), str(new_string))
+    if not diff_lines:
+        print("  (no changes in edit)")
+    else:
+        added = sum(1 for l in diff_lines if l.startswith("+") and not l.startswith("+++"))
+        removed = sum(1 for l in diff_lines if l.startswith("-") and not l.startswith("---"))
+        print(f"  diff: -{removed} +{added}")
+        truncated, leftover = _truncate_diff(diff_lines, _EDIT_DIFF_LINES)
+        for line in truncated:
+            print(f"  {line}", end="")
+        if leftover > 0:
+            print(f"  ... {leftover} more lines")
+
+    print(f"  {output_str.strip()}")
+
+    if _cache_get(file_path) is not None or file_path in _SNAPSHOT_CACHE:
+        _cache_reread(file_path)
+
     return True
 
 
@@ -799,6 +978,11 @@ def _dispatch_tool_renderer(console: Console, tool: str, state: dict[str, Any]) 
             return render_write_rich(console, state)
         else:
             return render_write_plain(state)
+    elif tool_lower == "edit":
+        if HAVE_RICH:
+            return render_edit_rich(console, state)
+        else:
+            return render_edit_plain(state)
     elif tool_lower == "glob":
         _cache_invalidate_stale()
         if HAVE_RICH:
@@ -930,10 +1114,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--finding", help="Finding id for prompt substitution.")
     parser.add_argument("--color", choices=["auto", "always", "never"], default="auto")
     parser.add_argument("--debug", action="store_true", help="Mirror raw JSON events to stderr.")
-    parser.add_argument("--excerpt-lines", type=int, help="Lines shown in write excerpt (default: 5, env: CODECOME_EXCERPT_LINES).")
+    parser.add_argument("--read-display-lines", type=int, help="Max lines shown in read output (default: 10, env: CODECOME_READ_DISPLAY_LINES).")
+    parser.add_argument("--write-content-lines", type=int, help="Max lines shown for new-file write content (default: 25, env: CODECOME_WRITE_CONTENT_LINES).")
     parser.add_argument("--write-diff-limit", type=int, help="Max diff lines shown for write (default: 50, env: CODECOME_WRITE_DIFF_LIMIT).")
-    parser.add_argument("--write-full-lines", type=int, help="Max lines for full content display on new files (default: 25, env: CODECOME_WRITE_FULL_LINES).")
-    parser.add_argument("--write-full-bytes", type=int, help="Max bytes for full content display on new files (default: 1024, env: CODECOME_WRITE_FULL_BYTES).")
+    parser.add_argument("--edit-diff-lines", type=int, help="Max diff lines shown for edit (default: 25, env: CODECOME_EDIT_DIFF_LINES).")
     return parser
 
 
@@ -952,15 +1136,15 @@ def main() -> int:
     args = parser.parse_args()
 
     # CLI flags override env var defaults for tunables.
-    global _EXCERPT_LINES, _WRITE_DIFF_LIMIT, _WRITE_FULL_LINES, _WRITE_FULL_BYTES
-    if args.excerpt_lines is not None:
-        _EXCERPT_LINES = args.excerpt_lines
+    global _READ_DISPLAY_LINES, _WRITE_CONTENT_LINES, _WRITE_DIFF_LIMIT, _EDIT_DIFF_LINES
+    if args.read_display_lines is not None:
+        _READ_DISPLAY_LINES = args.read_display_lines
+    if args.write_content_lines is not None:
+        _WRITE_CONTENT_LINES = args.write_content_lines
     if args.write_diff_limit is not None:
         _WRITE_DIFF_LIMIT = args.write_diff_limit
-    if args.write_full_lines is not None:
-        _WRITE_FULL_LINES = args.write_full_lines
-    if args.write_full_bytes is not None:
-        _WRITE_FULL_BYTES = args.write_full_bytes
+    if args.edit_diff_lines is not None:
+        _EDIT_DIFF_LINES = args.edit_diff_lines
 
     color_mode = resolve_color_mode(args.color)
     console = build_console(color_mode)
