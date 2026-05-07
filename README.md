@@ -164,6 +164,7 @@ Benchmark labels alone are not enough to mark a finding as confirmed.
 
 2. Check workspace and sandbox:
 
+       make venv
        make check
        make sandbox-check
 
@@ -182,6 +183,10 @@ Benchmark labels alone are not enough to mark a finding as confirmed.
        make exploit-all              # Exploit all CONFIRMED findings
 
 Each `make` target checks readiness gates before invoking the corresponding agent. Phase 4 and Phase 5 are invoked once per finding.
+
+By default, phase targets use a CodeCome-owned styled wrapper around `opencode run --format json` so assistant output, tool calls, and tool results render with consistent colors and structure.
+
+All `make` targets that invoke Python tools expect a repo-local virtualenv at `.venv/`. If it is missing or stale, the command will stop with a setup message telling you to run `make venv`.
 
 ## Reusable prompts
 
@@ -254,6 +259,20 @@ A basic local report can also be generated without an agent:
 
 The default report path is `itemdb/reports/report.md`.
 
+### Wrapper controls
+
+The phase targets support these environment variables:
+
+    CODECOME_USE_WRAPPER=0   # bypass the styled wrapper and use raw opencode run
+    CODECOME_THINKING=1      # pass --thinking through the wrapper
+    OPENCODE_ARGS='...'      # extra flags forwarded to opencode run
+
+The wrapper currently targets OpenCode 1.14.39 or newer.
+
+If `.venv` is missing required packages, rerun:
+
+    make venv
+
 ### Manual invocation
 
 If you prefer direct `opencode run` commands instead of `make` targets:
@@ -266,6 +285,8 @@ If you prefer direct `opencode run` commands instead of `make` targets:
     opencode run --agent reporter "$(cat prompts/phase-6-report.md)"
 
 `make report` is a lightweight local summary generator. Use `make phase-6` when you want the full AI-written report flow.
+
+Direct manual `opencode run` usage remains unchanged. The styled wrapper is only used by `make phase-*` targets.
 
 ## Local helper commands
 

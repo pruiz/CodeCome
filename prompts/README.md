@@ -17,6 +17,7 @@ Each prompt corresponds to one workflow phase.
 
 Use `make` targets for the simplest workflow:
 
+    make venv                     # Create/update repo-local virtualenv
     make phase-1                  # Reconnaissance
     make phase-2                  # Hypothesis generation
     make phase-3                  # Counter-analysis
@@ -27,6 +28,10 @@ Use `make` targets for the simplest workflow:
     make exploit-all              # Exploit all CONFIRMED findings
 
 Each `make` target checks readiness gates before invoking the corresponding agent.
+
+`make phase-*` targets use CodeCome's styled wrapper by default. Manual `opencode run` commands below remain the raw, direct path.
+
+If `.venv/` is missing or out of date, the `make` targets will stop and tell you to run `make venv`.
 
 ## Manual invocation
 

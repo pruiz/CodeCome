@@ -323,12 +323,15 @@ Before validation:
 1. Place target source under `src/`.
 2. Run:
 
+       make venv
        make check
        make sandbox-check
 
 3. Run reconnaissance:
 
        make phase-1
+
+   By default this uses CodeCome's styled wrapper around `opencode run --format json`.
 
 4. Review notes under:
 
@@ -360,3 +363,11 @@ Before validation:
        make phase-6
 
 `make report` remains available as a lightweight local summary, but it is not a full substitute for Phase 6.
+
+All `make` targets that depend on Python tooling expect a repo-local `.venv/`. If it is missing or stale, the command will stop and tell you to run `make venv`.
+
+Wrapper controls:
+
+    CODECOME_USE_WRAPPER=0   # bypass wrapper and use raw opencode run
+    CODECOME_THINKING=1      # enable thinking blocks for wrapper-driven phase runs
+    OPENCODE_ARGS='...'      # extra flags forwarded to opencode run
