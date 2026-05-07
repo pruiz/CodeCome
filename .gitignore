@@ -223,6 +223,10 @@ tmp/*
 # CodeCome runtime artifacts
 itemdb/index.md
 
+# Sandbox bootstrap runtime state
+sandbox/CODECOME-GENERATED.md
+sandbox/.backup-*
+
 itemdb/notes/*
 !itemdb/notes/.gitkeep
 

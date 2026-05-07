@@ -1,6 +1,7 @@
 .PHONY: help venv venv-check check status next-id frontmatter reset-itemdb index report
 .PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all
 .PHONY: sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-build-target sandbox-test-target
+.PHONY: sandbox-list sandbox-inspect sandbox-detect sandbox-bootstrap sandbox-validate sandbox-regenerate sandbox-status
 
 PYTHON := .venv/bin/python3
 
@@ -36,7 +37,7 @@ help:
 	@echo "    make index          Regenerate itemdb/index.md"
 	@echo "    make report         Regenerate itemdb/reports/report.md (local, no AI)"
 	@echo ""
-	@echo "  Sandbox:"
+	@echo "  Sandbox runtime:"
 	@echo ""
 	@echo "    make sandbox-check  Run sandbox smoke test"
 	@echo "    make sandbox-up     Start sandbox"
@@ -44,6 +45,22 @@ help:
 	@echo "    make sandbox-shell  Open sandbox shell"
 	@echo "    make sandbox-logs   Follow sandbox logs"
 	@echo "    make sandbox-clean  Stop sandbox and clean tmp"
+	@echo ""
+	@echo "  Sandbox bootstrap (Phase 1b):"
+	@echo ""
+	@echo "    make sandbox-list                List curated example sandboxes"
+	@echo "    make sandbox-inspect ID=python   Inspect one example"
+	@echo "    make sandbox-detect              Propose ranked candidates for src/"
+	@echo "    make sandbox-bootstrap ID=python Apply an example to sandbox/"
+	@echo "    make sandbox-validate            Run sandbox validation tiers"
+	@echo "    make sandbox-regenerate          Re-apply current example with backup"
+	@echo "    make sandbox-status              Show sandbox provenance and gate result"
+	@echo ""
+	@echo "  Sandbox bootstrap controls:"
+	@echo ""
+	@echo "    CODECOME_ALLOW_NO_SANDBOX=1        Soft-override Phase 2 sandbox gate"
+	@echo "    CODECOME_BOOTSTRAP_MAX_RETRIES=N   Agent remediation budget (default 3)"
+	@echo "    CODECOME_BOOTSTRAP_DRY_RUN=1       Force --dry-run on apply/regenerate"
 	@echo ""
 
 # ---------------------------------------------------------------------------
@@ -211,3 +228,30 @@ sandbox-build-target:
 
 sandbox-test-target:
 	./sandbox/scripts/test-target.sh
+
+# ---------------------------------------------------------------------------
+# Sandbox bootstrap (Phase 1b)
+# ---------------------------------------------------------------------------
+
+sandbox-list: venv-check
+	$(PYTHON) tools/sandbox-bootstrap.py list
+
+sandbox-inspect: venv-check
+	@test -n "$(ID)" || (echo "Usage: make sandbox-inspect ID=<example-id>" && exit 1)
+	$(PYTHON) tools/sandbox-bootstrap.py inspect $(ID)
+
+sandbox-detect: venv-check
+	$(PYTHON) tools/sandbox-bootstrap.py detect
+
+sandbox-bootstrap: venv-check
+	@test -n "$(ID)" || (echo "Usage: make sandbox-bootstrap ID=<example-id>" && exit 1)
+	$(PYTHON) tools/sandbox-bootstrap.py apply $(ID) $(BOOTSTRAP_ARGS)
+
+sandbox-validate: venv-check
+	$(PYTHON) tools/sandbox-bootstrap.py validate $(BOOTSTRAP_ARGS)
+
+sandbox-regenerate: venv-check
+	$(PYTHON) tools/sandbox-bootstrap.py regenerate $(BOOTSTRAP_ARGS)
+
+sandbox-status: venv-check
+	$(PYTHON) tools/sandbox-bootstrap.py status
