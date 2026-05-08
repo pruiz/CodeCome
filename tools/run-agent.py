@@ -595,6 +595,8 @@ _GREP_FILE_CAP = int(os.environ.get("CODECOME_GREP_FILE_CAP", "50"))
 _GREP_LINE_CAP_PER_FILE = int(os.environ.get("CODECOME_GREP_LINE_CAP_PER_FILE", "5"))
 _GREP_TOTAL_LINE_CAP = int(os.environ.get("CODECOME_GREP_TOTAL_LINE_CAP", "200"))
 _GREP_HIGHLIGHT = os.environ.get("CODECOME_GREP_HIGHLIGHT", "1") not in ("0", "false", "False", "no")
+_REASONING_MAX_CHARS = int(os.environ.get("CODECOME_REASONING_MAX_CHARS", "4000"))
+_RENDER_REASONING = os.environ.get("CODECOME_RENDER_REASONING", "1") not in ("0", "false", "False", "no")
 _INTERNAL_READ_SUPPRESS = os.environ.get("CODECOME_INTERNAL_READ_SUPPRESS", "1") not in ("0", "false", "False", "no")
 
 _READ_FILE_FRAMING_RE = re.compile(
@@ -2044,6 +2046,49 @@ def render_text(console: Console, event: dict[str, Any]) -> None:
         print(text)
 
 
+def render_reasoning(console: Console, event: dict[str, Any]) -> None:
+    """Render a model's reasoning/thinking block.
+
+    OpenCode emits these only when --thinking is on AND the part is
+    finalized (part.time?.end set). The wrapper draws them as a
+    visually-subordinate variant of the Assistant panel.
+    """
+    if not _RENDER_REASONING:
+        return
+    part = event.get("part", {})
+    text = str(part.get("text", "")).strip()
+    if not text:
+        return
+
+    truncated_note = ""
+    if len(text) > _REASONING_MAX_CHARS:
+        cut = len(text) - _REASONING_MAX_CHARS
+        text = text[:_REASONING_MAX_CHARS]
+        truncated_note = f"\n\n... ({cut} chars truncated)"
+
+    if HAVE_RICH:
+        body_md = Markdown(text)
+        if truncated_note:
+            sections: list[Any] = [body_md, Text(truncated_note.strip(), style="dim")]
+            body: Any = Group(*sections)
+        else:
+            body = body_md
+        console.print(
+            Panel(
+                body,
+                title="Thinking",
+                border_style="blue",
+                expand=True,
+                style="dim",
+            )
+        )
+    else:
+        print(C.header("Thinking"))
+        print(text)
+        if truncated_note:
+            print(truncated_note.strip())
+
+
 def render_tool_use(console: Console, event: dict[str, Any]) -> None:
     part = event.get("part", {})
     tool = str(part.get("tool", "unknown"))
@@ -2138,16 +2183,61 @@ def render_unknown(console: Console, event: dict[str, Any]) -> None:
         print(message)
 
 
+def render_error(console: Console, event: dict[str, Any]) -> None:
+    """Render a session.error event from the OpenCode JSON stream.
+
+    Border is yellow (alarm) and the message body is rendered red.
+    Distinct from tool failures (which are red borders on tool panels)
+    and from completed-but-truncated runs (which are red banners).
+    """
+    err = event.get("error")
+    msg_parts: list[str] = []
+    if isinstance(err, dict):
+        # Common shapes: {"name": "...", "message": "..."} or
+        # {"name": "...", "data": {"message": "..."}}
+        name = err.get("name")
+        if isinstance(name, str) and name:
+            msg_parts.append(name)
+        data = err.get("data")
+        if isinstance(data, dict):
+            data_msg = data.get("message")
+            if isinstance(data_msg, str) and data_msg:
+                msg_parts.append(data_msg)
+        elif isinstance(err.get("message"), str):
+            msg_parts.append(err["message"])
+    elif isinstance(err, str):
+        msg_parts.append(err)
+
+    text = ": ".join(msg_parts) if msg_parts else "(no error message)"
+
+    if HAVE_RICH:
+        console.print(
+            Panel(
+                Text(text, style="red"),
+                title="Error",
+                border_style="yellow",
+                expand=True,
+            )
+        )
+    else:
+        print(C.warn("Error"))
+        print(C.fail(text))
+
+
 def render_event(console: Console, phase: str, label: str, event: dict[str, Any]) -> None:
     event_type = event.get("type")
     if event_type == "step_start":
         render_step_start(console, phase, label, event)
     elif event_type == "text":
         render_text(console, event)
+    elif event_type == "reasoning":
+        render_reasoning(console, event)
     elif event_type == "tool_use":
         render_tool_use(console, event)
     elif event_type == "step_finish":
         render_step_finish(console, event)
+    elif event_type == "error":
+        render_error(console, event)
     else:
         render_unknown(console, event)
 
@@ -2173,15 +2263,64 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def build_child_command(args: argparse.Namespace) -> tuple[list[str], Optional[str], Optional[str], str, str]:
+def _thinking_default_for_provider(provider_id: Optional[str]) -> bool:
+    """Return True if --thinking should default to ON for this provider.
+
+    Anthropic interleaves thinking with text blocks via the
+    interleaved-thinking beta header (set by OpenCode by default), so
+    the wrapper already shows multiple Assistant panels per turn. Adding
+    --thinking on top would double the panels for no extra information.
+
+    All other known reasoning-capable providers hide their reasoning
+    unless --thinking is on. Default ON for those, and ON for unknown
+    future providers (cheaper to over-surface than under-surface in a
+    research workflow).
+    """
+    if not provider_id:
+        return True
+    pid = provider_id.lower()
+    if pid.startswith("anthropic"):
+        return False
+    return True
+
+
+def _resolve_thinking_decision(
+    model: Optional[str],
+    extra_args: list[str],
+) -> tuple[bool, str]:
+    """Decide whether to enable --thinking for the child opencode run.
+
+    Precedence:
+      1. --thinking explicitly present in OPENCODE_ARGS -> on (user-args).
+      2. CODECOME_THINKING env var -> on/off (env).
+      3. Per-provider default based on the model's provider prefix.
+
+    Returns (enabled, source).
+    """
+    if "--thinking" in extra_args:
+        return True, "user-args"
+
+    raw = os.environ.get("CODECOME_THINKING")
+    if raw is not None:
+        if raw.strip() in ("0", "false", "False", "no", ""):
+            return False, "env"
+        return True, "env"
+
+    provider_id = None
+    if model and "/" in model:
+        provider_id = model.split("/", 1)[0]
+    enabled = _thinking_default_for_provider(provider_id)
+    return enabled, "provider-default"
+
+
+def build_child_command(args: argparse.Namespace) -> tuple[list[str], Optional[str], Optional[str], str, str, bool, str]:
     """Return the child command and the resolved model/variant + sources.
 
     Appends --model/--variant from env or codecome.yml only when
-    OPENCODE_ARGS does not already pass them.
+    OPENCODE_ARGS does not already pass them. Also resolves the
+    --thinking decision per provider and returns it for the banner.
     """
     cmd = ["opencode", "run", "--format", "json", "--agent", args.agent]
-    if truthy_env("CODECOME_THINKING"):
-        cmd.append("--thinking")
 
     extra_args = shlex.split(os.environ.get("OPENCODE_ARGS", ""))
     cmd.extend(extra_args)
@@ -2206,7 +2345,14 @@ def build_child_command(args: argparse.Namespace) -> tuple[list[str], Optional[s
     if variant and variant_source in _ENFORCING_VARIANT_SOURCES:
         cmd.extend(["--variant", variant])
 
-    return cmd, model, variant, model_source, variant_source
+    # Decide --thinking based on env override, OPENCODE_ARGS, or
+    # per-provider default. Skip appending if it was already in
+    # extra_args (already added via cmd.extend(extra_args) above).
+    thinking_on, thinking_source = _resolve_thinking_decision(model, extra_args)
+    if thinking_on and "--thinking" not in extra_args:
+        cmd.append("--thinking")
+
+    return cmd, model, variant, model_source, variant_source, thinking_on, thinking_source
 
 
 def resolve_runtime_model_for_banner(
@@ -2263,10 +2409,13 @@ def show_model_table(agent_name: str) -> int:
     print()
     effective_model = model or "(unknown)"
     effective_variant = variant or "(unknown)"
+    thinking_on, thinking_source = _resolve_thinking_decision(model, extra_args)
     print(f"  {C.BOLD}effective{C.RESET}                     "
-          f"model={effective_model}  variant={effective_variant}")
+          f"model={effective_model}  variant={effective_variant}  "
+          f"thinking={'on' if thinking_on else 'off'}")
     print(f"  {C.DIM}sources{C.RESET}                       "
-          f"model: {model_source}  variant: {variant_source}")
+          f"model: {model_source}  variant: {variant_source}  "
+          f"thinking: {thinking_source}")
     return 0
 
 
@@ -2304,10 +2453,23 @@ def main() -> int:
     console = build_console(color_mode)
     prompt_file = ROOT / args.prompt_file
     prompt = load_prompt(prompt_file, args.finding)
-    command, model, variant, model_source, variant_source = build_child_command(args)
+    command, model, variant, model_source, variant_source, thinking_on, thinking_source = build_child_command(args)
     model, variant, model_source, variant_source = resolve_runtime_model_for_banner(
         args, command, model, variant, model_source, variant_source
     )
+
+    # If the runtime probe revealed a different provider and the user
+    # didn't explicitly pin --thinking via env or OPENCODE_ARGS, redo
+    # the per-provider decision now. This keeps the banner truthful.
+    if thinking_source == "provider-default":
+        new_thinking_on, _ = _resolve_thinking_decision(model, shlex.split(os.environ.get("OPENCODE_ARGS", "")))
+        if new_thinking_on != thinking_on:
+            # Adjust the command for the late discovery: add or remove --thinking.
+            if new_thinking_on and "--thinking" not in command:
+                command.append("--thinking")
+            elif not new_thinking_on and "--thinking" in command:
+                command.remove("--thinking")
+            thinking_on = new_thinking_on
 
     model_label = model or "(unknown)"
     variant_label = variant or "(unknown)"
@@ -2317,14 +2479,18 @@ def main() -> int:
     parts = [f"agent={args.agent}", f"model={model_label}"]
     if variant is not None:
         parts.append(f"variant={variant_label}")
+    parts.append(f"thinking={'on' if thinking_on else 'off'}")
     parts.append(f"prompt={args.prompt_file}")
 
     if variant is not None:
         sources_tail = (
-            f"(model source: {model_source}, variant source: {variant_source})"
+            f"(model source: {model_source}, variant source: {variant_source}, "
+            f"thinking source: {thinking_source})"
         )
     else:
-        sources_tail = f"(model source: {model_source})"
+        sources_tail = (
+            f"(model source: {model_source}, thinking source: {thinking_source})"
+        )
 
     main_line = "  ".join(parts) + "  " + sources_tail
 

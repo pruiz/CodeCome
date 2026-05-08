@@ -278,12 +278,23 @@ The default report path is `itemdb/reports/report.md`.
 The phase targets support these environment variables:
 
     CODECOME_USE_WRAPPER=0   # bypass the styled wrapper and use raw opencode run
-    CODECOME_THINKING=1      # pass --thinking through the wrapper
+    CODECOME_THINKING=1      # force --thinking on (default: per-provider, see below)
+    CODECOME_THINKING=0      # force --thinking off
+    CODECOME_RENDER_REASONING=0  # suppress on-screen Thinking panels even if --thinking is on
+    CODECOME_REASONING_MAX_CHARS=4000  # truncate individual reasoning blocks past this length
     OPENCODE_ARGS='...'      # extra flags forwarded to opencode run
     CODECOME_MODEL=<id>      # pin the model per phase, e.g. anthropic/claude-opus-4-7
     CODECOME_MODEL_VARIANT=<v>  # pin the model variant, e.g. high, max
 
 The wrapper resolves the effective model in this order: `OPENCODE_ARGS` (`--model …` / `--variant …`) > env (`CODECOME_MODEL`, `CODECOME_MODEL_VARIANT`) > `codecome.yml` (`agents.<name>.model` / `.variant`) > the model used in your most recent OpenCode session for this project (best-effort, read from OpenCode's local DB) > unknown. The chosen value is shown in the phase header banner along with its source. When the resolved value comes from env or YAML, the wrapper appends `--model` / `--variant` to `opencode run` so the banner is the truth. Discovered defaults (the last-session lookup) are display-only and are not enforced.
+
+The wrapper picks a `--thinking` default per provider so all models produce comparable in-flight commentary:
+
+- `anthropic/*` → off. Claude already interleaves thinking with normal `text` blocks via OpenCode's interleaved-thinking beta header, so `Assistant` panels already show the model's working.
+- `openai/*`, `xai/*`, `github-copilot/*`, `groq/*`, `cerebras/*`, `google/*`, `google-vertex/*` → on. These providers hide reasoning unless `--thinking` is passed; without it the wrapper would only see one or zero `text` events per phase.
+- Anything else (unknown / future provider) → on. Cheaper to over-surface than under-surface in vulnerability research.
+
+Override precedence: `--thinking` already in `OPENCODE_ARGS` > `CODECOME_THINKING` env > per-provider default. Some providers bill reasoning tokens; set `CODECOME_THINKING=0` per phase to opt out without losing the styled wrapper.
 
 Print the full resolution table for any agent without launching a phase:
 
