@@ -131,6 +131,27 @@ Agents:
 - `exploiter` -- Phase 5: exploit development and impact demonstration
 - `reporter` -- Phase 6: Markdown report generation
 
+### `codecome.yml`
+
+Project configuration for the audit workspace. Key sections:
+
+- **`project`** — project name, source path, language hints. Set `name` to
+  identify your target in output and reports.
+- **`audit.scope`** — include/exclude globs controlling which files agents
+  inspect. Adjust `exclude` if your target has non-standard vendored or
+  generated directories.
+- **`audit.focus`** — vulnerability classes to prioritize during analysis.
+  Remove or add entries to match your target's risk profile.
+- **`agents`** — optional per-agent model and variant pinning (see
+  "Model selection" below).
+- **`environment`** — sandbox paths and scripts. Typically left at defaults
+  unless you use a custom sandbox layout.
+- **`validation`** — confirmation policies, allowed write paths, and
+  validation methods. Defaults are safe for most targets.
+
+The shipped defaults work out of the box. Review and adjust `project.name`,
+`audit.scope`, and `audit.focus` before starting phase-1.
+
 ## Finding lifecycle
 
 Findings move through a structured lifecycle:
@@ -178,7 +199,11 @@ coding agent.
 
 1. Place target source under `src/`.
 
-2. Check workspace:
+2. Review `codecome.yml` — set `project.name` to your target's name and
+   adjust `audit.scope` or `audit.focus` if needed. The defaults work for
+   most projects.
+
+3. Check workspace:
 
        make venv
        make check
@@ -187,7 +212,7 @@ coding agent.
 
        make tests
 
-3. Run the workflow:
+4. Run the workflow:
 
        make phase-1                  # Reconnaissance
        make phase-2                  # Hypothesis generation
@@ -196,7 +221,7 @@ coding agent.
        make phase-5 FINDING=CC-0001  # Develop exploit for one finding
        make phase-6                  # Generate report
 
-4. Convenience targets:
+5. Convenience targets:
 
        make validate-all             # Validate all PENDING findings
        make exploit-all              # Exploit all CONFIRMED findings
