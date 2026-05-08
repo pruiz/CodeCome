@@ -591,6 +591,10 @@ _READ_HIGHLIGHT_LIMIT = int(os.environ.get("CODECOME_READ_HIGHLIGHT_LIMIT", str(
 _GLOB_MATCH_CAP = int(os.environ.get("CODECOME_GLOB_MATCH_CAP", "100"))
 _APPLY_PATCH_DIFF_LINES = int(os.environ.get("CODECOME_APPLY_PATCH_DIFF_LINES", str(_EDIT_DIFF_LINES)))
 _APPLY_PATCH_MAX_FILES = int(os.environ.get("CODECOME_APPLY_PATCH_MAX_FILES", "10"))
+_GREP_FILE_CAP = int(os.environ.get("CODECOME_GREP_FILE_CAP", "50"))
+_GREP_LINE_CAP_PER_FILE = int(os.environ.get("CODECOME_GREP_LINE_CAP_PER_FILE", "5"))
+_GREP_TOTAL_LINE_CAP = int(os.environ.get("CODECOME_GREP_TOTAL_LINE_CAP", "200"))
+_GREP_HIGHLIGHT = os.environ.get("CODECOME_GREP_HIGHLIGHT", "1") not in ("0", "false", "False", "no")
 _INTERNAL_READ_SUPPRESS = os.environ.get("CODECOME_INTERNAL_READ_SUPPRESS", "1") not in ("0", "false", "False", "no")
 
 _READ_FILE_FRAMING_RE = re.compile(
@@ -1557,6 +1561,315 @@ def render_glob_plain(state: dict[str, Any]) -> bool:
     return True
 
 
+# --- Grep renderer ------------------------------------------------------------
+
+_GREP_LINE_RE = re.compile(r"^(?P<path>.+?):(?P<line>\d+):(?P<text>.*)$")
+
+_GREP_HIGHLIGHT_STYLE = "bold yellow on grey23"
+_GREP_BODY_STYLE = "default"
+_GREP_LINENO_STYLE = "dim cyan"
+
+
+def _grep_compile_pattern(pattern: str) -> re.Pattern[str] | None:
+    """Compile the user's grep pattern for match highlighting. Returns None on failure."""
+    if not pattern or not _GREP_HIGHLIGHT:
+        return None
+    try:
+        return re.compile(pattern)
+    except re.error:
+        # Fall back to literal substring match
+        try:
+            return re.compile(re.escape(pattern))
+        except re.error:
+            return None
+
+
+def _grep_format_line_rich(line_no: int, text: str, pat: re.Pattern[str] | None) -> "Text":
+    """Format a single grep match line as a rich Text with highlighted matches."""
+    t = Text()
+    t.append(f"    {line_no:>5}", style=_GREP_LINENO_STYLE)
+    t.append(": ", style="dim")
+
+    if pat is None or not _GREP_HIGHLIGHT:
+        t.append(text, style=_GREP_BODY_STYLE)
+        return t
+
+    last = 0
+    for m in pat.finditer(text):
+        start, end = m.start(), m.end()
+        if start > last:
+            t.append(text[last:start], style=_GREP_BODY_STYLE)
+        if start < end:
+            t.append(text[start:end], style=_GREP_HIGHLIGHT_STYLE)
+        last = end
+    if last < len(text):
+        t.append(text[last:], style=_GREP_BODY_STYLE)
+
+    # If finditer yielded nothing, the whole body is already appended above
+    # via the trailing slice. If body was empty, Text is fine as-is.
+    return t
+
+
+def _grep_format_line_plain(line_no: int, text: str, pat: re.Pattern[str] | None, color: bool) -> str:
+    """Format a single grep match line for plain output with optional highlighting."""
+    prefix = f"    {line_no:>5}: "
+
+    if pat is None or not _GREP_HIGHLIGHT:
+        return prefix + text
+
+    if color:
+        # Bold yellow ANSI
+        hl_on = "\x1b[1;33m"
+        hl_off = "\x1b[0m"
+    else:
+        hl_on = ">>>"
+        hl_off = "<<<"
+
+    parts = [prefix]
+    last = 0
+    for m in pat.finditer(text):
+        start, end = m.start(), m.end()
+        if start > last:
+            parts.append(text[last:start])
+        if start < end:
+            parts.append(hl_on + text[start:end] + hl_off)
+        last = end
+    if last < len(text):
+        parts.append(text[last:])
+
+    return "".join(parts)
+
+
+def _parse_grep_output(output: str) -> tuple[str, list[dict[str, Any]]]:
+    """Parse grep tool output. Returns (mode, entries).
+
+    mode is "lines" or "files".
+    entries: for "files" -> [{"path": str}], for "lines" -> [{"path": str, "line": int, "text": str}].
+    """
+    raw_lines = [l for l in output.strip().split("\n") if l.strip()]
+    if not raw_lines:
+        return "files", []
+
+    # Detect mode: if >=70% of lines match path:linenum:content, use "lines"
+    line_matches = 0
+    for l in raw_lines:
+        if _GREP_LINE_RE.match(l):
+            line_matches += 1
+
+    if line_matches >= len(raw_lines) * 0.7:
+        entries: list[dict[str, Any]] = []
+        for l in raw_lines:
+            m = _GREP_LINE_RE.match(l)
+            if m:
+                entries.append({"path": m.group("path"), "line": int(m.group("line")), "text": m.group("text")})
+            else:
+                # Non-matching line in lines mode; treat as file-only
+                entries.append({"path": l.strip(), "line": 0, "text": ""})
+        return "lines", entries
+    else:
+        return "files", [{"path": l.strip()} for l in raw_lines]
+
+
+def render_grep_rich(console: Console, state: dict[str, Any]) -> bool:
+    inp = state.get("input")
+    output = state.get("output")
+    status = str(state.get("status", ""))
+
+    if not isinstance(inp, dict):
+        return False
+
+    # Handle output that might be a dict with a results/matches field
+    if isinstance(output, dict):
+        output_str = str(output.get("matches", output.get("results", "")))
+    elif isinstance(output, str):
+        output_str = output
+    else:
+        return False
+
+    pattern = str(inp.get("pattern", ""))
+    search_path = str(inp.get("path", ""))
+    include = str(inp.get("include", ""))
+
+    is_error = _is_likely_error(output_str)
+
+    if status == "completed":
+        border = "red" if is_error else "green"
+    else:
+        border = "yellow"
+
+    sections: list[Any] = []
+
+    # Header
+    header_parts = [f"pattern={pattern!r}"]
+    if search_path:
+        header_parts.append(f"path={_relativize_path(search_path)}")
+    if include:
+        header_parts.append(f"include={include}")
+    sections.append(Text("  ".join(header_parts), style="dim"))
+    sections.append(Text())
+
+    if is_error:
+        sections.append(Text(output_str.strip(), style="red"))
+    elif not output_str.strip():
+        sections.append(Text("(no matches)", style="dim"))
+        border = "dim"
+    else:
+        mode, entries = _parse_grep_output(output_str)
+
+        if mode == "files":
+            n_files = len(entries)
+            shown = entries[:_GREP_FILE_CAP]
+            for e in shown:
+                sections.append(Text(f"  {_relativize_path(e['path'])}"))
+            if n_files > _GREP_FILE_CAP:
+                sections.append(Text(f"  ... and {n_files - _GREP_FILE_CAP} more", style="dim"))
+            sections.append(Text())
+            sections.append(Text(f"{n_files} file(s) matched", style="dim"))
+        else:
+            # Group by file, preserving order
+            from collections import OrderedDict as _OD
+            grep_pat = _grep_compile_pattern(pattern)
+            grouped: OrderedDict[str, list[dict[str, Any]]] = _OD()
+            for e in entries:
+                grouped.setdefault(e["path"], []).append(e)
+
+            n_files = len(grouped)
+            n_total = len(entries)
+            total_lines_emitted = 0
+            files_shown = 0
+            truncated_globally = False
+
+            for fpath, file_entries in grouped.items():
+                if total_lines_emitted >= _GREP_TOTAL_LINE_CAP:
+                    truncated_globally = True
+                    break
+                if files_shown >= _GREP_FILE_CAP:
+                    truncated_globally = True
+                    break
+                files_shown += 1
+                rel = _relativize_path(fpath)
+                sections.append(Text(f"  {rel}  ({len(file_entries)} match(es))", style="bold cyan"))
+                shown_lines = file_entries[:_GREP_LINE_CAP_PER_FILE]
+                for e in shown_lines:
+                    text = e["text"]
+                    if len(text) > 200:
+                        text = text[:200] + "…"
+                    sections.append(_grep_format_line_rich(e["line"], text, grep_pat))
+                    total_lines_emitted += 1
+                    if total_lines_emitted >= _GREP_TOTAL_LINE_CAP:
+                        truncated_globally = True
+                        break
+                if len(file_entries) > _GREP_LINE_CAP_PER_FILE:
+                    remaining = len(file_entries) - _GREP_LINE_CAP_PER_FILE
+                    sections.append(Text(f"    ... and {remaining} more in {rel}", style="dim"))
+
+            if truncated_globally:
+                remaining_files = n_files - files_shown
+                if remaining_files > 0:
+                    sections.append(Text(f"  ... and {remaining_files} more file(s)", style="dim"))
+                else:
+                    sections.append(Text("  ... (further matches truncated)", style="dim"))
+
+            sections.append(Text())
+            sections.append(Text(f"{n_total} match(es) across {n_files} file(s)", style="dim"))
+
+    console.print(Panel(Group(*sections), title="Grep", border_style=border, expand=True))
+    return True
+
+
+def render_grep_plain(state: dict[str, Any]) -> bool:
+    inp = state.get("input")
+    output = state.get("output")
+    status = str(state.get("status", ""))
+
+    if not isinstance(inp, dict):
+        return False
+
+    if isinstance(output, dict):
+        output_str = str(output.get("matches", output.get("results", "")))
+    elif isinstance(output, str):
+        output_str = output
+    else:
+        return False
+
+    pattern = str(inp.get("pattern", ""))
+    search_path = str(inp.get("path", ""))
+    include = str(inp.get("include", ""))
+
+    is_error = _is_likely_error(output_str)
+
+    header_parts = [f"grep {pattern!r}"]
+    if search_path:
+        header_parts.append(f"in {_relativize_path(search_path)}")
+    if include:
+        header_parts.append(f"include={include}")
+    print(C.header(" ".join(header_parts)))
+
+    if is_error:
+        print(f"  {C.fail(output_str.strip())}")
+    elif not output_str.strip():
+        print("  (no matches)")
+    else:
+        mode, entries = _parse_grep_output(output_str)
+
+        if mode == "files":
+            n_files = len(entries)
+            shown = entries[:_GREP_FILE_CAP]
+            for e in shown:
+                print(f"  {_relativize_path(e['path'])}")
+            if n_files > _GREP_FILE_CAP:
+                print(f"  ... and {n_files - _GREP_FILE_CAP} more")
+            print(f"  {n_files} file(s) matched")
+        else:
+            from collections import OrderedDict as _OD
+            grep_pat = _grep_compile_pattern(pattern)
+            _plain_color = C.color_enabled()
+            grouped: OrderedDict[str, list[dict[str, Any]]] = _OD()
+            for e in entries:
+                grouped.setdefault(e["path"], []).append(e)
+
+            n_files = len(grouped)
+            n_total = len(entries)
+            total_lines_emitted = 0
+            files_shown = 0
+            truncated_globally = False
+
+            for fpath, file_entries in grouped.items():
+                if total_lines_emitted >= _GREP_TOTAL_LINE_CAP:
+                    truncated_globally = True
+                    break
+                if files_shown >= _GREP_FILE_CAP:
+                    truncated_globally = True
+                    break
+                files_shown += 1
+                rel = _relativize_path(fpath)
+                print(f"  {rel}  ({len(file_entries)} match(es))")
+                shown_lines = file_entries[:_GREP_LINE_CAP_PER_FILE]
+                for e in shown_lines:
+                    text = e["text"]
+                    if len(text) > 200:
+                        text = text[:200] + "…"
+                    print(_grep_format_line_plain(e["line"], text, grep_pat, _plain_color))
+                    total_lines_emitted += 1
+                    if total_lines_emitted >= _GREP_TOTAL_LINE_CAP:
+                        truncated_globally = True
+                        break
+                if len(file_entries) > _GREP_LINE_CAP_PER_FILE:
+                    remaining = len(file_entries) - _GREP_LINE_CAP_PER_FILE
+                    print(f"    ... and {remaining} more in {rel}")
+
+            if truncated_globally:
+                remaining_files = n_files - files_shown
+                if remaining_files > 0:
+                    print(f"  ... and {remaining_files} more file(s)")
+                else:
+                    print("  ... (further matches truncated)")
+
+            print(f"  {n_total} match(es) across {n_files} file(s)")
+
+    return True
+
+
 # --- Bash renderer ------------------------------------------------------------
 
 def render_bash_rich(console: Console, state: dict[str, Any]) -> bool:
@@ -1688,6 +2001,12 @@ def _dispatch_tool_renderer(console: Console, tool: str, state: dict[str, Any]) 
             return render_glob_rich(console, state)
         else:
             return render_glob_plain(state)
+    elif tool_lower == "grep":
+        _cache_invalidate_stale()
+        if HAVE_RICH:
+            return render_grep_rich(console, state)
+        else:
+            return render_grep_plain(state)
     elif tool_lower == "bash":
         _cache_invalidate_stale()
         if HAVE_RICH:

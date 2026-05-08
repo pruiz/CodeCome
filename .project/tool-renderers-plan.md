@@ -257,3 +257,4 @@ After implementation:
 ## Done (previously deferred)
 
 - `apply_patch` renderer — implemented in `.project/apply-patch-renderer-plan.md`
+- `grep` renderer — file-list and line-level modes with per-file grouping and truncation
