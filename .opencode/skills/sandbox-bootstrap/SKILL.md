@@ -58,6 +58,58 @@ Required capabilities for a Phase 2-ready sandbox:
 | test target | `sandbox/scripts/test-target.sh` | Run the target tests inside the sandbox when applicable. |
 | stop sandbox | `sandbox/scripts/down.sh` | Tear the sandbox environment down cleanly. |
 
+## Realistic runtime model
+
+Phase 1b should aim for the most realistic local runtime environment
+that is reasonably derivable from the repository, not merely a
+toolchain container that can build the source.
+
+What "realistic" means depends on target type:
+
+- **Web application / API / backend service** — prefer a sandbox that
+  starts the real application process and any inferable dependencies
+  (database, cache, queue, reverse proxy) rather than only compiling
+  the code.
+- **DB-backed app** — when docs/manifests show a database is required,
+  prefer including the database service, schema setup, migrations,
+  and minimal seed data when they are reasonably available.
+- **Queue / worker system** — include the worker and broker only when
+  they materially affect the reachable attack surface.
+- **CLI / library / static target** — do not invent a web server just
+  to look realistic; the closest faithful runtime may still be a
+  build-and-run CLI sandbox or `static-only`.
+- **Targets with cloud-only or third-party dependencies** — stub or
+  mock them only when a local replacement is straightforward and the
+  behavior is relevant to validation. Otherwise document the gap.
+
+When deciding whether to include a dependency, prefer source-backed
+signals such as:
+
+- `src/docker-compose.yml` / `src/compose.yml`,
+- framework config files,
+- migration files,
+- `.env.example`,
+- `README*` / `docs/` runbooks,
+- manifests for services like PostgreSQL, MySQL, Redis, RabbitMQ,
+  Nginx, Apache, PHP-FPM, etc.
+
+Do not stop at a toolchain-only or build-only sandbox when Phase 4 or
+Phase 5 validation would realistically need a running app. If full
+runtime is not feasible, produce the closest faithful approximation
+and document why in `sandbox-plan.md`.
+
+Recommended helper scripts when a realistic runtime model applies:
+
+- `migrate-target.sh` — apply schema migrations or other one-time DB
+  setup.
+- `seed-target.sh` — load minimal fixture data needed for realistic
+  validation.
+- `healthcheck-target.sh` — verify that the real app is serving,
+  connected, and usable (HTTP health route, root page, CLI smoke
+  command, DB ping, etc.).
+- `run-target.sh` — drive the target with a representative runtime
+  invocation when the standard test suite is not enough.
+
 Recommended helper capabilities when the target/runtime model makes
 them useful:
 
@@ -172,16 +224,29 @@ Mandatory sections in `sandbox-plan.md`:
    honored ("nothing to honor").
 3. **Chosen example(s)** — id from `templates/sandboxes/`.
 4. **Marker values applied** — table of `__VARNAME__` → value.
-5. **Validation matrix** — for each tier (T1 build, T2 start, T3
+5. **Runtime model** — one of: `full-runtime`, `partial-runtime`,
+   `build-only`, `static-only`, `nested-virt`. Explain why this is
+   the closest faithful runtime model for the target.
+6. **Services started** — app, web server, database, cache, queue,
+   broker, reverse proxy, or other runtime services that the sandbox
+   actually starts. If a service was expected but omitted, say so and
+   explain why.
+7. **Health / smoke checks** — the exact commands or requests used to
+   verify the target is actually runnable (HTTP request, root page,
+   CLI smoke command, DB ping, migration status, etc.).
+8. **Known runtime gaps** — secrets, external services, cloud-only
+   dependencies, hardware, or other blockers that prevent a more
+   realistic local stack.
+9. **Validation matrix** — for each tier (T1 build, T2 start, T3
    check, T4 build-target, T5 test-target, T6 stop): pass/fail/skipped, last command,
    exit code, last 50 lines of stderr.
-6. **`validation_model`** — one of: `docker`, `static-only`,
+10. **`validation_model`** — one of: `docker`, `static-only`,
    `nested-virt`. Justification mandatory for the last two.
-7. **Remediation log** — each automatic remediation attempt with its
+11. **Remediation log** — each automatic remediation attempt with its
    rationale and outcome.
-8. **Open questions for the user** — optional, only if input is
+12. **Open questions for the user** — optional, only if input is
    needed.
-9. **Halt notice** — only when bootstrap could not finish.
+13. **Halt notice** — only when bootstrap could not finish.
 
 ## Tooling
 

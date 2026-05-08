@@ -26,6 +26,7 @@ Examples:
 - `.opencode/skills/c-cpp-security/SKILL.md`
 - `.opencode/skills/dotnet-security/SKILL.md`
 - `.opencode/skills/php-security/SKILL.md`
+- `.opencode/skills/sql-injection/SKILL.md`
 - `.opencode/skills/web-security/SKILL.md`
 - `.opencode/skills/juliet-benchmark/SKILL.md`
 
@@ -139,6 +140,20 @@ Workflow:
     Add operational helpers when they make sense for the target:
 
         down.sh   shell.sh   logs.sh   clean.sh   reset.sh
+
+    Prefer a realistic runtime environment when it is reasonably
+    derivable from the repository. For web apps, APIs, and other
+    services, Phase 1b should attempt to start the real application
+    stack, not just compile it. If the target appears to need a
+    database, cache, queue, reverse proxy, migrations, seed data,
+    or health checks, include those when the source tree or docs
+    make them inferable.
+
+    Do not stop at a toolchain-only or build-only sandbox when
+    later Phase 4 or Phase 5 validation would realistically require
+    a running application. If full runtime is not feasible,
+    document the closest achievable runtime model and the blocker in
+    `itemdb/notes/sandbox-plan.md`.
 
     Adapt `build-target.sh` and `test-target.sh` to the actual
     project layout (the source may be nested under
