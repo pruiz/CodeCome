@@ -346,7 +346,8 @@ Examples:
 - C/C++ review should use `.opencode/skills/c-cpp-security/`.
 - Juliet/SARD review should use `.opencode/skills/juliet-benchmark/`.
 - Web apps may later use `.opencode/skills/web-security/`.
-- .NET apps may later use `.opencode/skills/dotnet-security/`.
+- .NET apps may use `.opencode/skills/dotnet-security/`.
+- PHP apps may use `.opencode/skills/php-security/`.
 
 ## Quality gates
 

@@ -313,6 +313,7 @@ Examples:
 - `.opencode/skills/c-cpp-security/`
 - `.opencode/skills/web-security/`
 - `.opencode/skills/dotnet-security/`
+- `.opencode/skills/php-security/`
 - `.opencode/skills/juliet-benchmark/`
 - `.opencode/skills/iac-security/`
 
