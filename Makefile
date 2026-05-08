@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later OR AGPL-3.0-or-later
 
 .PHONY: help venv venv-check check status next-id frontmatter tests reset-itemdb index report
+.PHONY: findings findings-create findings-move findings-evidence
 .PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all
 .PHONY: sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-reset sandbox-build-target sandbox-test-target
 .PHONY: sandbox-list sandbox-inspect sandbox-detect sandbox-bootstrap sandbox-validate sandbox-regenerate sandbox-status show-model
@@ -46,6 +47,14 @@ help:
 	@echo "    make tests          Run dev test suite + frontmatter gate"
 	@echo "    make index          Regenerate itemdb/index.md"
 	@echo "    make report         Regenerate itemdb/reports/report.md (local, no AI)"
+	@echo ""
+	@echo "  Finding management:"
+	@echo ""
+	@echo "    make findings                     List all findings"
+	@echo "    make findings STATUS=PENDING      List findings by status"
+	@echo "    make findings-create TITLE=\"...\"    Create a new finding from template"
+	@echo "    make findings-move FINDING=CC-0001 STATUS=CONFIRMED"
+	@echo "    make findings-evidence FINDING=CC-0001"
 	@echo ""
 	@echo "  Sandbox runtime:"
 	@echo ""
@@ -220,6 +229,22 @@ index: venv-check
 
 report: venv-check
 	$(PYTHON) tools/render-report.py
+
+findings: venv-check
+ifdef STATUS
+	$(PYTHON) tools/list-findings.py --status $(STATUS)
+else
+	$(PYTHON) tools/list-findings.py
+endif
+
+findings-create: venv-check
+	$(PYTHON) tools/create-finding.py $(TITLE) $(ARGS)
+
+findings-move: venv-check
+	$(PYTHON) tools/move-finding.py $(FINDING) $(STATUS)
+
+findings-evidence: venv-check
+	$(PYTHON) tools/create-evidence.py $(FINDING)
 
 # ---------------------------------------------------------------------------
 # Sandbox

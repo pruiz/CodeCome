@@ -403,6 +403,23 @@ Regenerate report:
 
     make report
 
+List findings (optionally filter by status):
+
+    make findings
+    make findings STATUS=PENDING
+
+Create a new finding from template:
+
+    make findings-create TITLE="Buffer overflow in parser"
+
+Move a finding to another status:
+
+    make findings-move FINDING=CC-0001 STATUS=CONFIRMED
+
+Create evidence directory for a finding:
+
+    make findings-evidence FINDING=CC-0001
+
 Check sandbox (requires phase-1 to bootstrap `sandbox/` first):
 
     make sandbox-check
