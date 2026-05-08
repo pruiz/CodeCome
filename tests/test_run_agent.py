@@ -578,6 +578,29 @@ def test_render_reasoning_rich_wraps_markdown_inside_panel(monkeypatch):
 
 
 @pytest.mark.unit
+def test_render_reasoning_rich_wraps_plain_text_inside_panel(monkeypatch):
+    module = load_tool_module("run_agent_reasoning_rich_plain_wrap", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", True)
+    monkeypatch.setattr(module, "_RENDER_REASONING", True)
+    monkeypatch.setattr(module, "_REASONING_MAX_CHARS", 10000)
+
+    console = Console(record=True, force_terminal=True, width=60, highlight=False)
+    text = (
+        "I need to mention the sandbox and validate the modifications. "
+        "Updating the item database for attack surfaces might need a more "
+        "realistic runtime setup so later phases can rely on it."
+    )
+
+    module.render_reasoning(console, {"part": {"text": text}})
+
+    out = console.export_text()
+    assert "Thinking" in out
+    assert "Updating the item database" in out
+    assert "realistic runtime setup" in out
+    assert "later phases can rely on it" in out
+
+
+@pytest.mark.unit
 def test_render_error_plain_mode_handles_missing_error_field(monkeypatch, capsys):
     module = load_tool_module("run_agent_error_missing", "tools/run-agent.py")
     monkeypatch.setattr(module, "HAVE_RICH", False)
