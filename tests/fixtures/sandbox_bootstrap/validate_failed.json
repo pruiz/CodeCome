@@ -1,0 +1,49 @@
+{
+  "overall_outcome": "failed",
+  "history_updated": true,
+  "missing_helpers": ["clean", "reset"],
+  "tiers": [
+    {
+      "tier": "T1",
+      "purpose": "Sandbox build",
+      "command": "sandbox/scripts/build-sandbox.sh",
+      "duration_seconds": 0.5,
+      "exit_code": 0,
+      "outcome": "passed",
+      "stderr_tail": "",
+      "stdout_tail": ""
+    },
+    {
+      "tier": "T2",
+      "purpose": "Environment start",
+      "command": "sandbox/scripts/up.sh",
+      "duration_seconds": 0.4,
+      "exit_code": 1,
+      "outcome": "failed",
+      "stderr_tail": "Error: container failed to start\nport 5432 already in use\nplease free the port or change the config",
+      "stdout_tail": ""
+    },
+    {
+      "tier": "T3",
+      "purpose": "Sandbox sanity",
+      "command": "sandbox/scripts/check.sh",
+      "duration_seconds": 0.0,
+      "exit_code": null,
+      "outcome": "skipped",
+      "stderr_tail": "",
+      "stdout_tail": ""
+    }
+  ],
+  "capabilities": {
+    "build": {"path": "sandbox/scripts/build-sandbox.sh", "present": true, "purpose": "build", "satisfied": true},
+    "start": {"path": "sandbox/scripts/up.sh", "present": true, "purpose": "start", "satisfied": true},
+    "check": {"path": "sandbox/scripts/check.sh", "present": true, "purpose": "check", "satisfied": true},
+    "target-build": {"path": "sandbox/scripts/build-target.sh", "present": true, "purpose": "tb", "satisfied": true},
+    "test": {"path": "sandbox/scripts/test-target.sh", "present": true, "purpose": "test", "satisfied": true},
+    "stop": {"path": "sandbox/scripts/down.sh", "present": true, "purpose": "stop", "satisfied": true},
+    "shell": {"path": "sandbox/scripts/shell.sh", "present": true, "purpose": "shell", "satisfied": true},
+    "logs": {"path": "sandbox/scripts/logs.sh", "present": true, "purpose": "logs", "satisfied": true},
+    "clean": {"path": "sandbox/scripts/clean.sh", "present": false, "purpose": "clean", "satisfied": false},
+    "reset": {"path": "sandbox/scripts/reset.sh", "present": false, "purpose": "reset", "satisfied": false}
+  }
+}

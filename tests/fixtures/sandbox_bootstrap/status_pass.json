@@ -1,0 +1,89 @@
+{
+  "allow_no_sandbox": false,
+  "capabilities": {
+    "build": {
+      "path": "sandbox/scripts/build-sandbox.sh",
+      "present": true,
+      "purpose": "build the sandbox environment in a repeatable way",
+      "satisfied": true
+    },
+    "check": {
+      "path": "sandbox/scripts/check.sh",
+      "present": true,
+      "purpose": "run sandbox sanity checks",
+      "satisfied": true
+    },
+    "clean": {
+      "path": "sandbox/scripts/clean.sh",
+      "present": true,
+      "purpose": "clean runtime artifacts",
+      "satisfied": true
+    },
+    "logs": {
+      "path": "sandbox/scripts/logs.sh",
+      "present": true,
+      "purpose": "inspect environment logs",
+      "satisfied": true
+    },
+    "reset": {
+      "path": "sandbox/scripts/reset.sh",
+      "present": true,
+      "purpose": "reset the environment to a known state",
+      "satisfied": true
+    },
+    "shell": {
+      "path": "sandbox/scripts/shell.sh",
+      "present": true,
+      "purpose": "open a shell in the environment",
+      "satisfied": true
+    },
+    "start": {
+      "path": "sandbox/scripts/up.sh",
+      "present": true,
+      "purpose": "bring the environment up",
+      "satisfied": true
+    },
+    "stop": {
+      "path": "sandbox/scripts/down.sh",
+      "present": true,
+      "purpose": "stop the environment",
+      "satisfied": true
+    },
+    "target-build": {
+      "path": "sandbox/scripts/build-target.sh",
+      "present": true,
+      "purpose": "build the target",
+      "satisfied": true
+    },
+    "test": {
+      "path": "sandbox/scripts/test-target.sh",
+      "present": true,
+      "purpose": "test the target",
+      "satisfied": true
+    }
+  },
+  "last_validation": "passed",
+  "phase2_gate_pass": true,
+  "phase2_gate_reason": "last validation passed",
+  "provenance": {
+    "baseline_files": {
+      "Dockerfile": "e7941b4cb53d76219f59407724a1b303fec40e38cfad6326f8a29f414f88c3e0",
+      "README.md": "51ffd560cb0b795ac7f05912f4b3314162163f8103b0aaf90d9f6353a76f6eda",
+      "docker-compose.yml": "b775affe86d7d93b0c2268e5d7d21089bd2b62b90a3abd9a5a9e30388dba7498",
+      "notes.md": "f773462a84cb927dcbe6e4cdde39e73408fc25f26b3d87e5a14de896b5b43bb1",
+      "scripts/build-target.sh": "d16975cebcf7cc568a138850e83e1c3b2b328074ad20f431828f823faecc7808",
+      "scripts/test-target.sh": "91758210d2e814856e6396e7edbd1247adf1cf21ab5ae49b21cffb95a64c817d"
+    },
+    "generated_at": "2026-05-07T21:26:11+00:00",
+    "markers": {
+      "DEBIAN_BASE_TAG": "bookworm",
+      "TARGET_NAME": "sample-c-cli"
+    },
+    "source_example": "c-cpp",
+    "source_example_path": "templates/sandboxes/c-cpp",
+    "validation": []
+  },
+  "provenance_present": true,
+  "sandbox_path": "sandbox",
+  "sandbox_state": "generated"
+}

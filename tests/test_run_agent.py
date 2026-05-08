@@ -744,3 +744,222 @@ def test_write_diff_uses_clean_cached_content_without_line_numbers(monkeypatch, 
     assert "-2: beta" not in out
     assert "+1: alpha" not in out
     assert "+2: gamma" not in out
+
+
+# --- sandbox-bootstrap renderer detection ----------------------------------
+
+SANDBOX_FIXTURES = ROOT / "tests" / "fixtures" / "sandbox_bootstrap"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        # Direct script invocations.
+        (".venv/bin/python3 tools/sandbox-bootstrap.py --format json status", "status"),
+        ("python3 tools/sandbox-bootstrap.py status --format=json", "status"),
+        ("python tools/sandbox-bootstrap.py --format json validate --keep-going", "validate"),
+        ("python tools/sandbox-bootstrap.py --format=json detect", "detect"),
+        ("./tools/sandbox-bootstrap.py --format json list", "list"),
+        # make-target wrappers with json forced via BOOTSTRAP_ARGS.
+        ("make sandbox-status BOOTSTRAP_ARGS='--format json'", "status"),
+        ("make sandbox-validate BOOTSTRAP_ARGS=--format=json", "validate"),
+        ("make sandbox-bootstrap ID=python BOOTSTRAP_ARGS='--format json'", "apply"),
+        # Negatives.
+        ("python tools/sandbox-bootstrap.py status", None),  # no --format json
+        ("make sandbox-status", None),                       # text mode
+        ("python tools/list-findings.py --format json", None),  # different script
+        ("", None),
+        ("ls -la", None),
+    ],
+)
+def test_is_sandbox_bootstrap_json_call(command, expected):
+    module = load_tool_module("run_agent_sandbox_detect", "tools/run-agent.py")
+    assert module._is_sandbox_bootstrap_json_call(command) == expected
+
+
+@pytest.mark.unit
+def test_sandbox_payload_matches_filters_unrelated_json():
+    module = load_tool_module("run_agent_sandbox_match", "tools/run-agent.py")
+
+    # Status-shape payload matches.
+    assert module._sandbox_payload_matches("status", {"sandbox_state": "missing", "capabilities": {}}) is True
+    # Unrelated dict does not match status.
+    assert module._sandbox_payload_matches("status", {"foo": "bar"}) is False
+    # list expects a list.
+    assert module._sandbox_payload_matches("list", []) is True
+    assert module._sandbox_payload_matches("list", {"id": "x"}) is False
+    # validate expects overall_outcome or tiers.
+    assert module._sandbox_payload_matches("validate", {"overall_outcome": "passed"}) is True
+    assert module._sandbox_payload_matches("validate", {"tiers": []}) is True
+    assert module._sandbox_payload_matches("validate", {"unrelated": True}) is False
+
+
+@pytest.mark.unit
+def test_sandbox_glyphs_uses_emoji_on_utf8_else_ascii(monkeypatch):
+    module = load_tool_module("run_agent_sandbox_glyphs", "tools/run-agent.py")
+
+    class FakeConsole:
+        encoding = "utf-8"
+
+    glyphs = module._sandbox_glyphs(FakeConsole())
+    assert glyphs["ok"] == "✅"
+    assert glyphs["fail"] == "❌"
+
+    class AsciiConsole:
+        encoding = "ascii"
+
+    glyphs = module._sandbox_glyphs(AsciiConsole())
+    assert glyphs["ok"] == "[OK]"
+    assert glyphs["fail"] == "[FAIL]"
+
+
+@pytest.mark.component
+def test_render_sandbox_status_plain_renders_pass_gate(monkeypatch, capsys):
+    """End-to-end through _maybe_render_sandbox_bootstrap with a real status payload."""
+    module = load_tool_module("run_agent_sandbox_status_plain", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+
+    payload = (SANDBOX_FIXTURES / "status_pass.json").read_text(encoding="utf-8")
+    state = {
+        "input": {
+            "command": ".venv/bin/python3 tools/sandbox-bootstrap.py --format json status",
+            "description": "Show sandbox status",
+        },
+        "output": payload,
+        "status": "completed",
+    }
+    handled = module._maybe_render_sandbox_bootstrap(None, state)
+    assert handled is True
+    out = capsys.readouterr().out
+    assert "Sandbox" in out
+    assert "status" in out
+    # Required capabilities should each appear with an OK marker.
+    for cap in ("build", "start", "check", "target-build", "test", "stop"):
+        assert cap in out
+
+
+@pytest.mark.component
+def test_render_sandbox_validate_plain_failed_shows_stderr_tail(monkeypatch, capsys):
+    module = load_tool_module("run_agent_sandbox_validate_plain", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+    # Force a small cap so we can confirm truncation works.
+    monkeypatch.setattr(module, "_SANDBOX_VALIDATE_STDERR_LINES", 2)
+
+    payload = (SANDBOX_FIXTURES / "validate_failed.json").read_text(encoding="utf-8")
+    state = {
+        "input": {
+            "command": "tools/sandbox-bootstrap.py --format json validate",
+            "description": "validate",
+        },
+        "output": payload,
+        "status": "completed",
+    }
+    handled = module._maybe_render_sandbox_bootstrap(None, state)
+    assert handled is True
+    out = capsys.readouterr().out
+    assert "failed" in out
+    # Failed tier's stderr_tail should appear (capped to 2 lines).
+    assert "port 5432 already in use" in out
+    assert "please free the port" in out
+    # "Error: container failed to start" is the earliest of 3 lines and
+    # must be elided by the cap.
+    assert "Error: container failed to start" not in out
+    assert "earlier lines truncated" in out
+    # missing helpers warning is present.
+    assert "clean" in out and "reset" in out
+
+
+@pytest.mark.component
+def test_render_sandbox_apply_plain_dry_run_lists_unfilled_markers(monkeypatch, capsys):
+    module = load_tool_module("run_agent_sandbox_apply_plain", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+
+    payload = (SANDBOX_FIXTURES / "apply_dry_run.json").read_text(encoding="utf-8")
+    state = {
+        "input": {
+            "command": "tools/sandbox-bootstrap.py --format json apply python --dry-run --var PYTHON_VERSION=3.11",
+            "description": "apply",
+        },
+        "output": payload,
+        "status": "completed",
+    }
+    handled = module._maybe_render_sandbox_bootstrap(None, state)
+    assert handled is True
+    out = capsys.readouterr().out
+    assert "DRY RUN" in out
+    assert "EXTRA_PIP" in out
+    assert "Dockerfile" in out
+
+
+@pytest.mark.component
+def test_render_sandbox_list_plain_uses_real_fixture(monkeypatch, capsys):
+    module = load_tool_module("run_agent_sandbox_list_plain", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+
+    payload = (SANDBOX_FIXTURES / "list.json").read_text(encoding="utf-8")
+    state = {
+        "input": {
+            "command": "tools/sandbox-bootstrap.py --format json list",
+            "description": "list",
+        },
+        "output": payload,
+        "status": "completed",
+    }
+    handled = module._maybe_render_sandbox_bootstrap(None, state)
+    assert handled is True
+    out = capsys.readouterr().out
+    # Spot-check at least one known example id.
+    import json as _json
+    examples = _json.loads(payload)
+    assert len(examples) > 0
+    first_id = examples[0]["id"]
+    assert first_id in out
+    assert "example(s) available" in out
+
+
+@pytest.mark.unit
+def test_maybe_render_sandbox_bootstrap_skips_non_sandbox_bash(monkeypatch):
+    module = load_tool_module("run_agent_sandbox_skip", "tools/run-agent.py")
+    state = {
+        "input": {"command": "ls -la", "description": "list files"},
+        "output": "total 0",
+        "status": "completed",
+    }
+    assert module._maybe_render_sandbox_bootstrap(None, state) is False
+
+
+@pytest.mark.unit
+def test_maybe_render_sandbox_bootstrap_falls_through_on_invalid_json(monkeypatch):
+    module = load_tool_module("run_agent_sandbox_bad_json", "tools/run-agent.py")
+    state = {
+        "input": {"command": "tools/sandbox-bootstrap.py --format json status"},
+        "output": "Loading config...\n{partial",
+        "status": "completed",
+    }
+    assert module._maybe_render_sandbox_bootstrap(None, state) is False
+
+
+@pytest.mark.unit
+def test_maybe_render_sandbox_bootstrap_falls_through_on_schema_mismatch(monkeypatch):
+    module = load_tool_module("run_agent_sandbox_schema_miss", "tools/run-agent.py")
+    state = {
+        "input": {"command": "tools/sandbox-bootstrap.py --format json status"},
+        "output": '{"unrelated": true, "foo": [1, 2, 3]}',
+        "status": "completed",
+    }
+    # Looks like JSON, parses as JSON, but does not have any of
+    # sandbox_state / phase2_gate_pass / capabilities -> fall through.
+    assert module._maybe_render_sandbox_bootstrap(None, state) is False
+
+
+@pytest.mark.unit
+def test_maybe_render_sandbox_bootstrap_disabled_via_env(monkeypatch):
+    module = load_tool_module("run_agent_sandbox_disabled", "tools/run-agent.py")
+    monkeypatch.setattr(module, "_SANDBOX_RENDER", False)
+    state = {
+        "input": {"command": "tools/sandbox-bootstrap.py --format json status"},
+        "output": '{"sandbox_state": "missing", "phase2_gate_pass": false, "capabilities": {}}',
+        "status": "completed",
+    }
+    assert module._maybe_render_sandbox_bootstrap(None, state) is False

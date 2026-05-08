@@ -184,7 +184,7 @@ Benchmark labels alone are not enough to mark a finding as confirmed.
 
 Each `make` target checks readiness gates before invoking the corresponding agent. Phase 4 and Phase 5 are invoked once per finding.
 
-By default, phase targets use a CodeCome-owned styled wrapper around `opencode run --format json` so assistant output, tool calls, and tool results render with consistent colors and structure. The wrapper pretty-renders `read`, `write`, `edit`, `apply_patch`, `grep`, `glob`, `bash`, `todowrite`, and `skill` tool calls; all others get a generic JSON panel.
+By default, phase targets use a CodeCome-owned styled wrapper around `opencode run --format json` so assistant output, tool calls, and tool results render with consistent colors and structure. The wrapper pretty-renders `read`, `write`, `edit`, `apply_patch`, `grep`, `glob`, `bash`, `todowrite`, and `skill` tool calls; all others get a generic JSON panel. The wrapper also detects bash invocations of `tools/sandbox-bootstrap.py --format json …` (and `make sandbox-* BOOTSTRAP_ARGS='--format json'` wrappers) and renders them as a structured Sandbox panel with capability tables, validation tier summaries, and color-coded gate badges.
 
 All `make` targets that invoke Python tools expect a repo-local virtualenv at `.venv/`. If it is missing or stale, the command will stop with a setup message telling you to run `make venv`.
 
@@ -282,6 +282,9 @@ The phase targets support these environment variables:
     CODECOME_THINKING=0      # force --thinking off
     CODECOME_RENDER_REASONING=0  # suppress on-screen Thinking panels even if --thinking is on
     CODECOME_REASONING_MAX_CHARS=4000  # truncate individual reasoning blocks past this length
+    CODECOME_SANDBOX_RENDER=0  # disable the structured Sandbox panel (fall back to a plain Bash panel)
+    CODECOME_SANDBOX_VALIDATE_STDERR_LINES=20  # cap stderr_tail lines shown per failed validate tier
+    CODECOME_SANDBOX_FILES_CAP=15  # cap files listed in sandbox apply/inspect/detect panels
     OPENCODE_ARGS='...'      # extra flags forwarded to opencode run
     CODECOME_MODEL=<id>      # pin the model per phase, e.g. anthropic/claude-opus-4-7
     CODECOME_MODEL_VARIANT=<v>  # pin the model variant, e.g. high, max

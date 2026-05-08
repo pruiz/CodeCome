@@ -596,6 +596,9 @@ _GREP_TOTAL_LINE_CAP = int(os.environ.get("CODECOME_GREP_TOTAL_LINE_CAP", "200")
 _GREP_HIGHLIGHT = os.environ.get("CODECOME_GREP_HIGHLIGHT", "1") not in ("0", "false", "False", "no")
 _REASONING_MAX_CHARS = int(os.environ.get("CODECOME_REASONING_MAX_CHARS", "4000"))
 _RENDER_REASONING = os.environ.get("CODECOME_RENDER_REASONING", "1") not in ("0", "false", "False", "no")
+_SANDBOX_RENDER = os.environ.get("CODECOME_SANDBOX_RENDER", "1") not in ("0", "false", "False", "no")
+_SANDBOX_VALIDATE_STDERR_LINES = int(os.environ.get("CODECOME_SANDBOX_VALIDATE_STDERR_LINES", "20"))
+_SANDBOX_FILES_CAP = int(os.environ.get("CODECOME_SANDBOX_FILES_CAP", "15"))
 _INTERNAL_READ_SUPPRESS = os.environ.get("CODECOME_INTERNAL_READ_SUPPRESS", "1") not in ("0", "false", "False", "no")
 
 _READ_FILE_FRAMING_RE = re.compile(
@@ -1948,6 +1951,790 @@ def render_bash_plain(state: dict[str, Any]) -> bool:
     return True
 
 
+# --- Sandbox-bootstrap renderer ---------------------------------------------
+#
+# Detects bash invocations of `tools/sandbox-bootstrap.py --format json` and
+# renders the JSON output as a structured, color-coded `Sandbox` panel
+# instead of the generic Bash panel. The script is CodeCome-owned, so its
+# JSON schema is stable and we can rely on per-subcommand shapes.
+
+_SANDBOX_BOOTSTRAP_SCRIPT = "tools/sandbox-bootstrap.py"
+_SANDBOX_KNOWN_SUBCOMMANDS = {
+    "list", "inspect", "detect", "status", "apply", "regenerate", "validate",
+}
+# make targets that wrap the script and where we can confidently infer the
+# subcommand from the target name.
+_SANDBOX_MAKE_TARGETS = {
+    "sandbox-list": "list",
+    "sandbox-inspect": "inspect",
+    "sandbox-detect": "detect",
+    "sandbox-status": "status",
+    "sandbox-bootstrap": "apply",       # `make sandbox-bootstrap ID=...` -> apply
+    "sandbox-regenerate": "regenerate",
+    "sandbox-validate": "validate",
+}
+_SANDBOX_REQUIRED_CAPABILITIES = ("build", "start", "check", "target-build", "test", "stop")
+_SANDBOX_HELPER_CAPABILITIES = ("shell", "logs", "clean", "reset")
+
+
+def _console_supports_emoji(console: Optional[Any]) -> bool:
+    """Return True when the console encoding can carry common emojis."""
+    if console is None:
+        # Plain mode: trust the stdout encoding, which is typically utf-8.
+        enc = (sys.stdout.encoding or "").lower()
+    else:
+        enc = (getattr(console, "encoding", "") or "").lower()
+    return "utf" in enc
+
+
+def _sandbox_glyphs(console: Optional[Any]) -> dict[str, str]:
+    """Return a name->glyph table, with emoji on utf-8 terminals and
+    ASCII fallbacks elsewhere."""
+    if _console_supports_emoji(console):
+        return {
+            "ok": "✅",
+            "fail": "❌",
+            "warn": "⚠️ ",
+            "skip": "⏭️ ",
+            "info": "ℹ️ ",
+            "box": "📦",
+            "check": "🧪",
+            "alarm": "🚦",
+            "clock": "⏱",
+            "bullet": "•",
+        }
+    return {
+        "ok": "[OK]",
+        "fail": "[FAIL]",
+        "warn": "[!]",
+        "skip": "[--]",
+        "info": "[i]",
+        "box": "[box]",
+        "check": "[chk]",
+        "alarm": "[gate]",
+        "clock": "t=",
+        "bullet": "-",
+    }
+
+
+def _is_sandbox_bootstrap_json_call(command_str: str) -> Optional[str]:
+    """Return the subcommand name if this bash invocation is a
+    sandbox-bootstrap call configured for --format json, else None.
+
+    Recognises both:
+      - direct script invocations:
+          .venv/bin/python3 tools/sandbox-bootstrap.py --format json status
+          python tools/sandbox-bootstrap.py status --format=json
+      - make-target wrappers when BOOTSTRAP_ARGS forces json:
+          make sandbox-status BOOTSTRAP_ARGS='--format json'
+          make sandbox-validate BOOTSTRAP_ARGS=--format=json
+    """
+    if not command_str:
+        return None
+    try:
+        tokens = shlex.split(command_str)
+    except ValueError:
+        return None
+    if not tokens:
+        return None
+
+    # Look for --format json or --format=json anywhere in the tokens.
+    # Also recognise it when nested inside a make-style assignment such as
+    # BOOTSTRAP_ARGS='--format json' (which shlex collapses into a single
+    # token "BOOTSTRAP_ARGS=--format json").
+    has_json_format = False
+    for i, tok in enumerate(tokens):
+        if tok == "--format=json":
+            has_json_format = True
+            break
+        if tok == "--format" and i + 1 < len(tokens) and tokens[i + 1] == "json":
+            has_json_format = True
+            break
+        # Make-style env assignments (e.g. BOOTSTRAP_ARGS=--format json,
+        # BOOTSTRAP_ARGS=--format=json, OPENCODE_ARGS=...).
+        if "=" in tok and ("--format json" in tok or "--format=json" in tok):
+            has_json_format = True
+            break
+
+    # Direct script invocation path.
+    script_idx = -1
+    for i, tok in enumerate(tokens):
+        if tok.endswith(_SANDBOX_BOOTSTRAP_SCRIPT) or tok.endswith("/" + _SANDBOX_BOOTSTRAP_SCRIPT):
+            script_idx = i
+            break
+    if script_idx >= 0 and has_json_format:
+        # Subcommand: first non-flag positional after the script path.
+        for j in range(script_idx + 1, len(tokens)):
+            t = tokens[j]
+            if t.startswith("-"):
+                # Skip --format json (two-token form).
+                if t == "--format" and j + 1 < len(tokens):
+                    continue
+                continue
+            # A bare token after --format json may be the value of --format.
+            # Skip if previous token was --format (without =).
+            if j > 0 and tokens[j - 1] == "--format":
+                continue
+            if t in _SANDBOX_KNOWN_SUBCOMMANDS:
+                return t
+        return None
+
+    # Make-target wrapper path.
+    if tokens[0] == "make":
+        # Find the first sandbox-* target token.
+        for tok in tokens[1:]:
+            if tok in _SANDBOX_MAKE_TARGETS and has_json_format:
+                return _SANDBOX_MAKE_TARGETS[tok]
+    return None
+
+
+def _maybe_render_sandbox_bootstrap(console: Optional[Any], state: dict[str, Any]) -> bool:
+    """Try to render a bash invocation of sandbox-bootstrap.py --format json
+    as a styled Sandbox panel. Return True if handled, False to fall back to
+    the generic bash renderer."""
+    if not _SANDBOX_RENDER:
+        return False
+    inp = state.get("input")
+    output = state.get("output")
+    if not isinstance(inp, dict):
+        return False
+
+    command = str(inp.get("command", ""))
+    subcommand = _is_sandbox_bootstrap_json_call(command)
+    if subcommand is None:
+        return False
+
+    output_str = str(output) if output is not None else ""
+    stripped = output_str.strip()
+    if not stripped:
+        # In-flight or silent success; let the bash renderer handle it.
+        return False
+
+    # Only proceed when output parses as a single JSON document.
+    try:
+        payload = json.loads(stripped)
+    except (ValueError, TypeError):
+        return False
+
+    # Per-subcommand schema sniff: if the payload doesn't carry the
+    # expected top-level structure, fall through to the bash renderer.
+    if not _sandbox_payload_matches(subcommand, payload):
+        return False
+
+    description = str(inp.get("description", "")).strip()
+    status = str(state.get("status", ""))
+
+    if HAVE_RICH and console is not None:
+        return _render_sandbox_rich(
+            console, subcommand, payload, command, description, status
+        )
+    return _render_sandbox_plain(
+        subcommand, payload, command, description, status
+    )
+
+
+def _sandbox_payload_matches(subcommand: str, payload: Any) -> bool:
+    """Cheap structural sniff so we don't render unrelated JSON as a
+    Sandbox panel. Returns False on obvious schema mismatch so the bash
+    renderer can take over."""
+    if subcommand == "list":
+        return isinstance(payload, list) and (not payload or isinstance(payload[0], dict))
+    if not isinstance(payload, dict):
+        return False
+    if subcommand == "inspect":
+        return any(k in payload for k in ("id", "display_name", "files"))
+    if subcommand == "detect":
+        return "candidates" in payload or "signals" in payload
+    if subcommand == "status":
+        return "sandbox_state" in payload or "phase2_gate_pass" in payload or "capabilities" in payload
+    if subcommand in ("apply", "regenerate"):
+        return any(k in payload for k in ("example", "files_to_write", "written_files", "status"))
+    if subcommand == "validate":
+        return "overall_outcome" in payload or "tiers" in payload
+    return False
+
+
+def _sandbox_outcome_style(outcome: str) -> tuple[str, str]:
+    """Return (rich_style, glyph_key) for a tier outcome string."""
+    if outcome == "passed":
+        return "green", "ok"
+    if outcome == "failed":
+        return "red", "fail"
+    if outcome == "skipped":
+        return "dim", "skip"
+    return "yellow", "warn"
+
+
+def _sandbox_state_style(state_value: str) -> str:
+    if state_value == "generated":
+        return "green"
+    if state_value == "user-managed":
+        return "yellow"
+    if state_value == "missing":
+        return "red"
+    return "dim"
+
+
+def _sandbox_last_validation_style(value: Optional[str]) -> str:
+    if value == "passed":
+        return "green"
+    if value == "mixed":
+        return "yellow"
+    if value == "failed":
+        return "red"
+    if value == "skipped":
+        return "yellow"
+    return "dim"
+
+
+def _render_sandbox_rich(
+    console: Any,
+    subcommand: str,
+    payload: Any,
+    command: str,
+    description: str,
+    status: str,
+) -> bool:
+    glyphs = _sandbox_glyphs(console)
+
+    # Default border = yellow (in flight) / green (completed); per-subcommand
+    # renderers may override based on payload contents (e.g. validate failed).
+    border = "yellow" if status != "completed" else "green"
+
+    title = f"{glyphs['box']} Sandbox · {subcommand}"
+    sections: list[Any] = []
+    sections.append(Text(f"$ {command}", style="bold cyan"))
+    if description:
+        sections.append(Text(description, style="dim italic"))
+    sections.append(Text())
+
+    try:
+        if subcommand == "list":
+            border = _render_sandbox_list_rich(sections, payload, border)
+        elif subcommand == "inspect":
+            border = _render_sandbox_inspect_rich(sections, payload, border, glyphs)
+        elif subcommand == "detect":
+            border = _render_sandbox_detect_rich(sections, payload, border, glyphs)
+        elif subcommand == "status":
+            border = _render_sandbox_status_rich(sections, payload, border, glyphs)
+        elif subcommand in ("apply", "regenerate"):
+            border = _render_sandbox_apply_rich(sections, payload, subcommand, border, glyphs)
+        elif subcommand == "validate":
+            border = _render_sandbox_validate_rich(sections, payload, border, glyphs)
+        else:
+            return False
+    except (KeyError, TypeError, AttributeError):
+        # Defensive: schema mismatch -> fall through to bash renderer.
+        return False
+
+    console.print(Panel(Group(*sections), title=title, border_style=border, expand=True))
+    return True
+
+
+def _render_sandbox_list_rich(sections: list[Any], payload: Any, border: str) -> str:
+    from rich.table import Table
+    if not isinstance(payload, list):
+        raise TypeError("list subcommand expects a JSON array")
+    table = Table(show_header=True, header_style="bold cyan", expand=True, pad_edge=False)
+    table.add_column("id", style="bold cyan", no_wrap=True)
+    table.add_column("name")
+    table.add_column("languages", style="dim")
+    table.add_column("manifests", style="dim")
+    for ex in payload:
+        applies = ex.get("applies_when") or {}
+        langs = ", ".join(applies.get("languages") or []) or "-"
+        mans = ", ".join((applies.get("manifests") or [])[:4]) or "-"
+        if applies.get("manifests") and len(applies["manifests"]) > 4:
+            mans += " …"
+        table.add_row(str(ex.get("id", "")), str(ex.get("display_name", "")), langs, mans)
+    sections.append(table)
+    sections.append(Text())
+    sections.append(Text(f"{len(payload)} example(s) available", style="dim"))
+    return border
+
+
+def _render_sandbox_inspect_rich(
+    sections: list[Any], payload: dict, border: str, glyphs: dict
+) -> str:
+    sections.append(Text(f"{payload.get('display_name', '')}", style="bold cyan"))
+    sections.append(Text(f"  id:    {payload.get('id', '')}", style="dim"))
+    sections.append(Text(f"  path:  {payload.get('path', '')}", style="dim"))
+    applies = payload.get("applies_when") or {}
+    if applies:
+        for k, v in applies.items():
+            joined = ", ".join(v) if isinstance(v, list) else str(v)
+            sections.append(Text(f"  applies_when.{k}: {joined}", style="dim"))
+    if payload.get("required_tools"):
+        sections.append(Text(f"  required_tools: {', '.join(payload['required_tools'])}", style="dim"))
+    if payload.get("template_vars"):
+        sections.append(Text(f"  template_vars:  {', '.join(payload['template_vars'])}", style="dim"))
+    if payload.get("default_ports"):
+        sections.append(Text(f"  default_ports:  {', '.join(str(p) for p in payload['default_ports'])}", style="dim"))
+    if payload.get("build_command"):
+        sections.append(Text(f"  build_command:  {payload['build_command']}", style="dim"))
+    if payload.get("test_command"):
+        sections.append(Text(f"  test_command:   {payload['test_command']}", style="dim"))
+    if payload.get("caveats"):
+        sections.append(Text())
+        sections.append(Text("Caveats:", style="bold yellow"))
+        for c in payload["caveats"]:
+            sections.append(Text(f"  {glyphs['warn']} {c}", style="yellow"))
+    files = payload.get("files") or []
+    if files:
+        sections.append(Text())
+        cap = _SANDBOX_FILES_CAP
+        sections.append(Text(f"Files ({len(files)}):", style="bold cyan"))
+        for f in files[:cap]:
+            sections.append(Text(f"  {glyphs['bullet']} {f}"))
+        if len(files) > cap:
+            sections.append(Text(f"  ... and {len(files) - cap} more", style="dim"))
+    return border
+
+
+def _render_sandbox_detect_rich(
+    sections: list[Any], payload: dict, border: str, glyphs: dict
+) -> str:
+    from rich.table import Table
+    signals = payload.get("signals") or {}
+    sections.append(Text("Detection signals", style="bold cyan"))
+    sections.append(Text(f"  source:    {signals.get('source', '-')}", style="dim"))
+    sections.append(Text(f"  languages: {', '.join(signals.get('languages') or []) or '-'}", style="dim"))
+    sections.append(Text(f"  manifests: {', '.join(signals.get('manifests') or []) or '-'}", style="dim"))
+    sections.append(Text())
+
+    candidates = payload.get("candidates") or []
+    sections.append(Text(f"Ranked candidates ({len(candidates)}):", style="bold cyan"))
+    table = Table(show_header=True, header_style="bold cyan", expand=True, pad_edge=False)
+    table.add_column("score", justify="right", no_wrap=True)
+    table.add_column("id", style="bold cyan", no_wrap=True)
+    table.add_column("name")
+    table.add_column("path", style="dim")
+    cap = _SANDBOX_FILES_CAP
+    for c in candidates[:cap]:
+        score = c.get("score", 0)
+        score_style = "green" if score >= 5 else ("yellow" if score >= 1 else "dim")
+        table.add_row(
+            Text(str(score), style=score_style),
+            str(c.get("id", "")),
+            str(c.get("display_name", "")),
+            str(c.get("path", "")),
+        )
+    sections.append(table)
+    if len(candidates) > cap:
+        sections.append(Text(f"... and {len(candidates) - cap} more", style="dim"))
+    return border
+
+
+def _render_sandbox_status_rich(
+    sections: list[Any], payload: dict, border: str, glyphs: dict
+) -> str:
+    from rich.table import Table
+    state_value = str(payload.get("sandbox_state", "unknown"))
+    last_validation = payload.get("last_validation")
+    gate_pass = bool(payload.get("phase2_gate_pass"))
+    gate_reason = str(payload.get("phase2_gate_reason", ""))
+
+    state_glyph = {"generated": glyphs["ok"], "user-managed": glyphs["warn"], "missing": glyphs["fail"]}.get(state_value, glyphs["info"])
+    sections.append(Text.assemble(
+        ("state: ", "bold"),
+        (f"{state_glyph} {state_value}", _sandbox_state_style(state_value)),
+    ))
+    sections.append(Text(f"  path:           {payload.get('sandbox_path', '-')}", style="dim"))
+    sections.append(Text(f"  provenance:     {'yes' if payload.get('provenance_present') else 'no'}", style="dim"))
+    lv_text = last_validation if last_validation is not None else "-"
+    sections.append(Text.assemble(
+        ("  last validation: ", "dim"),
+        (str(lv_text), _sandbox_last_validation_style(last_validation)),
+    ))
+    sections.append(Text(f"  allow override: {'yes' if payload.get('allow_no_sandbox') else 'no'}", style="dim"))
+    sections.append(Text())
+
+    # Gate badge.
+    if gate_pass:
+        sections.append(Text.assemble(
+            (f"{glyphs['alarm']} ", ""),
+            (f"Phase 2 gate would PASS", "bold green"),
+            (f" — {gate_reason}", "dim"),
+        ))
+    else:
+        sections.append(Text.assemble(
+            (f"{glyphs['alarm']} ", ""),
+            (f"Phase 2 gate would BLOCK", "bold red"),
+            (f" — {gate_reason}", "dim"),
+        ))
+        # Status doesn't fail the script; signal informational alarm via yellow.
+        border = "yellow"
+
+    sections.append(Text())
+    capabilities = payload.get("capabilities") or {}
+    if capabilities:
+        table = Table(show_header=True, header_style="bold cyan", expand=True, pad_edge=False)
+        table.add_column("capability", no_wrap=True)
+        table.add_column("status", no_wrap=True)
+        table.add_column("path", style="dim")
+        # Required first, helpers after.
+        for name in (*_SANDBOX_REQUIRED_CAPABILITIES, *_SANDBOX_HELPER_CAPABILITIES):
+            cap = capabilities.get(name)
+            if cap is None:
+                continue
+            satisfied = bool(cap.get("satisfied"))
+            present = bool(cap.get("present"))
+            is_helper = name in _SANDBOX_HELPER_CAPABILITIES
+            if satisfied:
+                badge = Text(f"{glyphs['ok']} ok", style="green")
+            elif is_helper and not present:
+                badge = Text(f"{glyphs['skip']} optional", style="dim")
+            else:
+                badge = Text(f"{glyphs['fail']} missing", style="red")
+            table.add_row(name, badge, str(cap.get("path", "")))
+        sections.append(table)
+    return border
+
+
+def _render_sandbox_apply_rich(
+    sections: list[Any], payload: dict, subcommand: str, border: str, glyphs: dict
+) -> str:
+    apply_status = str(payload.get("status", ""))
+    is_dry = bool(payload.get("dry_run")) or apply_status == "dry-run"
+    chip_text = "DRY RUN" if is_dry else apply_status.upper() or "(unknown)"
+    chip_style = "yellow" if is_dry else ("green" if apply_status == "applied" else "dim")
+    sections.append(Text.assemble(
+        (f"{glyphs['box']} ", ""),
+        (f"{subcommand} ", "bold cyan"),
+        (f"{payload.get('example', '-')}  ", "bold cyan"),
+        (f"[{chip_text}]", chip_style),
+    ))
+    sections.append(Text(f"  example_path: {payload.get('example_path', '-')}", style="dim"))
+    sections.append(Text(f"  sandbox_path: {payload.get('sandbox_path', '-')}", style="dim"))
+    sections.append(Text(f"  force:        {payload.get('force', False)}", style="dim"))
+    if payload.get("backup_dir"):
+        sections.append(Text(f"  backup_dir:   {payload['backup_dir']}", style="dim"))
+
+    files_to_write = payload.get("files_to_write") or []
+    written = payload.get("written_files") or []
+    sections.append(Text())
+    sections.append(Text(
+        f"files: planned={len(files_to_write)}  written={len(written)}",
+        style="bold cyan",
+    ))
+    markers = payload.get("markers_provided") or {}
+    if markers:
+        sections.append(Text(f"markers_provided ({len(markers)}):", style="bold cyan"))
+        for k, v in markers.items():
+            sections.append(Text(f"  {k} = {v}", style="dim"))
+    unfilled = payload.get("markers_used_unfilled") or []
+    if unfilled:
+        sections.append(Text())
+        sections.append(Text.assemble(
+            (f"{glyphs['warn']} ", ""),
+            (f"Declared markers used but not provided: {', '.join(unfilled)}", "yellow"),
+        ))
+        border = "yellow"
+    undeclared = payload.get("markers_used_undeclared") or []
+    if undeclared:
+        sections.append(Text.assemble(
+            (f"{glyphs['warn']} ", ""),
+            (f"Markers used but not declared: {', '.join(undeclared)}", "yellow"),
+        ))
+        border = "yellow"
+
+    show_files = files_to_write or written
+    if show_files:
+        sections.append(Text())
+        cap = _SANDBOX_FILES_CAP
+        for f in show_files[:cap]:
+            sections.append(Text(f"  {glyphs['bullet']} {f}"))
+        if len(show_files) > cap:
+            sections.append(Text(f"  ... and {len(show_files) - cap} more", style="dim"))
+
+    if apply_status == "applied" and not is_dry:
+        sections.append(Text())
+        sections.append(Text.assemble(
+            (f"{glyphs['ok']} ", ""),
+            (f"Applied '{payload.get('example', '-')}'", "bold green"),
+            (f" → {payload.get('sandbox_path', '-')}", "dim"),
+        ))
+        if payload.get("provenance_path"):
+            sections.append(Text(f"  provenance: {payload['provenance_path']}", style="dim"))
+    return border
+
+
+def _render_sandbox_validate_rich(
+    sections: list[Any], payload: dict, border: str, glyphs: dict
+) -> str:
+    from rich.table import Table
+    overall = str(payload.get("overall_outcome", "unknown"))
+    overall_style, overall_glyph_key = _sandbox_outcome_style(overall)
+
+    sections.append(Text.assemble(
+        (f"{glyphs['check']} ", ""),
+        ("overall: ", "bold"),
+        (f"{glyphs[overall_glyph_key]} {overall}", overall_style),
+    ))
+
+    if overall == "failed":
+        border = "red"
+    elif overall == "passed":
+        border = "green"
+    else:
+        border = "yellow"
+
+    tiers = payload.get("tiers") or []
+    if tiers:
+        sections.append(Text())
+        table = Table(show_header=True, header_style="bold cyan", expand=True, pad_edge=False)
+        table.add_column("tier", no_wrap=True)
+        table.add_column("purpose")
+        table.add_column("outcome", no_wrap=True)
+        table.add_column("dur", justify="right", no_wrap=True)
+        table.add_column("exit", justify="right", no_wrap=True)
+        for t in tiers:
+            t_outcome = str(t.get("outcome", "unknown"))
+            o_style, o_key = _sandbox_outcome_style(t_outcome)
+            badge = Text(f"{glyphs[o_key]} {t_outcome}", style=o_style)
+            dur = t.get("duration_seconds")
+            dur_str = f"{dur:.2f}s" if isinstance(dur, (int, float)) else "-"
+            exit_code = t.get("exit_code")
+            exit_str = "-" if exit_code is None else str(exit_code)
+            table.add_row(
+                str(t.get("tier", "")),
+                str(t.get("purpose", "")),
+                badge,
+                dur_str,
+                exit_str,
+            )
+        sections.append(table)
+
+        # For each failed tier, show a capped stderr_tail under it.
+        for t in tiers:
+            if t.get("outcome") != "failed":
+                continue
+            stderr_tail = str(t.get("stderr_tail") or "").strip()
+            if not stderr_tail:
+                continue
+            sections.append(Text())
+            sections.append(Text(
+                f"{glyphs['fail']} {t.get('tier', '')} {t.get('purpose', '')} stderr (tail):",
+                style="bold red",
+            ))
+            tail_lines = stderr_tail.splitlines()
+            cap = _SANDBOX_VALIDATE_STDERR_LINES
+            shown = tail_lines[-cap:]
+            for line in shown:
+                sections.append(Text(f"  {line}", style="red"))
+            if len(tail_lines) > cap:
+                sections.append(Text(
+                    f"  ... ({len(tail_lines) - cap} earlier lines truncated; "
+                    f"see tmp/last-phase-*.jsonl for full output)",
+                    style="dim",
+                ))
+
+    missing = payload.get("missing_helpers") or []
+    if missing:
+        sections.append(Text())
+        sections.append(Text.assemble(
+            (f"{glyphs['warn']} ", ""),
+            (f"Helper capabilities still missing: {', '.join(missing)}", "yellow"),
+        ))
+
+    if payload.get("history_updated"):
+        sections.append(Text(f"{glyphs['info']} history updated in sandbox/CODECOME-GENERATED.md", style="dim"))
+    return border
+
+
+def _render_sandbox_plain(
+    subcommand: str,
+    payload: Any,
+    command: str,
+    description: str,
+    status: str,
+) -> bool:
+    glyphs = _sandbox_glyphs(None)
+    print(C.header(f"{glyphs['box']} Sandbox · {subcommand}"))
+    print(f"  $ {command}")
+    if description:
+        print(f"  # {description}")
+
+    try:
+        if subcommand == "list":
+            _render_sandbox_list_plain(payload, glyphs)
+        elif subcommand == "inspect":
+            _render_sandbox_inspect_plain(payload, glyphs)
+        elif subcommand == "detect":
+            _render_sandbox_detect_plain(payload, glyphs)
+        elif subcommand == "status":
+            _render_sandbox_status_plain(payload, glyphs)
+        elif subcommand in ("apply", "regenerate"):
+            _render_sandbox_apply_plain(payload, subcommand, glyphs)
+        elif subcommand == "validate":
+            _render_sandbox_validate_plain(payload, glyphs)
+        else:
+            return False
+    except (KeyError, TypeError, AttributeError):
+        return False
+    return True
+
+
+def _render_sandbox_list_plain(payload: Any, glyphs: dict) -> None:
+    if not isinstance(payload, list):
+        raise TypeError
+    for ex in payload:
+        applies = ex.get("applies_when") or {}
+        langs = ", ".join(applies.get("languages") or []) or "-"
+        print(f"  {glyphs['bullet']} {ex.get('id', ''):<20} {ex.get('display_name', '')}  ({langs})")
+    print(f"  {len(payload)} example(s) available")
+
+
+def _render_sandbox_inspect_plain(payload: dict, glyphs: dict) -> None:
+    print(f"  id:    {payload.get('id', '')}")
+    print(f"  name:  {payload.get('display_name', '')}")
+    print(f"  path:  {payload.get('path', '')}")
+    applies = payload.get("applies_when") or {}
+    for k, v in applies.items():
+        joined = ", ".join(v) if isinstance(v, list) else str(v)
+        print(f"  applies_when.{k}: {joined}")
+    if payload.get("required_tools"):
+        print(f"  required_tools: {', '.join(payload['required_tools'])}")
+    if payload.get("template_vars"):
+        print(f"  template_vars:  {', '.join(payload['template_vars'])}")
+    if payload.get("default_ports"):
+        print(f"  default_ports:  {', '.join(str(p) for p in payload['default_ports'])}")
+    if payload.get("build_command"):
+        print(f"  build_command:  {payload['build_command']}")
+    if payload.get("test_command"):
+        print(f"  test_command:   {payload['test_command']}")
+    if payload.get("caveats"):
+        print("  Caveats:")
+        for c in payload["caveats"]:
+            print(f"    {glyphs['warn']} {c}")
+    files = payload.get("files") or []
+    if files:
+        cap = _SANDBOX_FILES_CAP
+        print(f"  Files ({len(files)}):")
+        for f in files[:cap]:
+            print(f"    {glyphs['bullet']} {f}")
+        if len(files) > cap:
+            print(f"    ... and {len(files) - cap} more")
+
+
+def _render_sandbox_detect_plain(payload: dict, glyphs: dict) -> None:
+    signals = payload.get("signals") or {}
+    print("  signals:")
+    print(f"    source:    {signals.get('source', '-')}")
+    print(f"    languages: {', '.join(signals.get('languages') or []) or '-'}")
+    print(f"    manifests: {', '.join(signals.get('manifests') or []) or '-'}")
+    candidates = payload.get("candidates") or []
+    print(f"  candidates ({len(candidates)}):")
+    cap = _SANDBOX_FILES_CAP
+    for c in candidates[:cap]:
+        print(f"    score={c.get('score', 0):>2}  {c.get('id', ''):<20} {c.get('display_name', '')}")
+    if len(candidates) > cap:
+        print(f"    ... and {len(candidates) - cap} more")
+
+
+def _render_sandbox_status_plain(payload: dict, glyphs: dict) -> None:
+    state_value = str(payload.get("sandbox_state", "unknown"))
+    last_validation = payload.get("last_validation")
+    gate_pass = bool(payload.get("phase2_gate_pass"))
+    gate_reason = str(payload.get("phase2_gate_reason", ""))
+
+    print(f"  state:           {state_value}")
+    print(f"  path:            {payload.get('sandbox_path', '-')}")
+    print(f"  provenance:      {'yes' if payload.get('provenance_present') else 'no'}")
+    print(f"  last validation: {last_validation if last_validation is not None else '-'}")
+    print(f"  allow override:  {'yes' if payload.get('allow_no_sandbox') else 'no'}")
+    if gate_pass:
+        print(C.ok(f"  {glyphs['alarm']} Phase 2 gate would PASS — {gate_reason}"))
+    else:
+        print(C.warn(f"  {glyphs['alarm']} Phase 2 gate would BLOCK — {gate_reason}"))
+
+    capabilities = payload.get("capabilities") or {}
+    if capabilities:
+        print("  capabilities:")
+        for name in (*_SANDBOX_REQUIRED_CAPABILITIES, *_SANDBOX_HELPER_CAPABILITIES):
+            cap = capabilities.get(name)
+            if cap is None:
+                continue
+            satisfied = bool(cap.get("satisfied"))
+            present = bool(cap.get("present"))
+            is_helper = name in _SANDBOX_HELPER_CAPABILITIES
+            if satisfied:
+                marker = f"{glyphs['ok']} ok"
+            elif is_helper and not present:
+                marker = f"{glyphs['skip']} optional"
+            else:
+                marker = f"{glyphs['fail']} missing"
+            print(f"    {name:<14} {marker:<14} {cap.get('path', '')}")
+
+
+def _render_sandbox_apply_plain(payload: dict, subcommand: str, glyphs: dict) -> None:
+    apply_status = str(payload.get("status", ""))
+    is_dry = bool(payload.get("dry_run")) or apply_status == "dry-run"
+    chip_text = "DRY RUN" if is_dry else apply_status.upper() or "(unknown)"
+    print(f"  {glyphs['box']} {subcommand} {payload.get('example', '-')}  [{chip_text}]")
+    print(f"    example_path: {payload.get('example_path', '-')}")
+    print(f"    sandbox_path: {payload.get('sandbox_path', '-')}")
+    print(f"    force:        {payload.get('force', False)}")
+    if payload.get("backup_dir"):
+        print(f"    backup_dir:   {payload['backup_dir']}")
+    files_to_write = payload.get("files_to_write") or []
+    written = payload.get("written_files") or []
+    print(f"    files: planned={len(files_to_write)} written={len(written)}")
+    markers = payload.get("markers_provided") or {}
+    if markers:
+        print(f"    markers_provided ({len(markers)}):")
+        for k, v in markers.items():
+            print(f"      {k} = {v}")
+    unfilled = payload.get("markers_used_unfilled") or []
+    if unfilled:
+        print(C.warn(f"    {glyphs['warn']} Declared markers used but not provided: {', '.join(unfilled)}"))
+    undeclared = payload.get("markers_used_undeclared") or []
+    if undeclared:
+        print(C.warn(f"    {glyphs['warn']} Markers used but not declared: {', '.join(undeclared)}"))
+    show_files = files_to_write or written
+    if show_files:
+        cap = _SANDBOX_FILES_CAP
+        for f in show_files[:cap]:
+            print(f"    {glyphs['bullet']} {f}")
+        if len(show_files) > cap:
+            print(f"    ... and {len(show_files) - cap} more")
+    if apply_status == "applied" and not is_dry:
+        print(C.ok(f"    {glyphs['ok']} Applied '{payload.get('example', '-')}'"))
+        if payload.get("provenance_path"):
+            print(f"      provenance: {payload['provenance_path']}")
+
+
+def _render_sandbox_validate_plain(payload: dict, glyphs: dict) -> None:
+    overall = str(payload.get("overall_outcome", "unknown"))
+    overall_glyph = glyphs["ok"] if overall == "passed" else glyphs["fail"] if overall == "failed" else glyphs["warn"]
+    print(f"  {glyphs['check']} overall: {overall_glyph} {overall}")
+    tiers = payload.get("tiers") or []
+    for t in tiers:
+        t_outcome = str(t.get("outcome", "unknown"))
+        o_glyph = glyphs["ok"] if t_outcome == "passed" else glyphs["fail"] if t_outcome == "failed" else glyphs["skip"]
+        dur = t.get("duration_seconds")
+        dur_str = f"{dur:.2f}s" if isinstance(dur, (int, float)) else "-"
+        exit_code = t.get("exit_code")
+        exit_str = "-" if exit_code is None else str(exit_code)
+        print(f"    {t.get('tier', ''):<3} {str(t.get('purpose', '')):<20} "
+              f"{o_glyph} {t_outcome:<8} dur={dur_str:<7} exit={exit_str}")
+        if t_outcome == "failed":
+            stderr_tail = str(t.get("stderr_tail") or "").strip()
+            if stderr_tail:
+                tail_lines = stderr_tail.splitlines()
+                cap = _SANDBOX_VALIDATE_STDERR_LINES
+                shown = tail_lines[-cap:]
+                for line in shown:
+                    print(f"      | {line}")
+                if len(tail_lines) > cap:
+                    print(f"      | ... ({len(tail_lines) - cap} earlier lines truncated)")
+    missing = payload.get("missing_helpers") or []
+    if missing:
+        print(C.warn(f"  {glyphs['warn']} Helper capabilities still missing: {', '.join(missing)}"))
+    if payload.get("history_updated"):
+        print(f"  {glyphs['info']} history updated in sandbox/CODECOME-GENERATED.md")
+
+
 # --- Skill renderer -----------------------------------------------------------
 
 def render_skill_rich(console: Console, state: dict[str, Any]) -> bool:
@@ -2026,6 +2813,12 @@ def _dispatch_tool_renderer(console: Console, tool: str, state: dict[str, Any]) 
             return render_grep_plain(state)
     elif tool_lower == "bash":
         _cache_invalidate_stale()
+        # Try the sandbox-bootstrap sub-renderer first; it handles bash
+        # invocations of `tools/sandbox-bootstrap.py --format json …` and
+        # `make sandbox-* BOOTSTRAP_ARGS='--format json'` with structured
+        # styling. Falls through to the generic bash renderer otherwise.
+        if _maybe_render_sandbox_bootstrap(console if HAVE_RICH else None, state):
+            return True
         if HAVE_RICH:
             return render_bash_rich(console, state)
         else:

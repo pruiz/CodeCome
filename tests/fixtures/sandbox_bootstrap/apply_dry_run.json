@@ -1,0 +1,19 @@
+{
+  "dry_run": true,
+  "example": "python",
+  "example_path": "templates/sandboxes/python",
+  "sandbox_path": "sandbox",
+  "force": false,
+  "files_to_write": [
+    "Dockerfile",
+    "scripts/build-sandbox.sh",
+    "scripts/up.sh",
+    "scripts/down.sh"
+  ],
+  "markers_provided": {"PYTHON_VERSION": "3.11"},
+  "markers_used_unfilled": ["EXTRA_PIP"],
+  "markers_used_undeclared": [],
+  "backup_dir": null,
+  "provenance_present_before": false,
+  "status": "dry-run"
+}

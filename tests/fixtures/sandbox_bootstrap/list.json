@@ -1,0 +1,381 @@
+[
+  {
+    "applies_when": {
+      "languages": [
+        "c",
+        "c++",
+        "cpp"
+      ],
+      "manifests": [
+        "Makefile",
+        "CMakeLists.txt",
+        "configure",
+        "configure.ac",
+        "meson.build"
+      ]
+    },
+    "display_name": "C / C++ project",
+    "id": "c-cpp",
+    "path": "templates/sandboxes/c-cpp",
+    "required_tools": [
+      "gcc",
+      "g++",
+      "clang",
+      "cmake",
+      "make",
+      "ninja",
+      "gdb",
+      "lldb",
+      "valgrind"
+    ],
+    "template_vars": [
+      "TARGET_NAME",
+      "DEBIAN_BASE_TAG"
+    ]
+  },
+  {
+    "applies_when": {
+      "languages": [
+        "c#",
+        "csharp",
+        "dotnet",
+        ".net",
+        "f#",
+        "fsharp",
+        "vb"
+      ],
+      "manifests": [
+        "global.json",
+        "Directory.Build.props",
+        "Directory.Packages.props",
+        "*.sln",
+        "*.csproj",
+        "*.fsproj",
+        "*.vbproj"
+      ]
+    },
+    "display_name": ".NET project",
+    "id": "dotnet",
+    "path": "templates/sandboxes/dotnet",
+    "required_tools": [
+      "dotnet"
+    ],
+    "template_vars": [
+      "TARGET_NAME",
+      "DOTNET_SDK_TAG",
+      "APP_PORT"
+    ]
+  },
+  {
+    "applies_when": {
+      "languages": [],
+      "manifests": []
+    },
+    "display_name": "Generic Debian sandbox",
+    "id": "generic",
+    "path": "templates/sandboxes/generic",
+    "required_tools": [
+      "bash",
+      "curl",
+      "git",
+      "make",
+      "python3",
+      "ripgrep",
+      "jq"
+    ],
+    "template_vars": [
+      "TARGET_NAME",
+      "DEBIAN_BASE_TAG"
+    ]
+  },
+  {
+    "applies_when": {
+      "languages": [
+        "go",
+        "golang"
+      ],
+      "manifests": [
+        "go.mod",
+        "go.sum"
+      ]
+    },
+    "display_name": "Go project",
+    "id": "go",
+    "path": "templates/sandboxes/go",
+    "required_tools": [
+      "go"
+    ],
+    "template_vars": [
+      "TARGET_NAME",
+      "GO_VERSION",
+      "APP_PORT"
+    ]
+  },
+  {
+    "applies_when": {
+      "languages": [
+        "hcl",
+        "terraform"
+      ],
+      "manifests": [
+        "main.tf",
+        "variables.tf",
+        "providers.tf",
+        "*.tf",
+        ".terraform-version",
+        ".tflint.hcl"
+      ]
+    },
+    "display_name": "Terraform IaC review",
+    "id": "iac-terraform",
+    "path": "templates/sandboxes/iac-terraform",
+    "required_tools": [
+      "terraform",
+      "tflint"
+    ],
+    "template_vars": [
+      "TARGET_NAME",
+      "TERRAFORM_VERSION"
+    ]
+  },
+  {
+    "applies_when": {
+      "languages": [
+        "java",
+        "kotlin",
+        "scala"
+      ],
+      "manifests": [
+        "pom.xml",
+        "build.gradle",
+        "build.gradle.kts",
+        "settings.gradle",
+        "settings.gradle.kts"
+      ]
+    },
+    "display_name": "Java + Maven project",
+    "id": "java-maven",
+    "path": "templates/sandboxes/java-maven",
+    "required_tools": [
+      "java",
+      "javac",
+      "mvn",
+      "gradle"
+    ],
+    "template_vars": [
+      "TARGET_NAME",
+      "JDK_VERSION",
+      "APP_PORT"
+    ]
+  },
+  {
+    "applies_when": {
+      "languages": [],
+      "manifests": [
+        "docker-compose.yml",
+        "docker-compose.yaml",
+        "compose.yml",
+        "compose.yaml"
+      ]
+    },
+    "display_name": "Multi-service compose harness",
+    "id": "multi-service-compose",
+    "path": "templates/sandboxes/multi-service-compose",
+    "required_tools": [
+      "docker",
+      "docker compose"
+    ],
+    "template_vars": [
+      "TARGET_NAME",
+      "PRIMARY_APP_PORT"
+    ]
+  },
+  {
+    "applies_when": {
+      "languages": [
+        "asm",
+        "embedded-c"
+      ],
+      "manifests": [
+        "*.bin",
+        "*.elf",
+        "*.img",
+        "*.dts",
+        "Kconfig"
+      ]
+    },
+    "display_name": "Nested QEMU runner (firmware / binary-only edge cases)",
+    "id": "nested-virt",
+    "path": "templates/sandboxes/nested-virt",
+    "required_tools": [
+      "qemu-system-arm",
+      "qemu-system-aarch64",
+      "qemu-system-x86_64",
+      "qemu-utils",
+      "binutils"
+    ],
+    "template_vars": [
+      "TARGET_NAME",
+      "QEMU_ARCH"
+    ]
+  },
+  {
+    "applies_when": {
+      "languages": [
+        "javascript",
+        "typescript",
+        "node"
+      ],
+      "manifests": [
+        "package.json",
+        "package-lock.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "tsconfig.json"
+      ]
+    },
+    "display_name": "Node.js project",
+    "id": "node",
+    "path": "templates/sandboxes/node",
+    "required_tools": [
+      "node",
+      "npm",
+      "yarn",
+      "pnpm"
+    ],
+    "template_vars": [
+      "TARGET_NAME",
+      "NODE_VERSION",
+      "APP_PORT"
+    ]
+  },
+  {
+    "applies_when": {
+      "languages": [
+        "php"
+      ],
+      "manifests": [
+        "composer.json",
+        "composer.lock"
+      ]
+    },
+    "display_name": "PHP project",
+    "id": "php",
+    "path": "templates/sandboxes/php",
+    "required_tools": [
+      "php",
+      "composer"
+    ],
+    "template_vars": [
+      "TARGET_NAME",
+      "PHP_VERSION",
+      "APP_PORT"
+    ]
+  },
+  {
+    "applies_when": {
+      "languages": [
+        "python"
+      ],
+      "manifests": [
+        "pyproject.toml",
+        "requirements.txt",
+        "setup.py",
+        "setup.cfg",
+        "Pipfile",
+        "poetry.lock"
+      ]
+    },
+    "display_name": "Python project",
+    "id": "python",
+    "path": "templates/sandboxes/python",
+    "required_tools": [
+      "python3",
+      "pip",
+      "pipx",
+      "venv"
+    ],
+    "template_vars": [
+      "TARGET_NAME",
+      "PYTHON_VERSION",
+      "APP_PORT"
+    ]
+  },
+  {
+    "applies_when": {
+      "languages": [
+        "ruby"
+      ],
+      "manifests": [
+        "Gemfile",
+        "Gemfile.lock",
+        "Rakefile",
+        "*.gemspec"
+      ]
+    },
+    "display_name": "Ruby project",
+    "id": "ruby",
+    "path": "templates/sandboxes/ruby",
+    "required_tools": [
+      "ruby",
+      "bundler",
+      "rake"
+    ],
+    "template_vars": [
+      "TARGET_NAME",
+      "RUBY_VERSION",
+      "APP_PORT"
+    ]
+  },
+  {
+    "applies_when": {
+      "languages": [
+        "rust"
+      ],
+      "manifests": [
+        "Cargo.toml",
+        "Cargo.lock",
+        "rust-toolchain",
+        "rust-toolchain.toml"
+      ]
+    },
+    "display_name": "Rust project",
+    "id": "rust",
+    "path": "templates/sandboxes/rust",
+    "required_tools": [
+      "cargo",
+      "rustc",
+      "rustup"
+    ],
+    "template_vars": [
+      "TARGET_NAME",
+      "RUST_TOOLCHAIN_TAG",
+      "APP_PORT"
+    ]
+  },
+  {
+    "applies_when": {
+      "languages": [
+        "html",
+        "css",
+        "javascript"
+      ],
+      "manifests": [
+        "index.html",
+        "robots.txt",
+        "sitemap.xml"
+      ]
+    },
+    "display_name": "Static web content",
+    "id": "web-static",
+    "path": "templates/sandboxes/web-static",
+    "required_tools": [
+      "nginx",
+      "curl"
+    ],
+    "template_vars": [
+      "TARGET_NAME",
+      "APP_PORT"
+    ]
+  }
+]
