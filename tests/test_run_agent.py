@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from rich.console import Console
 
 from conftest import ROOT, load_tool_module
 
@@ -550,6 +551,30 @@ def test_render_reasoning_plain_skips_empty_and_whitespace(monkeypatch, capsys):
 
     out = capsys.readouterr().out
     assert out == ""
+
+
+@pytest.mark.unit
+def test_render_reasoning_rich_wraps_markdown_inside_panel(monkeypatch):
+    module = load_tool_module("run_agent_reasoning_rich_wrap", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", True)
+    monkeypatch.setattr(module, "_RENDER_REASONING", True)
+    monkeypatch.setattr(module, "_REASONING_MAX_CHARS", 10000)
+
+    console = Console(record=True, force_terminal=True, width=60, highlight=False)
+    text = (
+        "**Summarizing file updates**\n\n"
+        "I need to mention the sandbox and validate the modifications. "
+        "Updating the item database for attack surfaces might need a more "
+        "realistic runtime setup so later phases can rely on it."
+    )
+
+    module.render_reasoning(console, {"part": {"text": text}})
+
+    out = console.export_text()
+    assert "Thinking" in out
+    assert "Summarizing file updates" in out
+    assert "realistic runtime setup" in out
+    assert "later phases can rely on it" in out
 
 
 @pytest.mark.unit

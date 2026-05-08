@@ -403,10 +403,10 @@ def build_console(color_mode: str) -> Console:
     if not HAVE_RICH:
         return None  # type: ignore[return-value]
     if color_mode == "always":
-        return Console(force_terminal=True, soft_wrap=True, highlight=False)
+        return Console(force_terminal=True, highlight=False)
     if color_mode == "never":
-        return Console(force_terminal=False, no_color=True, soft_wrap=True, highlight=False)
-    return Console(soft_wrap=True, highlight=False)
+        return Console(force_terminal=False, no_color=True, highlight=False)
+    return Console(highlight=False)
 
 
 _PHASE_NAMES = {
