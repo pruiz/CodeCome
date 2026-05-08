@@ -12,81 +12,95 @@ export PATH := $(CURDIR)/.venv/bin:$(PATH)
 export PROMPT_EXTRA
 export PROMPT_EXTRA_FILE
 
+ifndef NO_COLOR
+RED := \033[31m
+YELLOW := \033[33m
+CYAN := \033[36m
+BOLD := \033[1m
+RESET := \033[0m
+else
+RED :=
+YELLOW :=
+CYAN :=
+BOLD :=
+RESET :=
+endif
+
 help:
-	@echo ""
-	@echo "  CodeCome commands"
-	@echo "  ================"
-	@echo ""
-	@echo "  Workflow phases:"
-	@echo ""
-	@echo "    make venv                     Create/update repo-local virtualenv"
-	@echo "    make phase-1                  Run reconnaissance"
-	@echo "    make phase-2                  Run hypothesis generation"
-	@echo "    make phase-3                  Run counter-analysis"
-	@echo "    make phase-4 FINDING=CC-0001  Validate one finding"
-	@echo "    make phase-5 FINDING=CC-0001  Develop exploit for one finding"
-	@echo "    make phase-6                  Generate report"
-	@echo "    make validate-all             Validate all PENDING findings"
-	@echo "    make exploit-all              Exploit all CONFIRMED findings"
-	@echo ""
-	@echo "  Wrapper controls:"
-	@echo ""
-	@echo "    CODECOME_USE_WRAPPER=0       Bypass styled wrapper and use raw opencode run"
-	@echo "    CODECOME_THINKING=1          Enable --thinking in wrapper-driven phase runs"
-	@echo "    OPENCODE_ARGS='...'          Extra flags passed through to opencode run"
-	@echo "    CODECOME_MODEL=<id>          Pin the model per phase (e.g. anthropic/claude-opus-4-7)"
-	@echo "    CODECOME_MODEL_VARIANT=<v>   Pin the model variant (e.g. high, max)"
-	@echo "    PROMPT_EXTRA=\"...\"            Append extra instructions to phase prompt"
-	@echo "    PROMPT_EXTRA_FILE=path        Append file content to phase prompt"
-	@echo ""
-	@echo "    make show-model              Print the model resolution table for an agent"
-	@echo "    make show-model AGENT=auditor"
-	@echo ""
-	@echo "  Workspace tools:"
-	@echo ""
-	@echo "    make check          Validate workspace structure and config"
-	@echo "    make status         Show current finding status"
-	@echo "    make next-id        Show next available finding id"
-	@echo "    make frontmatter    Validate finding frontmatter"
-	@echo "    make tests          Run dev test suite + frontmatter gate"
-	@echo "    make itemdb-reset   Remove local audit artifacts and recreate .gitkeep files"
-	@echo "    make index          Regenerate itemdb/index.md"
-	@echo "    make report         Regenerate itemdb/reports/report.md (local, no AI)"
-	@echo ""
-	@echo "  Finding management:"
-	@echo ""
-	@echo "    make findings                     List all findings"
-	@echo "    make findings STATUS=PENDING      List findings by status"
-	@echo "    make findings-create TITLE=\"...\"    Create a new finding from template"
-	@echo "    make findings-move FINDING=CC-0001 STATUS=CONFIRMED"
-	@echo "    make findings-evidence FINDING=CC-0001"
-	@echo ""
-	@echo "  Sandbox runtime:"
-	@echo ""
-	@echo "    make sandbox-check  Run sandbox smoke test"
-	@echo "    make sandbox-up     Start sandbox"
-	@echo "    make sandbox-down   Stop sandbox"
-	@echo "    make sandbox-shell  Open sandbox shell"
-	@echo "    make sandbox-logs   Follow sandbox logs"
-	@echo "    make sandbox-clean  Stop sandbox and clean tmp"
-	@echo "    make sandbox-reset  Recreate sandbox from a known state"
-	@echo ""
-	@echo "  Sandbox bootstrap (Phase 1b):"
-	@echo ""
-	@echo "    make sandbox-list                List curated example sandboxes"
-	@echo "    make sandbox-inspect ID=python   Inspect one example"
-	@echo "    make sandbox-detect              Propose ranked candidates for src/"
-	@echo "    make sandbox-bootstrap ID=python Apply an example to sandbox/"
-	@echo "    make sandbox-validate            Run sandbox validation tiers"
-	@echo "    make sandbox-regenerate          Re-apply current example with backup"
-	@echo "    make sandbox-status              Show sandbox provenance and gate result"
-	@echo ""
-	@echo "  Sandbox bootstrap controls:"
-	@echo ""
-	@echo "    CODECOME_ALLOW_NO_SANDBOX=1        Soft-override Phase 2 sandbox gate"
-	@echo "    CODECOME_BOOTSTRAP_MAX_RETRIES=N   Agent remediation budget (default 3)"
-	@echo "    CODECOME_BOOTSTRAP_DRY_RUN=1       Force --dry-run on apply/regenerate"
-	@echo ""
+	@printf "\n"
+	@printf "  $(BOLD)$(CYAN)CodeCome commands$(RESET)\n"
+	@printf "  $(BOLD)$(CYAN)=================$(RESET)\n"
+	@printf "\n"
+	@printf "  $(BOLD)$(CYAN)Workflow phases:$(RESET)\n"
+	@printf "\n"
+	@printf "    $(BOLD)make venv$(RESET)                     Create/update repo-local virtualenv\n"
+	@printf "    $(BOLD)make phase-1$(RESET)                  Run reconnaissance\n"
+	@printf "    $(BOLD)make phase-2$(RESET)                  Run hypothesis generation\n"
+	@printf "    $(BOLD)make phase-3$(RESET)                  Run counter-analysis\n"
+	@printf "    $(BOLD)make phase-4 FINDING=CC-0001$(RESET)  Validate one finding\n"
+	@printf "    $(BOLD)make phase-5 FINDING=CC-0001$(RESET)  Develop exploit for one finding\n"
+	@printf "    $(BOLD)make phase-6$(RESET)                  Generate report\n"
+	@printf "    $(BOLD)make validate-all$(RESET)             Validate all PENDING findings\n"
+	@printf "    $(BOLD)make exploit-all$(RESET)              Exploit all CONFIRMED findings\n"
+	@printf "\n"
+	@printf "  $(BOLD)$(CYAN)Wrapper controls:$(RESET)\n"
+	@printf "\n"
+	@printf "    $(BOLD)CODECOME_USE_WRAPPER=0$(RESET)       Bypass styled wrapper and use raw opencode run\n"
+	@printf "    $(BOLD)CODECOME_THINKING=1$(RESET)          Enable --thinking in wrapper-driven phase runs\n"
+	@printf "    $(BOLD)OPENCODE_ARGS='...'$(RESET)          Extra flags passed through to opencode run\n"
+	@printf "    $(BOLD)CODECOME_MODEL=<id>$(RESET)          Pin the model per phase (e.g. anthropic/claude-opus-4-7)\n"
+	@printf "    $(BOLD)CODECOME_MODEL_VARIANT=<v>$(RESET)   Pin the model variant (e.g. high, max)\n"
+	@printf "    $(BOLD)PROMPT_EXTRA=\"...\"$(RESET)            Append extra instructions to phase prompt\n"
+	@printf "    $(BOLD)PROMPT_EXTRA_FILE=path$(RESET)        Append file content to phase prompt\n"
+	@printf "\n"
+	@printf "    $(BOLD)make show-model$(RESET)              Print the model resolution table for an agent\n"
+	@printf "    $(BOLD)make show-model AGENT=auditor$(RESET)\n"
+	@printf "\n"
+	@printf "  $(BOLD)$(CYAN)Workspace tools:$(RESET)\n"
+	@printf "\n"
+	@printf "    $(BOLD)make check$(RESET)          Validate workspace structure and config\n"
+	@printf "    $(BOLD)make status$(RESET)         Show current finding status\n"
+	@printf "    $(BOLD)make next-id$(RESET)        Show next available finding id\n"
+	@printf "    $(BOLD)make frontmatter$(RESET)    Validate finding frontmatter\n"
+	@printf "    $(BOLD)make tests$(RESET)          Run dev test suite + frontmatter gate\n"
+	@printf "    $(BOLD)make itemdb-reset$(RESET)   Remove local audit artifacts and recreate .gitkeep files\n"
+	@printf "    $(BOLD)make index$(RESET)          Regenerate itemdb/index.md\n"
+	@printf "    $(BOLD)make report$(RESET)         Regenerate itemdb/reports/report.md (local, no AI)\n"
+	@printf "\n"
+	@printf "  $(BOLD)$(CYAN)Finding management:$(RESET)\n"
+	@printf "\n"
+	@printf "    $(BOLD)make findings$(RESET)                     List all findings\n"
+	@printf "    $(BOLD)make findings STATUS=PENDING$(RESET)      List findings by status\n"
+	@printf "    $(BOLD)make findings-create TITLE=\"...\"$(RESET)    Create a new finding from template\n"
+	@printf "    $(BOLD)make findings-move FINDING=CC-0001 STATUS=CONFIRMED$(RESET)\n"
+	@printf "    $(BOLD)make findings-evidence FINDING=CC-0001$(RESET)\n"
+	@printf "\n"
+	@printf "  $(BOLD)$(CYAN)Sandbox runtime:$(RESET)\n"
+	@printf "\n"
+	@printf "    $(BOLD)make sandbox-check$(RESET)  Run sandbox smoke test\n"
+	@printf "    $(BOLD)make sandbox-up$(RESET)     Start sandbox\n"
+	@printf "    $(BOLD)make sandbox-down$(RESET)   Stop sandbox\n"
+	@printf "    $(BOLD)make sandbox-shell$(RESET)  Open sandbox shell\n"
+	@printf "    $(BOLD)make sandbox-logs$(RESET)   Follow sandbox logs\n"
+	@printf "    $(BOLD)make sandbox-clean$(RESET)  Stop sandbox and clean tmp\n"
+	@printf "    $(BOLD)make sandbox-reset$(RESET)  Recreate sandbox from a known state\n"
+	@printf "\n"
+	@printf "  $(BOLD)$(CYAN)Sandbox bootstrap (Phase 1b):$(RESET)\n"
+	@printf "\n"
+	@printf "    $(BOLD)make sandbox-list$(RESET)                List curated example sandboxes\n"
+	@printf "    $(BOLD)make sandbox-inspect ID=python$(RESET)   Inspect one example\n"
+	@printf "    $(BOLD)make sandbox-detect$(RESET)              Propose ranked candidates for src/\n"
+	@printf "    $(BOLD)make sandbox-bootstrap ID=python$(RESET) Apply an example to sandbox/\n"
+	@printf "    $(BOLD)make sandbox-validate$(RESET)            Run sandbox validation tiers\n"
+	@printf "    $(BOLD)make sandbox-regenerate$(RESET)          Re-apply current example with backup\n"
+	@printf "    $(BOLD)make sandbox-status$(RESET)              Show sandbox provenance and gate result\n"
+	@printf "\n"
+	@printf "  $(BOLD)$(CYAN)Sandbox bootstrap controls:$(RESET)\n"
+	@printf "\n"
+	@printf "    $(BOLD)CODECOME_ALLOW_NO_SANDBOX=1$(RESET)        Soft-override Phase 2 sandbox gate\n"
+	@printf "    $(BOLD)CODECOME_BOOTSTRAP_MAX_RETRIES=N$(RESET)   Agent remediation budget (default 3)\n"
+	@printf "    $(BOLD)CODECOME_BOOTSTRAP_DRY_RUN=1$(RESET)       Force --dry-run on apply/regenerate\n"
+	@printf "\n"
 
 # ---------------------------------------------------------------------------
 # Python environment
@@ -98,8 +112,8 @@ venv:
 	@$(PYTHON) -m pip install --no-input -r requirements.txt
 
 venv-check:
-	@test -x "$(PYTHON)" || (printf "\n[FAIL] Missing repo virtualenv at .venv\n\nRun:\n\n    make venv\n\n" && exit 1)
-	@$(PYTHON) -c "import yaml, rich" >/dev/null 2>&1 || (printf "\n[FAIL] .venv is missing required Python packages\n\nRun:\n\n    make venv\n\nIf you updated requirements, rerun the same command to resync .venv.\n\n" && exit 1)
+	@test -x "$(PYTHON)" || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) Missing repo virtualenv at .venv\n\nRun:\n\n    make venv\n\n" && exit 1)
+	@$(PYTHON) -c "import yaml, rich" >/dev/null 2>&1 || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) .venv is missing required Python packages\n\nRun:\n\n    make venv\n\nIf you updated requirements, rerun the same command to resync .venv.\n\n" && exit 1)
 
 # ---------------------------------------------------------------------------
 # Workflow phases
@@ -116,7 +130,7 @@ phase-1: venv-check
 phase-2: venv-check
 	@$(PYTHON) tools/gate-check.py 2
 	@$(PYTHON) tools/sandbox-bootstrap.py status --gate || ( \
-		printf "\n[BLOCK] Phase 2 sandbox gate failed.\n" ; \
+		printf "\n$(BOLD)$(YELLOW)[BLOCK]$(RESET) Phase 2 sandbox gate failed.\n" ; \
 		printf "Run: make sandbox-status\n" ; \
 		printf "Or override (not recommended): CODECOME_ALLOW_NO_SANDBOX=1 make phase-2\n\n" ; \
 		exit 1 )
