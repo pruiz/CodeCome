@@ -25,6 +25,7 @@ Examples:
 
 - `.opencode/skills/c-cpp-security/SKILL.md`
 - `.opencode/skills/dotnet-security/SKILL.md`
+- `.opencode/skills/php-security/SKILL.md`
 - `.opencode/skills/web-security/SKILL.md`
 - `.opencode/skills/juliet-benchmark/SKILL.md`
 
