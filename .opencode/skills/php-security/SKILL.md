@@ -387,6 +387,20 @@ Dangerous signs:
 - missing authorization on download,
 - processing archives without path checks.
 
+### Move-Check-Delete Race Conditions
+
+A common PHP anti-pattern is moving the uploaded file to its final destination
+first, checking its validity (e.g., using `getimagesize()` or AV scan), and
+calling `unlink()` if the check fails. 
+
+If the destination is inside the web root, this creates a Time-of-Check to
+Time-of-Use (TOCTOU) race condition. An attacker can repeatedly upload a
+malicious `.php` file and concurrently request its URL. If the request hits
+the microsecond window before `unlink()` executes, the PHP payload runs.
+
+Safer pattern: Validate the file *before* moving it out of the temporary
+directory (`$_FILES['file']['tmp_name']`).
+
 ## Deserialization review
 
 Look for:
@@ -479,6 +493,34 @@ Safer patterns:
 - `password_verify` for password verification,
 - `in_array($x, $arr, true)` (strict mode),
 - explicit type casts before comparison.
+
+## Variable overwrite (State Hijacking) review
+
+PHP allows dynamic variable creation which can accidentally overwrite internal
+application state if attacker input is passed to specific functions.
+
+Dangerous patterns:
+
+    extract($_POST);
+    extract($_GET, EXTR_OVERWRITE); // Default behavior
+    parse_str($user_input);         // In PHP < 7.2, sets variables in current scope
+    
+    // Dynamic variable assignment loops:
+    foreach ($_REQUEST as $key => $val) {
+        $$key = $val;
+    }
+
+If an attacker passes `?is_admin=1` or `?config[db]=malicious`, they may
+overwrite `$is_admin` or `$config` if the dynamic assignment happens *after*
+initialization.
+
+Check:
+
+- Order of operations: is `extract()` called before or after the target
+  variable is defined?
+- Use of `EXTR_SKIP` in `extract()` (safer).
+- Use of `parse_str($input, $result_array)` instead of relying on scope
+  pollution.
 
 ## XSS review
 
@@ -651,11 +693,18 @@ in `to`, `subject`, or the additional headers parameter without CRLF stripping
 can inject arbitrary headers (BCC for spam relay, content-type for HTML
 injection, MIME boundary tampering for attachment smuggling).
 
+The 5th parameter (`$additional_parameters`) is even more dangerous: it is
+passed directly to the underlying `sendmail` binary as command-line arguments.
+If an attacker controls this parameter, they can inject arguments like
+`-X/var/www/html/shell.php` to write log files containing PHP code into the
+web root, achieving direct Remote Code Execution (RCE).
+
 Dangerous patterns:
 
     mail($_POST["to"], "Subject", $body)
     mail($to, $_POST["subject"], $body)
     mail($to, $subject, $body, "From: " . $_POST["email"])
+    mail($to, $subject, $body, $headers, $_POST["sendmail_args"]) // RCE Vector
 
 Check:
 
@@ -666,7 +715,9 @@ Check:
 - additional headers parameter (5th arg) constructed from user input.
 
 The 5th-argument escape mechanism in PHP 5.4+ does not validate header
-content, only command-line escaping for the sendmail binary path.
+content, only command-line escaping for the sendmail binary path, and specific
+flags like `-X` or `-O` may still bypass intended constraints depending on the
+MTA configuration.
 
 ## XML and XXE review
 
@@ -678,7 +729,12 @@ Look for:
     DOMDocument::load
     XMLReader
 
-Check whether external entity loading is possible, especially in older PHP/libxml configurations.
+Check whether external entity loading is possible. 
+
+Important version context: In PHP < 8.0 (and libxml < 2.9), external entities
+were enabled by default. In modern PHP (libxml > 2.9), external entities are
+disabled by default. For XXE to be exploitable in modern PHP, the code must
+explicitly pass the `LIBXML_NOENT` flag to the parser.
 
 Consider:
 
@@ -837,6 +893,30 @@ Supply-chain red flags:
 - insecure package versions.
 
 Do not invent CVEs without verification. If current vulnerability data is needed, use external up-to-date sources outside this skill.
+
+## Insecure randomness review
+
+PHP provides several predictably seeded random generation functions that
+should never be used for security-sensitive tokens (password resets, CSRF
+tokens, cryptographic keys, or session identifiers).
+
+Dangerous functions:
+
+    rand()
+    mt_rand()
+    uniqid()
+    str_shuffle()
+    array_rand()
+
+Because these rely on the Mersenne Twister algorithm (or time-based seeds
+for `uniqid()`), an attacker observing a few outputs can predict past and
+future tokens, leading to account takeover or token bypass.
+
+Safer patterns:
+
+- `random_bytes()`
+- `random_int()`
+- `openssl_random_pseudo_bytes()`
 
 ## Secrets and configuration
 
