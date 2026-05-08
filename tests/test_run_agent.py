@@ -963,3 +963,292 @@ def test_maybe_render_sandbox_bootstrap_disabled_via_env(monkeypatch):
         "status": "completed",
     }
     assert module._maybe_render_sandbox_bootstrap(None, state) is False
+
+
+# --- bash-shim detection ----------------------------------------------------
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("command", "expected_family", "expected_attrs"),
+    [
+        # rtk read family
+        ("rtk read README.md", "read", {"files": ["README.md"], "rtk_filtered": False}),
+        ("rtk read README.md AGENTS.md", "read",
+         {"files": ["README.md", "AGENTS.md"], "rtk_filtered": False}),
+        ("rtk read --level minimal README.md", "read",
+         {"files": ["README.md"], "rtk_filtered": True}),
+        ("rtk read --tail-lines 5 README.md", "read",
+         {"files": ["README.md"], "rtk_filtered": True}),
+        ("rtk read -n -m 50 README.md", "read",
+         {"files": ["README.md"], "rtk_filtered": True}),
+        # cat / head / tail
+        ("cat README.md", "read", {"files": ["README.md"]}),
+        ("cat README.md AGENTS.md", "read", {"files": ["README.md", "AGENTS.md"]}),
+        ("head -n 10 README.md", "read", {"files": ["README.md"], "head_limit": 10}),
+        ("head -n10 README.md", "read", {"files": ["README.md"], "head_limit": 10}),
+        ("tail -n 5 README.md", "read", {"files": ["README.md"], "tail_limit": 5}),
+        # grep / rg / rtk grep
+        ("rg foo tools/run-agent.py", "grep", {"pattern": "foo", "path": "tools/run-agent.py"}),
+        ("rg --vimgrep render_grep tools/run-agent.py", "grep",
+         {"pattern": "render_grep", "path": "tools/run-agent.py"}),
+        ("rtk grep render_grep tools/run-agent.py", "grep",
+         {"pattern": "render_grep", "path": "tools/run-agent.py"}),
+        ("rtk grep -i needle .", "grep", {"pattern": "needle", "path": "."}),
+        ("grep -r foo bar/", "grep", {"pattern": "foo", "path": "bar/"}),
+        # ls
+        ("ls", "ls", {"path": ".", "long_format": False}),
+        ("ls -la tools", "ls", {"path": "tools", "long_format": True}),
+        ("rtk ls -la", "ls", {"path": ".", "long_format": True}),
+        # find / tree
+        ("find tools", "find", {"path": "tools"}),
+        ("find tools -name '*.py'", "find", {"path": "tools"}),
+        ("tree", "find", {"path": "."}),
+        # leading env / sudo wrappers should be stripped
+        ("LANG=C ls tools", "ls", {"path": "tools"}),
+        ("sudo cat /etc/hosts", "read", {"files": ["/etc/hosts"]}),
+        ("time rg foo bar/", "grep", {"pattern": "foo", "path": "bar/"}),
+    ],
+)
+def test_is_bash_shim_call_recognises_supported_commands(command, expected_family, expected_attrs):
+    module = load_tool_module("run_agent_shim_detect", "tools/run-agent.py")
+    shim = module._is_bash_shim_call(command)
+    assert shim is not None, f"expected shim match for {command!r}"
+    assert shim.family == expected_family
+    for k, v in expected_attrs.items():
+        assert getattr(shim, k) == v, (
+            f"attribute {k}: expected {v!r}, got {getattr(shim, k)!r} for {command!r}"
+        )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "command",
+    [
+        "",
+        "echo hello",
+        "make phase-1",
+        "git status",
+        "rtk diff a b",
+        "rtk smart README.md",
+        # Pipelines / redirections / substitutions disqualify shim handling.
+        "cat README.md | head",
+        "rg foo > out.txt",
+        "ls && pwd",
+        "ls; pwd",
+        "echo $(pwd)",
+        "cat `which python`",
+        # No file argument.
+        "rtk read",
+        "cat",
+        "rg",
+        # rtk subcommand we don't route.
+        "rtk json '{}'",
+        "rtk wc README.md",
+    ],
+)
+def test_is_bash_shim_call_rejects_unsupported(command):
+    module = load_tool_module("run_agent_shim_reject", "tools/run-agent.py")
+    assert module._is_bash_shim_call(command) is None
+
+
+@pytest.mark.unit
+def test_normalize_rtk_grep_output_converts_grouped_to_flat():
+    module = load_tool_module("run_agent_shim_norm_rtk", "tools/run-agent.py")
+    raw = (
+        "4 matches in 3F:\n"
+        "\n"
+        "[file] tools/run-agent.py (2):\n"
+        "  2811: return render_grep_rich(console, state)\n"
+        "  2813: return render_grep_plain(state)\n"
+        "\n"
+        "[file] tools/x.py (1):\n"
+        "    42: hit\n"
+    )
+    out = module._normalize_rtk_grep_output(raw)
+    lines = [l for l in out.split("\n") if l.strip()]
+    assert lines == [
+        "tools/run-agent.py:2811:return render_grep_rich(console, state)",
+        "tools/run-agent.py:2813:return render_grep_plain(state)",
+        "tools/x.py:42:hit",
+    ]
+
+
+@pytest.mark.unit
+def test_normalize_rtk_grep_output_passes_through_when_no_markers():
+    module = load_tool_module("run_agent_shim_norm_passthrough", "tools/run-agent.py")
+    raw = "tools/foo.py:10:hit\nanother line\n"
+    assert module._normalize_rtk_grep_output(raw) == raw
+
+
+@pytest.mark.unit
+def test_strip_ls_long_format_to_filenames_strips_columns_and_total():
+    module = load_tool_module("run_agent_shim_ls_strip", "tools/run-agent.py")
+    raw = (
+        "total 616\n"
+        "drwxr-xr-x@ 14 pruiz  staff     448 May  8 03:02 __pycache__\n"
+        "-rw-r--r--@  1 pruiz  staff    3893 May  8 00:37 _colors.py\n"
+        "-rwxr-xr-x@  1 pruiz  staff    6347 May  8 00:37 check-frontmatter.py\n"
+    )
+    out = module._strip_ls_long_format_to_filenames(raw)
+    assert out.split("\n") == ["__pycache__", "_colors.py", "check-frontmatter.py"]
+
+
+@pytest.mark.component
+def test_render_shim_read_routes_to_read_renderer(monkeypatch, capsys):
+    module = load_tool_module("run_agent_shim_read_e2e", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setattr(module, "_INTERNAL_READ_SUPPRESS", False)
+
+    raw_content = "alpha\nbeta\ngamma\n"
+    state = {
+        "input": {"command": "rtk read tests/fixtures/run_agent/openai_export.json", "description": "rtk read"},
+        "output": raw_content,
+        "status": "completed",
+    }
+    handled = module._maybe_render_bash_shim(None, state)
+    assert handled is True
+    out = capsys.readouterr().out
+    # The Read renderer header includes the file path.
+    assert "openai_export.json" in out
+    # Body content is rendered.
+    assert "alpha" in out
+    assert "beta" in out
+
+
+@pytest.mark.component
+def test_render_shim_grep_routes_through_normalizer(monkeypatch, capsys):
+    module = load_tool_module("run_agent_shim_grep_e2e", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+
+    rtk_output = (
+        "2 matches in 1F:\n"
+        "\n"
+        "[file] tools/run-agent.py (2):\n"
+        "  100: foo bar\n"
+        "  200: foo baz\n"
+    )
+    state = {
+        "input": {"command": "rtk grep foo tools/run-agent.py", "description": "rtk grep"},
+        "output": rtk_output,
+        "status": "completed",
+    }
+    handled = module._maybe_render_bash_shim(None, state)
+    assert handled is True
+    out = capsys.readouterr().out
+    assert "tools/run-agent.py" in out
+    # Both line numbers should appear since grep renderer detected lines mode.
+    assert "100" in out and "200" in out
+    # The header pattern should be visible.
+    assert "foo" in out
+
+
+@pytest.mark.component
+def test_render_shim_ls_long_format_strips_columns(monkeypatch, capsys):
+    module = load_tool_module("run_agent_shim_ls_e2e", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+
+    long_ls = (
+        "total 4\n"
+        "-rw-r--r--  1 u  g  10 May  8 README.md\n"
+        "drwxr-xr-x  2 u  g   1 May  8 docs\n"
+    )
+    state = {
+        "input": {"command": "ls -la", "description": "ls"},
+        "output": long_ls,
+        "status": "completed",
+    }
+    handled = module._maybe_render_bash_shim(None, state)
+    assert handled is True
+    out = capsys.readouterr().out
+    assert "README.md" in out
+    assert "docs" in out
+    # Long-format columns must be gone.
+    assert "rw-r--r--" not in out
+    assert "May  8" not in out
+
+
+@pytest.mark.component
+def test_render_shim_ls_long_format_can_be_disabled(monkeypatch, capsys):
+    module = load_tool_module("run_agent_shim_ls_no_strip", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setattr(module, "_BASH_SHIM_LS_STRIP_LONG_FORMAT", False)
+
+    long_ls = "total 4\n-rw-r--r--  1 u  g  10 May  8 README.md\n"
+    state = {
+        "input": {"command": "ls -la", "description": "ls"},
+        "output": long_ls,
+        "status": "completed",
+    }
+    handled = module._maybe_render_bash_shim(None, state)
+    assert handled is True
+    out = capsys.readouterr().out
+    # When disabled, the renderer keeps the long-format raw line.
+    assert "rw-r--r--" in out
+
+
+@pytest.mark.unit
+def test_maybe_render_bash_shim_disabled_via_env(monkeypatch):
+    module = load_tool_module("run_agent_shim_disabled", "tools/run-agent.py")
+    monkeypatch.setattr(module, "_BASH_SHIM_RENDER", False)
+    state = {
+        "input": {"command": "rtk read README.md"},
+        "output": "anything",
+        "status": "completed",
+    }
+    assert module._maybe_render_bash_shim(None, state) is False
+
+
+@pytest.mark.unit
+def test_maybe_render_bash_shim_skips_unrecognized_commands():
+    module = load_tool_module("run_agent_shim_skip", "tools/run-agent.py")
+    state = {
+        "input": {"command": "make phase-1", "description": ""},
+        "output": "Phase 1 done",
+        "status": "completed",
+    }
+    assert module._maybe_render_bash_shim(None, state) is False
+
+
+@pytest.mark.component
+def test_render_shim_read_filtered_triggers_cache_reread(monkeypatch):
+    """When rtk read uses a filtering flag, the renderer must call
+    _cache_reread for each requested file so the cache holds raw disk
+    content instead of the filtered output."""
+    module = load_tool_module("run_agent_shim_filter_cache", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setattr(module, "_INTERNAL_READ_SUPPRESS", False)
+
+    cache_calls: list[str] = []
+    monkeypatch.setattr(module, "_cache_reread", lambda p: cache_calls.append(p))
+
+    state = {
+        "input": {"command": "rtk read --level aggressive tools/run-agent.py", "description": "rtk read"},
+        "output": "filtered content",
+        "status": "completed",
+    }
+    handled = module._maybe_render_bash_shim(None, state)
+    assert handled is True
+    assert any("tools/run-agent.py" in c for c in cache_calls)
+
+
+@pytest.mark.component
+def test_render_shim_read_multi_file_triggers_cache_reread(monkeypatch):
+    """rtk read of multiple files concatenates output without delimiters,
+    so we cannot per-file split. The renderer must fall back to direct
+    filesystem reads to refresh the cache."""
+    module = load_tool_module("run_agent_shim_multi_cache", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setattr(module, "_INTERNAL_READ_SUPPRESS", False)
+
+    cache_calls: list[str] = []
+    monkeypatch.setattr(module, "_cache_reread", lambda p: cache_calls.append(p))
+
+    state = {
+        "input": {"command": "rtk read README.md AGENTS.md", "description": "rtk read"},
+        "output": "combined content",
+        "status": "completed",
+    }
+    handled = module._maybe_render_bash_shim(None, state)
+    assert handled is True
+    assert sum("README.md" in c for c in cache_calls) == 1
+    assert sum("AGENTS.md" in c for c in cache_calls) == 1

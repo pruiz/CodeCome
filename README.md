@@ -184,7 +184,7 @@ Benchmark labels alone are not enough to mark a finding as confirmed.
 
 Each `make` target checks readiness gates before invoking the corresponding agent. Phase 4 and Phase 5 are invoked once per finding.
 
-By default, phase targets use a CodeCome-owned styled wrapper around `opencode run --format json` so assistant output, tool calls, and tool results render with consistent colors and structure. The wrapper pretty-renders `read`, `write`, `edit`, `apply_patch`, `grep`, `glob`, `bash`, `todowrite`, and `skill` tool calls; all others get a generic JSON panel. The wrapper also detects bash invocations of `tools/sandbox-bootstrap.py --format json …` (and `make sandbox-* BOOTSTRAP_ARGS='--format json'` wrappers) and renders them as a structured Sandbox panel with capability tables, validation tier summaries, and color-coded gate badges.
+By default, phase targets use a CodeCome-owned styled wrapper around `opencode run --format json` so assistant output, tool calls, and tool results render with consistent colors and structure. The wrapper pretty-renders `read`, `write`, `edit`, `apply_patch`, `grep`, `glob`, `bash`, `todowrite`, and `skill` tool calls; all others get a generic JSON panel. The wrapper also detects bash invocations of `tools/sandbox-bootstrap.py --format json …` (and `make sandbox-* BOOTSTRAP_ARGS='--format json'` wrappers) and renders them as a structured Sandbox panel with capability tables, validation tier summaries, and color-coded gate badges. Some models prefer to invoke CLI helpers via the bash tool instead of the OpenCode-native Read/Grep/Glob tools (e.g. `rtk read FILE`, `rtk grep PAT PATH`, `rtk ls`, plain `rg PAT`, `cat FILE`, `head -n N FILE`, `tail -n N FILE`, `find PATH`, `tree`); the wrapper detects those calls and routes their output through the matching styled renderer so the panels look the same regardless of how the agent invoked the operation. Pipelines, redirections and command substitutions are intentionally left for the generic Bash panel.
 
 All `make` targets that invoke Python tools expect a repo-local virtualenv at `.venv/`. If it is missing or stale, the command will stop with a setup message telling you to run `make venv`.
 
@@ -285,6 +285,8 @@ The phase targets support these environment variables:
     CODECOME_SANDBOX_RENDER=0  # disable the structured Sandbox panel (fall back to a plain Bash panel)
     CODECOME_SANDBOX_VALIDATE_STDERR_LINES=20  # cap stderr_tail lines shown per failed validate tier
     CODECOME_SANDBOX_FILES_CAP=15  # cap files listed in sandbox apply/inspect/detect panels
+    CODECOME_BASH_SHIM_RENDER=0  # disable rtk/cat/head/tail/rg/ls/find/tree -> Read/Grep/Glob routing
+    CODECOME_BASH_SHIM_LS_STRIP_LONG_FORMAT=0  # keep `ls -la` columns instead of stripping to filenames
     OPENCODE_ARGS='...'      # extra flags forwarded to opencode run
     CODECOME_MODEL=<id>      # pin the model per phase, e.g. anthropic/claude-opus-4-7
     CODECOME_MODEL_VARIANT=<v>  # pin the model variant, e.g. high, max

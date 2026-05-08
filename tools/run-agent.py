@@ -599,6 +599,8 @@ _RENDER_REASONING = os.environ.get("CODECOME_RENDER_REASONING", "1") not in ("0"
 _SANDBOX_RENDER = os.environ.get("CODECOME_SANDBOX_RENDER", "1") not in ("0", "false", "False", "no")
 _SANDBOX_VALIDATE_STDERR_LINES = int(os.environ.get("CODECOME_SANDBOX_VALIDATE_STDERR_LINES", "20"))
 _SANDBOX_FILES_CAP = int(os.environ.get("CODECOME_SANDBOX_FILES_CAP", "15"))
+_BASH_SHIM_RENDER = os.environ.get("CODECOME_BASH_SHIM_RENDER", "1") not in ("0", "false", "False", "no")
+_BASH_SHIM_LS_STRIP_LONG_FORMAT = os.environ.get("CODECOME_BASH_SHIM_LS_STRIP_LONG_FORMAT", "1") not in ("0", "false", "False", "no")
 _INTERNAL_READ_SUPPRESS = os.environ.get("CODECOME_INTERNAL_READ_SUPPRESS", "1") not in ("0", "false", "False", "no")
 
 _READ_FILE_FRAMING_RE = re.compile(
@@ -2735,6 +2737,575 @@ def _render_sandbox_validate_plain(payload: dict, glyphs: dict) -> None:
         print(f"  {glyphs['info']} history updated in sandbox/CODECOME-GENERATED.md")
 
 
+# --- Bash-shim detection ----------------------------------------------------
+#
+# Some models (e.g. google/gemini-3.1-pro-preview) prefer to invoke a CLI
+# helper such as `rtk read FILE`, `rtk grep PAT PATH`, `rtk ls`, plain
+# `ls`, `cat`, `head`, `tail`, `find`, `tree`, or `rg` via the bash tool
+# instead of using OpenCode's native Read / Grep / Glob tools. The
+# wrapper detects these by inspecting the bash command and routes the
+# output through the existing styled renderers, so the user sees the
+# same Read / Grep / Glob panels regardless of how the agent invoked
+# the operation.
+
+# Recognised verbs at the head of a bash command, after env assignments
+# and shell wrappers like sudo / time / nice / ionice are stripped.
+_BASH_SHIM_READ_VERBS = {"cat", "head", "tail"}
+_BASH_SHIM_GREP_VERBS = {"rg", "grep"}
+_BASH_SHIM_LS_VERBS = {"ls"}
+_BASH_SHIM_FIND_VERBS = {"find", "tree"}
+# Wrappers we ignore at the start of a command line.
+_BASH_SHIM_LEADING_NOISE = {"sudo", "time", "nice", "ionice", "command", "env"}
+# Shell metacharacters that disqualify the command from shim handling.
+_BASH_SHIM_DISQUALIFIERS = ("|", ";", "&&", "||", ">", "<", "`", "$(")
+
+
+def _strip_leading_env_and_wrappers(tokens: list[str]) -> list[str]:
+    """Drop leading KEY=VAL env assignments and known shell wrappers
+    (sudo, time, nice, ionice, command, env) so the next significant
+    token is the actual command verb."""
+    out = list(tokens)
+    while out:
+        head = out[0]
+        # KEY=VAL env assignments are tokens with `=` and an UPPER_CASE
+        # identifier on the left.
+        if "=" in head and head.split("=", 1)[0].replace("_", "").isalnum():
+            left = head.split("=", 1)[0]
+            if left and (left[0].isalpha() or left[0] == "_") and left.isupper():
+                out.pop(0)
+                continue
+        if head in _BASH_SHIM_LEADING_NOISE:
+            # Skip wrapper plus its options (best-effort: drop only the
+            # wrapper itself and any -flags directly after it).
+            out.pop(0)
+            while out and out[0].startswith("-"):
+                out.pop(0)
+            continue
+        break
+    return out
+
+
+def _bash_command_has_pipeline(command_str: str) -> bool:
+    """Heuristic: avoid shim handling for any pipeline / redirection /
+    command-substitution / background invocation."""
+    for marker in _BASH_SHIM_DISQUALIFIERS:
+        if marker in command_str:
+            return True
+    return False
+
+
+@dataclass
+class _BashShim:
+    family: str  # "read" | "grep" | "ls" | "find"
+    files: list[str]              # for read family
+    pattern: str                  # for grep family
+    path: str                     # for grep / ls / find
+    long_format: bool             # for ls family
+    head_limit: int | None        # for `head -n N`
+    tail_limit: int | None        # for `tail -n N`
+    rtk_filtered: bool            # rtk read --level/--max-lines/--tail-lines present
+    raw_command: str
+
+
+def _is_bash_shim_call(command_str: str) -> Optional[_BashShim]:
+    """Recognise bash invocations the wrapper can re-route to the
+    Read/Grep/Glob renderers. Returns a _BashShim, or None when the
+    command should be left to the generic Bash renderer."""
+    if not command_str or _bash_command_has_pipeline(command_str):
+        return None
+    try:
+        tokens = shlex.split(command_str)
+    except ValueError:
+        return None
+    if not tokens:
+        return None
+
+    tokens = _strip_leading_env_and_wrappers(tokens)
+    if not tokens:
+        return None
+
+    head = tokens[0]
+    rest = tokens[1:]
+
+    # rtk dispatcher: peel `rtk` and re-evaluate against the subcommand.
+    via_rtk = False
+    if head == "rtk":
+        if not rest:
+            return None
+        head = rest[0]
+        rest = rest[1:]
+        via_rtk = True
+
+    if head == "read" and via_rtk:
+        return _parse_rtk_read(rest, command_str)
+    if head in _BASH_SHIM_READ_VERBS:
+        return _parse_cat_head_tail(head, rest, command_str)
+    if head == "grep" and via_rtk:
+        return _parse_rtk_grep(rest, command_str)
+    if head in _BASH_SHIM_GREP_VERBS:
+        return _parse_grep_or_rg(rest, command_str)
+    if head in _BASH_SHIM_LS_VERBS:
+        return _parse_ls(rest, command_str)
+    if head in _BASH_SHIM_FIND_VERBS:
+        return _parse_find_tree(head, rest, command_str)
+    return None
+
+
+def _parse_rtk_read(rest: list[str], raw: str) -> Optional[_BashShim]:
+    """Parse `rtk read [flags] FILE [FILE...]`."""
+    files: list[str] = []
+    filtered = False
+    i = 0
+    while i < len(rest):
+        tok = rest[i]
+        if tok in ("-l", "--level"):
+            filtered = True
+            if i + 1 < len(rest):
+                i += 2
+            else:
+                i += 1
+            continue
+        if tok.startswith("--level="):
+            filtered = True
+            i += 1
+            continue
+        if tok in ("-m", "--max-lines", "--tail-lines"):
+            filtered = True
+            if i + 1 < len(rest):
+                i += 2
+            else:
+                i += 1
+            continue
+        if tok.startswith(("--max-lines=", "--tail-lines=")):
+            filtered = True
+            i += 1
+            continue
+        if tok in ("-n", "--line-numbers", "--ultra-compact", "--skip-env"):
+            i += 1
+            continue
+        if tok.startswith("-v") and all(c == "v" for c in tok[1:]):
+            i += 1
+            continue
+        if tok == "--":
+            i += 1
+            continue
+        if tok.startswith("-"):
+            # Unknown flag; skip just the flag itself.
+            i += 1
+            continue
+        files.append(tok)
+        i += 1
+    if not files:
+        return None
+    return _BashShim(
+        family="read",
+        files=files,
+        pattern="",
+        path="",
+        long_format=False,
+        head_limit=None,
+        tail_limit=None,
+        rtk_filtered=filtered,
+        raw_command=raw,
+    )
+
+
+def _parse_cat_head_tail(verb: str, rest: list[str], raw: str) -> Optional[_BashShim]:
+    """Parse `cat FILE...`, `head [-n N] FILE`, `tail [-n N] FILE`."""
+    files: list[str] = []
+    head_limit: Optional[int] = None
+    tail_limit: Optional[int] = None
+    i = 0
+    while i < len(rest):
+        tok = rest[i]
+        if tok == "-n" and i + 1 < len(rest):
+            try:
+                count = int(rest[i + 1].lstrip("+-"))
+                if verb == "head":
+                    head_limit = count
+                elif verb == "tail":
+                    tail_limit = count
+            except ValueError:
+                pass
+            i += 2
+            continue
+        if tok.startswith("-n") and len(tok) > 2:
+            try:
+                count = int(tok[2:].lstrip("+-"))
+                if verb == "head":
+                    head_limit = count
+                elif verb == "tail":
+                    tail_limit = count
+            except ValueError:
+                pass
+            i += 1
+            continue
+        if tok.startswith("-") and tok != "-":
+            i += 1
+            continue
+        files.append(tok)
+        i += 1
+    if not files:
+        return None
+    return _BashShim(
+        family="read",
+        files=files,
+        pattern="",
+        path="",
+        long_format=False,
+        head_limit=head_limit,
+        tail_limit=tail_limit,
+        rtk_filtered=False,
+        raw_command=raw,
+    )
+
+
+def _parse_grep_or_rg(rest: list[str], raw: str) -> Optional[_BashShim]:
+    """Parse `rg PATTERN [PATH]` or `grep PATTERN PATH...` (best-effort)."""
+    # Drop common option flags so we can pull the pattern out. We don't
+    # need to be exhaustive: anything we miss simply falls through.
+    pattern = ""
+    path = ""
+    i = 0
+    saw_pattern = False
+    while i < len(rest):
+        tok = rest[i]
+        if tok == "--":
+            i += 1
+            continue
+        if tok.startswith("-") and tok != "-":
+            # rg/grep flags that take a value.
+            if tok in ("-e", "-f", "-A", "-B", "-C", "-g", "--glob", "--max-count",
+                       "--max-depth", "-t", "--type", "--ignore-file"):
+                i += 2
+                continue
+            i += 1
+            continue
+        if not saw_pattern:
+            pattern = tok
+            saw_pattern = True
+        elif not path:
+            path = tok
+        i += 1
+    if not saw_pattern:
+        return None
+    return _BashShim(
+        family="grep",
+        files=[],
+        pattern=pattern,
+        path=path,
+        long_format=False,
+        head_limit=None,
+        tail_limit=None,
+        rtk_filtered=False,
+        raw_command=raw,
+    )
+
+
+def _parse_rtk_grep(rest: list[str], raw: str) -> Optional[_BashShim]:
+    """Parse `rtk grep PATTERN [PATH] [extra args]`."""
+    pattern = ""
+    path = ""
+    i = 0
+    saw_pattern = False
+    while i < len(rest):
+        tok = rest[i]
+        if tok in ("-l", "--max-len", "-m", "--max", "-t", "--file-type"):
+            i += 2
+            continue
+        if tok in ("-c", "--context-only", "-n", "--line-numbers",
+                   "--ultra-compact", "--skip-env"):
+            i += 1
+            continue
+        if tok.startswith("-v") and all(c == "v" for c in tok[1:]):
+            i += 1
+            continue
+        if tok == "--":
+            i += 1
+            continue
+        if tok.startswith("-"):
+            i += 1
+            continue
+        if not saw_pattern:
+            pattern = tok
+            saw_pattern = True
+        elif not path:
+            path = tok
+        i += 1
+    if not saw_pattern:
+        return None
+    return _BashShim(
+        family="grep",
+        files=[],
+        pattern=pattern,
+        path=path,
+        long_format=False,
+        head_limit=None,
+        tail_limit=None,
+        rtk_filtered=False,
+        raw_command=raw,
+    )
+
+
+def _parse_ls(rest: list[str], raw: str) -> Optional[_BashShim]:
+    """Parse `ls [args]`. Detect -l / -la for long format."""
+    long_format = False
+    paths: list[str] = []
+    for tok in rest:
+        if tok.startswith("-") and tok != "-":
+            if "l" in tok[1:]:
+                long_format = True
+            continue
+        paths.append(tok)
+    path = paths[0] if paths else "."
+    return _BashShim(
+        family="ls",
+        files=[],
+        pattern="",
+        path=path,
+        long_format=long_format,
+        head_limit=None,
+        tail_limit=None,
+        rtk_filtered=False,
+        raw_command=raw,
+    )
+
+
+def _parse_find_tree(verb: str, rest: list[str], raw: str) -> Optional[_BashShim]:
+    """Parse `find PATH [args]` or `tree [PATH]`. Output is a list of paths."""
+    paths: list[str] = []
+    for tok in rest:
+        if tok.startswith("-") and tok != "-":
+            continue
+        # find expressions like `-name '*.py'` produce non-flag tokens
+        # we don't want to treat as paths. Best-effort: take the first
+        # non-flag token as path, ignore subsequent ones.
+        if not paths:
+            paths.append(tok)
+            break
+    path = paths[0] if paths else "."
+    return _BashShim(
+        family="find",
+        files=[],
+        pattern=verb,
+        path=path,
+        long_format=False,
+        head_limit=None,
+        tail_limit=None,
+        rtk_filtered=False,
+        raw_command=raw,
+    )
+
+
+# --- Bash-shim normalizers and renderers ------------------------------------
+
+_RTK_GREP_FILE_HEADER_RE = re.compile(r"^\[file\]\s+(?P<path>.+?)\s+\((?P<count>\d+)\)\s*:\s*$")
+_RTK_GREP_LINE_RE = re.compile(r"^\s+(?P<lineno>\d+):\s*(?P<text>.*)$")
+
+
+def _normalize_rtk_grep_output(text: str) -> str:
+    """Convert rtk grep grouped output to standard `path:line:text` lines.
+
+    Input shape (from `rtk grep`):
+        4 matches in 3F:
+        [file] tools/run-agent.py (2):
+          2811: return render_grep_rich(console, state)
+
+    Output shape (compatible with _parse_grep_output):
+        tools/run-agent.py:2811:return render_grep_rich(console, state)
+
+    If no `[file] <path> (N):` markers are found, returns the text
+    unchanged (no-op safe).
+    """
+    if "[file]" not in text:
+        return text
+    lines_in = text.split("\n")
+    out: list[str] = []
+    current_path: Optional[str] = None
+    found_marker = False
+    for line in lines_in:
+        m = _RTK_GREP_FILE_HEADER_RE.match(line)
+        if m:
+            current_path = m.group("path").strip()
+            found_marker = True
+            continue
+        n = _RTK_GREP_LINE_RE.match(line)
+        if n and current_path:
+            out.append(f"{current_path}:{n.group('lineno')}:{n.group('text')}")
+            continue
+        # Skip blanks and the "N matches in NF:" header; pass through anything else.
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if re.match(r"^\d+\s+matches?\s+in\s+\d+F:\s*$", stripped):
+            continue
+        # Unknown line; drop it to keep the output clean.
+    if not found_marker:
+        return text
+    return "\n".join(out) + ("\n" if out else "")
+
+
+_LS_LONG_FORMAT_RE = re.compile(
+    # Permissions (10-12 chars incl. trailing @/+ or "."), link count,
+    # user, group, size, then 2 or 3 date fields (Mon DD [YYYY|HH:MM]),
+    # then the filename.
+    r"^[\-dlbcps][rwxstST\-@\+\.]{9,11}"
+    r"\s+\d+\s+\S+\s+\S+\s+\d+"
+    r"\s+\S+\s+\S+(?:\s+\S+)?"
+    r"\s+(?P<name>.+)$"
+)
+
+
+def _strip_ls_long_format_to_filenames(text: str) -> str:
+    """Strip `ls -l` long-format columns down to just the filename.
+    Lines that don't look like long-format are kept as-is. The `total N`
+    header line is removed."""
+    out: list[str] = []
+    for line in text.split("\n"):
+        if not line.strip():
+            continue
+        if line.startswith("total ") and line[6:].strip().isdigit():
+            continue
+        m = _LS_LONG_FORMAT_RE.match(line)
+        if m:
+            out.append(m.group("name").strip())
+        else:
+            # Keep non-matching lines (might be paths separating directories
+            # in a multi-arg ls call).
+            out.append(line.rstrip())
+    return "\n".join(out)
+
+
+def _maybe_render_bash_shim(console: Optional[Any], state: dict[str, Any]) -> bool:
+    """Detect bash invocations of read/grep/ls-equivalent CLI helpers
+    (rtk *, rg, plain ls/cat/head/tail/find/tree) and route the output
+    through the matching styled renderer. Returns True if handled."""
+    if not _BASH_SHIM_RENDER:
+        return False
+    inp = state.get("input")
+    if not isinstance(inp, dict):
+        return False
+    command = str(inp.get("command", ""))
+    shim = _is_bash_shim_call(command)
+    if shim is None:
+        return False
+
+    output = state.get("output")
+    if not isinstance(output, str):
+        return False
+
+    if shim.family == "read":
+        return _render_shim_read(console, state, shim)
+    if shim.family == "grep":
+        return _render_shim_grep(console, state, shim)
+    if shim.family == "ls":
+        return _render_shim_ls(console, state, shim)
+    if shim.family == "find":
+        return _render_shim_ls(console, state, shim)
+    return False
+
+
+def _render_shim_read(console: Optional[Any], state: dict[str, Any], shim: _BashShim) -> bool:
+    """Synthesize a read-tool state and call render_read_*.
+
+    For multi-file input (rtk read F1 F2, cat F1 F2), the output is
+    concatenated with no delimiter. We render a single combined Read
+    panel using the first file's path as the panel header, but we
+    update the read cache by re-reading each file directly from disk
+    so subsequent edit/write diffs see fresh content per the user
+    directive.
+    """
+    raw_output = str(state.get("output") or "")
+    status = str(state.get("status", ""))
+
+    # Choose the file_path for the panel: when only one file, the actual
+    # path. When multiple files, fall back to a synthetic descriptor.
+    if len(shim.files) == 1:
+        file_path = shim.files[0]
+    else:
+        file_path = " + ".join(shim.files)
+
+    # Synthesize OpenCode read framing around the raw content so the
+    # existing renderer can parse and render without modification.
+    rel_for_frame = _relativize_path(shim.files[0]) if shim.files else file_path
+
+    # Optional offset/limit from `head -n N` / `tail -n N`.
+    offset: Optional[int] = None
+    limit: Optional[int] = None
+    if shim.head_limit is not None:
+        offset = 1
+        limit = shim.head_limit
+    elif shim.tail_limit is not None:
+        # We don't know the file length, so leave offset unset and let
+        # the renderer omit the lines header.
+        limit = shim.tail_limit
+
+    framed = (
+        f"<path>{rel_for_frame}</path>\n"
+        f"<type>file</type>\n"
+        f"<content>\n{raw_output}\n</content>"
+    )
+
+    syn_state = {
+        "input": {"filePath": file_path, "offset": offset, "limit": limit},
+        "output": framed,
+        "status": status,
+    }
+
+    if HAVE_RICH and console is not None:
+        ok = render_read_rich(console, syn_state)
+    else:
+        ok = render_read_plain(syn_state)
+
+    if not ok:
+        return False
+
+    # Cache update: when filtering flags are present, or there are
+    # multiple files (no reliable per-file content boundaries), re-read
+    # each file directly from disk so the cache stays accurate.
+    if shim.rtk_filtered or len(shim.files) > 1:
+        for f in shim.files:
+            full = f if os.path.isabs(f) else os.path.join(ROOT, f)
+            _cache_reread(full)
+    return True
+
+
+def _render_shim_grep(console: Optional[Any], state: dict[str, Any], shim: _BashShim) -> bool:
+    raw_output = str(state.get("output") or "")
+    normalized = _normalize_rtk_grep_output(raw_output)
+
+    # If the normalizer found rtk-style markers but produced no rows,
+    # something is unexpected; fall back to bash renderer.
+    if "[file]" in raw_output and not normalized.strip():
+        return False
+
+    syn_state = {
+        "input": {"pattern": shim.pattern, "path": shim.path},
+        "output": normalized,
+        "status": str(state.get("status", "")),
+    }
+    if HAVE_RICH and console is not None:
+        return render_grep_rich(console, syn_state)
+    return render_grep_plain(syn_state)
+
+
+def _render_shim_ls(console: Optional[Any], state: dict[str, Any], shim: _BashShim) -> bool:
+    raw_output = str(state.get("output") or "")
+    if shim.long_format and _BASH_SHIM_LS_STRIP_LONG_FORMAT:
+        body = _strip_ls_long_format_to_filenames(raw_output)
+    else:
+        body = raw_output
+    pattern_label = "ls" if shim.family == "ls" else shim.pattern
+    syn_state = {
+        "input": {"pattern": pattern_label, "path": shim.path},
+        "output": body,
+        "status": str(state.get("status", "")),
+    }
+    if HAVE_RICH and console is not None:
+        return render_glob_rich(console, syn_state)
+    return render_glob_plain(syn_state)
+
+
 # --- Skill renderer -----------------------------------------------------------
 
 def render_skill_rich(console: Console, state: dict[str, Any]) -> bool:
@@ -2818,6 +3389,12 @@ def _dispatch_tool_renderer(console: Console, tool: str, state: dict[str, Any]) 
         # `make sandbox-* BOOTSTRAP_ARGS='--format json'` with structured
         # styling. Falls through to the generic bash renderer otherwise.
         if _maybe_render_sandbox_bootstrap(console if HAVE_RICH else None, state):
+            return True
+        # Then try the bash-shim sub-renderer: detects `rtk read`,
+        # `rtk grep`, `rg`, `rtk ls` / `ls`, `cat`, `head`, `tail`,
+        # `find`, `tree` and routes them through the Read / Grep /
+        # Glob renderers as if the agent had used the native tool.
+        if _maybe_render_bash_shim(console if HAVE_RICH else None, state):
             return True
         if HAVE_RICH:
             return render_bash_rich(console, state)
