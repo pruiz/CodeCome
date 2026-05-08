@@ -1251,7 +1251,7 @@ class _ParsedFilePatch:
 
 
 _APPLY_PATCH_HEADER_RE = re.compile(
-    r"^\*\*\*\s*(Begin Patch|End Patch|Update File|Add File|Delete File|Rename File|Move File):?\s*(.*)",
+    r"^\*\*\*[ \t]*(Begin Patch|End Patch|Update File|Add File|Delete File|Rename File|Move File):?[ \t]*(.*)",
     re.MULTILINE,
 )
 
@@ -1312,7 +1312,7 @@ def _parse_apply_patch_json_list(patches: list[dict[str, Any]]) -> list[_ParsedF
     results: list[_ParsedFilePatch] = []
     for p in patches:
         path = str(p.get("path", p.get("file", "")))
-        diff_text = str(p.get("diff", p.get("patch", "")))
+        diff_text = _first_string(p, ("diff", "patch", "patchText", "patch_text", "content", "body"))
         lines = diff_text.split("\n")
         added = sum(1 for l in lines if l.startswith("+") and not l.startswith("+++"))
         removed = sum(1 for l in lines if l.startswith("-") and not l.startswith("---"))
@@ -1323,6 +1323,22 @@ def _parse_apply_patch_json_list(patches: list[dict[str, Any]]) -> list[_ParsedF
     return results
 
 
+# Keys under which the apply_patch tool may stash its patch body, in
+# precedence order. github-copilot/gpt-5.x emits 'patchText'; older
+# OpenAI tool-use mode emits 'input'; some MCP bridges use 'diff' or
+# 'body'. The first non-empty string wins.
+_PATCH_TEXT_KEYS = ("patchText", "patch_text", "patch", "input", "content", "diff", "body")
+
+
+def _first_string(d: dict[str, Any], keys: tuple[str, ...]) -> str:
+    """Return the first non-empty string value in d under any of keys, else ''."""
+    for k in keys:
+        v = d.get(k)
+        if isinstance(v, str) and v:
+            return v
+    return ""
+
+
 def _extract_apply_patch_payload(state: dict[str, Any]) -> tuple[str, list[_ParsedFilePatch], str]:
     """Extract and parse apply_patch input. Returns (raw_text, parsed_patches, output_str)."""
     inp = state.get("input")
@@ -1331,7 +1347,7 @@ def _extract_apply_patch_payload(state: dict[str, Any]) -> tuple[str, list[_Pars
 
     raw_text = ""
     if isinstance(inp, dict):
-        raw_text = str(inp.get("patch", inp.get("input", inp.get("content", ""))))
+        raw_text = _first_string(inp, _PATCH_TEXT_KEYS)
         # Check for {patches: [...]} variant
         if not raw_text and isinstance(inp.get("patches"), list):
             patches = _parse_apply_patch_json_list(inp["patches"])
