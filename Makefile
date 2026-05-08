@@ -9,6 +9,8 @@
 
 PYTHON := .venv/bin/python3
 export PATH := $(CURDIR)/.venv/bin:$(PATH)
+export PROMPT_EXTRA
+export PROMPT_EXTRA_FILE
 
 help:
 	@echo ""
@@ -34,6 +36,8 @@ help:
 	@echo "    OPENCODE_ARGS='...'          Extra flags passed through to opencode run"
 	@echo "    CODECOME_MODEL=<id>          Pin the model per phase (e.g. anthropic/claude-opus-4-7)"
 	@echo "    CODECOME_MODEL_VARIANT=<v>   Pin the model variant (e.g. high, max)"
+	@echo "    PROMPT_EXTRA=\"...\"            Append extra instructions to phase prompt"
+	@echo "    PROMPT_EXTRA_FILE=path        Append file content to phase prompt"
 	@echo ""
 	@echo "    make show-model              Print the model resolution table for an agent"
 	@echo "    make show-model AGENT=auditor"

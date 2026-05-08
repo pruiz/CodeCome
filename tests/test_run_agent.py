@@ -1357,3 +1357,145 @@ def test_parse_find_tree_tree_verb_no_name():
     assert shim is not None
     assert shim.pattern == "tree"
     assert shim.path == "src/"
+
+
+# ---------------------------------------------------------------------------
+# load_prompt extra-prompt tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def prompt_env(tmp_path, monkeypatch):
+    """Set up an isolated environment for load_prompt tests."""
+    module = load_tool_module("run_agent_prompt", "tools/run-agent.py")
+
+    # Create a minimal prompt file.
+    prompt_file = tmp_path / "prompt.md"
+    prompt_file.write_text("# Phase prompt\n\nBase content.", encoding="utf-8")
+
+    # Point ROOT at tmp_path so codecome.yml is found there.
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+
+    # Clear env vars by default.
+    monkeypatch.delenv("PROMPT_EXTRA", raising=False)
+    monkeypatch.delenv("PROMPT_EXTRA_FILE", raising=False)
+
+    return module, prompt_file, tmp_path
+
+
+@pytest.mark.unit
+def test_load_prompt_no_extras(prompt_env):
+    module, prompt_file, _ = prompt_env
+    result = module.load_prompt(prompt_file, None)
+    assert result == "# Phase prompt\n\nBase content."
+    assert "Additional instructions" not in result
+
+
+@pytest.mark.unit
+def test_load_prompt_inline_extra(prompt_env, monkeypatch):
+    module, prompt_file, _ = prompt_env
+    monkeypatch.setenv("PROMPT_EXTRA", "Use ASAN builds.")
+    result = module.load_prompt(prompt_file, None, phase="1")
+    assert "## Additional instructions" in result
+    assert "Use ASAN builds." in result
+
+
+@pytest.mark.unit
+def test_load_prompt_extra_file(prompt_env, monkeypatch):
+    module, prompt_file, tmp_path = prompt_env
+    extra_file = tmp_path / "extra.md"
+    extra_file.write_text("Extra from file.", encoding="utf-8")
+    monkeypatch.setenv("PROMPT_EXTRA_FILE", str(extra_file))
+    result = module.load_prompt(prompt_file, None, phase="1")
+    assert "## Additional instructions" in result
+    assert "Extra from file." in result
+
+
+@pytest.mark.unit
+def test_load_prompt_yaml_extra(prompt_env):
+    module, prompt_file, tmp_path = prompt_env
+    yml = tmp_path / "codecome.yml"
+    yml.write_text(
+        "audit:\n  extra_prompts:\n    reconnaissance: |\n      Focus on memory safety.\n",
+        encoding="utf-8",
+    )
+    result = module.load_prompt(prompt_file, None, phase="1")
+    assert "## Additional instructions" in result
+    assert "Focus on memory safety." in result
+    assert "From codecome.yml" in result
+
+
+@pytest.mark.unit
+def test_load_prompt_all_three_sources(prompt_env, monkeypatch):
+    module, prompt_file, tmp_path = prompt_env
+
+    # YAML source
+    yml = tmp_path / "codecome.yml"
+    yml.write_text(
+        "audit:\n  extra_prompts:\n    reconnaissance: |\n      YAML extra.\n",
+        encoding="utf-8",
+    )
+
+    # File source
+    extra_file = tmp_path / "extra.md"
+    extra_file.write_text("File extra.", encoding="utf-8")
+    monkeypatch.setenv("PROMPT_EXTRA_FILE", str(extra_file))
+
+    # Inline source
+    monkeypatch.setenv("PROMPT_EXTRA", "Inline extra.")
+
+    result = module.load_prompt(prompt_file, None, phase="1")
+    assert "## Additional instructions" in result
+    assert "YAML extra." in result
+    assert "File extra." in result
+    assert "Inline extra." in result
+
+    # Verify ordering: yaml before file before inline.
+    yaml_pos = result.index("YAML extra.")
+    file_pos = result.index("File extra.")
+    inline_pos = result.index("Inline extra.")
+    assert yaml_pos < file_pos < inline_pos
+
+
+@pytest.mark.unit
+def test_load_prompt_no_phase_skips_yaml(prompt_env, monkeypatch):
+    module, prompt_file, tmp_path = prompt_env
+    yml = tmp_path / "codecome.yml"
+    yml.write_text(
+        "audit:\n  extra_prompts:\n    reconnaissance: |\n      Should not appear.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PROMPT_EXTRA", "Inline only.")
+    result = module.load_prompt(prompt_file, None)  # no phase
+    assert "Should not appear." not in result
+    assert "Inline only." in result
+
+
+@pytest.mark.unit
+def test_load_prompt_empty_extras_no_heading(prompt_env, monkeypatch):
+    module, prompt_file, _ = prompt_env
+    monkeypatch.setenv("PROMPT_EXTRA", "   ")  # whitespace only
+    monkeypatch.setenv("PROMPT_EXTRA_FILE", "")
+    result = module.load_prompt(prompt_file, None, phase="1")
+    assert "Additional instructions" not in result
+
+
+@pytest.mark.unit
+def test_load_prompt_finding_substitution_still_works(prompt_env):
+    module, _, tmp_path = prompt_env
+    prompt_file = tmp_path / "prompt-with-finding.md"
+    prompt_file.write_text("Validate FINDING_PATH_OR_ID now.", encoding="utf-8")
+    result = module.load_prompt(prompt_file, "CC-0001", phase="4")
+    assert "CC-0001" in result
+    assert "FINDING_PATH_OR_ID" not in result
+
+
+@pytest.mark.unit
+def test_load_prompt_relative_extra_file(prompt_env, monkeypatch):
+    module, prompt_file, tmp_path = prompt_env
+    extra_file = tmp_path / "notes" / "extra.md"
+    extra_file.parent.mkdir()
+    extra_file.write_text("Relative file content.", encoding="utf-8")
+    monkeypatch.setenv("PROMPT_EXTRA_FILE", "notes/extra.md")
+    result = module.load_prompt(prompt_file, None, phase="1")
+    assert "Relative file content." in result

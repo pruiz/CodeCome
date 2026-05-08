@@ -409,16 +409,66 @@ def build_console(color_mode: str) -> Console:
     return Console(soft_wrap=True, highlight=False)
 
 
-def load_prompt(prompt_file: Path, finding: str | None) -> str:
+_PHASE_NAMES = {
+    "1": "reconnaissance",
+    "2": "hypothesis_generation",
+    "3": "counter_analysis",
+    "4": "validation",
+    "5": "exploit_development",
+    "6": "reporting",
+}
+
+
+def load_prompt(prompt_file: Path, finding: str | None, phase: str | None = None) -> str:
     prompt = prompt_file.read_text(encoding="utf-8")
-    if finding is None:
-        return prompt
+    if finding is not None:
+        placeholder = "FINDING_PATH_OR_ID"
+        if placeholder not in prompt:
+            raise ValueError(f"Prompt placeholder {placeholder!r} not found in {prompt_file}")
+        prompt = prompt.replace(placeholder, finding)
 
-    placeholder = "FINDING_PATH_OR_ID"
-    if placeholder not in prompt:
-        raise ValueError(f"Prompt placeholder {placeholder!r} not found in {prompt_file}")
+    # --- Extra prompt sources (additive, appended in order) ---------------
+    extra_sections: list[tuple[str, str]] = []
 
-    return prompt.replace(placeholder, finding)
+    # Source 1: codecome.yml  audit.extra_prompts.<phase_name>
+    if phase is not None:
+        phase_name = _PHASE_NAMES.get(str(phase))
+        if phase_name:
+            try:
+                import yaml  # type: ignore
+
+                config_path = ROOT / "codecome.yml"
+                if config_path.exists():
+                    cfg = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+                    ep = cfg.get("audit", {}).get("extra_prompts", {})
+                    yml_extra = ep.get(phase_name, "").strip() if isinstance(ep, dict) else ""
+                    if yml_extra:
+                        extra_sections.append(("From codecome.yml", yml_extra))
+            except Exception:
+                pass  # Non-fatal; skip if yaml missing or config is broken.
+
+    # Source 2: PROMPT_EXTRA_FILE env var
+    extra_file = os.environ.get("PROMPT_EXTRA_FILE", "").strip()
+    if extra_file:
+        extra_path = Path(extra_file)
+        if not extra_path.is_absolute():
+            extra_path = ROOT / extra_path
+        if extra_path.is_file():
+            file_text = extra_path.read_text(encoding="utf-8").strip()
+            if file_text:
+                extra_sections.append((f"From {extra_file}", file_text))
+
+    # Source 3: PROMPT_EXTRA env var
+    extra_inline = os.environ.get("PROMPT_EXTRA", "").strip()
+    if extra_inline:
+        extra_sections.append(("Additional instructions", extra_inline))
+
+    if extra_sections:
+        prompt += "\n\n## Additional instructions\n"
+        for heading, body in extra_sections:
+            prompt += f"\n### {heading}\n\n{body}\n"
+
+    return prompt
 
 
 def format_tokens(tokens: dict[str, Any]) -> str:
@@ -3900,7 +3950,7 @@ def main() -> int:
     color_mode = resolve_color_mode(args.color)
     console = build_console(color_mode)
     prompt_file = ROOT / args.prompt_file
-    prompt = load_prompt(prompt_file, args.finding)
+    prompt = load_prompt(prompt_file, args.finding, phase=args.phase)
     command, model, variant, model_source, variant_source, thinking_on, thinking_source = build_child_command(args)
     model, variant, model_source, variant_source = resolve_runtime_model_for_banner(
         args, command, model, variant, model_source, variant_source

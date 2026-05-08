@@ -142,6 +142,10 @@ Project configuration for the audit workspace. Key sections:
   generated directories.
 - **`audit.focus`** — vulnerability classes to prioritize during analysis.
   Remove or add entries to match your target's risk profile.
+- **`audit.extra_prompts`** — optional per-phase extra instructions appended
+  to the phase prompt. Useful for persistent customization (e.g., sandbox
+  preferences, focus areas). For ad-hoc use, see `PROMPT_EXTRA` and
+  `PROMPT_EXTRA_FILE` below.
 - **`agents`** — optional per-agent model and variant pinning (see
   "Model selection" below).
 - **`environment`** — sandbox paths and scripts. Typically left at defaults
@@ -427,6 +431,30 @@ Check sandbox (requires phase-1 to bootstrap `sandbox/` first):
 Open sandbox shell:
 
     make sandbox-shell
+
+## Customizing phase prompts
+
+Extra instructions can be appended to any phase prompt from three sources,
+applied in this order (all additive):
+
+1. **`codecome.yml`** — persistent per-phase instructions under
+   `audit.extra_prompts`. Always applied when the phase runs.
+
+       audit:
+         extra_prompts:
+           reconnaissance: |
+             Focus sandbox on ASAN builds.
+             Skip fuzzing harness for now.
+
+2. **`PROMPT_EXTRA_FILE`** — path to a file whose content is appended.
+
+       make phase-1 PROMPT_EXTRA_FILE=my-notes.md
+
+3. **`PROMPT_EXTRA`** — inline text appended directly.
+
+       make phase-1 PROMPT_EXTRA="Also try clang for the sandbox build."
+
+All three can be combined in a single invocation.
 
 ## Design principles
 

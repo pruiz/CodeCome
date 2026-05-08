@@ -23,6 +23,17 @@ audit:
     - exploit_development
     - reporting
 
+  # Per-phase extra instructions appended to the phase prompt.
+  # These are persistent and always applied when the phase runs.
+  # See also: PROMPT_EXTRA and PROMPT_EXTRA_FILE env vars for ad-hoc use.
+  #
+  # extra_prompts:
+  #   reconnaissance: |
+  #     Focus sandbox on ASAN builds.
+  #     Skip fuzzing harness for now.
+  #   hypothesis_generation: |
+  #     Prioritize memory safety issues over logic bugs.
+
   scope:
     include:
       - "src/**"
