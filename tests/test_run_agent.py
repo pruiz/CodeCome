@@ -384,3 +384,316 @@ def test_extract_apply_patch_payload_falls_back_to_unknown_unified_diff():
     assert patches[0].op == "unknown"
     assert patches[0].path == "(patch)"
     assert patches[0].added == 1 and patches[0].removed == 1
+
+
+# --- _first_string and _PATCH_TEXT_KEYS -------------------------------------
+
+@pytest.mark.unit
+def test_first_string_skips_non_string_and_empty_values():
+    module = load_tool_module("run_agent_first_string", "tools/run-agent.py")
+    keys = ("a", "b", "c", "d")
+
+    # None, empty string, dict, and number are all rejected; the first
+    # non-empty string wins.
+    d = {"a": None, "b": "", "c": {"nested": "no"}, "d": "yes"}
+    assert module._first_string(d, keys) == "yes"
+
+    # Number-typed value should not be coerced via str().
+    d = {"a": 42, "b": "fallback"}
+    assert module._first_string(d, keys) == "fallback"
+
+    # No string under any key.
+    assert module._first_string({"a": None, "b": 0}, keys) == ""
+
+
+@pytest.mark.unit
+def test_patch_text_keys_have_correct_precedence_order():
+    module = load_tool_module("run_agent_patch_keys", "tools/run-agent.py")
+
+    # patchText must beat patch_text must beat patch must beat input must
+    # beat content. Order matters: github-copilot/gpt-5.4 emits patchText
+    # and that is what triggered the original bug fix.
+    expected_first = ("patchText", "patch_text", "patch", "input", "content")
+    assert module._PATCH_TEXT_KEYS[: len(expected_first)] == expected_first
+
+
+@pytest.mark.unit
+def test_extract_apply_patch_payload_ignores_non_string_patch_values():
+    module = load_tool_module("run_agent_patch_ignores_nonstring", "tools/run-agent.py")
+
+    # If patchText is a dict (something an SDK might pass through by
+    # mistake), we must NOT stringify it via str(...). Earlier code did
+    # `str(inp.get("patch", ...))` which silently produced "{'foo': 1}",
+    # corrupting the parser. Now those keys are skipped and the next
+    # valid string key wins.
+    state = {
+        "input": {
+            "patchText": {"oops": "wrong shape"},
+            "patch": "*** Begin Patch\n*** Update File: real.txt\n+ok\n*** End Patch",
+        },
+        "output": "done",
+    }
+    raw_text, patches, _ = module._extract_apply_patch_payload(state)
+    assert "real.txt" in raw_text
+    assert len(patches) == 1
+    assert patches[0].path == "real.txt"
+
+
+@pytest.mark.unit
+def test_extract_apply_patch_payload_handles_none_value_without_str_coercion():
+    module = load_tool_module("run_agent_patch_none", "tools/run-agent.py")
+
+    # If patchText is explicitly None, we must not produce raw_text="None"
+    # which would then fail to parse and fall through to the generic JSON
+    # panel. This is the "str(None)" regression class from the original
+    # bug.
+    state = {"input": {"patchText": None}, "output": "ok"}
+    raw_text, patches, _ = module._extract_apply_patch_payload(state)
+    assert raw_text == ""
+    assert patches == []
+
+
+# --- apply_patch envelope: regex bug regression ----------------------------
+
+@pytest.mark.unit
+def test_parse_apply_patch_envelope_does_not_swallow_next_directive_after_begin():
+    """Regex must split on each *** directive even when no horizontal
+    whitespace separates them. The bug fix changed `\\s*` to `[ \\t]*` so
+    that newlines remain directive separators. Reproduces the exact
+    pattern emitted by github-copilot/gpt-5.4.
+    """
+    module = load_tool_module("run_agent_envelope_regex", "tools/run-agent.py")
+
+    patch = (
+        "*** Begin Patch\n"
+        "*** Delete File: /abs/path/sandbox-plan.md\n"
+        "*** Add File: /abs/path/sandbox-plan.md\n"
+        "+# New Content\n"
+        "+more\n"
+        "*** End Patch\n"
+    )
+
+    parsed = module._parse_apply_patch_envelope(patch)
+    # Must produce exactly two file entries: a delete and an add.
+    assert len(parsed) == 2
+    assert parsed[0].op == "delete"
+    assert parsed[0].path == "/abs/path/sandbox-plan.md"
+    assert parsed[1].op == "add"
+    assert parsed[1].path == "/abs/path/sandbox-plan.md"
+    assert parsed[1].added == 2
+
+
+@pytest.mark.unit
+def test_parse_apply_patch_envelope_tolerates_extra_horizontal_whitespace():
+    module = load_tool_module("run_agent_envelope_ws", "tools/run-agent.py")
+    # Multiple spaces and tabs around directive name and colon.
+    patch = "*** Begin Patch\n***   Update File:\tfoo.txt\n+x\n*** End Patch\n"
+    parsed = module._parse_apply_patch_envelope(patch)
+    assert len(parsed) == 1
+    assert parsed[0].op == "update"
+    assert parsed[0].path == "foo.txt"
+
+
+# --- thinking decision edge cases ------------------------------------------
+
+@pytest.mark.unit
+def test_resolve_thinking_decision_treats_empty_env_as_off(monkeypatch):
+    module = load_tool_module("run_agent_thinking_empty_env", "tools/run-agent.py")
+    monkeypatch.setenv("CODECOME_THINKING", "")
+    on, source = module._resolve_thinking_decision("openai/gpt-5", [])
+    # Empty string is in the off-list along with "0"/"false"/"no".
+    assert (on, source) == (False, "env")
+
+
+@pytest.mark.unit
+def test_resolve_thinking_decision_unknown_provider_defaults_on(monkeypatch):
+    module = load_tool_module("run_agent_thinking_unknown", "tools/run-agent.py")
+    monkeypatch.delenv("CODECOME_THINKING", raising=False)
+    on, source = module._resolve_thinking_decision("unknown-provider/some-model", [])
+    assert (on, source) == (True, "provider-default")
+
+
+@pytest.mark.unit
+def test_resolve_thinking_decision_user_args_beats_env_off(monkeypatch):
+    """OPENCODE_ARGS --thinking must win even when CODECOME_THINKING=0."""
+    module = load_tool_module("run_agent_thinking_userargs_wins", "tools/run-agent.py")
+    monkeypatch.setenv("CODECOME_THINKING", "0")
+    on, source = module._resolve_thinking_decision("anthropic/claude-opus-4-7", ["--thinking"])
+    assert (on, source) == (True, "user-args")
+
+
+@pytest.mark.unit
+def test_resolve_thinking_decision_no_provider_prefix_defaults_on(monkeypatch):
+    module = load_tool_module("run_agent_thinking_no_prefix", "tools/run-agent.py")
+    monkeypatch.delenv("CODECOME_THINKING", raising=False)
+    # No slash in the model name -> no provider id derivable.
+    on, source = module._resolve_thinking_decision("just-a-model", [])
+    assert (on, source) == (True, "provider-default")
+
+
+# --- reasoning / error rendering edge cases --------------------------------
+
+@pytest.mark.unit
+def test_render_reasoning_plain_skips_empty_and_whitespace(monkeypatch, capsys):
+    module = load_tool_module("run_agent_reasoning_skip", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setattr(module, "_RENDER_REASONING", True)
+
+    # Empty body
+    module.render_reasoning(None, {"part": {"text": ""}})
+    # Whitespace-only body
+    module.render_reasoning(None, {"part": {"text": "   \n\t  "}})
+    # Missing text key
+    module.render_reasoning(None, {"part": {}})
+    # Missing part dict
+    module.render_reasoning(None, {})
+
+    out = capsys.readouterr().out
+    assert out == ""
+
+
+@pytest.mark.unit
+def test_render_error_plain_mode_handles_missing_error_field(monkeypatch, capsys):
+    module = load_tool_module("run_agent_error_missing", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+
+    module.render_error(None, {})
+    out = capsys.readouterr().out
+    # Title line plus a (no error message) body line.
+    assert "Error" in out
+    assert "(no error message)" in out
+
+
+@pytest.mark.unit
+def test_render_error_plain_mode_handles_dict_with_only_message(monkeypatch, capsys):
+    module = load_tool_module("run_agent_error_only_msg", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+
+    module.render_error(None, {"error": {"message": "rate limited"}})
+    out = capsys.readouterr().out
+    assert "rate limited" in out
+
+
+# --- grep highlight helpers ------------------------------------------------
+
+@pytest.mark.unit
+def test_grep_format_line_plain_with_color_emits_ansi(monkeypatch):
+    module = load_tool_module("run_agent_grep_plain_ansi", "tools/run-agent.py")
+    monkeypatch.setattr(module, "_GREP_HIGHLIGHT", True)
+    pat = module._grep_compile_pattern("error")
+    out = module._grep_format_line_plain(42, "an error here and error again", pat, color=True)
+    # Bold yellow + reset around each match.
+    assert out.count("\x1b[1;33m") == 2
+    assert out.count("\x1b[0m") == 2
+    assert "    42: " in out
+
+
+@pytest.mark.unit
+def test_grep_format_line_plain_without_color_uses_markers(monkeypatch):
+    module = load_tool_module("run_agent_grep_plain_markers", "tools/run-agent.py")
+    monkeypatch.setattr(module, "_GREP_HIGHLIGHT", True)
+    pat = module._grep_compile_pattern("error")
+    out = module._grep_format_line_plain(7, "an error", pat, color=False)
+    assert ">>>error<<<" in out
+    assert "    7: " in out
+
+
+@pytest.mark.unit
+def test_grep_format_line_plain_no_pattern_returns_unstyled(monkeypatch):
+    module = load_tool_module("run_agent_grep_plain_nopat", "tools/run-agent.py")
+    out = module._grep_format_line_plain(99, "plain text", None, color=True)
+    assert out == "       99: plain text"
+
+
+@pytest.mark.unit
+def test_grep_format_line_plain_disabled_returns_unstyled(monkeypatch):
+    """CODECOME_GREP_HIGHLIGHT=0 must skip even ANSI emission."""
+    module = load_tool_module("run_agent_grep_plain_disabled", "tools/run-agent.py")
+    monkeypatch.setattr(module, "_GREP_HIGHLIGHT", False)
+    pat = module._grep_compile_pattern("error")  # returns None when disabled
+    out = module._grep_format_line_plain(1, "an error", pat, color=True)
+    assert "\x1b[1;33m" not in out
+    assert ">>>" not in out
+    assert "an error" in out
+
+
+@pytest.mark.unit
+def test_grep_compile_pattern_returns_none_when_highlight_disabled(monkeypatch):
+    module = load_tool_module("run_agent_grep_compile_off", "tools/run-agent.py")
+    monkeypatch.setattr(module, "_GREP_HIGHLIGHT", False)
+    assert module._grep_compile_pattern("foo") is None
+
+
+@pytest.mark.unit
+def test_grep_compile_pattern_returns_none_for_empty_pattern(monkeypatch):
+    module = load_tool_module("run_agent_grep_compile_empty", "tools/run-agent.py")
+    monkeypatch.setattr(module, "_GREP_HIGHLIGHT", True)
+    assert module._grep_compile_pattern("") is None
+
+
+# --- grep parser additional cases ------------------------------------------
+
+@pytest.mark.unit
+def test_parse_grep_output_empty_returns_empty_files_mode():
+    module = load_tool_module("run_agent_grep_empty", "tools/run-agent.py")
+    mode, entries = module._parse_grep_output("")
+    assert mode == "files"
+    assert entries == []
+
+
+@pytest.mark.unit
+def test_parse_grep_output_70_percent_threshold_for_lines_mode():
+    module = load_tool_module("run_agent_grep_threshold", "tools/run-agent.py")
+
+    # 7 of 10 lines are line-level => exactly 70% => "lines" mode.
+    output = "\n".join(
+        [f"foo.py:{i}:match" for i in range(7)] + ["plain1", "plain2", "plain3"]
+    )
+    mode, entries = module._parse_grep_output(output)
+    assert mode == "lines"
+    # The non-matching lines become path-only entries with line=0.
+    assert any(e["line"] == 0 for e in entries)
+
+    # 6 of 10 -> below threshold -> "files" mode.
+    output_low = "\n".join(
+        [f"foo.py:{i}:match" for i in range(6)] + ["a", "b", "c", "d"]
+    )
+    mode, _ = module._parse_grep_output(output_low)
+    assert mode == "files"
+
+
+# --- build_child_command thinking interactions -----------------------------
+
+@pytest.mark.component
+def test_build_child_command_user_args_thinking_is_not_duplicated(monkeypatch):
+    module = load_tool_module("run_agent_child_user_thinking", "tools/run-agent.py")
+    monkeypatch.setenv("OPENCODE_ARGS", "--thinking")
+    monkeypatch.setenv("CODECOME_MODEL", "anthropic/claude-opus-4-7")
+    monkeypatch.delenv("CODECOME_MODEL_VARIANT", raising=False)
+    monkeypatch.delenv("CODECOME_THINKING", raising=False)
+
+    class Args:
+        agent = "recon"
+
+    cmd, _, _, _, _, thinking_on, thinking_source = module.build_child_command(Args())
+    # Exactly one --thinking even though anthropic default is off.
+    assert cmd.count("--thinking") == 1
+    assert thinking_on is True
+    assert thinking_source == "user-args"
+
+
+@pytest.mark.component
+def test_build_child_command_anthropic_default_omits_thinking(monkeypatch):
+    module = load_tool_module("run_agent_child_anthropic_no_thinking", "tools/run-agent.py")
+    monkeypatch.setenv("OPENCODE_ARGS", "")
+    monkeypatch.setenv("CODECOME_MODEL", "anthropic/claude-opus-4-7")
+    monkeypatch.delenv("CODECOME_MODEL_VARIANT", raising=False)
+    monkeypatch.delenv("CODECOME_THINKING", raising=False)
+
+    class Args:
+        agent = "recon"
+
+    cmd, _, _, _, _, thinking_on, thinking_source = module.build_child_command(Args())
+    assert "--thinking" not in cmd
+    assert thinking_on is False
+    assert thinking_source == "provider-default"
