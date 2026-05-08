@@ -162,11 +162,10 @@ Benchmark labels alone are not enough to mark a finding as confirmed.
 
 1. Place target source under `src/`.
 
-2. Check workspace and sandbox:
+2. Check workspace:
 
        make venv
        make check
-       make sandbox-check
 
    Before committing or pushing changes, run:
 
@@ -363,7 +362,7 @@ Regenerate report:
 
     make report
 
-Check sandbox:
+Check sandbox (requires phase-1 to bootstrap `sandbox/` first):
 
     make sandbox-check
 
