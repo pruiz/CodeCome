@@ -588,6 +588,14 @@ _WRITE_DIFF_LIMIT = int(os.environ.get("CODECOME_WRITE_DIFF_LIMIT", "50"))
 _EDIT_DIFF_LINES = int(os.environ.get("CODECOME_EDIT_DIFF_LINES", "25"))
 _READ_HIGHLIGHT_LIMIT = int(os.environ.get("CODECOME_READ_HIGHLIGHT_LIMIT", str(200 * 1024)))
 _GLOB_MATCH_CAP = int(os.environ.get("CODECOME_GLOB_MATCH_CAP", "10"))
+
+# Lines that look like OpenCode summary/status rather than actual file paths.
+# Examples: "0 for '*.md'", "3 match(es)", "No matches found".
+_GLOB_SUMMARY_LINE_RE = re.compile(
+    r"^\d+\s+(?:for\s|match)"   # "0 for '*.md'" or "3 match(es)"
+    r"|^No\s+matches?\s"        # "No matches found"
+    r"|^\d+\s+file"             # "0 files" / "3 files found"
+)
 _APPLY_PATCH_DIFF_LINES = int(os.environ.get("CODECOME_APPLY_PATCH_DIFF_LINES", str(_EDIT_DIFF_LINES)))
 _APPLY_PATCH_MAX_FILES = int(os.environ.get("CODECOME_APPLY_PATCH_MAX_FILES", "10"))
 _GREP_FILE_CAP = int(os.environ.get("CODECOME_GREP_FILE_CAP", "50"))
@@ -1513,6 +1521,25 @@ def render_apply_patch_plain(state: dict[str, Any]) -> bool:
 
 # --- Glob renderer ------------------------------------------------------------
 
+def _parse_glob_output(output: str) -> tuple[list[str], list[str]]:
+    """Split glob output into (file_paths, summary_lines).
+
+    Summary lines (e.g. ``0 for '*.md'``) are separated from actual file
+    paths so the match count reflects real results.
+    """
+    files: list[str] = []
+    summaries: list[str] = []
+    for line in output.strip().split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if _GLOB_SUMMARY_LINE_RE.match(stripped):
+            summaries.append(stripped)
+        else:
+            files.append(stripped)
+    return files, summaries
+
+
 def render_glob_rich(console: Console, state: dict[str, Any]) -> bool:
     inp = state.get("input")
     output = state.get("output")
@@ -1522,7 +1549,7 @@ def render_glob_rich(console: Console, state: dict[str, Any]) -> bool:
     pattern = str(inp.get("pattern", ""))
     search_path = str(inp.get("path", ""))
 
-    matches = [m.strip() for m in output.strip().split("\n") if m.strip()]
+    matches, summaries = _parse_glob_output(output)
     n_matches = len(matches)
 
     border = "green" if n_matches > 0 else "dim"
@@ -1533,7 +1560,12 @@ def render_glob_rich(console: Console, state: dict[str, Any]) -> bool:
     ]
 
     if n_matches == 0:
-        sections.append(Text("(no matches)", style="dim"))
+        # Show summary lines from the tool if available, otherwise generic.
+        if summaries:
+            for s in summaries:
+                sections.append(Text(f"  {s}", style="dim"))
+        else:
+            sections.append(Text("(no matches)", style="dim"))
     else:
         shown = matches[:_GLOB_MATCH_CAP]
         for m in shown:
@@ -1561,13 +1593,17 @@ def render_glob_plain(state: dict[str, Any]) -> bool:
     pattern = str(inp.get("pattern", ""))
     search_path = str(inp.get("path", ""))
 
-    matches = [m.strip() for m in output.strip().split("\n") if m.strip()]
+    matches, summaries = _parse_glob_output(output)
     n_matches = len(matches)
 
     print(C.header(f"glob {pattern} in {_relativize_path(search_path) if search_path else '.'}"))
 
     if n_matches == 0:
-        print("  (no matches)")
+        if summaries:
+            for s in summaries:
+                print(f"  {s}")
+        else:
+            print("  (no matches)")
     else:
         shown = matches[:_GLOB_MATCH_CAP]
         for m in shown:
@@ -3072,22 +3108,49 @@ def _parse_ls(rest: list[str], raw: str) -> Optional[_BashShim]:
 
 
 def _parse_find_tree(verb: str, rest: list[str], raw: str) -> Optional[_BashShim]:
-    """Parse `find PATH [args]` or `tree [PATH]`. Output is a list of paths."""
-    paths: list[str] = []
-    for tok in rest:
-        if tok.startswith("-") and tok != "-":
+    """Parse `find PATH [args]` or `tree [PATH]`. Output is a list of paths.
+
+    Extracts ``-name`` / ``-iname`` filters into *pattern* so the Glob
+    panel header shows the actual search expression rather than the bare
+    verb.
+    """
+    path: str = ""
+    name_filter: str = ""
+    # Flags whose next token is a value (not a path).
+    _FIND_VALUE_FLAGS = {
+        "-name", "-iname", "-path", "-ipath", "-regex", "-iregex",
+        "-type", "-maxdepth", "-mindepth", "-perm", "-user", "-group",
+        "-newer", "-size", "-amin", "-atime", "-cmin", "-ctime",
+        "-mmin", "-mtime", "-printf", "-fprintf", "-fls",
+    }
+    i = 0
+    while i < len(rest):
+        tok = rest[i]
+        if tok in _FIND_VALUE_FLAGS:
+            # Consume the value token.
+            if i + 1 < len(rest):
+                val = rest[i + 1]
+                if tok in ("-name", "-iname"):
+                    name_filter = val
+                i += 2
+                continue
+            i += 1
             continue
-        # find expressions like `-name '*.py'` produce non-flag tokens
-        # we don't want to treat as paths. Best-effort: take the first
-        # non-flag token as path, ignore subsequent ones.
-        if not paths:
-            paths.append(tok)
-            break
-    path = paths[0] if paths else "."
+        if tok.startswith("-") and tok != "-":
+            # Other flags without values (e.g. -print, -delete).
+            i += 1
+            continue
+        # First non-flag, non-value token is the path.
+        if not path:
+            path = tok
+        i += 1
+    if not path:
+        path = "."
+    pattern = name_filter if name_filter else verb
     return _BashShim(
         family="find",
         files=[],
-        pattern=verb,
+        pattern=pattern,
         path=path,
         long_format=False,
         head_limit=None,

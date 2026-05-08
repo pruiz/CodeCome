@@ -1252,3 +1252,108 @@ def test_render_shim_read_multi_file_triggers_cache_reread(monkeypatch):
     assert handled is True
     assert sum("README.md" in c for c in cache_calls) == 1
     assert sum("AGENTS.md" in c for c in cache_calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# Glob output parsing — summary line filtering
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+def test_parse_glob_output_filters_summary_lines():
+    module = load_tool_module("run_agent_glob_summary_1", "tools/run-agent.py")
+    output = "0 for '*.md'\n"
+    files, summaries = module._parse_glob_output(output)
+    assert files == []
+    assert summaries == ["0 for '*.md'"]
+
+
+@pytest.mark.unit
+def test_parse_glob_output_keeps_real_paths():
+    module = load_tool_module("run_agent_glob_summary_2", "tools/run-agent.py")
+    output = "src/foo.py\nsrc/bar.py\n"
+    files, summaries = module._parse_glob_output(output)
+    assert files == ["src/foo.py", "src/bar.py"]
+    assert summaries == []
+
+
+@pytest.mark.unit
+def test_parse_glob_output_mixed():
+    module = load_tool_module("run_agent_glob_summary_3", "tools/run-agent.py")
+    output = "src/foo.py\nsrc/bar.py\n3 match(es)\n"
+    files, summaries = module._parse_glob_output(output)
+    assert files == ["src/foo.py", "src/bar.py"]
+    assert len(summaries) == 1
+
+
+@pytest.mark.unit
+def test_parse_glob_output_no_matches_found():
+    module = load_tool_module("run_agent_glob_summary_4", "tools/run-agent.py")
+    output = "No matches found\n"
+    files, summaries = module._parse_glob_output(output)
+    assert files == []
+    assert summaries == ["No matches found"]
+
+
+@pytest.mark.component
+def test_render_glob_plain_zero_matches_with_summary(capsys):
+    module = load_tool_module("run_agent_glob_summary_5", "tools/run-agent.py")
+    state = {
+        "input": {"pattern": "**/*.md", "path": "itemdb/findings"},
+        "output": "0 for '*.md'\n",
+        "status": "completed",
+    }
+    result = module.render_glob_plain(state)
+    assert result is True
+    out = capsys.readouterr().out
+    assert "0 for" in out
+    # Footer should say 0, not 1.
+    assert "0 match(es)" in out
+
+
+# ---------------------------------------------------------------------------
+# find -name extraction
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+def test_parse_find_tree_extracts_name_filter():
+    module = load_tool_module("run_agent_find_name_1", "tools/run-agent.py")
+    shim = module._parse_find_tree("find", ["itemdb/findings", "-name", "*.md"], "find itemdb/findings -name '*.md'")
+    assert shim is not None
+    assert shim.pattern == "*.md"
+    assert shim.path == "itemdb/findings"
+
+
+@pytest.mark.unit
+def test_parse_find_tree_extracts_iname_filter():
+    module = load_tool_module("run_agent_find_name_2", "tools/run-agent.py")
+    shim = module._parse_find_tree("find", [".", "-iname", "*.PY"], "find . -iname '*.PY'")
+    assert shim is not None
+    assert shim.pattern == "*.PY"
+    assert shim.path == "."
+
+
+@pytest.mark.unit
+def test_parse_find_tree_no_name_falls_back_to_verb():
+    module = load_tool_module("run_agent_find_name_3", "tools/run-agent.py")
+    shim = module._parse_find_tree("find", ["src/"], "find src/")
+    assert shim is not None
+    assert shim.pattern == "find"
+    assert shim.path == "src/"
+
+
+@pytest.mark.unit
+def test_parse_find_tree_extracts_path_after_type_flag():
+    module = load_tool_module("run_agent_find_name_4", "tools/run-agent.py")
+    shim = module._parse_find_tree("find", ["itemdb", "-type", "f", "-name", "*.md"], "find itemdb -type f -name '*.md'")
+    assert shim is not None
+    assert shim.pattern == "*.md"
+    assert shim.path == "itemdb"
+
+
+@pytest.mark.unit
+def test_parse_find_tree_tree_verb_no_name():
+    module = load_tool_module("run_agent_find_name_5", "tools/run-agent.py")
+    shim = module._parse_find_tree("tree", ["src/"], "tree src/")
+    assert shim is not None
+    assert shim.pattern == "tree"
+    assert shim.path == "src/"

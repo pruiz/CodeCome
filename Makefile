@@ -7,6 +7,7 @@
 .PHONY: sandbox-list sandbox-inspect sandbox-detect sandbox-bootstrap sandbox-validate sandbox-regenerate sandbox-status show-model
 
 PYTHON := .venv/bin/python3
+export PATH := $(CURDIR)/.venv/bin:$(PATH)
 
 help:
 	@echo ""
