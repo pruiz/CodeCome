@@ -23,8 +23,8 @@ You **must**:
   capability contract" below), preferably via helpers under
   `sandbox/scripts/`,
 - adapt the starter `build-target.sh` and `test-target.sh` to the
-  real project layout (the sample target nests its build under
-  `src/sample-c-cli/`, not `src/`; many real targets do similar),
+  real project layout (some targets nest their build under a
+  subdirectory of `src/`, not `src/` directly; many real targets do similar),
 - add target-specific scripts when they help (sanitizer builds,
   fuzzing harnesses, debugger attach helpers, etc.),
 - make every script executable,

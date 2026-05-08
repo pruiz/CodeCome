@@ -139,6 +139,15 @@ def command_check(_: argparse.Namespace) -> int:
 
     project_name = config.get("project", {}).get("name", "unknown")
     print(C.ok(f"Workspace OK: {C.BOLD}{project_name}{C.RESET}"))
+
+    # Warn if src/ has no actual content (only .gitkeep or empty).
+    src_dir = ROOT / "src"
+    has_source = any(
+        p.name != ".gitkeep" for p in src_dir.iterdir()
+    ) if src_dir.is_dir() else False
+    if not has_source:
+        print(C.warn("src/ is empty — place your target source code there before running phase-1."))
+
     return 0
 
 

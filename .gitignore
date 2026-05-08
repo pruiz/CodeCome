@@ -229,12 +229,9 @@ itemdb/index.md
 sandbox/*
 !sandbox/.gitkeep
 
-# Build artifacts produced by sandbox runs against src/.
-src/**/bin/
-src/**/build/
-src/**/dist/
-src/**/target/
-src/**/obj/
+# Target source code placed by users — not shipped in the repo.
+src/*
+!src/.gitkeep
 
 itemdb/notes/*
 !itemdb/notes/.gitkeep
