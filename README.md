@@ -158,6 +158,22 @@ Valid evidence for confirmation may include:
 
 Benchmark labels alone are not enough to mark a finding as confirmed.
 
+## Prerequisites
+
+CodeCome runs on top of [OpenCode](https://opencode.ai), an open-source AI
+coding agent.
+
+1. **Install OpenCode** — follow the
+   [installation guide](https://opencode.ai/docs/#install).
+
+2. **Configure a provider** — connect at least one LLM provider with an API
+   key. See [provider setup](https://opencode.ai/docs/#configure).
+
+3. **Python 3.10+** — needed for workspace tooling (`make venv` creates a
+   local virtualenv).
+
+4. **GNU Make** — used to drive the workflow.
+
 ## Quick start
 
 1. Place target source under `src/`.
