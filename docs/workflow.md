@@ -348,6 +348,7 @@ Examples:
 - Web apps may later use `.opencode/skills/web-security/`.
 - .NET apps may use `.opencode/skills/dotnet-security/`.
 - PHP apps may use `.opencode/skills/php-security/`.
+- SQL-heavy code paths may use `.opencode/skills/sql-injection/`.
 
 ## Quality gates
 
