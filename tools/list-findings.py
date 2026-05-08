@@ -53,7 +53,11 @@ def load_frontmatter(path: Path) -> Dict[str, object]:
     if not match:
         return {}
 
-    data = yaml.safe_load(match.group(1))
+    try:
+        data = yaml.safe_load(match.group(1))
+    except yaml.YAMLError:
+        return {}
+
     return data if isinstance(data, dict) else {}
 
 

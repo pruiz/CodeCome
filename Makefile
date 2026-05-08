@@ -1,7 +1,7 @@
 # Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later OR AGPL-3.0-or-later
 
-.PHONY: help venv venv-check check status next-id frontmatter reset-itemdb index report
+.PHONY: help venv venv-check check status next-id frontmatter tests reset-itemdb index report
 .PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all
 .PHONY: sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-reset sandbox-build-target sandbox-test-target
 .PHONY: sandbox-list sandbox-inspect sandbox-detect sandbox-bootstrap sandbox-validate sandbox-regenerate sandbox-status show-model
@@ -42,6 +42,7 @@ help:
 	@echo "    make status         Show current finding status"
 	@echo "    make next-id        Show next available finding id"
 	@echo "    make frontmatter    Validate finding frontmatter"
+	@echo "    make tests          Run dev test suite + frontmatter gate"
 	@echo "    make index          Regenerate itemdb/index.md"
 	@echo "    make report         Regenerate itemdb/reports/report.md (local, no AI)"
 	@echo ""
@@ -184,6 +185,10 @@ next-id: venv-check
 	$(PYTHON) tools/codecome.py next-id
 
 frontmatter: venv-check
+	$(PYTHON) tools/check-frontmatter.py
+
+tests: venv-check
+	$(PYTHON) -m pytest -q tests
 	$(PYTHON) tools/check-frontmatter.py
 
 reset-itemdb: venv-check

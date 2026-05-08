@@ -61,3 +61,29 @@ def test_validate_frontmatter_status_directory_mismatch(tmp_path):
 
     errors = module.validate_finding(finding)
     assert any("status mismatch" in e for e in errors)
+
+
+def test_validate_frontmatter_reports_yaml_parse_error(tmp_path):
+    module = load_tool_module("check_frontmatter_yaml_error", "tools/check-frontmatter.py")
+    finding = tmp_path / "itemdb" / "findings" / "PENDING" / "CC-0002-invalid-yaml.md"
+    finding.parent.mkdir(parents=True)
+    finding.write_text(
+        """---
+id: "CC-0002"
+title: "Invalid yaml"
+status: "PENDING"
+validation:
+status: "NOT_STARTED"
+  methods: []
+---
+
+# Summary
+
+Broken.
+""",
+        encoding="utf-8",
+    )
+
+    errors = module.validate_finding(finding)
+    assert len(errors) == 1
+    assert "while parsing a block mapping" in errors[0]

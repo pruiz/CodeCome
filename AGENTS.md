@@ -45,6 +45,16 @@ Important security claims must be written to files under `itemdb/`, not left onl
 11. If a target-specific skill applies, use it, but keep the core workflow target-agnostic.
 12. Do not rely only on filenames, comments, benchmark labels, or directory names to claim a vulnerability.
 
+## Local quality gate (no CI)
+
+This repository currently relies on local developer checks instead of CI.
+
+Before committing or pushing changes, run:
+
+    make tests
+
+This command runs `pytest` for `tests/` and then validates finding frontmatter using `tools/check-frontmatter.py`.
+
 ## Allowed write locations
 
 Unless explicitly instructed otherwise, write only under:
