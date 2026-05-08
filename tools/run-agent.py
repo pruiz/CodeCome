@@ -922,9 +922,10 @@ def render_read_rich(console: Console, state: dict[str, Any]) -> bool:
 
     if kind == "file":
         body = str(payload).strip()
+        raw_body = _strip_line_numbers(body)
         # Cache the full body before considering display suppression so
         # subsequent write/edit diffs always have a baseline.
-        _cache_set(file_path, body)
+        _cache_set(file_path, raw_body)
 
         # Display suppression for internal workspace files.
         if _INTERNAL_READ_SUPPRESS:
@@ -943,7 +944,6 @@ def render_read_rich(console: Console, state: dict[str, Any]) -> bool:
         if not body:
             sections.append(Text("(empty file)", style="dim"))
         else:
-            raw_body = _strip_line_numbers(body)
             lexer = _detect_lexer(file_path)
             _render_truncated_body_rich(console, sections, raw_body, _READ_DISPLAY_LINES, lexer, footer)
 
@@ -979,7 +979,8 @@ def render_read_plain(state: dict[str, Any]) -> bool:
 
     if kind == "file":
         body = str(payload).strip()
-        _cache_set(file_path, body)
+        raw_body = _strip_line_numbers(body)
+        _cache_set(file_path, raw_body)
 
         if _INTERNAL_READ_SUPPRESS:
             description = _classify_internal_read(rel_path)
@@ -992,7 +993,6 @@ def render_read_plain(state: dict[str, Any]) -> bool:
         print(C.header(f"read {rel_path}"))
         if offset is not None and limit is not None:
             print(f"  lines {offset}..{offset + limit - 1}")
-        raw_body = _strip_line_numbers(body)
         _render_truncated_body_plain(raw_body, _READ_DISPLAY_LINES, footer)
         return True
 

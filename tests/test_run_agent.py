@@ -697,3 +697,50 @@ def test_build_child_command_anthropic_default_omits_thinking(monkeypatch):
     assert "--thinking" not in cmd
     assert thinking_on is False
     assert thinking_source == "provider-default"
+
+
+@pytest.mark.unit
+def test_read_renderer_caches_stripped_lines_instead_of_numbered(monkeypatch):
+    module = load_tool_module("run_agent_read_cache_strip", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setattr(module, "_INTERNAL_READ_SUPPRESS", False)
+
+    cache_writes = []
+
+    def fake_cache_set(path, content):
+        cache_writes.append((path, content))
+
+    monkeypatch.setattr(module, "_cache_set", fake_cache_set)
+
+    output = "<path>/tmp/x.txt</path>\n<type>file</type>\n<content>\n1: alpha\n2: beta\n\n(End of file - total 2 lines)\n</content>"
+    state = {
+        "input": {"filePath": "/tmp/x.txt", "offset": 1, "limit": 20},
+        "output": output,
+        "status": "completed",
+    }
+
+    assert module.render_read_plain(state) is True
+    assert cache_writes
+    assert cache_writes[-1][1] == "alpha\nbeta"
+
+
+@pytest.mark.unit
+def test_write_diff_uses_clean_cached_content_without_line_numbers(monkeypatch, capsys):
+    module = load_tool_module("run_agent_write_diff_clean", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+
+    monkeypatch.setattr(module, "_cache_get", lambda _path: "alpha\nbeta\n")
+    monkeypatch.setattr(module, "_cache_set", lambda _path, _content: None)
+
+    state = {
+        "input": {"filePath": "/tmp/x.txt", "content": "alpha\ngamma\n"},
+        "output": "Wrote file successfully.",
+        "status": "completed",
+    }
+
+    assert module.render_write_plain(state) is True
+    out = capsys.readouterr().out
+    assert "-1: alpha" not in out
+    assert "-2: beta" not in out
+    assert "+1: alpha" not in out
+    assert "+2: gamma" not in out
