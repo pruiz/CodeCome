@@ -1,7 +1,7 @@
 # Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later OR AGPL-3.0-or-later
 
-.PHONY: help venv venv-check check status next-id frontmatter tests reset-itemdb index report
+.PHONY: help venv venv-check check status next-id frontmatter tests itemdb-reset index report
 .PHONY: findings findings-create findings-move findings-evidence
 .PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all
 .PHONY: sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-reset sandbox-build-target sandbox-test-target
@@ -49,6 +49,7 @@ help:
 	@echo "    make next-id        Show next available finding id"
 	@echo "    make frontmatter    Validate finding frontmatter"
 	@echo "    make tests          Run dev test suite + frontmatter gate"
+	@echo "    make itemdb-reset   Remove local audit artifacts and recreate .gitkeep files"
 	@echo "    make index          Regenerate itemdb/index.md"
 	@echo "    make report         Regenerate itemdb/reports/report.md (local, no AI)"
 	@echo ""
@@ -205,7 +206,7 @@ tests: venv-check
 	$(PYTHON) -m pytest -q tests
 	$(PYTHON) tools/check-frontmatter.py
 
-reset-itemdb: venv-check
+itemdb-reset: venv-check
 	rm -f itemdb/notes/*.md
 	rm -rf itemdb/evidence/CC-*
 	rm -f itemdb/reports/*.md

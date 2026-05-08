@@ -399,6 +399,10 @@ Validate finding frontmatter:
 
     make frontmatter
 
+Reset local audit artifacts:
+
+    make itemdb-reset
+
 Regenerate finding index:
 
     make index
@@ -431,6 +435,20 @@ Check sandbox (requires phase-1 to bootstrap `sandbox/` first):
 Open sandbox shell:
 
     make sandbox-shell
+
+## Starting over
+
+If you want a completely clean workspace, the safest option is to clone a
+fresh copy of CodeCome again.
+
+If you only want to clear generated local audit artifacts without recloning,
+use:
+
+    make itemdb-reset
+
+This removes local notes, findings, evidence, reports, run summaries, and
+temporary artifacts, then recreates the expected `.gitkeep` files. Do not use
+it if you want to preserve prior audit work.
 
 ## Customizing phase prompts
 
