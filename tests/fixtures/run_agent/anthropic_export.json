@@ -1,0 +1,10 @@
+{
+  "events": [
+    {
+      "part": {
+        "providerID": "anthropic",
+        "modelID": "claude-opus-4-7"
+      }
+    }
+  ]
+}

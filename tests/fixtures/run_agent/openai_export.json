@@ -1,0 +1,8 @@
+{
+  "session": {
+    "model": {
+      "providerID": "openai",
+      "id": "gpt-5.3"
+    }
+  }
+}

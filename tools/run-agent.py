@@ -99,12 +99,11 @@ def _scan_event_for_model(payload: Any) -> Optional[str]:
     if isinstance(payload, dict):
         # Same-dict providerID + modelID combo wins.
         pid = payload.get("providerID")
-        mid = payload.get("modelID") or (
-            payload.get("model") if isinstance(payload.get("model"), str) else None
-        )
-        if isinstance(mid, dict):
-            inner_pid = mid.get("providerID")
-            inner_id = mid.get("id") or mid.get("modelID")
+        model_field = payload.get("model")
+        mid = payload.get("modelID") or (model_field if isinstance(model_field, str) else None)
+        if isinstance(model_field, dict):
+            inner_pid = model_field.get("providerID")
+            inner_id = model_field.get("id") or model_field.get("modelID")
             if inner_pid and inner_id:
                 return f"{inner_pid}/{inner_id}"
             if inner_id:
