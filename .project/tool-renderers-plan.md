@@ -49,7 +49,7 @@ Highlighting always applies to the visible portion only, so Pygments cost is bou
 | Write diff cap (with baseline) | 50 | `CODECOME_WRITE_DIFF_LIMIT` | `--write-diff-limit` | Pure display cap; name kept for compat |
 | Edit diff cap | 25 | `CODECOME_EDIT_DIFF_LINES` | `--edit-diff-lines` | Pure display cap |
 | Read highlight size cap | 200 KB | `CODECOME_READ_HIGHLIGHT_LIMIT` | none | Plain monospace beyond |
-| Glob match cap | 100 | `CODECOME_GLOB_MATCH_CAP` | none | `... and N more` after |
+| Glob match cap | 10 | `CODECOME_GLOB_MATCH_CAP` | none | `... and N more` after |
 | Snapshot cache size | 200 | `CODECOME_WRITE_CACHE_CAP` | none | LRU path count |
 | Snapshot cache enabled | on | `CODECOME_WRITE_CACHE` | none | `=0` to disable |
 
