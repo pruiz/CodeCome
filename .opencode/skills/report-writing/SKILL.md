@@ -182,6 +182,26 @@ Rules:
 - When the finding spans multiple files, include the most relevant
   excerpt and reference the others by path.
 
+## Exploited finding section
+
+For each exploited finding, include:
+
+- id,
+- title,
+- severity (note if adjusted from original),
+- CWE id(s),
+- impact demonstrated,
+- exploit type,
+- affected area,
+- affected files,
+- summary,
+- vulnerable code excerpt (≤ ~15 lines, fenced, with `file:line` header),
+- root cause analysis (1–3 sentences referencing the finding's `# Root cause analysis` section),
+- demonstrated impact narrative,
+- evidence and exploitation artifact references,
+- recording references (cast / gif / optional mp4 / `reproduce.sh` / recordings README, all by relative path; or an absence note if no recording was produced),
+- remediation idea (with corrected-code excerpt or unified diff from the finding).
+
 ## Confirmed finding section
 
 For each confirmed finding, include:
@@ -190,10 +210,13 @@ For each confirmed finding, include:
 - title,
 - severity,
 - confidence,
+- CWE id(s) (if known),
 - category,
 - affected area,
 - affected files,
 - summary,
+- vulnerable code excerpt (≤ ~15 lines, fenced, with `file:line` header),
+- root cause analysis (1–3 sentences when the finding has a populated `# Root cause analysis`; otherwise omit gracefully),
 - impact,
 - validation method,
 - evidence references,

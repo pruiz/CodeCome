@@ -190,12 +190,32 @@ def vulnerable_code_excerpt(frontmatter: Dict[str, object], sections: Dict[str, 
     if not isinstance(files, list) or not files:
         return "_No source file listed in finding frontmatter._"
 
-    relative = str(files[0])
+    affected_code = sections.get("Affected code", "")
+    
+    # Try to extract explicit file:line hint
+    explicit_file = None
+    line_hint = None
+    
+    match = re.search(r"(?P<file>[\w/.-]+):(?P<line>\d+)", affected_code)
+    if match:
+        explicit_file = match.group("file")
+        line_hint = int(match.group("line"))
+    else:
+        line_hint = first_line_hint(affected_code)
+        
+    relative = explicit_file if explicit_file else str(files[0])
     path = ROOT / relative
+    
     if not path.exists() or not path.is_file():
-        return f"_Source file not available: `{relative}`._"
+        # Fallback to files[0] if explicit file is not found
+        if explicit_file and files and str(files[0]) != explicit_file:
+            relative = str(files[0])
+            path = ROOT / relative
+            
+        if not path.exists() or not path.is_file():
+            return f"_Source file not available: `{relative}`._"
 
-    line_hint = first_line_hint(sections.get("Affected code", "")) or 1
+    line_hint = line_hint or 1
     start = max(1, line_hint - 3)
     end = start + 14
 
@@ -213,8 +233,9 @@ def vulnerable_code_excerpt(frontmatter: Dict[str, object], sections: Dict[str, 
 def summarize_root_cause(text: str) -> str:
     if not text or text.strip().lower() == "pending.":
         return "_Root cause not documented._"
-    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
-    return " ".join(sentences[:3])
+        
+    first_paragraph = text.strip().split("\n\n")[0].strip()
+    return first_paragraph
 
 
 def table_for(rows: List[Dict[str, str]]) -> List[str]:
