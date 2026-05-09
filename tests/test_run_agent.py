@@ -300,6 +300,59 @@ def test_finish_reason_classification_logic_matches_contract():
 
 
 @pytest.mark.unit
+def test_extract_tool_permission_error_for_read_path():
+    module = load_tool_module("run_agent_permission_error_read", "tools/run-agent.py")
+    event = {
+        "type": "tool_use",
+        "part": {
+            "tool": "read",
+            "state": {
+                "status": "error",
+                "input": {"filePath": "/tmp/workspace/sandbox/.env"},
+                "error": "The user rejected permission to use this specific tool call.",
+            },
+        },
+    }
+    msg = module._extract_tool_permission_error(event)
+    assert msg == "tool permission rejected: read /tmp/workspace/sandbox/.env"
+
+
+@pytest.mark.unit
+def test_extract_tool_permission_error_for_bash_command():
+    module = load_tool_module("run_agent_permission_error_bash", "tools/run-agent.py")
+    event = {
+        "type": "tool_use",
+        "part": {
+            "tool": "bash",
+            "state": {
+                "status": "error",
+                "input": {"command": "rm -rf /"},
+                "error": "permission denied",
+            },
+        },
+    }
+    msg = module._extract_tool_permission_error(event)
+    assert msg == "tool permission rejected: bash `rm -rf /`"
+
+
+@pytest.mark.unit
+def test_extract_tool_permission_error_ignores_non_permission_errors():
+    module = load_tool_module("run_agent_permission_error_ignore", "tools/run-agent.py")
+    event = {
+        "type": "tool_use",
+        "part": {
+            "tool": "read",
+            "state": {
+                "status": "error",
+                "input": {"filePath": "/tmp/x"},
+                "error": "File not found",
+            },
+        },
+    }
+    assert module._extract_tool_permission_error(event) is None
+
+
+@pytest.mark.unit
 def test_extract_apply_patch_payload_prefers_patchtext_key():
     module = load_tool_module("run_agent_patchtext_key", "tools/run-agent.py")
     state = {
@@ -813,6 +866,8 @@ SANDBOX_FIXTURES = ROOT / "tests" / "fixtures" / "sandbox_bootstrap"
         ("make sandbox-status BOOTSTRAP_ARGS='--format json'", "status"),
         ("make sandbox-validate BOOTSTRAP_ARGS=--format=json", "validate"),
         ("make sandbox-bootstrap ID=python BOOTSTRAP_ARGS='--format json'", "apply"),
+        ("BOOTSTRAP_ARGS='--format json --keep-going' make sandbox-validate", "validate"),
+        ("BOOTSTRAP_ARGS=--format=json make sandbox-status", "status"),
         # Negatives.
         ("python tools/sandbox-bootstrap.py status", None),  # no --format json
         ("make sandbox-status", None),                       # text mode
@@ -994,6 +1049,25 @@ def test_maybe_render_sandbox_bootstrap_strips_leading_text(monkeypatch, capsys)
     
     captured = capsys.readouterr()
     assert "Sandbox · status" in captured.out
+
+
+@pytest.mark.unit
+def test_maybe_render_sandbox_bootstrap_handles_env_prefixed_make(monkeypatch, capsys):
+    module = load_tool_module("run_agent_sandbox_env_prefixed_make", "tools/run-agent.py")
+    state = {
+        "input": {
+            "command": "BOOTSTRAP_ARGS='--format json --keep-going' make sandbox-validate",
+            "description": "Run validation with longer timeout",
+        },
+        "output": '{"overall_outcome": "passed", "tiers": []}',
+        "status": "completed",
+    }
+
+    monkeypatch.setattr(module, "_SANDBOX_RENDER", True)
+
+    assert module._maybe_render_sandbox_bootstrap(None, state) is True
+    captured = capsys.readouterr()
+    assert "Sandbox · validate" in captured.out
 
 
 @pytest.mark.unit

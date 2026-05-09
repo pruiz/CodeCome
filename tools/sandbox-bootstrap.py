@@ -768,6 +768,7 @@ def render_provenance(
     example: ExampleManifest,
     markers: Dict[str, str],
     file_hashes: Dict[str, str],
+    compose_project_name: str,
 ) -> str:
     """Build CODECOME-GENERATED.md content."""
     lines: List[str] = ["---"]
@@ -820,6 +821,12 @@ def render_provenance(
             lines.append(f"| `{key}` | `{markers[key]}` |")
     else:
         lines.append("(none)")
+    lines.append("")
+    lines.append("## Runtime metadata")
+    lines.append("")
+    lines.append("| Key | Value |")
+    lines.append("|---|---|")
+    lines.append(f"| `COMPOSE_PROJECT_NAME` | `{compose_project_name}` |")
     lines.append("")
     lines.append("## Manual edits since generation")
     lines.append("")
@@ -980,7 +987,8 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
     # Plan summary.
     # We always inject a .env file to isolate docker compose projects.
-    env_content = f"COMPOSE_PROJECT_NAME={_docker_compose_project_name()}\n"
+    compose_project_name = _docker_compose_project_name()
+    env_content = f"COMPOSE_PROJECT_NAME={compose_project_name}\n"
     if args.format == "json":
         plan_payload = {
             "dry_run": dry_run,
@@ -1052,7 +1060,12 @@ def cmd_apply(args: argparse.Namespace) -> int:
     
     file_hashes = {rel: digest for rel, digest in written}
 
-    provenance_text = render_provenance(manifest, markers, file_hashes)
+    provenance_text = render_provenance(
+        manifest,
+        markers,
+        file_hashes,
+        compose_project_name,
+    )
     PROVENANCE_FILE.write_text(provenance_text, encoding="utf-8")
 
     if args.format == "json":

@@ -215,6 +215,14 @@ Workflow:
 - Focus on what later phases need.
 - Do not let any target-specific skill narrow the target model before broad
   mapping is complete.
+- Do not ask the user to choose Phase 2 scope when a reasonable default can
+  be inferred. Pick the primary target from repository evidence, document
+  secondary surfaces as optional follow-up, and continue.
+- Do not phrase optional preferences as "User input requested". Use
+  "Optional follow-up" unless Phase 1 halted.
+- Reading `.env` files is allowed only in two places during reconnaissance:
+  target inputs under `src/**` and CodeCome-generated sandbox metadata in
+  `sandbox/.env`. Avoid unrelated `.env` files elsewhere in the workspace.
 
 ## Final response
 
@@ -226,4 +234,7 @@ At the end, summarize:
 - files created or updated (Phase 1a + Phase 1b),
 - chosen sandbox example and `validation_model`,
 - validation outcome (`passed`, `passed-with-warnings`, `halted`),
-- key limitations and any user-input requests.
+- key limitations,
+- halt requirements if Phase 1 is blocked,
+- optional follow-up scope controls users may pass via `PROMPT_EXTRA` or
+  `PROMPT_EXTRA_FILE`.

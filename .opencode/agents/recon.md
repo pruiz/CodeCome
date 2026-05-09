@@ -115,6 +115,7 @@ and the halt protocol.
 9. Identify what later agents should review.
 10. Identify how later validators can prove or disprove findings.
 11. Do not load vulnerability-family-specific skills such as `sql-injection` during reconnaissance unless needed only to improve attack-surface terminology. Do not let any target-specific skill narrow the target model before broad mapping is complete.
+12. Do not ask the user to choose Phase 2 scope during reconnaissance when a reasonable default can be inferred. Pick the primary target from repository evidence, document secondary surfaces as optional follow-up, and continue.
 
 ## Target profile
 
@@ -358,3 +359,8 @@ Phase 1b:
   documented,
 - if bootstrap succeeded, `sandbox/CODECOME-GENERATED.md` exists
   with provenance.
+
+Only describe user input as required when Phase 1b is blocked. For
+non-blocking preferences, use "optional follow-up" language and explain how
+the user can override the default with `PROMPT_EXTRA` or
+`PROMPT_EXTRA_FILE` on a later run.

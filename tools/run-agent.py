@@ -2168,9 +2168,16 @@ def _is_sandbox_bootstrap_json_call(command_str: str) -> Optional[str]:
         return None
 
     # Make-target wrapper path.
-    if tokens[0] == "make":
-        # Find the first sandbox-* target token.
-        for tok in tokens[1:]:
+    # Accept env-prefixed forms too, e.g.:
+    #   BOOTSTRAP_ARGS='--format json --keep-going' make sandbox-validate
+    make_idx = -1
+    for i, tok in enumerate(tokens):
+        if tok == "make":
+            make_idx = i
+            break
+    if make_idx >= 0:
+        # Find the first sandbox-* target token after `make`.
+        for tok in tokens[make_idx + 1:]:
             if tok in _SANDBOX_MAKE_TARGETS and has_json_format:
                 return _SANDBOX_MAKE_TARGETS[tok]
     return None
@@ -3667,6 +3674,46 @@ _FINISH_FAILURE = {
 }
 
 
+def _extract_tool_permission_error(event: dict[str, Any]) -> Optional[str]:
+    """Return a human-readable permission rejection summary for a tool_use error.
+
+    The OpenCode stream reports rejected approvals as tool_use events with
+    state.status == "error" and an error string mentioning permission rejection.
+    When this occurs near the end of a turn, we should report that explicit
+    cause instead of a generic "mid-turn" truncation message.
+    """
+    if event.get("type") != "tool_use":
+        return None
+    part = event.get("part")
+    if not isinstance(part, dict):
+        return None
+    state = part.get("state")
+    if not isinstance(state, dict):
+        return None
+    if str(state.get("status", "")) != "error":
+        return None
+
+    err = str(state.get("error", "")).strip()
+    low = err.lower()
+    if "rejected permission" not in low and "permission" not in low:
+        return None
+
+    tool_name = str(part.get("tool", "tool")).strip() or "tool"
+    input_data = state.get("input")
+    if isinstance(input_data, dict):
+        # Prefer path-like identifiers for file-oriented tools.
+        for key in ("filePath", "path", "selector"):
+            value = input_data.get(key)
+            if isinstance(value, str) and value.strip():
+                return f"tool permission rejected: {tool_name} {value.strip()}"
+        # Bash tool:
+        cmd = input_data.get("command")
+        if isinstance(cmd, str) and cmd.strip():
+            return f"tool permission rejected: {tool_name} `{cmd.strip()}`"
+
+    return f"tool permission rejected: {tool_name}"
+
+
 def render_step_finish(console: Console, event: dict[str, Any]) -> None:
     part = event.get("part", {})
     reason = str(part.get("reason", "unknown"))
@@ -4065,6 +4112,7 @@ def main() -> int:
         transcript_path = transcript_dir / f"last-phase-{args.phase}-{finding_tag}.jsonl"
         last_finish_reason: Optional[str] = None
         last_finish_tokens: dict[str, Any] = {}
+        last_permission_error: Optional[str] = None
         any_step_finish_seen = False
         try:
             transcript_fp: Optional[Any] = transcript_path.open("w", encoding="utf-8")
@@ -4124,6 +4172,10 @@ def main() -> int:
                     if isinstance(tokens, dict):
                         last_finish_tokens = tokens
 
+                permission_error = _extract_tool_permission_error(event)
+                if permission_error is not None:
+                    last_permission_error = permission_error
+
                 render_event(console, args.phase, args.label, event)
         finally:
             if transcript_fp is not None:
@@ -4175,12 +4227,18 @@ def main() -> int:
                 "(provider truncated the response; the phase did not finish)"
             )
         elif last_finish_reason in _FINISH_MID_TURN:
-            finish_warning = (
-                f"LLM stream ended after a mid-turn step (reason "
-                f"'{last_finish_reason}') without a terminal 'stop'; the "
-                "agent likely ran out of iterations or was cut short by "
-                "the provider before producing a final response"
-            )
+            if last_permission_error:
+                finish_warning = (
+                    f"{last_permission_error}; the run stopped mid-turn "
+                    f"(finish reason '{last_finish_reason}')"
+                )
+            else:
+                finish_warning = (
+                    f"LLM stream ended after a mid-turn step (reason "
+                    f"'{last_finish_reason}') without a terminal 'stop'; the "
+                    "agent likely ran out of iterations or was cut short by "
+                    "the provider before producing a final response"
+                )
         elif last_finish_reason not in _FINISH_TERMINAL_OK:
             finish_warning = (
                 f"LLM stream ended with unrecognised finish reason "
