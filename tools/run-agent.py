@@ -2199,10 +2199,21 @@ def _maybe_render_sandbox_bootstrap(console: Optional[Any], state: dict[str, Any
         return False
 
     # Only proceed when output parses as a single JSON document.
+    # make commands often echo the invocation line, so try to find
+    # the first JSON-like delimiter if a strict parse fails.
     try:
         payload = json.loads(stripped)
     except (ValueError, TypeError):
-        return False
+        first_brace = stripped.find("{")
+        first_bracket = stripped.find("[")
+        idxs = [i for i in (first_brace, first_bracket) if i >= 0]
+        if not idxs:
+            return False
+        start_idx = min(idxs)
+        try:
+            payload = json.loads(stripped[start_idx:])
+        except (ValueError, TypeError):
+            return False
 
     # Per-subcommand schema sniff: if the payload doesn't carry the
     # expected top-level structure, fall through to the bash renderer.

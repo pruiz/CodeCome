@@ -325,27 +325,27 @@ sandbox-test:
 # ---------------------------------------------------------------------------
 
 sandbox-list: venv-check
-	$(PYTHON) tools/sandbox-bootstrap.py list
+	@$(PYTHON) tools/sandbox-bootstrap.py list
 
 sandbox-inspect: venv-check
 	@test -n "$(ID)" || (echo "Usage: make sandbox-inspect ID=<example-id>" && exit 1)
-	$(PYTHON) tools/sandbox-bootstrap.py inspect $(ID)
+	@$(PYTHON) tools/sandbox-bootstrap.py inspect $(ID)
 
 sandbox-detect: venv-check
-	$(PYTHON) tools/sandbox-bootstrap.py detect
+	@$(PYTHON) tools/sandbox-bootstrap.py detect
 
 sandbox-bootstrap: venv-check
 	@test -n "$(ID)" || (echo "Usage: make sandbox-bootstrap ID=<example-id>" && exit 1)
-	$(PYTHON) tools/sandbox-bootstrap.py apply $(ID) $(BOOTSTRAP_ARGS)
+	@$(PYTHON) tools/sandbox-bootstrap.py apply $(ID) $(BOOTSTRAP_ARGS)
 
 sandbox-validate: venv-check
-	$(PYTHON) tools/sandbox-bootstrap.py validate $(BOOTSTRAP_ARGS)
+	@$(PYTHON) tools/sandbox-bootstrap.py validate $(BOOTSTRAP_ARGS)
 
 sandbox-regenerate: venv-check
-	$(PYTHON) tools/sandbox-bootstrap.py regenerate $(BOOTSTRAP_ARGS)
+	@$(PYTHON) tools/sandbox-bootstrap.py regenerate $(BOOTSTRAP_ARGS)
 
 sandbox-status: venv-check
-	$(PYTHON) tools/sandbox-bootstrap.py status
+	@$(PYTHON) tools/sandbox-bootstrap.py status
 
 # Print the model that would be picked for a given AGENT (default: recon).
 # Usage:

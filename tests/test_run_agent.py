@@ -978,6 +978,25 @@ def test_maybe_render_sandbox_bootstrap_skips_non_sandbox_bash(monkeypatch):
 
 
 @pytest.mark.unit
+def test_maybe_render_sandbox_bootstrap_strips_leading_text(monkeypatch, capsys):
+    module = load_tool_module("run_agent_sandbox_leading_text", "tools/run-agent.py")
+    # Simulate a make command that echoes the invocation line before the JSON payload
+    state = {
+        "input": {"command": "tools/sandbox-bootstrap.py --format json status"},
+        "output": 'python tools/sandbox-bootstrap.py status --format json\n{"sandbox_state": "missing", "phase2_gate_pass": false, "capabilities": {}}',
+        "status": "completed",
+    }
+    
+    # Force _SANDBOX_RENDER = True
+    monkeypatch.setattr(module, "_SANDBOX_RENDER", True)
+    
+    assert module._maybe_render_sandbox_bootstrap(None, state) is True
+    
+    captured = capsys.readouterr()
+    assert "Sandbox · status" in captured.out
+
+
+@pytest.mark.unit
 def test_maybe_render_sandbox_bootstrap_falls_through_on_invalid_json(monkeypatch):
     module = load_tool_module("run_agent_sandbox_bad_json", "tools/run-agent.py")
     state = {
