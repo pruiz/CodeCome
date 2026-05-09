@@ -163,7 +163,8 @@ def check_recording_tools() -> List[str]:
             warnings.append(
                 "agg not found on PATH; falling back to "
                 "'docker run --rm -v \"$PWD:/data\" ghcr.io/asciinema/agg' "
-                "is available."
+                "may be usable because the docker CLI is present. Confirm the "
+                "daemon, permissions, and image pull before recording."
             )
         else:
             warnings.append(

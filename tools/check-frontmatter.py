@@ -95,6 +95,21 @@ REQUIRED_EXPLOITATION_FIELDS = [
 
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 FINDING_ID_RE = re.compile(r"^CC-\d{4,}$")
+SECTION_RE = re.compile(r"^# (?P<title>.+?)\n(?P<body>.*?)(?=^# |\Z)", re.MULTILINE | re.DOTALL)
+
+REQUIRED_EXPLOITED_SECTIONS = [
+    "Root cause analysis",
+    "Data flow",
+    "Inputs and preconditions",
+    "Recording",
+]
+
+PLACEHOLDER_VALUES = {
+    "",
+    "pending.",
+    "todo.",
+    "tbd.",
+}
 
 
 def load_frontmatter(path: Path) -> Dict[str, object]:
@@ -112,6 +127,27 @@ def load_frontmatter(path: Path) -> Dict[str, object]:
         raise ValueError("frontmatter is not a YAML object")
 
     return data
+
+
+def load_sections(path: Path) -> Dict[str, str]:
+    content = path.read_text(encoding="utf-8")
+    match = FRONTMATTER_RE.match(content)
+    body = content[match.end() :] if match else content
+    sections: Dict[str, str] = {}
+
+    for section_match in SECTION_RE.finditer(body):
+        title = section_match.group("title").strip()
+        sections[title] = section_match.group("body").strip()
+
+    return sections
+
+
+def is_placeholder(value: str) -> bool:
+    return value.strip().lower() in PLACEHOLDER_VALUES
+
+
+def has_remediation_code(value: str) -> bool:
+    return "```diff" in value or "```patch" in value or "```c" in value or "```" in value
 
 
 def validate_finding(path: Path) -> List[str]:
@@ -200,6 +236,26 @@ def validate_finding(path: Path) -> List[str]:
         errors.append("EXPLOITED status requires exploitation block")
     else:
         errors.append("missing required field: exploitation")
+
+    sections = load_sections(path)
+    if status == "EXPLOITED":
+        for section in REQUIRED_EXPLOITED_SECTIONS:
+            body = sections.get(section)
+            if body is None:
+                errors.append(f"EXPLOITED status requires #{section} section")
+            elif is_placeholder(body):
+                errors.append(f"EXPLOITED status requires populated #{section} section")
+
+    if status in ("CONFIRMED", "EXPLOITED"):
+        remediation = sections.get("Remediation idea")
+        if remediation is None:
+            errors.append(f"{status} status requires #Remediation idea section")
+        elif is_placeholder(remediation):
+            errors.append(f"{status} status requires populated #Remediation idea section")
+        elif not has_remediation_code(remediation):
+            errors.append(
+                f"{status} status requires #Remediation idea with corrected-code excerpt or unified diff"
+            )
 
     return errors
 

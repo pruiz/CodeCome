@@ -100,6 +100,28 @@ updated_at: "2026-01-01"
 # Summary
 
 Exploited.
+
+# Root cause analysis
+
+The vulnerable code reaches a dangerous sink without the required validation.
+
+# Data flow
+
+Not applicable. This fixture is not modeling an input-driven bug.
+
+# Inputs and preconditions
+
+The test fixture assumes the vulnerable path is reachable.
+
+# Recording
+
+No recording exists for this unit-test fixture.
+
+# Remediation idea
+
+```c
+safe_call();
+```
 """
 
 
@@ -140,6 +162,34 @@ def test_validate_frontmatter_rejects_malformed_cwe(tmp_path):
 
     errors = module.validate_finding(finding)
     assert any("invalid cwe entry" in e for e in errors)
+
+
+def test_validate_frontmatter_exploited_requires_body_sections(tmp_path):
+    module = load_tool_module("check_frontmatter_exploited_body", "tools/check-frontmatter.py")
+    finding = tmp_path / "itemdb" / "findings" / "EXPLOITED" / "CC-0001-missing-body.md"
+    finding.parent.mkdir(parents=True)
+    finding.write_text(
+        EXPLOITED_FRONTMATTER_TEMPLATE.format(cwe='["CWE-121"]')
+        .split("# Root cause analysis", 1)[0],
+        encoding="utf-8",
+    )
+
+    errors = module.validate_finding(finding)
+    assert any("EXPLOITED status requires #Root cause analysis section" in e for e in errors)
+
+
+def test_validate_frontmatter_confirmed_requires_remediation_code(tmp_path):
+    module = load_tool_module("check_frontmatter_remediation_code", "tools/check-frontmatter.py")
+    finding = tmp_path / "itemdb" / "findings" / "CONFIRMED" / "CC-0001-no-remediation-code.md"
+    finding.parent.mkdir(parents=True)
+    finding.write_text(
+        VALID_FRONTMATTER.replace('status: "PENDING"', 'status: "CONFIRMED"')
+        + "\n# Remediation idea\n\nUse a safe call, but no code block.\n",
+        encoding="utf-8",
+    )
+
+    errors = module.validate_finding(finding)
+    assert any("requires #Remediation idea with corrected-code excerpt" in e for e in errors)
 
 
 def test_validate_frontmatter_reports_yaml_parse_error(tmp_path):

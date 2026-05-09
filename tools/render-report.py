@@ -18,7 +18,7 @@ import re
 import sys
 from datetime import date
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Optional
 
 try:
     import yaml
@@ -95,6 +95,10 @@ def load_findings() -> List[Dict[str, str]]:
             sections = extract_sections(path)
             files = frontmatter.get("files")
             affected_files = ", ".join(str(item) for item in files) if isinstance(files, list) else ""
+            cwe = frontmatter.get("cwe")
+            cwe_text = ", ".join(str(item) for item in cwe) if isinstance(cwe, list) else ""
+            evidence_root = ROOT / evidence_dir if evidence_dir else None
+            recording = find_recording_reference(evidence_root) if evidence_root else ""
 
             rows.append(
                 {
@@ -102,6 +106,7 @@ def load_findings() -> List[Dict[str, str]]:
                     "status": str(frontmatter.get("status", path.parent.name)),
                     "severity": str(frontmatter.get("severity", "")),
                     "confidence": str(frontmatter.get("confidence", "")),
+                    "cwe": cwe_text,
                     "category": str(frontmatter.get("category", "")),
                     "language": str(frontmatter.get("language", "")),
                     "target_area": str(frontmatter.get("target_area", "")),
@@ -113,12 +118,16 @@ def load_findings() -> List[Dict[str, str]]:
                     "affected_files": affected_files,
                     "finding_path": str(path.relative_to(ROOT)),
                     "evidence": evidence_dir,
+                    "recording": recording,
                     "summary": sections.get("Summary", "Pending."),
+                    "affected_code": sections.get("Affected code", "Pending."),
                     "impact": sections.get("Impact", "Pending."),
                     "validation_result": sections.get("Validation result", "Pending."),
                     "remediation": sections.get("Remediation idea", "Pending."),
                     "exploitation_result": sections.get("Exploitation Result", "Pending."),
                     "demonstrated_impact": sections.get("Demonstrated Impact", "Pending."),
+                    "root_cause": sections.get("Root cause analysis", ""),
+                    "code_excerpt": vulnerable_code_excerpt(frontmatter, sections),
                 }
             )
 
@@ -157,26 +166,80 @@ def extract_sections(path: Path) -> Dict[str, str]:
     return sections
 
 
+def find_recording_reference(evidence_dir: Path) -> str:
+    recordings = evidence_dir / "exploits" / "recordings"
+    for name in ("README.md", "exploit.gif", "exploit.mp4", "exploit.cast"):
+        candidate = recordings / name
+        if candidate.exists():
+            return str(candidate.relative_to(ROOT))
+    return ""
+
+
+def first_line_hint(text: str) -> Optional[int]:
+    match = re.search(r"\bline(?:s)?\s+(\d+)", text, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+    match = re.search(r":(\d+)(?:\b|-)", text)
+    if match:
+        return int(match.group(1))
+    return None
+
+
+def vulnerable_code_excerpt(frontmatter: Dict[str, object], sections: Dict[str, str]) -> str:
+    files = frontmatter.get("files")
+    if not isinstance(files, list) or not files:
+        return "_No source file listed in finding frontmatter._"
+
+    relative = str(files[0])
+    path = ROOT / relative
+    if not path.exists() or not path.is_file():
+        return f"_Source file not available: `{relative}`._"
+
+    line_hint = first_line_hint(sections.get("Affected code", "")) or 1
+    start = max(1, line_hint - 3)
+    end = start + 14
+
+    source_lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    excerpt = source_lines[start - 1 : min(end, len(source_lines))]
+    language = str(frontmatter.get("language", "")).lower()
+    fence = "c" if language in {"c", "cpp", "c++"} else language
+
+    numbered = [f"{idx:>4}: {line}" for idx, line in enumerate(excerpt, start=start)]
+    return "\n".join(
+        [f"```{fence}".rstrip(), f"// {relative}:{start}-{start + len(excerpt) - 1}", *numbered, "```"]
+    )
+
+
+def summarize_root_cause(text: str) -> str:
+    if not text or text.strip().lower() == "pending.":
+        return "_Root cause not documented._"
+    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
+    return " ".join(sentences[:3])
+
+
 def table_for(rows: List[Dict[str, str]]) -> List[str]:
     lines = [
-        "| ID | Status | Severity | Confidence | Target area | Title | Evidence |",
-        "|---|---|---|---|---|---|---|",
+        "| ID | Status | Severity | Confidence | CWE | Target area | Title | Evidence | Recording |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
 
     if not rows:
-        lines.append("| - | - | - | - | - | None. | - |")
+        lines.append("| - | - | - | - | - | - | None. | - | - |")
         return lines
 
     for row in rows:
         evidence = f"`{row['evidence']}`" if row["evidence"] else "-"
+        recording = f"`{row['recording']}`" if row["recording"] else "-"
         lines.append(
             f"| {row['id']} "
             f"| {row['status']} "
             f"| {row['severity']} "
             f"| {row['confidence']} "
+            f"| {row['cwe'] or '-'} "
             f"| {row['target_area']} "
             f"| [{row['title']}]({row['finding_path']}) "
-            f"| {evidence} |"
+            f"| {evidence} "
+            f"| {recording} |"
         )
 
     return lines
@@ -195,6 +258,7 @@ def render_detail_block(title: str, rows: List[Dict[str, str]], exploited: bool 
         lines.append("")
         lines.append(f"- Status: {row['status']}")
         lines.append(f"- Severity: {row['severity']}")
+        lines.append(f"- CWE: {row['cwe'] or '-'}")
         if exploited:
             lines.append(f"- Impact demonstrated: {row['exploitation_impact'] or 'Pending.'}")
             lines.append(f"- Exploit type: {row['exploitation_type'] or 'Pending.'}")
@@ -207,10 +271,19 @@ def render_detail_block(title: str, rows: List[Dict[str, str]], exploited: bool 
         if exploited:
             exploit_artifacts = f"{row['evidence']}/exploits" if row['evidence'] else ""
             lines.append(f"- Exploitation artifacts: `{exploit_artifacts}`" if exploit_artifacts else "- Exploitation artifacts: Pending.")
+            lines.append(f"- Recording: `{row['recording']}`" if row["recording"] else "- Recording: -")
         lines.append("")
         lines.append("### Summary")
         lines.append("")
         lines.append(row["summary"])
+        lines.append("")
+        lines.append("### Vulnerable code excerpt")
+        lines.append("")
+        lines.append(row["code_excerpt"])
+        lines.append("")
+        lines.append("### Root cause")
+        lines.append("")
+        lines.append(summarize_root_cause(row["root_cause"]))
         lines.append("")
         if exploited:
             lines.append("### Demonstrated Impact")
