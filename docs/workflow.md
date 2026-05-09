@@ -214,6 +214,7 @@ Expected outputs:
     itemdb/evidence/CC-0001/exploits/
     itemdb/evidence/CC-0001/exploits/README.md
     itemdb/evidence/CC-0001/exploits/exploit.py
+    itemdb/evidence/CC-0001/exploits/recordings/        # demo recording
 
 Useful exploitation artifacts:
 
@@ -223,6 +224,20 @@ Useful exploitation artifacts:
     malicious-input.txt
     captured-output.txt
     impact-log.txt
+
+When the PoC works, the exploiter also produces a reproducible
+demonstration recording under `exploits/recordings/` (cast, gif,
+optional mp4, `reproduce.sh`, `env.txt`, `README.md`). See
+`.opencode/skills/exploit-recording/SKILL.md`. Recording effort is
+mandatory; documented absence does not block `EXPLOITED`.
+
+EXPLOITED findings must additionally carry:
+
+- one or more CWE ids in frontmatter,
+- populated `# Root cause analysis`, `# Data flow` (or `Not applicable.`),
+  `# Inputs and preconditions`, and `# Recording` sections,
+- a `# Remediation idea` containing a corrected-code excerpt or unified
+  diff.
 
 Possible outcomes:
 
@@ -252,6 +267,11 @@ Or generate a basic local report:
 Expected output:
 
     itemdb/reports/report.md
+
+Phase 6 reports include `CWE` and `Recording` columns in the summary
+table, a short vulnerable-code excerpt and root-cause summary per
+CONFIRMED/EXPLOITED finding, and recording references by relative path.
+Binary blobs (`.gif`, `.mp4`) are never embedded inline.
 
 ## Helper commands
 
@@ -356,6 +376,9 @@ Before moving from Phase 1 to Phase 2:
 
     make check
 
+`make check` also warns when optional recording tools (`asciinema`,
+`agg`, `ffmpeg`, `Xvfb`) are missing; warnings do not fail the gate.
+
 Before reporting:
 
     make frontmatter
@@ -397,9 +420,11 @@ Before validation:
 
        make phase-4 FINDING=CC-0001
 
-8. (Optional) Develop exploit for a confirmed finding:
+8. Develop exploit and demonstration recording for a confirmed finding:
 
        make phase-5 FINDING=CC-0001
+
+   `make check` warns ahead of time if recording tools are missing.
 
 9. Regenerate index and report:
 

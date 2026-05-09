@@ -87,7 +87,12 @@ Exploitation artifacts are stored under:
 
     itemdb/evidence/<finding-id>/exploits/
 
-and may move findings to:
+When the PoC works, a demonstration recording is also produced under
+`itemdb/evidence/<finding-id>/exploits/recordings/`. EXPLOITED findings
+must carry CWE id(s) and populated root-cause / data-flow /
+preconditions / recording / remediation-diff sections.
+
+Findings may move to:
 
     itemdb/findings/EXPLOITED/
 
@@ -105,7 +110,10 @@ Default report path:
 
     itemdb/reports/report.md
 
-This local report is a lightweight snapshot. Use `make phase-6` for the full reporting pass.
+This local report is a lightweight snapshot. Use `make phase-6` for the
+full reporting pass. Phase 6 surfaces `CWE` and `Recording` columns,
+vulnerable-code excerpts, and root-cause summaries; recordings are
+referenced by relative path (binaries are never embedded).
 
 ## Notes
 
@@ -113,6 +121,8 @@ This local report is a lightweight snapshot. Use `make phase-6` for the full rep
 - Prompts are intentionally target-agnostic.
 - Target-specific behavior should come from skills under `.opencode/skills/`.
 - Do not present unvalidated hypotheses as confirmed vulnerabilities.
+- `make check` warns when optional recording tools (`asciinema`, `agg`,
+  `ffmpeg`, `Xvfb`) are missing; warnings do not fail the gate.
 
 ## License
 
