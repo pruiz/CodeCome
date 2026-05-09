@@ -1499,24 +1499,34 @@ def cmd_not_implemented(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="sandbox-bootstrap",
-        description="Manage CodeCome sandbox examples and bootstrap the live sandbox.",
-    )
-    parser.add_argument(
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument(
         "--format",
         choices=["text", "json"],
         default="text",
         help="Output format. Defaults to text.",
     )
 
+    parser = argparse.ArgumentParser(
+        prog="sandbox-bootstrap",
+        description="Manage CodeCome sandbox examples and bootstrap the live sandbox.",
+    )
+    # Support --format before the subcommand as well
+    parser.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help=argparse.SUPPRESS,
+    )
+
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_list = sub.add_parser("list", help="List available sandbox examples.")
+    p_list = sub.add_parser("list", parents=[common], help="List available sandbox examples.")
     p_list.set_defaults(func=cmd_list)
 
     p_inspect = sub.add_parser(
         "inspect",
+        parents=[common],
         help="Print manifest and previews for one example.",
     )
     p_inspect.add_argument("id", help="Example id (matches templates/sandboxes/<id>/).")
@@ -1524,6 +1534,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_detect = sub.add_parser(
         "detect",
+        parents=[common],
         help="Scan workspace and propose ranked sandbox candidates.",
     )
     p_detect.add_argument(
@@ -1535,6 +1546,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_apply = sub.add_parser(
         "apply",
+        parents=[common],
         help="Copy an example into sandbox/ with marker substitution.",
     )
     p_apply.add_argument("id", help="Example id to apply.")
@@ -1544,15 +1556,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_apply.add_argument("--force", action="store_true",
                          help="Allow overwriting user-managed sandbox/ content.")
     p_apply.add_argument(
-        "--max-retries",
-        type=int,
-        default=int(os.environ.get("CODECOME_BOOTSTRAP_MAX_RETRIES", DEFAULT_MAX_RETRIES)),
-        help="Agent remediation retry budget (env CODECOME_BOOTSTRAP_MAX_RETRIES, default 3).",
+        "--no-gate",
+        action="store_true",
+        help="Skip recording provenance and evaluating validation gate.",
     )
     p_apply.set_defaults(func=cmd_apply)
 
     p_validate = sub.add_parser(
         "validate",
+        parents=[common],
         help="Run sandbox validation tiers and capture results.",
     )
     p_validate.add_argument(
@@ -1563,17 +1575,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_validate.add_argument(
         "--docker-only",
         action="store_true",
-        help="Skip sandbox/scripts/* and call docker compose directly.",
+        help="Only run docker compose tiers; skip sandbox/scripts/*.",
+    )
+    p_validate.add_argument(
+        "--no-record",
+        action="store_true",
+        help="Do not record the result in state.json (dry run evaluation).",
     )
     p_validate.add_argument(
         "--keep-going",
         action="store_true",
-        help="Run all tiers even after a failure.",
+        help="Continue running subsequent tiers even if one fails.",
     )
     p_validate.set_defaults(func=cmd_validate)
 
     p_regen = sub.add_parser(
         "regenerate",
+        parents=[common],
         help="Re-apply the recorded sandbox example with backup.",
     )
     p_regen.add_argument(
@@ -1584,15 +1602,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_regen.add_argument("--dry-run", action="store_true", help="Preview only, do not write.")
     p_regen.add_argument(
-        "--max-retries",
-        type=int,
-        default=int(os.environ.get("CODECOME_BOOTSTRAP_MAX_RETRIES", DEFAULT_MAX_RETRIES)),
-        help="Agent remediation retry budget.",
+        "--no-gate",
+        action="store_true",
+        help="Skip recording provenance and evaluating validation gate.",
     )
     p_regen.set_defaults(func=cmd_regenerate)
 
     p_status = sub.add_parser(
         "status",
+        parents=[common],
         help="Print sandbox provenance and Phase 2 gate result.",
     )
     p_status.add_argument(
