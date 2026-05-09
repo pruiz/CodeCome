@@ -19,16 +19,12 @@ Read:
 - `.opencode/skills/source-recon/SKILL.md`
 - `.opencode/skills/sandbox-bootstrap/SKILL.md`
 
-Use additional target-specific skills only if they clearly apply.
-
-Examples:
-
-- `.opencode/skills/c-cpp-security/SKILL.md`
-- `.opencode/skills/dotnet-security/SKILL.md`
-- `.opencode/skills/php-security/SKILL.md`
-- `.opencode/skills/sql-injection/SKILL.md`
-- `.opencode/skills/web-security/SKILL.md`
-- `.opencode/skills/juliet-benchmark/SKILL.md`
+Do not load target-specific security skills before first mapping the source
+tree broadly. After broad structural mapping, you may consult target-specific
+skills only for reconnaissance checklists, not for vulnerability deep dives or
+finding generation. Do not load vulnerability-family-specific skills such as
+`sql-injection` during reconnaissance unless needed only to improve
+attack-surface terminology.
 
 ## Target
 
@@ -217,6 +213,8 @@ Workflow:
 - Be explicit about uncertainty.
 - Prefer useful notes over exhaustive dumps.
 - Focus on what later phases need.
+- Do not let any target-specific skill narrow the target model before broad
+  mapping is complete.
 
 ## Final response
 

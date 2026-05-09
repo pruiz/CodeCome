@@ -24,10 +24,10 @@ Also reference when writing run summaries:
 
 - `templates/run-summary.md`
 
-Use target-specific skills when they clearly apply, for example:
-
-- `.opencode/skills/c-cpp-security/SKILL.md`
-- `.opencode/skills/juliet-benchmark/SKILL.md`
+Do not load target-specific security skills before first mapping the source
+tree broadly. After broad structural mapping, you may consult target-specific
+skills only for reconnaissance checklists, not for vulnerability deep dives or
+finding generation.
 
 ## Mission
 
@@ -114,7 +114,7 @@ and the halt protocol.
 8. Prefer concise, useful notes over exhaustive dumps.
 9. Identify what later agents should review.
 10. Identify how later validators can prove or disprove findings.
-11. Do not load vulnerability-specific or security-specific skills (e.g., php-security, web-security) during reconnaissance. Focus strictly on structural mapping.
+11. Do not load vulnerability-family-specific skills such as `sql-injection` during reconnaissance unless needed only to improve attack-surface terminology. Do not let any target-specific skill narrow the target model before broad mapping is complete.
 
 ## Target profile
 

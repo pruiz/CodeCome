@@ -1,7 +1,7 @@
 # CodeCome Run Summary
 
 Date: YYYY-MM-DD  
-Phase: reconnaissance / hypothesis_generation / counter_analysis / validation / reporting  
+Phase: reconnaissance / hypothesis_generation / counter_analysis / validation / exploit_development / reporting  
 Agent: recon / auditor / reviewer / validator / exploiter / reporter / generic  
 Target path: `./src`
 
