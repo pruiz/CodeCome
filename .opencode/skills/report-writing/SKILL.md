@@ -129,11 +129,58 @@ Use this structure for `itemdb/reports/report.md`:
 
 Include a table like:
 
-    | ID | Status | Severity | Confidence | Title | Evidence |
-    |---|---|---|---|---|---|
-    | CC-0001 | CONFIRMED | HIGH | CONFIRMED | Missing owner check | itemdb/evidence/CC-0001/ |
+    | ID | Status | Severity | Confidence | CWE | Target area | Title | Evidence | Recording |
+    |---|---|---|---|---|---|---|---|---|
+    | CC-0001 | EXPLOITED | HIGH | CONFIRMED | CWE-121 | parser | Missing owner check | itemdb/evidence/CC-0001/ | itemdb/evidence/CC-0001/exploits/recordings/README.md |
 
-Only include useful columns.
+Cell rules:
+
+- `CWE`: list one or more CWE ids; use `—` when none.
+- `Recording`: relative path to the recordings README or to the GIF;
+  use `—` when no recording exists.
+
+Only include useful columns. Drop `Confidence` if every row has the same
+value, but keep `CWE` and `Recording` so reviewers can scan them.
+
+## Recording handling
+
+Reference recordings by relative path. Never embed binary blobs (`.gif`,
+`.mp4`) inline in the Markdown; link to them instead and let the
+recordings README document play instructions.
+
+Examples:
+
+    Recording: [recordings/README.md](../evidence/CC-0001/exploits/recordings/README.md)
+    Cast: ../evidence/CC-0001/exploits/recordings/exploit.cast
+    GIF: ../evidence/CC-0001/exploits/recordings/exploit.gif
+
+If a finding has no recording, write `—` in the table cell and explain
+the absence briefly in the per-finding section.
+
+## Vulnerable-code excerpts
+
+For each CONFIRMED/EXPLOITED finding, include a short excerpt (≤ ~15
+lines) of the vulnerable code, fenced and annotated with a `file:line`
+header. Examples:
+
+    ```c
+    // src/parser/buf.c:42-58
+    void parse_record(char *src) {
+        char dst[50];
+        memcpy(dst, src, 100);  // attacker-controlled length
+        ...
+    }
+    ```
+
+Rules:
+
+- Keep excerpts focused on the vulnerable construct; do not paste whole
+  files.
+- Always include a `file:line` header so reviewers can navigate to the
+  source.
+- Redact any secrets, tokens, or production identifiers.
+- When the finding spans multiple files, include the most relevant
+  excerpt and reference the others by path.
 
 ## Confirmed finding section
 

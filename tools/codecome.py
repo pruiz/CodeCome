@@ -12,10 +12,12 @@ finding status counts, and next-id discovery for Markdown findings.
 from __future__ import annotations
 
 import argparse
+import platform
 import re
+import shutil
 import sys
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Optional
 
 try:
     import yaml
@@ -65,6 +67,126 @@ FINDING_STATUS_DIRS = [
 ]
 
 FINDING_ID_RE = re.compile(r"\bCC-(\d{4,})\b")
+
+
+# --- Optional recording tools ------------------------------------------------
+#
+# Used by Phase 5 to capture exploit demonstrations. Missing tools are not
+# fatal; we just warn so the user can install what they need before
+# attempting a recording.
+
+_INSTALL_HINTS_MAC = {
+    "asciinema": "brew install asciinema",
+    "agg": "brew install agg",
+    "ffmpeg": "brew install ffmpeg",
+    "Xvfb": "brew install --cask xquartz   # Xvfb ships with XQuartz",
+    "docker": "brew install --cask docker",
+}
+
+_INSTALL_HINTS_DEBIAN = {
+    "asciinema": "sudo apt-get install asciinema",
+    "agg": (
+        "cargo install --git https://github.com/asciinema/agg "
+        "(no apt package; or use the docker fallback "
+        "'docker pull ghcr.io/asciinema/agg')"
+    ),
+    "ffmpeg": "sudo apt-get install ffmpeg",
+    "Xvfb": "sudo apt-get install xvfb",
+    "docker": "https://docs.docker.com/engine/install/",
+}
+
+_INSTALL_HINTS_GENERIC = {
+    "asciinema": "https://asciinema.org/docs/installation",
+    "agg": "https://github.com/asciinema/agg (or docker pull ghcr.io/asciinema/agg)",
+    "ffmpeg": "https://ffmpeg.org/download.html",
+    "Xvfb": "package usually named 'xvfb' on Linux distributions",
+    "docker": "https://docs.docker.com/engine/install/",
+}
+
+
+def _detect_os_family() -> str:
+    system = platform.system()
+    if system == "Darwin":
+        return "mac"
+    if system == "Linux":
+        # Best-effort detection of Debian/Ubuntu family.
+        try:
+            os_release = Path("/etc/os-release").read_text(encoding="utf-8")
+        except OSError:
+            return "linux"
+        lower = os_release.lower()
+        if any(token in lower for token in ("debian", "ubuntu", "mint")):
+            return "debian"
+        return "linux"
+    return "other"
+
+
+def _install_hint(tool: str) -> str:
+    family = _detect_os_family()
+    if family == "mac":
+        return _INSTALL_HINTS_MAC.get(tool, _INSTALL_HINTS_GENERIC[tool])
+    if family == "debian":
+        return _INSTALL_HINTS_DEBIAN.get(tool, _INSTALL_HINTS_GENERIC[tool])
+    return _INSTALL_HINTS_GENERIC.get(tool, "")
+
+
+def _which(tool: str) -> Optional[str]:
+    return shutil.which(tool)
+
+
+def check_recording_tools() -> List[str]:
+    """Return a list of warning messages about missing optional recording tools.
+
+    Empty list means everything is in place. Tools are grouped by recording
+    path: preferred (asciinema + agg), and fallback (ffmpeg + Xvfb).
+    Docker is reported separately because it provides a containerised agg
+    fallback when agg itself is not on PATH.
+    """
+
+    warnings: List[str] = []
+
+    asciinema = _which("asciinema")
+    agg = _which("agg")
+    docker = _which("docker")
+    ffmpeg = _which("ffmpeg")
+    xvfb = _which("Xvfb") or _which("xvfb-run")
+
+    # Preferred path: asciinema + agg (or asciinema + docker for containerised agg).
+    if not asciinema:
+        warnings.append(
+            f"asciinema not found on PATH "
+            f"(preferred recording tool). Install hint: {_install_hint('asciinema')}"
+        )
+
+    if not agg:
+        if docker:
+            warnings.append(
+                "agg not found on PATH; falling back to "
+                "'docker run --rm -v \"$PWD:/data\" ghcr.io/asciinema/agg' "
+                "is available."
+            )
+        else:
+            warnings.append(
+                f"agg not found on PATH and docker is not available either "
+                f"(needed to render asciinema casts to GIF). "
+                f"Install hint: {_install_hint('agg')}"
+            )
+
+    # Fallback path: ffmpeg + Xvfb (only required for GUI/browser exploits).
+    if not ffmpeg:
+        warnings.append(
+            f"ffmpeg not found on PATH (fallback for GUI/browser exploits). "
+            f"Install hint: {_install_hint('ffmpeg')}"
+        )
+
+    if not xvfb:
+        warnings.append(
+            f"Xvfb (or xvfb-run) not found on PATH "
+            f"(headless fallback for GUI exploits). "
+            f"Install hint: {_install_hint('Xvfb')}"
+        )
+
+    return warnings
 
 
 def fail(message: str) -> int:
@@ -147,6 +269,16 @@ def command_check(_: argparse.Namespace) -> int:
     ) if src_dir.is_dir() else False
     if not has_source:
         print(C.warn("src/ is empty — place your target source code there before running phase-1."))
+
+    # Warn (do not fail) about missing optional recording tools used by Phase 5.
+    recording_warnings = check_recording_tools()
+    if recording_warnings:
+        print()
+        print(C.header("Optional recording tools (used by phase-5 exploit demonstrations):"))
+        for message in recording_warnings:
+            print(C.warn(message))
+    else:
+        print(C.ok("Optional recording tools available (asciinema, agg, ffmpeg, Xvfb)."))
 
     return 0
 

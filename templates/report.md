@@ -70,9 +70,9 @@ Include:
 
 # Findings summary
 
-| ID | Status | Severity | Confidence | Target area | Title | Evidence |
-|---|---|---|---|---|---|---|
-| - | - | - | - | - | No findings yet. | - |
+| ID | Status | Severity | Confidence | CWE | Target area | Title | Evidence | Recording |
+|---|---|---|---|---|---|---|---|---|
+| - | - | - | - | - | - | No findings yet. | - | - |
 
 # Exploited findings
 
@@ -84,20 +84,35 @@ For each exploited finding, include:
 
 - Status:
 - Severity: (note if adjusted, e.g., "HIGH (upgraded from MEDIUM)")
+- CWE: CWE-NNN
 - Impact demonstrated:
 - Exploit type:
 - Target area:
 - Affected files:
 - Evidence:
 - Exploitation artifacts:
+- Recording:
 
 ### Summary
+
+### Vulnerable code excerpt
+
+```
+// path/to/file.c:NN-MM
+// short excerpt (≤ ~15 lines)
+```
+
+### Root cause
+
+1–3 sentences distilled from the finding's `# Root cause analysis`.
 
 ### Demonstrated Impact
 
 ### Exploitation Result
 
 ### Remediation idea
+
+Include the corrected-code excerpt or unified diff from the finding.
 
 # Confirmed findings
 
@@ -110,6 +125,7 @@ For each confirmed finding, include:
 - Status:
 - Severity:
 - Confidence:
+- CWE: CWE-NNN (if known)
 - Category:
 - Target area:
 - Affected files:
@@ -117,6 +133,18 @@ For each confirmed finding, include:
 - Evidence:
 
 ### Summary
+
+### Vulnerable code excerpt
+
+```
+// path/to/file.c:NN-MM
+// short excerpt (≤ ~15 lines)
+```
+
+### Root cause
+
+1–3 sentences when the finding has a populated `# Root cause analysis`;
+otherwise omit this subsection.
 
 ### Impact
 

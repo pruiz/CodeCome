@@ -160,6 +160,15 @@ def validate_finding(path: Path) -> List[str]:
         if list_field in data and not isinstance(data[list_field], list):
             errors.append(f"{list_field} must be a list")
 
+    cwe_value = data.get("cwe")
+    if status == "EXPLOITED":
+        if not isinstance(cwe_value, list) or not cwe_value:
+            errors.append("EXPLOITED status requires at least one CWE id in cwe")
+    if isinstance(cwe_value, list):
+        for entry in cwe_value:
+            if not isinstance(entry, str) or not re.fullmatch(r"CWE-\d+", entry):
+                errors.append(f"invalid cwe entry: {entry!r} (expected 'CWE-NNN')")
+
     exploitation = data.get("exploitation")
     if isinstance(exploitation, dict):
         for field in REQUIRED_EXPLOITATION_FIELDS:

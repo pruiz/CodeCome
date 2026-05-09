@@ -118,6 +118,26 @@ Use only:
 
 Do not invent additional status values.
 
+## CWE classification
+
+The `cwe` frontmatter field holds a list of CWE ids that best match the
+vulnerability. Use the most specific id first; broader parents may
+follow.
+
+Example:
+
+    cwe:
+      - "CWE-121"
+      - "CWE-805"
+
+Rules:
+
+- **Required** when the finding is `EXPLOITED`.
+- **Recommended** when the finding is `CONFIRMED`.
+- Optional for `PENDING`, `REJECTED`, `DUPLICATE`.
+
+Do not invent CWE ids. Use values from the official MITRE CWE catalog.
+
 ## Severity values
 
 Use only:
@@ -165,10 +185,26 @@ Every finding must include these sections:
     # Evidence
     # Exploitation Result
     # Demonstrated Impact
+    # Root cause analysis
+    # Data flow
+    # Inputs and preconditions
+    # Recording
     # Remediation idea
     # Notes
 
 Do not omit sections. If a section is not yet complete, write `Pending.` and explain what is missing.
+
+For `# Data flow`, when the bug is not input-driven (e.g. configuration
+default, lifetime bug not driven by external input) write
+`Not applicable.` and add a brief reason rather than `Pending.`.
+
+The four sections `# Root cause analysis`, `# Data flow`,
+`# Inputs and preconditions`, and `# Recording` are required to be filled
+(not `Pending.`) when the finding reaches `EXPLOITED`. They may stay
+`Pending.` for non-EXPLOITED findings.
+
+`# Remediation idea` must include a corrected-code excerpt or a unified
+diff for `CONFIRMED` and `EXPLOITED` findings. Keep the patch minimal.
 
 ## Quality bar
 
@@ -375,6 +411,7 @@ If a confirmed finding has a demonstrated proof-of-concept exploit showing real-
 - move it to `itemdb/findings/EXPLOITED/`,
 - set `status: "EXPLOITED"`,
 - set `confidence: "CONFIRMED"`,
+- populate `cwe` (required for EXPLOITED) with one or more CWE ids,
 - update `exploitation.status` to `"DEMONSTRATED"`,
 - fill `exploitation.impact_demonstrated` with a description of the impact achieved,
 - fill `exploitation.exploit_type` with the type of exploit (e.g., `buffer_overflow_rce`, `sqli_data_dump`),
@@ -382,7 +419,14 @@ If a confirmed finding has a demonstrated proof-of-concept exploit showing real-
 - adjust `severity` if the demonstrated impact warrants it,
 - update `# Exploitation Result` with details of the exploit,
 - update `# Demonstrated Impact` with a plain-language narrative,
-- store exploitation artifacts under `itemdb/evidence/<finding-id>/exploits/`.
+- fill `# Root cause analysis`, `# Data flow` (or `Not applicable.`),
+  `# Inputs and preconditions`, `# Recording`, and `# Remediation idea`
+  (with corrected-code excerpt or unified diff),
+- store exploitation artifacts under `itemdb/evidence/<finding-id>/exploits/`,
+- store the demonstration recording (when produced) under
+  `itemdb/evidence/<finding-id>/exploits/recordings/`. Mandatory effort
+  when a working PoC exists; document absence in `exploits/README.md`
+  Limitations and the finding's `# Recording` section if not feasible.
 
 If exploitation is not feasible, the finding stays in `CONFIRMED/` with `exploitation.status` set to `"NOT_FEASIBLE"` and a documented explanation.
 

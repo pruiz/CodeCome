@@ -200,11 +200,87 @@ Describe in concrete terms what an attacker achieves:
 - what the blast radius is,
 - what the business impact is.
 
+# Root cause analysis
+
+Pending.
+
+In 2–6 sentences, explain precisely why the quoted code is exploitable.
+
+Examples of root causes:
+
+- missing input validation,
+- unsafe sink (e.g. `memcpy` with attacker-controlled size,
+  `system()` with attacker-controlled string),
+- broken or missing authorization check,
+- unsafe deserialization,
+- race window between check and use,
+- incorrect type assumption,
+- mismatched buffer sizes,
+- trust placed in attacker-controlled metadata.
+
+Required content (not `Pending.`) when the finding is `EXPLOITED`.
+
+# Data flow
+
+Pending.
+
+When the bug is input-driven, list the path as an ordered chain:
+
+    1. source: <component> -- file:line
+    2. propagator: <function/transform> -- file:line
+    3. sink: <dangerous operation> -- file:line
+
+When the bug is not input-driven (e.g. configuration default, lifetime
+bug not driven by external input) write `Not applicable.` and add a
+brief reason.
+
+Required content (`Not applicable.` is acceptable) when the finding is
+`EXPLOITED`.
+
+# Inputs and preconditions
+
+Pending.
+
+List:
+
+- attacker-controlled inputs (parameters, headers, files, packets,
+  environment variables, etc.),
+- required preconditions (privileges, network position, prior state,
+  feature flags, timing windows).
+
+Required content (not `Pending.`) when the finding is `EXPLOITED`.
+
+# Recording
+
+Pending.
+
+When a demonstration recording exists, list the relative paths and a
+one-line description for each artifact, e.g.:
+
+- `itemdb/evidence/CC-0000/exploits/recordings/exploit.cast` -- asciinema
+  raw recording of the end-to-end exploit.
+- `itemdb/evidence/CC-0000/exploits/recordings/exploit.gif` -- rendered
+  preview of the exploit.
+- `itemdb/evidence/CC-0000/exploits/recordings/reproduce.sh` -- driver
+  script that the recording captures.
+- `itemdb/evidence/CC-0000/exploits/recordings/README.md` -- play and
+  re-run instructions.
+
+If no recording exists, explain why (missing tooling, exploit cannot be
+driven without human interaction, etc.). Absence does not block
+`EXPLOITED` but must be explicit.
+
+Required content (not `Pending.`) when the finding is `EXPLOITED`.
+
 # Remediation idea
 
 Describe the likely fix pattern.
 
 Keep it technical and concise.
+
+For `CONFIRMED` and `EXPLOITED` findings, include a corrected-code
+excerpt or unified diff showing the proposed fix. Keep the patch
+minimal.
 
 # Notes
 

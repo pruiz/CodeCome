@@ -72,6 +72,14 @@ Use this structure:
 - Clearly label rejected findings as rejected.
 - Do not overstate production impact unless production-like validation was actually performed.
 - Reference evidence files by relative path.
+- Reference recordings by relative path; never embed binary blobs
+  (`.gif`, `.mp4`) inline in the Markdown.
+- For each CONFIRMED/EXPLOITED finding, include a short vulnerable-code
+  excerpt (≤ ~15 lines) read from the finding's `# Affected code`
+  section or the evidence directory; quote with a `file:line` header.
+- For each CONFIRMED/EXPLOITED finding, include a 1–3 sentence root
+  cause analysis summary distilled from the finding's
+  `# Root cause analysis`, and reference the relevant Phase 5 artifacts.
 - Do not paste huge logs into the report.
 - Include limitations.
 - Include actionable next steps.
@@ -81,8 +89,15 @@ Use this structure:
 
 Include a table like:
 
-    | ID | Status | Severity | Confidence | Target area | Title | Evidence |
-    |---|---|---|---|---|---|---|
+    | ID | Status | Severity | Confidence | CWE | Target area | Title | Evidence | Recording |
+    |---|---|---|---|---|---|---|---|---|
+
+Cell rules:
+
+- `CWE`: list one or more ids (e.g. `CWE-121, CWE-805`); `—` if none.
+- `Recording`: relative path to
+  `itemdb/evidence/<id>/exploits/recordings/README.md` (preferred), or
+  to `exploit.gif`; `—` if no recording exists.
 
 ## Exploited findings
 
@@ -91,14 +106,23 @@ For each exploited finding, include:
 - id,
 - title,
 - severity (note if adjusted from original),
+- CWE id(s),
 - impact demonstrated,
 - exploit type,
 - affected area,
 - affected files,
 - summary,
+- vulnerable code excerpt (≤ ~15 lines, fenced, with `file:line`
+  header),
+- root cause analysis (1–3 sentences referencing the finding's
+  `# Root cause analysis` section),
 - demonstrated impact narrative,
 - evidence and exploitation artifact references,
-- remediation idea.
+- recording references (cast / gif / optional mp4 / `reproduce.sh` /
+  recordings README, all by relative path; or an absence note if no
+  recording was produced),
+- remediation idea (with corrected-code excerpt or unified diff from
+  the finding).
 
 This section carries the most weight in the report. These findings have proven, concrete impact.
 
@@ -110,10 +134,15 @@ For each confirmed finding, include:
 - title,
 - severity,
 - confidence,
+- CWE id(s) (if known),
 - category,
 - affected area,
 - affected files,
 - summary,
+- vulnerable code excerpt (≤ ~15 lines, fenced, with `file:line`
+  header),
+- root cause analysis (1–3 sentences when the finding has a populated
+  `# Root cause analysis`; otherwise omit gracefully),
 - impact,
 - validation method,
 - evidence references,
