@@ -917,6 +917,30 @@ def _copy_with_markers(
     return written
 
 
+def _docker_compose_project_name() -> str:
+    """Read the project name from codecome.yml and sanitize it for docker compose."""
+    try:
+        from codecome import load_config
+        config = load_config()
+        raw_name = str(config.get("project", {}).get("name", "codecome-sandbox"))
+    except Exception:
+        raw_name = "codecome-sandbox"
+
+    # Docker Compose allows lowercase alphanumeric, hyphens, and underscores.
+    # Must start with a letter or number.
+    sanitized = re.sub(r'[^a-z0-9_-]', '-', raw_name.lower())
+    sanitized = re.sub(r'-+', '-', sanitized)
+    sanitized = sanitized.strip('-')
+
+    if not sanitized or not sanitized[0].isalnum():
+        sanitized = "cc-" + sanitized.lstrip('-_')
+
+    if not sanitized:
+        sanitized = "codecome-sandbox"
+
+    return sanitized
+
+
 def cmd_apply(args: argparse.Namespace) -> int:
     dry_run = bool(args.dry_run) or bool(os.environ.get("CODECOME_BOOTSTRAP_DRY_RUN"))
 
@@ -955,6 +979,8 @@ def cmd_apply(args: argparse.Namespace) -> int:
     backup_target = SANDBOX_ROOT / f".backup-{_timestamp()}" if will_backup else None
 
     # Plan summary.
+    # We always inject a .env file to isolate docker compose projects.
+    env_content = f"COMPOSE_PROJECT_NAME={_docker_compose_project_name()}\n"
     if args.format == "json":
         plan_payload = {
             "dry_run": dry_run,
@@ -962,7 +988,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
             "example_path": manifest.relative_path(),
             "sandbox_path": str(SANDBOX_ROOT.relative_to(ROOT)),
             "force": bool(args.force),
-            "files_to_write": [str(p.relative_to(manifest.path)) for p in files],
+            "files_to_write": [str(p.relative_to(manifest.path)) for p in files] + [".env"],
             "markers_provided": markers,
             "markers_used_unfilled": unfilled,
             "markers_used_undeclared": undeclared,
@@ -979,7 +1005,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
         print(f"  {C.DIM}prov. present:{C.RESET}    {'yes' if provenance_present else 'no'}")
         if backup_target:
             print(f"  {C.DIM}backup target:{C.RESET}    {backup_target.relative_to(ROOT)}")
-        print(f"  {C.DIM}files to write:{C.RESET}   {len(files)}")
+        print(f"  {C.DIM}files to write:{C.RESET}   {len(files) + 1}")
         if markers:
             print(f"  {C.DIM}marker values:{C.RESET}")
             for k in sorted(markers):
@@ -1018,6 +1044,12 @@ def cmd_apply(args: argparse.Namespace) -> int:
                 child.rmdir()
 
     written = _copy_with_markers(manifest.path, files, SANDBOX_ROOT, markers, dry_run=False)
+    
+    # Inject isolated compose project name.
+    env_file = SANDBOX_ROOT / ".env"
+    env_file.write_text(env_content, encoding="utf-8")
+    written.append((".env", file_sha256(env_file)))
+    
     file_hashes = {rel: digest for rel, digest in written}
 
     provenance_text = render_provenance(manifest, markers, file_hashes)
