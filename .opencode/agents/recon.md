@@ -114,6 +114,7 @@ and the halt protocol.
 8. Prefer concise, useful notes over exhaustive dumps.
 9. Identify what later agents should review.
 10. Identify how later validators can prove or disprove findings.
+11. Do not load vulnerability-specific or security-specific skills (e.g., php-security, web-security) during reconnaissance. Focus strictly on structural mapping.
 
 ## Target profile
 

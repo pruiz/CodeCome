@@ -2,7 +2,7 @@
 
 Date: YYYY-MM-DD  
 Phase: reconnaissance / hypothesis_generation / counter_analysis / validation / reporting  
-Agent: auditor / reviewer / validator / reporter / generic  
+Agent: recon / auditor / reviewer / validator / exploiter / reporter / generic  
 Target path: `./src`
 
 # Goal
