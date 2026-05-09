@@ -201,6 +201,18 @@ coding agent.
 
 4. **GNU Make** — used to drive the workflow.
 
+5. **Optional: Exploit recording tools** — Phase 5 (exploit development) can
+   produce visual recordings of confirmed vulnerabilities. To enable this,
+   install:
+   - `asciinema` — primary tool for TTY-driven terminal recordings.
+   - `agg` — renders `.cast` files to embeddable GIFs (if absent, CodeCome
+     will attempt to fall back to a Docker container).
+   - `ffmpeg` & `xvfb` (or `xvfb-run`) — fallbacks for capturing GUI/browser
+     exploits.
+   
+   *Note: `make check` will emit warnings if these tools are missing, but the
+   core CodeCome workflow functions perfectly fine without them.*
+
 ## Quick start
 
 1. Place target source under `src/`.
