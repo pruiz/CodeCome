@@ -1,5 +1,7 @@
 # CodeCome
 
+> The harness for building your own Mythos of vulnerability research at home!
+
 CodeCome is an (open source) Agentic vulnerability research harness, or AI-assisted vulnerability research workspace.
 
 It is designed to help language-model agents inspect source code, identify security-relevant attack surfaces, produce structured vulnerability hypotheses, validate those hypotheses inside an isolated execution environment, demonstrate real-world impact through exploit development, and produce reviewable Markdown reports.
