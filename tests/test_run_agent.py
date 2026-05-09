@@ -883,7 +883,7 @@ def test_render_sandbox_status_plain_renders_pass_gate(monkeypatch, capsys):
     assert "Sandbox" in out
     assert "status" in out
     # Required capabilities should each appear with an OK marker.
-    for cap in ("build", "start", "check", "target-build", "test", "stop"):
+    for cap in ("setup", "start", "check", "build", "test", "stop"):
         assert cap in out
 
 

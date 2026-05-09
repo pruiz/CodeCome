@@ -2,9 +2,21 @@
 
 ## Status
 
-v1.0 — new feature. Introduces a Phase 1b sub-stage in the recon
-workflow and a curated set of sandbox baselines under
-`templates/sandboxes/`.
+v1.0 — **implemented**. The plan below is preserved for historical
+context; for the live contract see:
+
+- `docs/sandbox.md`
+- `.opencode/skills/sandbox-bootstrap/SKILL.md`
+- `prompts/phase-1-recon.md`
+
+Some sections of this document predate the rename of the script set
+to single-word verbs (`setup.sh`, `up.sh`, `check.sh`, `build.sh`,
+`test.sh`, `down.sh`) and the move from a 4-tier to a 6-tier
+validation model. Where this plan and the live docs disagree, the
+live docs win.
+
+Introduces a Phase 1b sub-stage in the recon workflow and a curated
+set of sandbox baselines under `templates/sandboxes/`.
 
 ## Goal
 
@@ -124,8 +136,8 @@ templates/sandboxes/<id>/
 ├── Dockerfile          (when applicable)
 ├── docker-compose.yml  (when applicable)
 ├── scripts/
-│   ├── build-target.sh
-│   └── test-target.sh
+│   ├── build.sh
+│   └── test.sh
 ├── README.md
 └── notes.md
 ```
@@ -231,9 +243,9 @@ Mandatory output of Phase 1b. Sections:
    ignored, and why)
 3. Chosen example(s)
 4. Marker values applied
-5. Validation matrix (T1 build, T2 check, T3 build-target, T4
-   test-target — each: pass/fail/n-a, last command, exit code, stderr
-   excerpt)
+5. Validation matrix (T1 sandbox setup, T2 sandbox start, T3
+   sandbox sanity, T4 target build, T5 target test, T6 sandbox stop
+   — each: pass/fail/n-a, last command, exit code, stderr excerpt)
 6. Open questions for the user (optional)
 7. Halt notice (optional, only when bootstrap could not finish)
 8. `validation_model` declaration (`docker`, `static-only`,
@@ -335,12 +347,16 @@ existing phases.
 Each tier executed in order. First failing tier causes the validation
 to stop early (unless `--keep-going` is set). Result captured per tier.
 
+The current six-tier model (canonical; see `docs/sandbox.md`):
+
 | Tier | Purpose | Command |
 |---|---|---|
-| T1 | Image build | `sandbox/scripts/up.sh` if it builds, else `docker compose -f sandbox/docker-compose.yml build` |
-| T2 | Sanity | `sandbox/scripts/check.sh` |
-| T3 | Target build | `sandbox/scripts/build-target.sh` (skip if not applicable per manifest) |
-| T4 | Target test | `sandbox/scripts/test-target.sh` (skip if not applicable per manifest) |
+| T1 | Sandbox setup | `sandbox/scripts/setup.sh` (or `docker compose -f sandbox/docker-compose.yml build`) |
+| T2 | Sandbox start | `sandbox/scripts/up.sh` |
+| T3 | Sandbox sanity | `sandbox/scripts/check.sh` |
+| T4 | Target build | `sandbox/scripts/build.sh` |
+| T5 | Target test | `sandbox/scripts/test.sh` |
+| T6 | Sandbox stop | `sandbox/scripts/down.sh` |
 
 Per-tier capture:
 

@@ -19,7 +19,7 @@ Baseline image for Python projects.
 
 ## Build heuristics
 
-`scripts/build-target.sh` tries, in order: `pyproject.toml`,
+`scripts/build.sh` tries, in order: `pyproject.toml`,
 `requirements.txt`, `setup.py`, `Pipfile`. Outputs a virtualenv at
 `/workspace/tmp/venv`.
 

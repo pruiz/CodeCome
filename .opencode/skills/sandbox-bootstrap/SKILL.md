@@ -11,7 +11,7 @@ under `src/`, so Phase 2 can rely on it.
 
 Every directory under `templates/sandboxes/<id>/` is a **seed**.
 Each seed ships only `Dockerfile`, `docker-compose.yml`, a starter
-`scripts/build-target.sh`, and a starter `scripts/test-target.sh`.
+`scripts/build.sh`, and a starter `scripts/test.sh`.
 
 That is on purpose. The agent is expected to extend the seed into a
 fully functional sandbox tailored to the specific target. Treating
@@ -22,7 +22,7 @@ You **must**:
 - implement the required sandbox capabilities (see "Sandbox
   capability contract" below), preferably via helpers under
   `sandbox/scripts/`,
-- adapt the starter `build-target.sh` and `test-target.sh` to the
+- adapt the starter `build.sh` and `test.sh` to the
   real project layout (some targets nest their build under a
   subdirectory of `src/`, not `src/` directly; many real targets do similar),
 - add target-specific scripts when they help (sanitizer builds,
@@ -51,12 +51,12 @@ Required capabilities for a Phase 2-ready sandbox:
 
 | Capability | Preferred helper | Purpose |
 |---|---|---|
-| build sandbox | `sandbox/scripts/build-sandbox.sh` | Build the sandbox artifact in a repeatable way. This may be a container image, VM image, firmware bundle, or other runnable sandbox artifact. |
-| start sandbox | `sandbox/scripts/up.sh` | Bring the sandbox environment up when runtime startup is distinct from build. |
-| sandbox sanity check | `sandbox/scripts/check.sh` | Verify mounts, toolchain/runtime availability, and basic health. |
-| build target | `sandbox/scripts/build-target.sh` | Build the target inside the sandbox when applicable. |
-| test target | `sandbox/scripts/test-target.sh` | Run the target tests inside the sandbox when applicable. |
-| stop sandbox | `sandbox/scripts/down.sh` | Tear the sandbox environment down cleanly. |
+| sandbox setup | `sandbox/scripts/setup.sh` | Set up the sandbox environment in a repeatable way. This may build a container image, prepare a VM image, assemble a firmware bundle, or perform equivalent environment preparation. |
+| sandbox start | `sandbox/scripts/up.sh` | Bring the sandbox environment up when runtime startup is distinct from setup. |
+| sandbox sanity | `sandbox/scripts/check.sh` | Verify mounts, toolchain/runtime availability, and basic health. |
+| target build | `sandbox/scripts/build.sh` | Build the target inside the sandbox when applicable. |
+| target test | `sandbox/scripts/test.sh` | Run the target tests inside the sandbox when applicable. |
+| sandbox stop | `sandbox/scripts/down.sh` | Tear the sandbox environment down cleanly. |
 
 ## Realistic runtime model
 
@@ -100,38 +100,48 @@ and document why in `sandbox-plan.md`.
 
 Recommended helper scripts when a realistic runtime model applies:
 
-- `migrate-target.sh` — apply schema migrations or other one-time DB
+- `migrate.sh` — apply schema migrations or other one-time DB
   setup.
-- `seed-target.sh` — load minimal fixture data needed for realistic
+- `seed.sh` — load minimal fixture data needed for realistic
   validation.
-- `healthcheck-target.sh` — verify that the real app is serving,
+- `healthcheck.sh` — verify that the real app is serving,
   connected, and usable (HTTP health route, root page, CLI smoke
   command, DB ping, etc.).
-- `run-target.sh` — drive the target with a representative runtime
+- `run.sh` — drive the target with a representative runtime
   invocation when the standard test suite is not enough.
 
 Recommended helper capabilities when the target/runtime model makes
-them useful:
+them useful (these are not part of the Phase 2 gate, but are
+strongly encouraged):
 
 | Capability | Preferred helper | Purpose |
 |---|---|---|
-| stop environment | `sandbox/scripts/down.sh` | Tear the environment down cleanly. |
-| shell entry | `sandbox/scripts/shell.sh` | Open a shell in the sandbox. |
-| logs access | `sandbox/scripts/logs.sh` | Inspect runtime logs. |
-| clean runtime artifacts | `sandbox/scripts/clean.sh` | Remove containers, volumes, and tmp produced by validation. |
-| reset to known state | `sandbox/scripts/reset.sh` | Recreate the environment from a clean state. |
+| sandbox shell | `sandbox/scripts/shell.sh` | Open a shell in the sandbox. |
+| sandbox logs | `sandbox/scripts/logs.sh` | Inspect runtime logs. |
+| sandbox clean | `sandbox/scripts/clean.sh` | Remove containers, volumes, and tmp produced by validation. |
+| sandbox reset | `sandbox/scripts/reset.sh` | Recreate the environment from a clean state. |
 
 If a recommended helper does not apply, say so explicitly in
 `sandbox-plan.md`. Do not silently omit it.
 
 Add additional scripts whenever the target benefits, for example:
 
-- `run-target.sh` — drive the target with a sample input.
-- `asan-build.sh` — build with AddressSanitizer + UBSan.
-- `fuzz-corpus.sh` — seed a fuzzing corpus.
+- `run.sh` — drive the target with a sample input.
+- `build-asan.sh` — build with AddressSanitizer + UBSan.
+- `fuzz.sh` — seed a fuzzing corpus or drive a fuzzer.
 - `attach-debugger.sh` — attach gdb / lldb to a running container.
-- `reset-target.sh` — reset target-specific state inside the
-  container without tearing down the whole stack.
+
+Naming convention for extras:
+
+- prefer single-word names when the meaning is unambiguous (`migrate`,
+  `seed`, `healthcheck`, `run`, `fuzz`),
+- use `<verb>-<flavor>.sh` for build flavors (e.g. `build-asan.sh`,
+  `build-ubsan.sh`) so the canonical `build.sh` keeps its meaning,
+- use a descriptive multi-word name when no short form is unambiguous
+  (e.g. `attach-debugger.sh`),
+- never reuse the canonical names (`setup`, `up`, `check`, `build`,
+  `test`, `down`, `shell`, `logs`, `clean`, `reset`) for variants;
+  use a prefix or suffix instead.
 
 Document any extras in `itemdb/notes/sandbox-plan.md` under "Extra
 scripts authored", with one line per script explaining what it does
@@ -149,7 +159,7 @@ and how to run it.
   runtime versions) and verifying the expected workspace mounts
   exist (`/workspace/src`, `/workspace/itemdb`, `/workspace/sandbox`,
   `/workspace/AGENTS.md`, `/workspace/codecome.yml`).
-- `build-sandbox.sh` should build the sandbox artifact without implying
+- `setup.sh` should prepare the sandbox environment without implying
   the environment must be started. When Docker Compose is used, it
   should typically run `docker compose -f sandbox/docker-compose.yml
   build`.
@@ -170,8 +180,8 @@ and how to run it.
 
 ## T1/T2/T3/T4/T5/T6 reporting rules
 
-- T1 must never be recorded as `skipped` because the sandbox build
-  mechanism is missing. Prefer `build-sandbox.sh`; `docker compose
+- T1 must never be recorded as `skipped` because the sandbox setup
+  mechanism is missing. Prefer `setup.sh`; `docker compose
   -f sandbox/docker-compose.yml build` is an acceptable fallback.
 - T2 must never be recorded as `skipped` because the sandbox start
   mechanism is missing when the sandbox requires startup. Prefer
@@ -188,8 +198,8 @@ and how to run it.
   `check.sh`.
 
 `tools/sandbox-bootstrap.py validate` enforces these rules for the
-required Phase 2 capabilities: a missing build, start, check,
-target-build, test, or stop mechanism is reported as **failed** (not
+required Phase 2 capabilities: a missing setup, start, check,
+build, test, or stop mechanism is reported as **failed** (not
 skipped). The Phase 2 gate blocks on `failed`.
 
 ## Purpose
@@ -237,9 +247,10 @@ Mandatory sections in `sandbox-plan.md`:
 8. **Known runtime gaps** — secrets, external services, cloud-only
    dependencies, hardware, or other blockers that prevent a more
    realistic local stack.
-9. **Validation matrix** — for each tier (T1 build, T2 start, T3
-   check, T4 build-target, T5 test-target, T6 stop): pass/fail/skipped, last command,
-   exit code, last 50 lines of stderr.
+9. **Validation matrix** — for each tier (T1 sandbox setup, T2
+   sandbox start, T3 sandbox sanity, T4 target build, T5 target
+   test, T6 sandbox stop): pass/fail/skipped, last command, exit
+   code, last 50 lines of stderr.
 10. **`validation_model`** — one of: `docker`, `static-only`,
    `nested-virt`. Justification mandatory for the last two.
 11. **Remediation log** — each automatic remediation attempt with its
@@ -341,7 +352,7 @@ Honoring rules:
 2. If `src/docker-compose.yml` is present and runnable, prefer
    layering on top of it via `multi-service-compose`.
 3. If `src/Makefile` describes the build, the language-specific
-   example's `scripts/build-target.sh` should call it instead of
+   example's `scripts/build.sh` should call it instead of
    re-implementing build logic.
 4. If `src/README*` or `src/docs/` describe ports, environment
    variables, or run commands, capture those values into marker
@@ -439,11 +450,11 @@ Do not invent variables that are not defined in `manifest.yml`.
 
 | Tier | Purpose | Preferred helper | Fallback |
 |---|---|---|---|
-| T1 | Sandbox build | `sandbox/scripts/build-sandbox.sh` | `docker compose -f sandbox/docker-compose.yml build` |
+| T1 | Sandbox setup | `sandbox/scripts/setup.sh` | `docker compose -f sandbox/docker-compose.yml build` |
 | T2 | Sandbox start | `sandbox/scripts/up.sh` | none — implement it when startup is distinct from build |
 | T3 | Sanity | `sandbox/scripts/check.sh` | none — implement it |
-| T4 | Target build | `sandbox/scripts/build-target.sh` (template ships starter; adapt it) | none — implement it |
-| T5 | Target test | `sandbox/scripts/test-target.sh` (template ships starter; adapt it) | none — implement it |
+| T4 | Target build | `sandbox/scripts/build.sh` (template ships starter; adapt it) | none — implement it |
+| T5 | Target test | `sandbox/scripts/test.sh` (template ships starter; adapt it) | none — implement it |
 | T6 | Sandbox stop | `sandbox/scripts/down.sh` | none — implement it |
 
 For each tier capture: start time, exit code, last 50 lines of

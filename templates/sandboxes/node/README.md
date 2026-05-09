@@ -19,7 +19,7 @@ Baseline image for Node.js / TypeScript projects.
 
 ## Build heuristics
 
-`scripts/build-target.sh` chooses pnpm > yarn > npm by lockfile.
+`scripts/build.sh` chooses pnpm > yarn > npm by lockfile.
 Calls `*.run --if-present build`.
 
 ## When to extend

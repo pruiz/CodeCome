@@ -29,19 +29,24 @@ After bootstrap, `sandbox/` typically contains:
 
     sandbox/Dockerfile
     sandbox/docker-compose.yml
-    sandbox/scripts/build-target.sh
-    sandbox/scripts/build-sandbox.sh
-    sandbox/scripts/check.sh
-    sandbox/scripts/up.sh            (when applicable)
-    sandbox/scripts/test-target.sh
-    sandbox/scripts/down.sh          (when applicable)
-    sandbox/scripts/down.sh         (when applicable)
-    sandbox/scripts/logs.sh         (when applicable)
-    sandbox/scripts/shell.sh        (when applicable)
-    sandbox/scripts/clean.sh        (when applicable)
-    sandbox/scripts/reset.sh        (when applicable)
+    sandbox/scripts/setup.sh         (sandbox setup)
+    sandbox/scripts/up.sh            (sandbox start, when applicable)
+    sandbox/scripts/check.sh         (sandbox sanity)
+    sandbox/scripts/build.sh         (target build)
+    sandbox/scripts/test.sh          (target test)
+    sandbox/scripts/down.sh          (sandbox stop, when applicable)
+    sandbox/scripts/shell.sh         (when applicable)
+    sandbox/scripts/logs.sh          (when applicable)
+    sandbox/scripts/clean.sh         (when applicable)
+    sandbox/scripts/reset.sh         (when applicable)
     sandbox/CODECOME-GENERATED.md
     sandbox/.backup-<UTC-timestamp>/  (if a previous content was replaced)
+
+`setup.sh` and `up.sh` are distinct concerns: `setup.sh` is repeatable
+environment preparation (e.g. `docker compose build`), while `up.sh`
+brings a long-lived sandbox stack up (e.g. `docker compose up -d`).
+Targets that don't need a long-lived stack may omit `up.sh` and
+`down.sh`.
 
 `sandbox/CODECOME-GENERATED.md` and `sandbox/.backup-*/` are git-ignored.
 Everything else in `sandbox/` is also ignored, except `sandbox/.gitkeep`.
@@ -57,6 +62,24 @@ Everything else in `sandbox/` is also ignored, except `sandbox/.gitkeep`.
 | Re-apply with backup | `make sandbox-regenerate` |
 | Run validation tiers | `make sandbox-validate` |
 | Show provenance and gate | `make sandbox-status` |
+
+## Sandbox runtime CLI
+
+Once a sandbox exists, these targets invoke the canonical helper
+scripts directly. Each maps to one canonical capability:
+
+| Command | Make target | Underlying script |
+|---|---|---|
+| Sandbox setup | `make sandbox-setup` | `sandbox/scripts/setup.sh` (or `docker compose build`) |
+| Sandbox start | `make sandbox-up` | `sandbox/scripts/up.sh` |
+| Sandbox sanity | `make sandbox-check` | `sandbox/scripts/check.sh` |
+| Target build | `make sandbox-build` | `sandbox/scripts/build.sh` |
+| Target test | `make sandbox-test` | `sandbox/scripts/test.sh` |
+| Sandbox stop | `make sandbox-down` | `sandbox/scripts/down.sh` |
+| Sandbox shell | `make sandbox-shell` | `sandbox/scripts/shell.sh` |
+| Sandbox logs | `make sandbox-logs` | `sandbox/scripts/logs.sh` |
+| Sandbox clean | `make sandbox-clean` | `sandbox/scripts/clean.sh` |
+| Sandbox reset | `make sandbox-reset` | `sandbox/scripts/reset.sh` |
 
 Pass extra args via `BOOTSTRAP_ARGS`:
 
@@ -78,11 +101,11 @@ Environment variables:
 
 | Tier | Purpose | Default command |
 |---|---|---|
-| T1 | Sandbox build | `sandbox/scripts/build-sandbox.sh` (or `docker compose -f sandbox/docker-compose.yml build`) |
+| T1 | Sandbox setup | `sandbox/scripts/setup.sh` (or `docker compose -f sandbox/docker-compose.yml build`) |
 | T2 | Sandbox start | `sandbox/scripts/up.sh` |
 | T3 | Sandbox sanity | `sandbox/scripts/check.sh` |
-| T4 | Target build | `sandbox/scripts/build-target.sh` |
-| T5 | Target test | `sandbox/scripts/test-target.sh` |
+| T4 | Target build | `sandbox/scripts/build.sh` |
+| T5 | Target test | `sandbox/scripts/test.sh` |
 | T6 | Sandbox stop | `sandbox/scripts/down.sh` |
 
 By default, validate stops at the first failed tier. Pass

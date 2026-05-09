@@ -4,7 +4,7 @@
 .PHONY: help venv venv-check check status next-id frontmatter tests itemdb-reset index report
 .PHONY: findings findings-create findings-move findings-evidence
 .PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all
-.PHONY: sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-reset sandbox-build-target sandbox-test-target
+.PHONY: sandbox-setup sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-reset sandbox-build sandbox-test
 .PHONY: sandbox-list sandbox-inspect sandbox-detect sandbox-bootstrap sandbox-validate sandbox-regenerate sandbox-status show-model
 
 PYTHON := .venv/bin/python3
@@ -77,6 +77,7 @@ help:
 	@printf "\n"
 	@printf "  $(BOLD)$(CYAN)Sandbox runtime:$(RESET)\n"
 	@printf "\n"
+	@printf "    $(BOLD)make sandbox-setup$(RESET)  Set up sandbox env (setup.sh or 'docker compose build')\n"
 	@printf "    $(BOLD)make sandbox-check$(RESET)  Run sandbox smoke test\n"
 	@printf "    $(BOLD)make sandbox-up$(RESET)     Start sandbox\n"
 	@printf "    $(BOLD)make sandbox-down$(RESET)   Stop sandbox\n"
@@ -84,6 +85,8 @@ help:
 	@printf "    $(BOLD)make sandbox-logs$(RESET)   Follow sandbox logs\n"
 	@printf "    $(BOLD)make sandbox-clean$(RESET)  Stop sandbox and clean tmp\n"
 	@printf "    $(BOLD)make sandbox-reset$(RESET)  Recreate sandbox from a known state\n"
+	@printf "    $(BOLD)make sandbox-build$(RESET)  Build the target inside the sandbox\n"
+	@printf "    $(BOLD)make sandbox-test$(RESET)   Test the target inside the sandbox\n"
 	@printf "\n"
 	@printf "  $(BOLD)$(CYAN)Sandbox bootstrap (Phase 1b):$(RESET)\n"
 	@printf "\n"
@@ -269,7 +272,17 @@ findings-evidence: venv-check
 # Sandbox
 # ---------------------------------------------------------------------------
 
-SANDBOX_SCRIPT_HINT := "Run 'make phase-1' (sub-stage 1b) to bootstrap sandbox/ from templates/sandboxes/."
+SANDBOX_SCRIPT_HINT := "No sandbox helper script found. Run 'make phase-1' (sub-stage 1b) to bootstrap sandbox/ from templates/sandboxes/, or place the helper script under sandbox/scripts/ manually."
+
+sandbox-setup:
+	@if [ -x sandbox/scripts/setup.sh ]; then \
+		./sandbox/scripts/setup.sh; \
+	elif [ -f sandbox/docker-compose.yml ]; then \
+		docker compose -f sandbox/docker-compose.yml build; \
+	else \
+		echo $(SANDBOX_SCRIPT_HINT); \
+		exit 1; \
+	fi
 
 sandbox-check:
 	@test -x sandbox/scripts/check.sh || (echo $(SANDBOX_SCRIPT_HINT) && exit 1)
@@ -299,13 +312,13 @@ sandbox-reset:
 	@test -x sandbox/scripts/reset.sh || (echo $(SANDBOX_SCRIPT_HINT) && exit 1)
 	./sandbox/scripts/reset.sh
 
-sandbox-build-target:
-	@test -x sandbox/scripts/build-target.sh || (echo $(SANDBOX_SCRIPT_HINT) && exit 1)
-	./sandbox/scripts/build-target.sh
+sandbox-build:
+	@test -x sandbox/scripts/build.sh || (echo $(SANDBOX_SCRIPT_HINT) && exit 1)
+	./sandbox/scripts/build.sh
 
-sandbox-test-target:
-	@test -x sandbox/scripts/test-target.sh || (echo $(SANDBOX_SCRIPT_HINT) && exit 1)
-	./sandbox/scripts/test-target.sh
+sandbox-test:
+	@test -x sandbox/scripts/test.sh || (echo $(SANDBOX_SCRIPT_HINT) && exit 1)
+	./sandbox/scripts/test.sh
 
 # ---------------------------------------------------------------------------
 # Sandbox bootstrap (Phase 1b)

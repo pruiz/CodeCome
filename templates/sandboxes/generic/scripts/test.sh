@@ -13,5 +13,5 @@ cd /workspace
 
 echo "CodeCome generic test hook"
 echo "No test runner configured for the generic sandbox."
-echo "Edit sandbox/scripts/test-target.sh for target __TARGET_NAME__."
+echo "Edit sandbox/scripts/test.sh for target __TARGET_NAME__."
 '

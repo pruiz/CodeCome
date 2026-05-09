@@ -649,7 +649,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(f"  {C.DIM}last validation:{C.RESET}  {last_validation or '-'}")
         print(f"  {C.DIM}allow override:{C.RESET}   {'yes' if allow_no_sandbox else 'no'}")
         print(f"  {C.DIM}capabilities:{C.RESET}")
-        for name in ("build", "start", "check", "target-build", "test", "stop", "shell", "logs", "clean", "reset"):
+        for name in ("setup", "start", "check", "build", "test", "stop", "shell", "logs", "clean", "reset"):
             status = capability_status[name]
             state = "ok" if status.get("satisfied") else "missing"
             print(f"    {name:<6} {state:<7} {status['path']}")
@@ -1197,20 +1197,20 @@ def _has_executable(path: Path) -> bool:
 
 
 def _resolve_tier1_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str], str]:
-    """T1 sandbox build capability.
+    """T1 sandbox setup capability.
 
     Returns (kind, command, expected_path).
     kind: 'script' | 'docker' | 'missing'
     expected_path: relative path of the preferred helper that was
                    sought (or empty string when not script-bound).
     """
-    build_sandbox_script = SANDBOX_ROOT / "scripts" / "build-sandbox.sh"
+    setup_script = SANDBOX_ROOT / "scripts" / "setup.sh"
     compose_file = SANDBOX_ROOT / "docker-compose.yml"
-    if not docker_only and _has_executable(build_sandbox_script):
+    if not docker_only and _has_executable(setup_script):
         return (
             "script",
-            [str(build_sandbox_script.relative_to(ROOT))],
-            str(build_sandbox_script.relative_to(ROOT)),
+            [str(setup_script.relative_to(ROOT))],
+            str(setup_script.relative_to(ROOT)),
         )
     if not scripts_only and compose_file.exists():
         return (
@@ -1218,7 +1218,7 @@ def _resolve_tier1_command(scripts_only: bool, docker_only: bool) -> tuple[str, 
             ["docker", "compose", "-f", str(compose_file.relative_to(ROOT)), "build"],
             "",
         )
-    return ("missing", [], str(build_sandbox_script.relative_to(ROOT)))
+    return ("missing", [], str(setup_script.relative_to(ROOT)))
 
 
 def _resolve_tier2_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str], str]:
@@ -1236,14 +1236,14 @@ def _resolve_tier3_command(scripts_only: bool, docker_only: bool) -> tuple[str, 
 
 
 def _resolve_tier4_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str], str]:
-    build_script = SANDBOX_ROOT / "scripts" / "build-target.sh"
+    build_script = SANDBOX_ROOT / "scripts" / "build.sh"
     if not docker_only and _has_executable(build_script):
         return ("script", [str(build_script.relative_to(ROOT))], str(build_script.relative_to(ROOT)))
     return ("missing", [], str(build_script.relative_to(ROOT)))
 
 
 def _resolve_tier5_command(scripts_only: bool, docker_only: bool) -> tuple[str, List[str], str]:
-    test_script = SANDBOX_ROOT / "scripts" / "test-target.sh"
+    test_script = SANDBOX_ROOT / "scripts" / "test.sh"
     if not docker_only and _has_executable(test_script):
         return ("script", [str(test_script.relative_to(ROOT))], str(test_script.relative_to(ROOT)))
     return ("missing", [], str(test_script.relative_to(ROOT)))
@@ -1258,10 +1258,10 @@ def _resolve_tier6_command(scripts_only: bool, docker_only: bool) -> tuple[str, 
 
 def _capability_helpers() -> Dict[str, tuple[Path, str]]:
     return {
-        "build": (SANDBOX_ROOT / "scripts" / "build-sandbox.sh", "build the sandbox environment in a repeatable way"),
+        "setup": (SANDBOX_ROOT / "scripts" / "setup.sh", "set up the sandbox environment in a repeatable way"),
         "check": (SANDBOX_ROOT / "scripts" / "check.sh", "run sandbox sanity checks"),
-        "target-build": (SANDBOX_ROOT / "scripts" / "build-target.sh", "build the target"),
-        "test": (SANDBOX_ROOT / "scripts" / "test-target.sh", "test the target"),
+        "build": (SANDBOX_ROOT / "scripts" / "build.sh", "build the target"),
+        "test": (SANDBOX_ROOT / "scripts" / "test.sh", "test the target"),
         "start": (SANDBOX_ROOT / "scripts" / "up.sh", "bring the environment up"),
         "stop": (SANDBOX_ROOT / "scripts" / "down.sh", "stop the environment"),
         "shell": (SANDBOX_ROOT / "scripts" / "shell.sh", "open a shell in the environment"),
@@ -1284,10 +1284,10 @@ def _capability_status() -> Dict[str, Dict[str, str | bool]]:
 
     # Image build may be satisfied by docker compose even when there is no
     # helper script yet. Starting the environment remains a separate helper.
-    build_status = statuses["build"]
-    build_status["satisfied"] = bool(build_status["present"] or compose_file.exists())
+    setup_status = statuses["setup"]
+    setup_status["satisfied"] = bool(setup_status["present"] or compose_file.exists())
     for key, status in statuses.items():
-        if key != "build":
+        if key != "setup":
             status["satisfied"] = bool(status["present"])
     return statuses
 
@@ -1345,7 +1345,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
             print(C.info("Validation will likely fail unless your sandbox can run without Docker."))
 
     tier_specs = [
-        ("T1", "Sandbox build", _resolve_tier1_command),
+        ("T1", "Sandbox setup", _resolve_tier1_command),
         ("T2", "Environment start", _resolve_tier2_command),
         ("T3", "Sandbox sanity", _resolve_tier3_command),
         ("T4", "Target build", _resolve_tier4_command),
@@ -1362,7 +1362,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
             reason = (
                 f"required sandbox capability is missing: {expected_path}. "
                 "Templates are seeds; Phase 1b must leave behind a working way to "
-                "build the sandbox, start it, sanity-check it, build the target, test the target, and stop the environment. "
+                "set up the sandbox, start it, sanity-check it, build the target, test the target, and stop the environment. "
                 "See .opencode/skills/sandbox-bootstrap/SKILL.md."
             )
             entry = TierResult(
@@ -1472,7 +1472,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
                 "Helper capabilities still missing: " + ", ".join(missing_helpers)
             ))
             print(C.info(
-                "Phase 2 enforces build/start/check/target-build/test/stop. Document missing helper capabilities in sandbox-plan.md."
+                "Phase 2 enforces setup/start/check/build/test/stop. Document missing helper capabilities in sandbox-plan.md."
             ))
         if history_updated:
             print(C.info(f"Validation history appended to {PROVENANCE_FILE.relative_to(ROOT)}"))

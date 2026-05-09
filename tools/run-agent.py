@@ -2061,7 +2061,7 @@ _SANDBOX_MAKE_TARGETS = {
     "sandbox-regenerate": "regenerate",
     "sandbox-validate": "validate",
 }
-_SANDBOX_REQUIRED_CAPABILITIES = ("build", "start", "check", "target-build", "test", "stop")
+_SANDBOX_REQUIRED_CAPABILITIES = ("setup", "start", "check", "build", "test", "stop")
 _SANDBOX_HELPER_CAPABILITIES = ("shell", "logs", "clean", "reset")
 
 

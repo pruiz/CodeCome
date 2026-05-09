@@ -314,8 +314,9 @@ Steps (full detail in `.opencode/skills/sandbox-bootstrap/SKILL.md`):
    fallback documented in the skill.
 6. Substitute markers (`__VARNAME__`) using values from recon
    notes and target documentation.
-7. Run validation tiers (T1 sandbox build, T2 sandbox start, T3
-   check, T4 build-target, T5 test-target, T6 stop).
+7. Run validation tiers (T1 sandbox setup, T2 sandbox start, T3
+   sandbox sanity, T4 target build, T5 target test, T6 sandbox
+   stop).
 8. Write `sandbox/CODECOME-GENERATED.md` with provenance.
 9. Update `itemdb/notes/sandbox-plan.md` with the validation
    matrix, honoring decision, marker values, and any halt notice.

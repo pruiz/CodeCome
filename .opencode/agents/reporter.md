@@ -261,7 +261,7 @@ Give actionable next steps.
 Examples:
 
 - validate remaining findings,
-- improve sandbox build support,
+- improve sandbox setup support,
 - add target-specific skill,
 - add tests for confirmed issue,
 - review related code paths,

@@ -25,7 +25,7 @@ Each seed contains:
 - `manifest.yml` declaring `applies_when`, `template_vars`,
   `caveats`, and the recommended build / test commands,
 - a `Dockerfile`, optionally a `docker-compose.yml`,
-- `scripts/build-target.sh` and `scripts/test-target.sh` (starter
+- `scripts/build.sh` and `scripts/test.sh` (starter
   versions; the agent must adapt them to the real target during
   Phase 1b),
 - `README.md` and `notes.md` describing when the seed applies and

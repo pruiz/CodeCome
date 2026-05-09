@@ -123,19 +123,20 @@ Workflow:
 
     Templates are seeds, not finished sandboxes. Each
     `templates/sandboxes/<id>/` ships only `Dockerfile`,
-    `docker-compose.yml`, a starter `build-target.sh`, and a
-    starter `test-target.sh`. After `apply`, the agent must
+    `docker-compose.yml`, a starter `build.sh`, and a
+    starter `test.sh`. After `apply`, the agent must
     leave `sandbox/` with working mechanisms for:
 
-        build sandbox
-        start sandbox
-        sandbox sanity check
+        sandbox setup
+        sandbox start
+        sandbox sanity
         target build
         target test
+        sandbox stop
 
     Prefer helper scripts under `sandbox/scripts/` such as:
 
-        build-sandbox.sh   up.sh   check.sh   build-target.sh   test-target.sh
+        setup.sh   up.sh   check.sh   build.sh   test.sh
 
     Add operational helpers when they make sense for the target:
 
@@ -155,7 +156,7 @@ Workflow:
     document the closest achievable runtime model and the blocker in
     `itemdb/notes/sandbox-plan.md`.
 
-    Adapt `build-target.sh` and `test-target.sh` to the actual
+    Adapt `build.sh` and `test.sh` to the actual
     project layout (the source may be nested under
     `src/<name>/`, not directly under `src/`). Author additional
     scripts when they help the target (sanitizer build, fuzzing

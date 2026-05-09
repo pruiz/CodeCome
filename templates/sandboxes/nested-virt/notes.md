@@ -6,17 +6,18 @@ This template is a starting point, not a finished sandbox. During
 Phase 1b the agent must extend it into a fully functional
 `sandbox/` with durable ways to:
 
-    start/build the environment
-    run sandbox sanity checks
-    build the target
-    test the target
+    sandbox setup
+    sandbox start
+    sandbox sanity
+    target build
+    target test
+    sandbox stop
 
-Prefer helpers such as `build-sandbox.sh`, `up.sh`, `check.sh`,
-`build-target.sh`, and `test-target.sh` under `sandbox/scripts/`. Add
-operational helpers such as `down.sh`, `shell.sh`, `logs.sh`,
-`clean.sh`, and `reset.sh`
-when they make sense for the target. Document any extras or omitted
-helpers in `itemdb/notes/sandbox-plan.md`. See
+Use the canonical helper set under `sandbox/scripts/`:
+`setup.sh`, `up.sh`, `check.sh`, `build.sh`, `test.sh`, `down.sh`.
+Add operational helpers such as `shell.sh`, `logs.sh`, `clean.sh`,
+and `reset.sh` when they make sense for the target. Document any
+extras or omitted helpers in `itemdb/notes/sandbox-plan.md`. See
 `.opencode/skills/sandbox-bootstrap/SKILL.md`.
 
 ## When to use

@@ -18,6 +18,6 @@ Last-resort baseline. Use when no other example fits the target stack.
 ## How to extend
 
 Add the toolchain you need to `Dockerfile` and update
-`scripts/build-target.sh` and `scripts/test-target.sh`. If the target
+`scripts/build.sh` and `scripts/test.sh`. If the target
 fits a more specific example, prefer switching to that example
 instead of bloating the generic one.

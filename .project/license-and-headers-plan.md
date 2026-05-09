@@ -131,8 +131,8 @@ follow the root LICENSE by reference; that's enough.
   SPDX header at top.
 - `templates/sandboxes/<id>/manifest.yml` × 14: insert MIT SPDX
   header at top.
-- `templates/sandboxes/<id>/scripts/*.sh` × 28 (build-target.sh +
-  test-target.sh per template): insert MIT SPDX header after
+- `templates/sandboxes/<id>/scripts/*.sh` × 28 (build.sh +
+  test.sh per template): insert MIT SPDX header after
   shebang.
 
 ### Markdown footers
@@ -187,7 +187,7 @@ a separate signing flow.
 - `tools/*.py` compile.
 - Random sample inspection: top of `tools/run-agent.py`,
   `Makefile`, `templates/sandboxes/python/Dockerfile`,
-  `templates/sandboxes/c-cpp/scripts/build-target.sh` — all have
+  `templates/sandboxes/c-cpp/scripts/build.sh` — all have
   the correct SPDX header.
 - `LICENSE`, `AGPL-LICENSE`, `templates/sandboxes/LICENSE`, `NOTICE`,
   `CONTRIBUTING.md` exist with the expected content.

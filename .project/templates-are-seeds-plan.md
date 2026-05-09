@@ -46,8 +46,8 @@ must be documented in `sandbox-plan.md`.
 
 | Script | Purpose |
 |---|---|
-| `build-target.sh` | Build the target inside the sandbox. (Templates ship a starter; adapt it.) |
-| `test-target.sh` | Run the target's tests inside the sandbox. (Templates ship a starter; adapt it.) |
+| `build.sh` | Build the target inside the sandbox. (Templates ship a starter; adapt it.) |
+| `test.sh` | Run the target's tests inside the sandbox. (Templates ship a starter; adapt it.) |
 | `check.sh` | Smoke-check toolchain and workspace mounts inside the container. |
 | `up.sh` | Build images and bring the stack up. |
 | `down.sh` | Tear the stack down. |
@@ -56,8 +56,8 @@ must be documented in `sandbox-plan.md`.
 | `clean.sh` | Remove stack containers, volumes, and local tmp produced by validation. |
 | `reset.sh` | Reset the sandbox to a known-good state. |
 
-Additional scripts (e.g. `run-target.sh`, `asan-build.sh`,
-`fuzz-corpus.sh`, `attach-debugger.sh`) are encouraged when the
+Additional scripts (e.g. `run.sh`, `build-asan.sh`,
+`fuzz.sh`, `attach-debugger.sh`) are encouraged when the
 target benefits. The agent must list any extras in `sandbox-plan.md`.
 
 ## Rules for the agent
@@ -109,9 +109,9 @@ Insert a new step 5b between the current step 5 (apply) and step 6
         Templates are seeds. After `apply`, ensure `sandbox/`
         contains the canonical script set:
         check.sh, up.sh, down.sh, shell.sh, logs.sh, clean.sh,
-        reset.sh (in addition to the build-target.sh and
-        test-target.sh provided by the template).
-        Adapt the template's build-target.sh and test-target.sh
+        reset.sh (in addition to the build.sh and
+        test.sh provided by the template).
+        Adapt the template's build.sh and test.sh
         to the actual project layout. Add target-specific
         scripts when they help. Make every script executable and
         document any extras in sandbox-plan.md.

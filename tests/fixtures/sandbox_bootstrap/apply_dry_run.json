@@ -6,7 +6,7 @@
   "force": false,
   "files_to_write": [
     "Dockerfile",
-    "scripts/build-sandbox.sh",
+    "scripts/setup.sh",
     "scripts/up.sh",
     "scripts/down.sh"
   ],

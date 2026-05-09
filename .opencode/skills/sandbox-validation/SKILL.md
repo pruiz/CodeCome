@@ -58,13 +58,13 @@ Clean sandbox:
 
     ./sandbox/scripts/clean.sh
 
-Run generic build hook:
+Run target build hook:
 
-    ./sandbox/scripts/build-target.sh
+    ./sandbox/scripts/build.sh
 
-Run generic test hook:
+Run target test hook:
 
-    ./sandbox/scripts/test-target.sh
+    ./sandbox/scripts/test.sh
 
 ## Sandbox boundaries
 
@@ -138,11 +138,11 @@ Useful evidence files include:
     static-proof.md
     limitations.md
 
-## Build hooks
+## Target build hook
 
-The generic build hook is:
+The canonical target build hook is:
 
-    ./sandbox/scripts/build-target.sh
+    ./sandbox/scripts/build.sh
 
 It attempts common build systems such as:
 
@@ -160,16 +160,15 @@ If the generic hook is insufficient, document what is missing and create a targe
 
 Examples:
 
-    sandbox/scripts/build-cwe.sh
-    sandbox/scripts/run-testcase.sh
-    sandbox/scripts/run-target.sh
-    sandbox/scripts/asan-build.sh
+    sandbox/scripts/run.sh
+    sandbox/scripts/build-asan.sh
+    sandbox/scripts/fuzz.sh
 
-## Test hooks
+## Target test hook
 
-The generic test hook is:
+The canonical target test hook is:
 
-    ./sandbox/scripts/test-target.sh
+    ./sandbox/scripts/test.sh
 
 It attempts common test commands such as:
 

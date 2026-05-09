@@ -1,10 +1,10 @@
 {
   "allow_no_sandbox": false,
   "capabilities": {
-    "build": {
-      "path": "sandbox/scripts/build-sandbox.sh",
+    "setup": {
+      "path": "sandbox/scripts/setup.sh",
       "present": true,
-      "purpose": "build the sandbox environment in a repeatable way",
+      "purpose": "set up the sandbox environment in a repeatable way",
       "satisfied": true
     },
     "check": {
@@ -49,14 +49,14 @@
       "purpose": "stop the environment",
       "satisfied": true
     },
-    "target-build": {
-      "path": "sandbox/scripts/build-target.sh",
+    "build": {
+      "path": "sandbox/scripts/build.sh",
       "present": true,
       "purpose": "build the target",
       "satisfied": true
     },
     "test": {
-      "path": "sandbox/scripts/test-target.sh",
+      "path": "sandbox/scripts/test.sh",
       "present": true,
       "purpose": "test the target",
       "satisfied": true
@@ -71,8 +71,8 @@
       "README.md": "51ffd560cb0b795ac7f05912f4b3314162163f8103b0aaf90d9f6353a76f6eda",
       "docker-compose.yml": "b775affe86d7d93b0c2268e5d7d21089bd2b62b90a3abd9a5a9e30388dba7498",
       "notes.md": "f773462a84cb927dcbe6e4cdde39e73408fc25f26b3d87e5a14de896b5b43bb1",
-      "scripts/build-target.sh": "d16975cebcf7cc568a138850e83e1c3b2b328074ad20f431828f823faecc7808",
-      "scripts/test-target.sh": "91758210d2e814856e6396e7edbd1247adf1cf21ab5ae49b21cffb95a64c817d"
+      "scripts/build.sh": "d16975cebcf7cc568a138850e83e1c3b2b328074ad20f431828f823faecc7808",
+      "scripts/test.sh": "91758210d2e814856e6396e7edbd1247adf1cf21ab5ae49b21cffb95a64c817d"
     },
     "generated_at": "2026-05-07T21:26:11+00:00",
     "markers": {

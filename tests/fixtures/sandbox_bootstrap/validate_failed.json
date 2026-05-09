@@ -5,8 +5,8 @@
   "tiers": [
     {
       "tier": "T1",
-      "purpose": "Sandbox build",
-      "command": "sandbox/scripts/build-sandbox.sh",
+      "purpose": "Sandbox setup",
+      "command": "sandbox/scripts/setup.sh",
       "duration_seconds": 0.5,
       "exit_code": 0,
       "outcome": "passed",
@@ -35,11 +35,11 @@
     }
   ],
   "capabilities": {
-    "build": {"path": "sandbox/scripts/build-sandbox.sh", "present": true, "purpose": "build", "satisfied": true},
+    "setup": {"path": "sandbox/scripts/setup.sh", "present": true, "purpose": "setup", "satisfied": true},
     "start": {"path": "sandbox/scripts/up.sh", "present": true, "purpose": "start", "satisfied": true},
     "check": {"path": "sandbox/scripts/check.sh", "present": true, "purpose": "check", "satisfied": true},
-    "target-build": {"path": "sandbox/scripts/build-target.sh", "present": true, "purpose": "tb", "satisfied": true},
-    "test": {"path": "sandbox/scripts/test-target.sh", "present": true, "purpose": "test", "satisfied": true},
+    "build": {"path": "sandbox/scripts/build.sh", "present": true, "purpose": "build", "satisfied": true},
+    "test": {"path": "sandbox/scripts/test.sh", "present": true, "purpose": "test", "satisfied": true},
     "stop": {"path": "sandbox/scripts/down.sh", "present": true, "purpose": "stop", "satisfied": true},
     "shell": {"path": "sandbox/scripts/shell.sh", "present": true, "purpose": "shell", "satisfied": true},
     "logs": {"path": "sandbox/scripts/logs.sh", "present": true, "purpose": "logs", "satisfied": true},

@@ -19,7 +19,7 @@ Baseline image for JVM projects, including Kotlin and Scala.
 
 ## Build heuristics
 
-`scripts/build-target.sh` chooses Maven if `pom.xml` exists,
+`scripts/build.sh` chooses Maven if `pom.xml` exists,
 otherwise Gradle. Local caches under `/root/.m2` and `/root/.gradle`
 are persisted across runs.
 

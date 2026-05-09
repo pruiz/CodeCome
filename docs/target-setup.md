@@ -107,8 +107,8 @@ The generic sandbox provides common tooling, especially for C/C++ targets.
 
 Target-specific build and test logic can be added to:
 
-    sandbox/scripts/build-target.sh
-    sandbox/scripts/test-target.sh
+    sandbox/scripts/build.sh
+    sandbox/scripts/test.sh
 
 For complex targets, add additional scripts under:
 
@@ -116,10 +116,10 @@ For complex targets, add additional scripts under:
 
 Examples:
 
-    sandbox/scripts/run-target.sh
-    sandbox/scripts/reset-target.sh
-    sandbox/scripts/build-cwe.sh
-    sandbox/scripts/run-testcase.sh
+    sandbox/scripts/run.sh
+    sandbox/scripts/build-asan.sh
+    sandbox/scripts/fuzz.sh
+    sandbox/scripts/migrate.sh
 
 ## What not to commit
 

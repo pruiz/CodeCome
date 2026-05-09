@@ -266,7 +266,9 @@ Phase 1 has two sub-stages run together:
 - **1a — Source reconnaissance**: creates or updates reconnaissance notes under `itemdb/notes/`.
 - **1b — Sandbox bootstrap**: picks a curated baseline from `templates/sandboxes/<id>/`, applies it to `sandbox/` (with marker substitution), validates it, and writes `itemdb/notes/sandbox-plan.md` plus `sandbox/CODECOME-GENERATED.md`.
 
-`sandbox/` is semi-ephemeral; Phase 1b regenerates its contents based on what is in `src/`. Manual sandbox CLI commands:
+`sandbox/` is semi-ephemeral; Phase 1b regenerates its contents based on what is in `src/`.
+
+Bootstrap CLI:
 
     make sandbox-list
     make sandbox-detect
@@ -274,6 +276,19 @@ Phase 1 has two sub-stages run together:
     make sandbox-bootstrap ID=python
     make sandbox-validate
     make sandbox-status
+
+Sandbox runtime helpers (one make target per canonical capability):
+
+    make sandbox-setup        # sandbox setup (setup.sh or `docker compose build`)
+    make sandbox-up           # sandbox start
+    make sandbox-check        # sandbox sanity
+    make sandbox-build        # target build
+    make sandbox-test         # target test
+    make sandbox-down         # sandbox stop
+    make sandbox-shell        # open a shell
+    make sandbox-logs         # tail logs
+    make sandbox-clean        # clean runtime artifacts
+    make sandbox-reset        # reset to a known state
 
 See `docs/sandbox.md` for the full bootstrap workflow.
 
@@ -470,7 +485,7 @@ applied in this order (all additive):
 
 3. **`PROMPT_EXTRA`** — inline text appended directly.
 
-       make phase-1 PROMPT_EXTRA="Also try clang for the sandbox build."
+       make phase-1 PROMPT_EXTRA="Also try clang for the sandbox setup."
 
 All three can be combined in a single invocation.
 

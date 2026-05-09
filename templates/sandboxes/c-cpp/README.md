@@ -20,7 +20,7 @@ runs.
 
 ## Build heuristics
 
-`scripts/build-target.sh` tries, in order: CMake, Makefile, Meson.
+`scripts/build.sh` tries, in order: CMake, Makefile, Meson.
 Adapt this for the specific target.
 
 ## Sanitizer example

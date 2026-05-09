@@ -18,7 +18,7 @@ Baseline image for .NET (C# / F# / VB) projects.
 
 ## Build heuristics
 
-`scripts/build-target.sh` chooses a `.sln` if present, otherwise
+`scripts/build.sh` chooses a `.sln` if present, otherwise
 falls back to scanning `.csproj`. `dotnet restore` runs before
 `dotnet build --no-restore`.
 

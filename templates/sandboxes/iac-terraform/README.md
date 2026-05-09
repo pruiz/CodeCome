@@ -19,9 +19,9 @@ No provider authentication is configured. No real cloud calls.
 
 ## What it does
 
-- `build-target.sh`: `terraform init -backend=false`, then
+- `build.sh`: `terraform init -backend=false`, then
   `terraform fmt -check` and `terraform validate`.
-- `test-target.sh`: optional `tflint --recursive` if tflint installed.
+- `test.sh`: optional `tflint --recursive` if tflint installed.
 
 ## Why no provider auth
 
