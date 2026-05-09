@@ -145,15 +145,12 @@ Reject the finding when validation or strong static analysis shows:
 - expected vulnerable behavior does not occur,
 - finding is based only on labels or misleading names.
 
-Move rejected findings to:
+Move the rejected finding using the CLI tool:
 
-    itemdb/findings/REJECTED/
-
-Set frontmatter:
-
-    status: "REJECTED"
+    make findings-move FINDING=<id> STATUS=REJECTED
 
 Update `# Validation result`.
+Run `make frontmatter` to ensure the finding's frontmatter is valid and fix any reported errors before finishing.
 
 ## Unresolved policy
 
@@ -173,19 +170,9 @@ Update `# Validation result` with:
 
 ## Confirmed policy
 
-If confirmed, move the finding to:
+If confirmed, move the finding using the CLI tool:
 
-    itemdb/findings/CONFIRMED/
-
-Set frontmatter:
-
-    status: "CONFIRMED"
-    confidence: "CONFIRMED"
-
-Update validation frontmatter:
-
-    validation:
-      status: "CONFIRMED"
+    make findings-move FINDING=<id> STATUS=CONFIRMED
 
 Update:
 
@@ -193,6 +180,8 @@ Update:
 - `# Evidence`
 
 Reference evidence files by relative path.
+
+Run `make frontmatter` to ensure the finding's frontmatter is valid and fix any reported errors before finishing.
 
 ## Final response
 

@@ -66,33 +66,29 @@ Update:
 
 ### Move to REJECTED
 
-Move the finding to:
+Move the finding using the CLI tool:
 
-    itemdb/findings/REJECTED/
+    make findings-move FINDING=<id> STATUS=REJECTED
 
 Use this when the hypothesis is disproven, not security-relevant, unreachable, out of scope, or based only on weak evidence.
 
 Update:
 
-- frontmatter `status`
 - `# Counter-analysis`
 - `# Validation result`
-- `updated_at`
 
 ### Move to DUPLICATE
 
-Move the finding to:
+Move the finding using the CLI tool:
 
-    itemdb/findings/DUPLICATE/
+    make findings-move FINDING=<id> STATUS=DUPLICATE
 
 Use this when another finding already covers the same root cause.
 
 Update:
 
-- frontmatter `status`
 - `# Counter-analysis`
 - `# Notes`
-- `updated_at`
 
 Reference the canonical finding id.
 
@@ -143,6 +139,8 @@ Instead:
 - improve validation plan.
 
 ## Final response
+
+Run `make frontmatter` to ensure all modified findings have valid frontmatter and fix any reported errors before finishing.
 
 At the end, summarize:
 
