@@ -1503,6 +1503,7 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument(
         "--format",
         choices=["text", "json"],
+        default=argparse.SUPPRESS,
         help="Output format. Defaults to text.",
     )
 
@@ -1514,6 +1515,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--format",
         choices=["text", "json"],
+        default="text",
         help=argparse.SUPPRESS,
     )
 
@@ -1623,16 +1625,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
-    raw_args = argv if argv is not None else sys.argv[1:]
-    
-    fmt = "text"
-    if "--format" in raw_args:
-        idx = raw_args.index("--format")
-        if idx + 1 < len(raw_args):
-            fmt = raw_args[idx + 1]
-            
     args = parser.parse_args(argv)
-    args.format = fmt
     
     return args.func(args)
 
