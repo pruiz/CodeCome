@@ -51,6 +51,49 @@ For each finding, ask:
 - Is the finding a duplicate of another finding?
 - Is the validation plan actionable?
 
+## Semantic deduplication
+
+Do not deduplicate only by title or by exact file path.
+
+Two findings are likely duplicates when they describe the same root cause, security property, source, sink, trust boundary, and remediation pattern, even if they were discovered from different files during a file-scoped sweep.
+
+For each candidate finding, compare these frontmatter fields against all other findings:
+
+- `category`
+- `target_area`
+- `files`
+- `symbols`
+- `entry_points`
+- `sources`
+- `sinks`
+- `trust_boundary`
+- `assets_at_risk`
+
+Also compare these body sections:
+
+- `# Source-to-sink reasoning`
+- `# Attackability / trigger conditions`
+- `# Impact`
+- `# Root cause analysis`
+- `# Remediation idea`
+
+Prefer a single canonical finding when multiple findings share the same bug pattern and validation path. Keep separate findings when any of these differ materially:
+
+- affected security property,
+- attacker capability,
+- affected tenant/account/resource boundary,
+- dangerous sink,
+- exploit primitive,
+- impact,
+- remediation,
+- validation method.
+
+When marking a duplicate, update `# Counter-analysis` and `# Notes` to reference the canonical finding id and explain why the root cause is the same.
+
+When keeping similar-but-not-duplicate findings, update `# Notes` to explain the distinction so later reviewers do not collapse them incorrectly.
+
+If frontmatter metadata is too vague to compare findings, improve it before deciding.
+
 ## Allowed outcomes
 
 ### Keep in PENDING
@@ -62,6 +105,7 @@ Update:
 - `# Counter-analysis`
 - `# Validation plan` if needed
 - confidence if needed
+- semantic metadata if needed (`files`, `symbols`, `entry_points`, `sources`, `sinks`, `trust_boundary`, `assets_at_risk`, `category`, `target_area`)
 - `updated_at`
 
 ### Move to REJECTED
@@ -103,6 +147,8 @@ Use this structure inside each reviewed finding:
     Evidence reviewed:
 
     Disproof attempts:
+
+    Semantic deduplication:
 
     Remaining assumptions:
 
@@ -148,6 +194,7 @@ At the end, summarize:
 - findings kept in PENDING,
 - findings moved to REJECTED,
 - findings moved to DUPLICATE,
+- semantic duplicate groups identified,
 - major confidence changes,
 - recommended validation order,
 - files modified.
