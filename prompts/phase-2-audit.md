@@ -31,6 +31,8 @@ Use Phase 1 reconnaissance notes under:
 
     itemdb/notes/
 
+If `itemdb/notes/file-risk-index.yml` exists, use it to prioritize review order. Start with score 5 files, then score 4 files, unless another Phase 1 note gives a stronger reason to inspect a different area first.
+
 ## Goal
 
 Create precise vulnerability hypotheses as Markdown findings under:
@@ -73,6 +75,22 @@ Each finding must include:
 - validation plan,
 - counter-analysis placeholder,
 - evidence placeholder.
+
+## Semantic metadata
+
+Populate existing frontmatter fields as precisely as possible:
+
+- `files`
+- `symbols`
+- `entry_points`
+- `sources`
+- `sinks`
+- `trust_boundary`
+- `assets_at_risk`
+- `category`
+- `target_area`
+
+These fields are used by Phase 3 for semantic deduplication. Two findings are likely duplicates when they share the same root cause, source, sink, affected security property, and validation path, even if they were discovered from different files.
 
 ## Quality bar
 
@@ -145,6 +163,16 @@ Avoid duplicate root causes.
 
 Create separate findings only when the affected component, exploit path, impact, or remediation differs.
 
+## Optional file-scoped sweeps
+
+This global Phase 2 can be complemented with the file-scoped sweep mode:
+
+    ./tools/list-risk-files.py --min-score 4
+    ./tools/run-file-sweep.py --min-score 4 --limit 5
+    ./tools/run-file-sweep.py --file src/path/to/high-risk-file.ext
+
+The sweep mode uses `prompts/phase-2-file.md` and is intentionally sequential by default so the operator can observe the model's reasoning and stop between files.
+
 ## Benchmark targets
 
 If the target is a benchmark corpus:
@@ -163,6 +191,8 @@ At the end, summarize:
 
 - number of findings created,
 - ids and titles,
+- highest-risk files reviewed,
+- high-risk files left for optional sweep,
 - most important assumptions,
 - recommended next phase,
 - files created or modified.
