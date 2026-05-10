@@ -1,6 +1,6 @@
 # CodeCome
 
-![CodeCome Logo](CodeCome.png)
+<img src="CodeCome.png" alt="CodeCome Logo" width="300">
 
 > The harness for building your own Mythos of vulnerability research at home!
 
