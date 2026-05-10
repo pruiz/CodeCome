@@ -68,7 +68,7 @@ Update:
 
 Move the finding using the CLI tool:
 
-    make findings-move FINDING=<id> STATUS=REJECTED
+    make findings-move FINDING=<id-or-path> STATUS=REJECTED
 
 Use this when the hypothesis is disproven, not security-relevant, unreachable, out of scope, or based only on weak evidence.
 
@@ -81,7 +81,7 @@ Update:
 
 Move the finding using the CLI tool:
 
-    make findings-move FINDING=<id> STATUS=DUPLICATE
+    make findings-move FINDING=<id-or-path> STATUS=DUPLICATE
 
 Use this when another finding already covers the same root cause.
 

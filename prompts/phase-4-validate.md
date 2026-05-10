@@ -147,10 +147,9 @@ Reject the finding when validation or strong static analysis shows:
 
 Move the rejected finding using the CLI tool:
 
-    make findings-move FINDING=<id> STATUS=REJECTED
+    make findings-move FINDING=<id-or-path> STATUS=REJECTED
 
 Update `# Validation result`.
-Run `make frontmatter` to ensure the finding's frontmatter is valid and fix any reported errors before finishing.
 
 ## Unresolved policy
 
@@ -172,7 +171,7 @@ Update `# Validation result` with:
 
 If confirmed, move the finding using the CLI tool:
 
-    make findings-move FINDING=<id> STATUS=CONFIRMED
+    make findings-move FINDING=<id-or-path> STATUS=CONFIRMED
 
 Update:
 
@@ -181,9 +180,9 @@ Update:
 
 Reference evidence files by relative path.
 
-Run `make frontmatter` to ensure the finding's frontmatter is valid and fix any reported errors before finishing.
-
 ## Final response
+
+Run `make frontmatter` to ensure the finding's frontmatter is valid and fix any reported errors before finishing.
 
 At the end, summarize:
 

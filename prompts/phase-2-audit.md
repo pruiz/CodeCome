@@ -43,21 +43,14 @@ Do not mark anything as confirmed.
 
 ## Required output
 
-For each candidate finding, create a Markdown file using:
+For each candidate finding, create a Markdown file using the CLI tool:
 
-    templates/finding.md
+    make findings-create TITLE="Short descriptive title"
 
-Store it under:
+This command uses the template and automatically assigns the next available ID.
+Then, edit the generated file to fill in the finding details.
 
-    itemdb/findings/PENDING/
-
-Use filenames like:
-
-    CC-0001-short-descriptive-slug.md
-
-Use the next available id. You may use:
-
-    ./tools/codecome.py next-id
+Do not manually copy `templates/finding.md` or pick IDs yourself.
 
 ## Finding requirements
 
@@ -163,6 +156,8 @@ If the target is a benchmark corpus:
 - keep confidence low if the issue is mostly inferred from labels.
 
 ## Final response
+
+Run `make frontmatter` to ensure all created findings have valid frontmatter and fix any reported errors before finishing.
 
 At the end, summarize:
 
