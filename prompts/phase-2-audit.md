@@ -4,7 +4,7 @@ You are performing CodeCome Phase 2: vulnerability hypothesis generation.
 
 ## Required reading
 
-Read:
+Read the following files (all paths are relative to the project/workspace root):
 
 - `AGENTS.md`
 - `codecome.yml`

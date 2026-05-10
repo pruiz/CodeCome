@@ -10,7 +10,7 @@ depends on the recon notes produced by Phase 1a.
 
 ## Required reading
 
-Read:
+Read the following files (all paths are relative to the project/workspace root):
 
 - `AGENTS.md`
 - `codecome.yml`
