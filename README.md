@@ -1,5 +1,7 @@
 # CodeCome
 
+![CodeCome Logo](CodeCome.png)
+
 > The harness for building your own Mythos of vulnerability research at home!
 
 CodeCome is an (open source) Agentic vulnerability research harness, or AI-assisted vulnerability research workspace.
