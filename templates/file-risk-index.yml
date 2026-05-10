@@ -1,0 +1,58 @@
+# CodeCome file risk index template
+#
+# Generated during Phase 1 and consumed by optional file-by-file Phase 2 sweeps.
+# Scores are intentionally coarse so agents can prioritize attention without
+# pretending the ranking is precise.
+
+schema_version: 1
+generated_by: "phase-1-recon"
+generated_at: "YYYY-MM-DDTHH:MM:SSZ"
+target: "codecome-target"
+scoring_scale:
+  min: 1
+  max: 5
+  meaning:
+    "1": "Low security interest; unlikely to cross a trust boundary or reach a dangerous sink."
+    "2": "Some security relevance, but weak attacker control or low impact."
+    "3": "Moderate interest; plausible source, sink, or security decision."
+    "4": "High interest; likely attack surface, trust boundary, parser, authz/authn, or dangerous sink."
+    "5": "Very high interest; externally reachable, security-critical, complex parser, privileged operation, or historically bug-prone surface."
+
+scoring_dimensions:
+  - attacker_controlled_input
+  - externally_influenced_state
+  - trust_boundary_crossing
+  - security_decision
+  - dangerous_sink
+  - parser_complexity
+  - privilege_boundary
+  - asset_sensitivity
+  - historical_vulnerability_density
+  - validation_feasibility
+
+files:
+  - path: "src/example/path/to/file.ext"
+    score: 5
+    confidence: "MEDIUM"
+    target_area: "example component or feature"
+    reasons:
+      - "Handles attacker-controlled input."
+      - "Crosses a trust boundary before reaching a security-sensitive operation."
+    entry_points:
+      - "HTTP POST /example"
+      - "CLI argument --example"
+    sources:
+      - "request.body.example"
+    sinks:
+      - "ExampleService.security_sensitive_operation"
+    trust_boundaries:
+      - "untrusted user -> server-side parser"
+    suggested_vulnerability_classes:
+      - "Injection vulnerabilities"
+      - "Path traversal"
+    suggested_skills:
+      - "web-security"
+    suggested_validation_methods:
+      - "static_proof"
+      - "http_exploit"
+    notes: "Replace this example entry with target-specific ranked files."
