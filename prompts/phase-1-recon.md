@@ -15,6 +15,7 @@ Read the following files (all paths are relative to the project/workspace root):
 - `AGENTS.md`
 - `codecome.yml`
 - `templates/target-recon.md`
+- `templates/file-risk-index.yml`
 - `.opencode/agents/recon.md`
 - `.opencode/skills/source-recon/SKILL.md`
 - `.opencode/skills/sandbox-bootstrap/SKILL.md`
@@ -44,6 +45,7 @@ Build a target model by creating these files under `itemdb/notes/`:
 - `data-flow.md`
 - `validation-model.md`
 - `interesting-files.md`
+- `file-risk-index.yml`
 - `security-assumptions.md`
 
 Document:
@@ -58,6 +60,40 @@ Document:
 - security assumptions,
 - interesting files for Phase 2,
 - validation strategy.
+
+### File risk index
+
+Create `itemdb/notes/file-risk-index.yml` using the schema in `templates/file-risk-index.yml`.
+
+This is a structured, machine-readable companion to `interesting-files.md`. It is consumed by optional file-scoped Phase 2 sweeps.
+
+Score files from 1 to 5 using the scoring scale in the template:
+
+- `1`: low security interest,
+- `2`: weak or indirect security relevance,
+- `3`: moderate security interest,
+- `4`: high security interest,
+- `5`: very high security interest.
+
+Prioritize files that contain or strongly influence:
+
+- attacker-controlled or externally influenced input,
+- trust-boundary crossings,
+- authentication or authorization decisions,
+- dangerous sinks,
+- parsers and decoders,
+- file upload or archive handling,
+- cryptographic or secret-handling logic,
+- privilege boundaries,
+- tenant/account/resource isolation,
+- network-facing protocol handlers,
+- sandbox, policy, or permission enforcement.
+
+For each high-risk file, include concrete reasons, likely entry points, sources, sinks, trust boundaries, suggested vulnerability classes, suggested skills, and suggested validation methods when inferable.
+
+Do not include every source file. Prefer a concise ranked set that Phase 2 can act on. For large projects, include at least the top 20–50 files if that many are plausibly security-relevant. For small projects, include all meaningful security-relevant files.
+
+Keep `interesting-files.md` human-readable, but make `file-risk-index.yml` the structured source for automated or semi-automated sweeps.
 
 ## Phase 1b: sandbox bootstrap
 
@@ -231,6 +267,7 @@ At the end, summarize:
 - target type,
 - most important attack surfaces,
 - recommended Phase 2 focus,
+- highest-risk files from `file-risk-index.yml`,
 - files created or updated (Phase 1a + Phase 1b),
 - chosen sandbox example and `validation_model`,
 - validation outcome (`passed`, `passed-with-warnings`, `halted`),
