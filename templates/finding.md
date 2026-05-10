@@ -266,9 +266,10 @@ one-line description for each artifact, e.g.:
 - `itemdb/evidence/CC-0000/exploits/recordings/README.md` -- play and
   re-run instructions.
 
-If no recording exists, explain why (missing tooling, exploit cannot be
-driven without human interaction, etc.). Absence does not block
-`EXPLOITED` but must be explicit.
+If no recording exists, explain why by summarizing the fallback methods
+attempted and referencing their failure logs under
+`itemdb/evidence/CC-0000/exploits/recordings/attempts/`. Absence does not
+block `EXPLOITED` but must be explicit and evidenced.
 
 Required content (not `Pending.`) when the finding is `EXPLOITED`.
 

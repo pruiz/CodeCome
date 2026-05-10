@@ -12,12 +12,14 @@ finding status counts, and next-id discovery for Markdown findings.
 from __future__ import annotations
 
 import argparse
+import os
 import platform
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 
 try:
     import yaml
@@ -190,6 +192,108 @@ def check_recording_tools() -> List[str]:
     return warnings
 
 
+def _docker_daemon_reachable() -> bool:
+    if not _which("docker"):
+        return False
+    try:
+        result = subprocess.run(
+            ["docker", "info"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0
+
+
+def _detect_script_flavor() -> Optional[str]:
+    """Return 'util-linux', 'bsd', or None depending on which `script(1)` is on PATH."""
+
+    if not _which("script"):
+        return None
+    try:
+        result = subprocess.run(
+            ["script", "--version"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=3,
+            text=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "bsd"
+    output = (result.stdout or "") + (result.stderr or "")
+    if result.returncode == 0 and "util-linux" in output.lower():
+        return "util-linux"
+    return "bsd"
+
+
+def probe_recording_environment() -> List[Tuple[str, str, str]]:
+    """Probe runtime conditions for the current invocation context.
+
+    Returns a list of (label, status, detail) tuples. `status` is one of
+    "ok", "warn", "info" and is used purely for colouring.
+    """
+
+    rows: List[Tuple[str, str, str]] = []
+
+    stdin_tty = os.isatty(0)
+    stdout_tty = os.isatty(1)
+    if stdin_tty and stdout_tty:
+        rows.append(("stdin/stdout TTY", "ok", "yes (tier 1 'asciinema rec' should work directly)"))
+    else:
+        rows.append((
+            "stdin/stdout TTY",
+            "warn",
+            (
+                f"no (stdin={stdin_tty}, stdout={stdout_tty}); direct tier-1 "
+                "`asciinema rec` is unlikely to work from this exact invocation"
+            ),
+        ))
+
+    flavor = _detect_script_flavor()
+    if flavor == "util-linux":
+        rows.append((
+            "script(1) shim (tier 2)",
+            "ok",
+            "yes, util-linux flavor — `script -qfc '<cmd>' /dev/null`",
+        ))
+    elif flavor == "bsd":
+        rows.append((
+            "script(1) shim (tier 2)",
+            "ok",
+            "yes, BSD/macOS flavor — `script -q /dev/null <cmd>`",
+        ))
+    else:
+        rows.append(("script(1) shim (tier 2)", "warn", "no — script(1) not on PATH"))
+
+    if _which("unbuffer"):
+        rows.append(("unbuffer shim (tier 3)", "ok", "yes — `unbuffer -p <cmd>`"))
+    else:
+        rows.append((
+            "unbuffer shim (tier 3)",
+            "info",
+            "no (ships with the `expect` package; optional)",
+        ))
+
+    if _docker_daemon_reachable():
+        rows.append((
+            "docker daemon (tier 4)",
+            "ok",
+            "reachable — `docker run --rm -t …` can supply a PTY",
+        ))
+    elif _which("docker"):
+        rows.append((
+            "docker daemon (tier 4)",
+            "warn",
+            "docker CLI present but daemon not reachable",
+        ))
+    else:
+        rows.append(("docker daemon (tier 4)", "info", "docker not installed"))
+
+    return rows
+
+
 def fail(message: str) -> int:
     print(C.fail(message), file=sys.stderr)
     return 1
@@ -280,6 +384,29 @@ def command_check(_: argparse.Namespace) -> int:
             print(C.warn(message))
     else:
         print(C.ok("Optional recording tools available (asciinema, agg, ffmpeg, Xvfb)."))
+
+    # Probe only the current helper invocation context; phase-5 may later run
+    # from a different shell, container, or PTY wrapper.
+    print()
+    print(C.header("Recording probe (current invocation context):"))
+    probe_rows = probe_recording_environment()
+    label_width = max(len(label) for label, _, _ in probe_rows)
+    for label, status, detail in probe_rows:
+        line = f"  {label.ljust(label_width)}  {detail}"
+        if status == "ok":
+            print(C.ok(line))
+        elif status == "warn":
+            print(C.warn(line))
+        else:
+            print(C.info(line))
+    print(
+        "  Recording may still succeed from a different context "
+        "(host shell, sandbox shell, container exec session, or PTY wrapper)."
+    )
+    print(
+        "  See `.opencode/skills/exploit-recording/SKILL.md` for context selection "
+        "and PTY-acquisition guidance."
+    )
 
     return 0
 
