@@ -22,29 +22,29 @@ The recon agent should prioritize files that contain or influence attacker-contr
 
 Show score 4+ files:
 
-    ./tools/list-risk-files.py --min-score 4
+    python tools/list-risk-files.py --min-score 4
 
 Show only paths for scripting:
 
-    ./tools/list-risk-files.py --min-score 4 --format paths
+    python tools/list-risk-files.py --min-score 4 --format paths
 
 Limit the list:
 
-    ./tools/list-risk-files.py --min-score 5 --limit 10
+    python tools/list-risk-files.py --min-score 5 --limit 10
 
 ## Run a file-scoped Phase 2 sweep
 
 Run a single file:
 
-    ./tools/run-file-sweep.py --file src/path/to/file.ext
+    python tools/run-file-sweep.py --file src/path/to/file.ext
 
 Run the top indexed files with score 4 or higher:
 
-    ./tools/run-file-sweep.py --min-score 4 --limit 5
+    python tools/run-file-sweep.py --min-score 4 --limit 5
 
 Preview selected files and generated prompts without invoking OpenCode:
 
-    ./tools/run-file-sweep.py --min-score 4 --limit 5 --dry-run
+    python tools/run-file-sweep.py --min-score 4 --limit 5 --dry-run
 
 The sweep runner is sequential by default. It invokes the normal `auditor` agent through the existing CodeCome wrapper unless `CODECOME_USE_WRAPPER=0` is set.
 
