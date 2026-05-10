@@ -67,6 +67,8 @@ Unless explicitly instructed otherwise, write only under:
 - `tmp/`
 - `.opencode/`
 
+**IMPORTANT SANDBOX RULE:** Never use the absolute path `/tmp/` in any tool or shell command, as it will be rejected by the OpenCode sandbox. Instead, always use the workspace-relative `tmp/` directory for temporary files, downloads, or scratch space.
+
 Do not write into `src/` except for temporary instrumentation when explicitly authorized.
 
 ## Target-agnostic mindset
