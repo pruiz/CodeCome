@@ -19,6 +19,7 @@ import shlex
 import signal
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from functools import lru_cache
 from collections import OrderedDict
@@ -3936,6 +3937,54 @@ def resolve_runtime_model_for_banner(
     return model, variant, model_source, variant_source
 
 
+
+def check_phase_graceful_completion(phase: str, finding: str | None, run_start_time: float) -> bool:
+    """Check if the phase produced its primary artifacts, allowing us to forgive mid-turn cutoffs."""
+    try:
+        if str(phase) == "1":
+            profile = ROOT / "itemdb" / "notes" / "target-profile.md"
+            surface = ROOT / "itemdb" / "notes" / "attack-surface.md"
+            if profile.exists() and surface.exists():
+                return profile.stat().st_mtime >= run_start_time or surface.stat().st_mtime >= run_start_time
+            return False
+        elif str(phase) in ("2", "sweep"):
+            pending_dir = ROOT / "itemdb" / "findings" / "PENDING"
+            if pending_dir.exists():
+                return any(f.name.endswith(".md") and f.name != ".gitkeep" and f.stat().st_mtime >= run_start_time for f in pending_dir.iterdir())
+            return False
+        elif str(phase) == "3":
+            findings_dir = ROOT / "itemdb" / "findings"
+            if findings_dir.exists():
+                for root, _, files in os.walk(findings_dir):
+                    for file in files:
+                        if file.endswith(".md") and file != ".gitkeep":
+                            f = Path(root) / file
+                            if f.stat().st_mtime >= run_start_time:
+                                return True
+            return False
+        elif str(phase) == "4" and finding:
+            evidence_dir = ROOT / "itemdb" / "evidence" / finding
+            if evidence_dir.exists():
+                return any(f.stat().st_mtime >= run_start_time for f in evidence_dir.iterdir() if f.is_file())
+            return False
+        elif str(phase) == "5" and finding:
+            exploits_dir = ROOT / "itemdb" / "evidence" / finding / "exploits"
+            if exploits_dir.exists() and any(f.stat().st_mtime >= run_start_time for f in exploits_dir.iterdir() if f.is_file()):
+                return True
+            # Fallback for NOT_FEASIBLE
+            finding_file = ROOT / "itemdb" / "findings" / "CONFIRMED" / f"{finding}.md"
+            if finding_file.exists() and finding_file.stat().st_mtime >= run_start_time:
+                return True
+            return False
+        elif str(phase) == "6":
+            reports_dir = ROOT / "itemdb" / "reports"
+            if reports_dir.exists():
+                return any(f.name.endswith(".md") and f.name != ".gitkeep" and f.stat().st_mtime >= run_start_time for f in reports_dir.iterdir())
+            return False
+    except Exception:
+        pass
+    return False
+
 def show_model_table(agent_name: str) -> int:
     """Print the model-resolution table for an agent and exit."""
     extra_args = shlex.split(os.environ.get("OPENCODE_ARGS", ""))
@@ -3976,6 +4025,9 @@ def show_model_table(agent_name: str) -> int:
 
 
 def main() -> int:
+    RUN_START_TIME = time.time()
+    iteration_retry_count = 0
+    frontmatter_retry_count = 0
     check_opencode_version()
 
     parser = build_parser()
@@ -4071,249 +4123,277 @@ def main() -> int:
             ))
         print(C.warn("rich is not installed; using plain structured output fallback"))
 
-    process: subprocess.Popen[str] | None = None
-    interrupted = False
+    while True:
+        process: subprocess.Popen[str] | None = None
+        interrupted = False
 
-    def forward_signal(signum: int, _frame: Any) -> None:
-        nonlocal interrupted
-        interrupted = True
-        if process is not None and process.poll() is None:
-            try:
-                os.killpg(process.pid, signum)
-            except ProcessLookupError:
-                pass
-
-    previous_sigint = signal.signal(signal.SIGINT, forward_signal)
-    previous_sigterm = signal.signal(signal.SIGTERM, forward_signal)
-
-    try:
-        process = subprocess.Popen(
-            command,
-            cwd=ROOT,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=None,
-            text=True,
-            bufsize=1,
-            preexec_fn=os.setsid,
-        )
-
-        assert process.stdin is not None
-        process.stdin.write(prompt)
-        process.stdin.close()
-
-        assert process.stdout is not None
-        late_model_announced = False
-        # Tee the raw JSONL stream to disk for post-mortem analysis.
-        # The path is under tmp/ which is intended to be ephemeral.
-        finding_tag = (args.finding or "no-finding").replace("/", "_")
-        transcript_dir = ROOT / "tmp"
-        transcript_dir.mkdir(parents=True, exist_ok=True)
-        transcript_path = transcript_dir / f"last-phase-{args.phase}-{finding_tag}.jsonl"
-        last_finish_reason: Optional[str] = None
-        last_finish_tokens: dict[str, Any] = {}
-        last_permission_error: Optional[str] = None
-        any_step_finish_seen = False
-        try:
-            transcript_fp: Optional[Any] = transcript_path.open("w", encoding="utf-8")
-        except OSError as exc:
-            transcript_fp = None
-            if HAVE_RICH:
-                console.print(Text(f"warning: could not open transcript {transcript_path}: {exc}", style="yellow"))
-            else:
-                print(C.warn(f"warning: could not open transcript {transcript_path}: {exc}"))
-
-        try:
-            for raw_line in process.stdout:
-                if transcript_fp is not None:
-                    try:
-                        transcript_fp.write(raw_line)
-                    except OSError:
-                        pass
-                line = raw_line.strip()
-                if not line:
-                    continue
-                if args.debug:
-                    sys.stderr.write(line + "\n")
-                    sys.stderr.flush()
+        def forward_signal(signum: int, _frame: Any) -> None:
+            nonlocal interrupted
+            interrupted = True
+            if process is not None and process.poll() is None:
                 try:
-                    event = json.loads(line)
-                except json.JSONDecodeError:
-                    if args.debug:
-                        sys.stderr.write(f"json-parse-error: {line}\n")
-                        sys.stderr.flush()
-                    continue
-
-                # Late discovery: if the JSON stream ever carries the model
-                # identity in a tool/event payload, surface it once.
-                if not late_model_announced:
-                    discovered_in_stream = _scan_event_for_model(event)
-                    if discovered_in_stream and discovered_in_stream != model:
-                        late_model_announced = True
-                        msg = (
-                            f"[model resolved from stream] {discovered_in_stream} "
-                            f"(banner showed {model_label})"
-                        )
-                        if HAVE_RICH:
-                            console.print(Text(msg, style="yellow"))
-                        else:
-                            print(C.warn(msg))
-
-                # Track every step_finish so we can audit the turn after
-                # the child exits. The LAST step_finish in the stream is
-                # the one that decides whether the run completed cleanly.
-                if event.get("type") == "step_finish":
-                    any_step_finish_seen = True
-                    part = event.get("part") or {}
-                    reason = part.get("reason")
-                    if isinstance(reason, str):
-                        last_finish_reason = reason
-                    tokens = part.get("tokens")
-                    if isinstance(tokens, dict):
-                        last_finish_tokens = tokens
-
-                permission_error = _extract_tool_permission_error(event)
-                if permission_error is not None:
-                    last_permission_error = permission_error
-
-                render_event(console, args.phase, args.label, event)
-        finally:
-            if transcript_fp is not None:
-                try:
-                    transcript_fp.flush()
-                    transcript_fp.close()
-                except OSError:
+                    os.killpg(process.pid, signum)
+                except ProcessLookupError:
                     pass
 
-        process.wait()
-        returncode = process.returncode
-    except Exception as exc:
-        if HAVE_RICH:
-            console.print(Panel(Text(str(exc), style="red"), title="Wrapper Error", border_style="red"))
-        else:
-            print(C.fail(str(exc)), file=sys.stderr)
-        return 1
-    finally:
-        signal.signal(signal.SIGINT, previous_sigint)
-        signal.signal(signal.SIGTERM, previous_sigterm)
+        previous_sigint = signal.signal(signal.SIGINT, forward_signal)
+        previous_sigterm = signal.signal(signal.SIGTERM, forward_signal)
 
-    if returncode is None:
-        returncode = 1
+        try:
+            process = subprocess.Popen(
+                command,
+                cwd=ROOT,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=None,
+                text=True,
+                bufsize=1,
+                preexec_fn=os.setsid,
+            )
 
-    if returncode < 0:
-        returncode = 128 + abs(returncode)
+            assert process.stdin is not None
+            process.stdin.write(prompt)
+            process.stdin.close()
 
-    if interrupted and returncode == 0:
-        returncode = 130
-
-    # Auto-resume loop for frontmatter errors
-    if returncode == 0:
-        validation_result = subprocess.run(
-            [sys.executable, "tools/check-frontmatter.py"],
-            cwd=ROOT,
-            capture_output=True,
-            text=True
-        )
-        if validation_result.returncode != 0:
-            retry_count = int(os.environ.get("CODECOME_FRONTMATTER_RETRIES", "0"))
-            max_retries = 2
+            assert process.stdout is not None
+            late_model_announced = False
+            finding_tag = (args.finding or "no-finding").replace("/", "_")
+            transcript_dir = ROOT / "tmp"
+            transcript_dir.mkdir(parents=True, exist_ok=True)
+            transcript_path = transcript_dir / f"last-phase-{args.phase}-{finding_tag}.jsonl"
+            last_finish_reason: Optional[str] = None
+            last_finish_tokens: dict[str, Any] = {}
+            last_permission_error: Optional[str] = None
+            any_step_finish_seen = False
+            step_finish_count = 0
+            stream_session_id: Optional[str] = None
             
-            if retry_count < max_retries:
-                msg = f"\n[Auto-Correction] Frontmatter errors detected. Resuming session to fix (retry {retry_count + 1}/{max_retries})..."
+            try:
+                transcript_fp: Optional[Any] = transcript_path.open("w", encoding="utf-8")
+            except OSError as exc:
+                transcript_fp = None
+                if HAVE_RICH:
+                    console.print(Text(f"warning: could not open transcript {transcript_path}: {exc}", style="yellow"))
+                else:
+                    print(C.warn(f"warning: could not open transcript {transcript_path}: {exc}"))
+
+            try:
+                for raw_line in process.stdout:
+                    if transcript_fp is not None:
+                        try:
+                            transcript_fp.write(raw_line)
+                        except OSError:
+                            pass
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    if args.debug:
+                        sys.stderr.write(line + "\n")
+                        sys.stderr.flush()
+                    try:
+                        event = json.loads(line)
+                        if stream_session_id is None and "sessionID" in event:
+                            stream_session_id = event["sessionID"]
+                    except json.JSONDecodeError:
+                        if args.debug:
+                            sys.stderr.write(f"json-parse-error: {line}\n")
+                            sys.stderr.flush()
+                        continue
+
+                    if not late_model_announced:
+                        discovered_in_stream = _scan_event_for_model(event)
+                        if discovered_in_stream and discovered_in_stream != model:
+                            late_model_announced = True
+                            msg = (
+                                f"[model resolved from stream] {discovered_in_stream} "
+                                f"(banner showed {model_label})"
+                            )
+                            if HAVE_RICH:
+                                console.print(Text(msg, style="yellow"))
+                            else:
+                                print(C.warn(msg))
+
+                    if event.get("type") == "step_finish":
+                        any_step_finish_seen = True
+                        step_finish_count += 1
+                        part = event.get("part") or {}
+                        reason = part.get("reason")
+                        if isinstance(reason, str):
+                            last_finish_reason = reason
+                        tokens = part.get("tokens")
+                        if isinstance(tokens, dict):
+                            last_finish_tokens = tokens
+
+                    permission_error = _extract_tool_permission_error(event)
+                    if permission_error is not None:
+                        last_permission_error = permission_error
+
+                    render_event(console, args.phase, args.label, event)
+            finally:
+                if transcript_fp is not None:
+                    try:
+                        transcript_fp.flush()
+                        transcript_fp.close()
+                    except OSError:
+                        pass
+
+            process.wait()
+            returncode = process.returncode
+        except Exception as exc:
+            if HAVE_RICH:
+                console.print(Panel(Text(str(exc), style="red"), title="Wrapper Error", border_style="red"))
+            else:
+                print(C.fail(str(exc)), file=sys.stderr)
+            return 1
+        finally:
+            signal.signal(signal.SIGINT, previous_sigint)
+            signal.signal(signal.SIGTERM, previous_sigterm)
+
+        if returncode is None:
+            returncode = 1
+
+        if returncode < 0:
+            returncode = 128 + abs(returncode)
+
+        if interrupted and returncode == 0:
+            returncode = 130
+
+        finish_warning: Optional[str] = None
+        if returncode == 0:
+            if not any_step_finish_seen:
+                finish_warning = (
+                    "no step_finish events were observed in the JSON stream; "
+                    "the agent likely produced no work"
+                )
+            elif last_finish_reason is None:
+                finish_warning = "step_finish observed but reason was missing"
+            elif last_finish_reason in _FINISH_FAILURE:
+                finish_warning = (
+                    f"LLM stream ended with finish reason '{last_finish_reason}' "
+                    "(provider truncated the response; the phase did not finish)"
+                )
+            elif last_finish_reason in _FINISH_MID_TURN:
+                if last_permission_error:
+                    finish_warning = (
+                        f"{last_permission_error}; the run stopped mid-turn "
+                        f"(finish reason '{last_finish_reason}')"
+                    )
+                else:
+                    finish_warning = (
+                        f"LLM stream ended after a mid-turn step (reason "
+                        f"'{last_finish_reason}') without a terminal 'stop'; the "
+                        f"agent hit the internal iteration limit (completed {step_finish_count} loops) or was cut short by "
+                        "the provider before producing a final response"
+                    )
+            elif last_finish_reason not in _FINISH_TERMINAL_OK:
+                finish_warning = (
+                    f"LLM stream ended with unrecognised finish reason "
+                    f"'{last_finish_reason}'; treating as incomplete"
+                )
+
+        if finish_warning is not None and returncode == 0:
+            if last_finish_reason in _FINISH_MID_TURN and check_phase_graceful_completion(args.phase, args.finding, RUN_START_TIME):
+                msg = f"Phase {args.phase} hit iteration limit (completed {step_finish_count} loops), but all required artifacts were successfully generated. Forgiving mid-turn cutoff."
+                if HAVE_RICH:
+                    console.print(Text(msg, style="bold green"))
+                else:
+                    print(C.ok(msg))
+                finish_warning = None
+                last_finish_reason = "graceful_forgiveness"
+            else:
+                returncode = 2
+
+        # -----------------------------------------------------
+        # Auto-Resume Logic
+        # -----------------------------------------------------
+        
+        last_session_id = stream_session_id
+        if not last_session_id:
+            try:
+                db_query = subprocess.run(
+                    ["opencode", "db", "SELECT id FROM session ORDER BY time_updated DESC LIMIT 1", "--format", "tsv"],
+                    capture_output=True, text=True, timeout=1.0
+                )
+                if db_query.returncode == 0 and db_query.stdout.strip():
+                    last_session_id = db_query.stdout.strip().splitlines()[-1].strip()
+            except Exception:
+                pass
+
+        # Frontmatter Resume
+        if returncode == 0:
+            validation_result = subprocess.run(
+                [sys.executable, "tools/check-frontmatter.py"],
+                cwd=ROOT,
+                capture_output=True,
+                text=True
+            )
+            if validation_result.returncode != 0:
+                max_frontmatter_retries = 2
+                if frontmatter_retry_count < max_frontmatter_retries:
+                    frontmatter_retry_count += 1
+                    msg = f"\n[Auto-Correction] Frontmatter errors detected. Resuming session to fix (retry {frontmatter_retry_count}/{max_frontmatter_retries})..."
+                    if HAVE_RICH:
+                        console.print(Text(msg, style="bold yellow"))
+                    else:
+                        print(C.warn(msg))
+                        
+                    if last_session_id and last_session_id != "id":
+                        prompt = (
+                            "Validation failed with the following errors:\n"
+                            f"{validation_result.stderr or validation_result.stdout}\n"
+                            "Please fix the YAML/frontmatter errors."
+                        )
+                        command = ["opencode", "run", "--session", last_session_id, "--format", "json", prompt]
+                        if HAVE_RICH:
+                            console.print(Text(f"Resuming session {last_session_id}...", style="dim"))
+                        continue # loop back and retry
+                    else:
+                        if HAVE_RICH:
+                            console.print(Text("Could not determine session ID to resume.", style="red"))
+                        else:
+                            print(C.fail("Could not determine session ID to resume."))
+                else:
+                    msg = f"\n[Warning] Frontmatter errors persist after {max_frontmatter_retries} auto-retries."
+                    if HAVE_RICH:
+                        console.print(Text(msg, style="bold red"))
+                    else:
+                        print(C.fail(msg))
+                    print(validation_result.stderr or validation_result.stdout)
+            
+            # If no frontmatter errors or we ran out of retries, we are done
+            break
+
+        # Iteration Limit Resume
+        if returncode == 2 and last_finish_reason in _FINISH_MID_TURN:
+            max_iteration_retries = int(os.environ.get("CODECOME_MAX_ITERATION_RETRIES", "1"))
+            if iteration_retry_count < max_iteration_retries:
+                iteration_retry_count += 1
+                msg = f"\n[Auto-Resume] Agent hit iteration limit ({step_finish_count} loops). Resuming session to allow it to finish... (retry {iteration_retry_count}/{max_iteration_retries})"
                 if HAVE_RICH:
                     console.print(Text(msg, style="bold yellow"))
                 else:
                     print(C.warn(msg))
-                    
-                # We need the session_id to resume. Use the late discovery fallback if available.
-                # Since we didn't track session_id explicitly in the stream reader, we'll try to find it
-                # from the opencode DB via discovery, or we could have captured it earlier.
-                # Actually, we can get it from _discover_opencode_default_model but that returns a model.
-                # Let's run a quick opencode db query to get the last session ID.
-                try:
-                    db_query = subprocess.run(
-                        ["opencode", "db", "SELECT id FROM session ORDER BY time_updated DESC LIMIT 1", "--format", "tsv"],
-                        capture_output=True, text=True, timeout=1.0
+                
+                if last_session_id and last_session_id != "id":
+                    prompt = (
+                        "You were interrupted by the system's iteration limit. "
+                        "Please continue your previous plan and finish the task."
                     )
-                    if db_query.returncode == 0 and db_query.stdout.strip():
-                        last_session_id = db_query.stdout.strip().splitlines()[-1].strip()
-                        if last_session_id and last_session_id != "id":
-                            # Resume the session!
-                            resume_env = os.environ.copy()
-                            resume_env["CODECOME_FRONTMATTER_RETRIES"] = str(retry_count + 1)
-                            
-                            error_prompt = (
-                                "Validation failed with the following errors:\n"
-                                f"{validation_result.stderr or validation_result.stdout}\n"
-                                "Please fix the YAML/frontmatter errors."
-                            )
-                            
-                            resume_command = ["opencode", "run", "--session", last_session_id, "--format", "json", error_prompt]
-                            
-                            if HAVE_RICH:
-                                console.print(Text(f"Resuming session {last_session_id}...", style="dim"))
-                                
-                            resume_process = subprocess.run(
-                                resume_command,
-                                cwd=ROOT,
-                                env=resume_env,
-                            )
-                            return resume_process.returncode
-                except Exception as e:
+                    command = ["opencode", "run", "--session", last_session_id, "--format", "json", prompt]
                     if HAVE_RICH:
-                        console.print(Text(f"Failed to auto-resume: {e}", style="red"))
-                    else:
-                        print(C.fail(f"Failed to auto-resume: {e}"))
-            else:
-                msg = f"\n[Warning] Frontmatter errors persist after {max_retries} auto-retries."
-                if HAVE_RICH:
-                    console.print(Text(msg, style="bold red"))
+                        console.print(Text(f"Resuming session {last_session_id}...", style="dim"))
+                    continue # loop back and retry
                 else:
-                    print(C.fail(msg))
-                print(validation_result.stderr or validation_result.stdout)
-
-    # Decide whether the LLM stream ended cleanly. Even when opencode
-    # itself exits 0, a non-clean finish reason (e.g. content-filter,
-    # length, error) means the model's response was cut short and the
-    # phase did not complete its intended work. Treat that as a failure
-    # so callers (Make, exploit-all, CI) can react instead of being
-    # told "Phase N completed successfully" on a half-finished run.
-    finish_warning: Optional[str] = None
-    if returncode == 0:
-        if not any_step_finish_seen:
-            finish_warning = (
-                "no step_finish events were observed in the JSON stream; "
-                "the agent likely produced no work"
-            )
-        elif last_finish_reason is None:
-            finish_warning = "step_finish observed but reason was missing"
-        elif last_finish_reason in _FINISH_FAILURE:
-            finish_warning = (
-                f"LLM stream ended with finish reason '{last_finish_reason}' "
-                "(provider truncated the response; the phase did not finish)"
-            )
-        elif last_finish_reason in _FINISH_MID_TURN:
-            if last_permission_error:
-                finish_warning = (
-                    f"{last_permission_error}; the run stopped mid-turn "
-                    f"(finish reason '{last_finish_reason}')"
-                )
-            else:
-                finish_warning = (
-                    f"LLM stream ended after a mid-turn step (reason "
-                    f"'{last_finish_reason}') without a terminal 'stop'; the "
-                    "agent likely ran out of iterations or was cut short by "
-                    "the provider before producing a final response"
-                )
-        elif last_finish_reason not in _FINISH_TERMINAL_OK:
-            finish_warning = (
-                f"LLM stream ended with unrecognised finish reason "
-                f"'{last_finish_reason}'; treating as incomplete"
-            )
-
-    if finish_warning is not None and returncode == 0:
-        # Promote to an error so the make target / exploit-all loop fails.
-        returncode = 2
+                    if HAVE_RICH:
+                        console.print(Text("Could not determine session ID to resume.", style="red"))
+                    else:
+                        print(C.fail("Could not determine session ID to resume."))
+                        
+            # If we run out of iteration retries, we break out
+            break
+            
+        # Any other return code (e.g. failure, interrupt), we break
+        break
 
     if returncode == 0:
         if HAVE_RICH:
@@ -4381,7 +4461,6 @@ def main() -> int:
             )
 
     return returncode
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

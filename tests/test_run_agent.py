@@ -1643,64 +1643,282 @@ def test_load_prompt_relative_extra_file(prompt_env, monkeypatch):
 
 
 @pytest.mark.component
-def test_auto_correction_resume_does_not_raise_nameerror(monkeypatch, tmp_path):
+def test_auto_correction_resume_loops_back_via_popen(monkeypatch, tmp_path):
+    """Frontmatter errors trigger a second Popen loop; on the second run the
+    check passes and main exits 0.  The session ID must come from the event
+    stream, not from subprocess.run (the DB fallback)."""
+    import io, json
+
     module = load_tool_module("run_agent_autocorrect", "tools/run-agent.py")
-    
-    import io
-    class MockPopen:
-        def __init__(self, *args, **kwargs):
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+
+    # Build a minimal JSON event stream that conveys a clean stop
+    def _make_stream(session_id: str) -> io.StringIO:
+        events = [
+            {"sessionID": session_id, "type": "step_finish",
+             "part": {"reason": "stop", "tokens": {}}},
+        ]
+        return io.StringIO("".join(json.dumps(e) + "\n" for e in events))
+
+    popen_calls: list[list] = []
+
+    class FakePopen:
+        def __init__(self, cmd, *args, **kwargs):
+            popen_calls.append(list(cmd))
             self.returncode = 0
-            self.pid = 1234
+            self.pid = 9999
             self.stdin = io.StringIO()
-            # Simulate a clean step finish so it doesn't fail on finish_warning
-            self.stdout = io.StringIO('{"type": "step_finish", "part": {"reason": "stop"}}\n')
+            self.stdout = _make_stream("ses_test_abc")
         def poll(self):
             return 0
         def wait(self):
-            return 0
-        
-    class MockRunResult:
-        def __init__(self, returncode, stdout="", stderr=""):
-            self.returncode = returncode
-            self.stdout = stdout
-            self.stderr = stderr
+            return None
 
-    run_args_captured = []
+    monkeypatch.setattr(module.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(module.os, "killpg", lambda *a: None)
 
-    def mock_run(args, *a, **kw):
-        run_args_captured.append(args)
-        # Handle version check
-        if "--version" in args:
-            return MockRunResult(0, stdout="opencode 1.15.0\n", stderr="")
-        # Handle check-frontmatter
-        if len(args) > 1 and "check-frontmatter.py" in args[1]:
-            return MockRunResult(1, stdout="", stderr="frontmatter error")
-        # Handle opencode db
-        if "db" in args and "SELECT id FROM session" in args[2]:
-            return MockRunResult(0, stdout="id\nresume_session_id\n", stderr="")
-        # Handle opencode run
-        if "run" in args and "--session" in args:
-            return MockRunResult(0, stdout="", stderr="")
-        return MockRunResult(0, stdout="", stderr="")
-        
-    monkeypatch.setattr(module.subprocess, "Popen", MockPopen)
-    monkeypatch.setattr(module.subprocess, "run", mock_run)
-    
-    # Needs a real prompt file
-    prompt_file = tmp_path / "prompt.md"
-    prompt_file.write_text("Hello", encoding="utf-8")
-    
+    # subprocess.run: frontmatter fails on first check, passes on second
+    frontmatter_call_count = [0]
+
+    class FakeResult:
+        def __init__(self, rc, out="", err=""):
+            self.returncode, self.stdout, self.stderr = rc, out, err
+
+    def fake_run(cmd, *args, **kwargs):
+        if "--version" in cmd:
+            return FakeResult(0, out="opencode 1.15.0\n")
+        if any("check-frontmatter" in str(c) for c in cmd):
+            frontmatter_call_count[0] += 1
+            if frontmatter_call_count[0] == 1:
+                return FakeResult(1, err="bad frontmatter")
+            return FakeResult(0)
+        return FakeResult(0)
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    prompt_file = tmp_path / "phase.md"
+    prompt_file.write_text("run recon", encoding="utf-8")
     monkeypatch.setattr(module.sys, "argv", [
-        "run-agent.py", "--phase", "4", "--label", "test", "--agent", "recon", "--prompt-file", str(prompt_file)
+        "run-agent.py", "--phase", "1", "--label", "test",
+        "--agent", "recon", "--prompt-file", str(prompt_file),
     ])
-    
-    # Run main, it should return 0 (simulated resume success)
-    # The crucial part is it shouldn't raise NameError
-    ret = module.main()
-    assert ret == 0
-    
-    # Verify the resume command was actually constructed and called
-    resume_calls = [args for args in run_args_captured if "run" in args and "--session" in args]
-    assert len(resume_calls) == 1
-    assert "--format" in resume_calls[0]
-    assert "json" in resume_calls[0]
+
+    rc = module.main()
+    assert rc == 0
+
+    # The while loop should have called Popen twice: initial run + frontmatter resume
+    assert len(popen_calls) == 2, f"expected 2 Popen calls, got {len(popen_calls)}"
+    resume_cmd = popen_calls[1]
+    assert "--session" in resume_cmd
+    assert "ses_test_abc" in resume_cmd
+    assert "--format" in resume_cmd
+    assert "json" in resume_cmd
+
+
+@pytest.mark.component
+def test_iteration_limit_triggers_auto_resume(monkeypatch, tmp_path):
+    """When the stream ends with a mid-turn finish reason (tool-calls) and
+    graceful forgiveness does not apply, run-agent resumes once then exits."""
+    import io, json
+
+    module = load_tool_module("run_agent_iter_resume", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setenv("CODECOME_MAX_ITERATION_RETRIES", "1")
+
+    def _make_stream(session_id: str, reason: str) -> io.StringIO:
+        events = [
+            {"sessionID": session_id, "type": "step_finish",
+             "part": {"reason": reason, "tokens": {}}},
+        ]
+        return io.StringIO("".join(json.dumps(e) + "\n" for e in events))
+
+    popen_calls: list[list] = []
+
+    class FakePopen:
+        def __init__(self, cmd, *args, **kwargs):
+            popen_calls.append(list(cmd))
+            self.returncode = 0
+            self.pid = 9999
+            self.stdin = io.StringIO()
+            # Always return tool-calls (iteration limit hit) so we test the
+            # retry path; after the retry the retry counter is exhausted and
+            # we exit with code 2.
+            self.stdout = _make_stream("ses_iter_xyz", "tool-calls")
+        def poll(self):
+            return 0
+        def wait(self):
+            return None
+
+    monkeypatch.setattr(module.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(module.os, "killpg", lambda *a: None)
+
+    class FakeResult:
+        def __init__(self, rc, out="", err=""):
+            self.returncode, self.stdout, self.stderr = rc, out, err
+
+    def fake_run(cmd, *args, **kwargs):
+        if "--version" in cmd:
+            return FakeResult(0, out="opencode 1.15.0\n")
+        return FakeResult(0)
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    prompt_file = tmp_path / "phase.md"
+    prompt_file.write_text("run recon for FINDING_PATH_OR_ID", encoding="utf-8")
+    monkeypatch.setattr(module.sys, "argv", [
+        "run-agent.py", "--phase", "4", "--label", "test",
+        "--agent", "recon", "--prompt-file", str(prompt_file),
+        "--finding", "CC-9999",
+    ])
+
+    rc = module.main()
+
+    # After 1 retry (2 total Popen calls) the retry budget is exhausted → exit 2
+    assert len(popen_calls) == 2, f"expected 2 Popen calls, got {len(popen_calls)}"
+    assert rc == 2
+
+    resume_cmd = popen_calls[1]
+    assert "--session" in resume_cmd
+    assert "ses_iter_xyz" in resume_cmd
+
+
+# ---------------------------------------------------------------------------
+# check_phase_graceful_completion – mtime-aware artifact detection
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+def test_check_phase_graceful_completion_mtime(monkeypatch, tmp_path):
+    """Graceful completion is only True when the artifact was written during
+    the current run (st_mtime >= run_start_time)."""
+    import os
+
+    module = load_tool_module("run_agent_graceful_mtime", "tools/run-agent.py")
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+
+    start = 1_000_000.0
+    old   = start - 1.0
+    fresh = start + 1.0
+
+    # ---- Phase 1 ----
+    notes = tmp_path / "itemdb" / "notes"
+    notes.mkdir(parents=True)
+    profile = notes / "target-profile.md"
+    surface = notes / "attack-surface.md"
+
+    # missing files
+    assert module.check_phase_graceful_completion("1", None, start) is False
+
+    profile.write_text("x"); surface.write_text("x")
+    os.utime(profile, (old, old)); os.utime(surface, (old, old))
+    assert module.check_phase_graceful_completion("1", None, start) is False
+
+    os.utime(profile, (fresh, fresh))
+    assert module.check_phase_graceful_completion("1", None, start) is True
+
+    # ---- Phase 2 ----
+    pending = tmp_path / "itemdb" / "findings" / "PENDING"
+    pending.mkdir(parents=True)
+    f2 = pending / "CC-0001.md"; f2.write_text("x")
+    os.utime(f2, (old, old))
+    assert module.check_phase_graceful_completion("2", None, start) is False
+    os.utime(f2, (fresh, fresh))
+    assert module.check_phase_graceful_completion("2", None, start) is True
+
+    # ---- Phase 3: touches any finding in any status dir ----
+    confirmed = tmp_path / "itemdb" / "findings" / "CONFIRMED"
+    confirmed.mkdir(parents=True)
+    f3 = confirmed / "CC-0002.md"; f3.write_text("x")
+    os.utime(f3, (old, old))
+    # Phase 2 file is still fresh but phase 3 should check all dirs
+    assert module.check_phase_graceful_completion("3", None, start) is True
+    # Make the phase 2 file old too
+    os.utime(f2, (old, old))
+    assert module.check_phase_graceful_completion("3", None, start) is False
+    os.utime(f3, (fresh, fresh))
+    assert module.check_phase_graceful_completion("3", None, start) is True
+
+    # ---- Phase 5 fallback: not-feasible updates the CONFIRMED finding ----
+    conf5 = confirmed / "CC-0005.md"; conf5.write_text("x")
+    os.utime(conf5, (old, old))
+    assert module.check_phase_graceful_completion("5", "CC-0005", start) is False
+    os.utime(conf5, (fresh, fresh))
+    assert module.check_phase_graceful_completion("5", "CC-0005", start) is True
+
+    # ---- Phase 5 exploit artifacts ----
+    exploits = tmp_path / "itemdb" / "evidence" / "CC-0005" / "exploits"
+    exploits.mkdir(parents=True)
+    xf = exploits / "exploit.py"; xf.write_text("x")
+    os.utime(xf, (fresh, fresh))
+    assert module.check_phase_graceful_completion("5", "CC-0005", start) is True
+
+    # ---- Phase 6 ----
+    reports = tmp_path / "itemdb" / "reports"
+    reports.mkdir(parents=True)
+    rpt = reports / "report.md"; rpt.write_text("x")
+    os.utime(rpt, (old, old))
+    assert module.check_phase_graceful_completion("6", None, start) is False
+    os.utime(rpt, (fresh, fresh))
+    assert module.check_phase_graceful_completion("6", None, start) is True
+
+
+@pytest.mark.unit
+def test_stream_session_id_and_step_finish_count(monkeypatch, tmp_path):
+    """Verify that the main loop captures sessionID from the first event and
+    counts step_finish events accurately."""
+    import io, json
+
+    module = load_tool_module("run_agent_stream_tracking", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+
+    SESSION = "ses_stream_test_001"
+
+    events = [
+        {"sessionID": SESSION, "type": "step_start",  "part": {}},
+        {"sessionID": SESSION, "type": "step_finish", "part": {"reason": "tool-calls", "tokens": {}}},
+        {"sessionID": SESSION, "type": "step_start",  "part": {}},
+        {"sessionID": SESSION, "type": "step_finish", "part": {"reason": "tool-calls", "tokens": {}}},
+        {"sessionID": SESSION, "type": "step_start",  "part": {}},
+        {"sessionID": SESSION, "type": "step_finish", "part": {"reason": "stop", "tokens": {}}},
+    ]
+    stream = io.StringIO("".join(json.dumps(e) + "\n" for e in events))
+
+    popen_calls: list[list] = []
+
+    class FakePopen:
+        def __init__(self, cmd, *args, **kwargs):
+            popen_calls.append(list(cmd))
+            self.returncode = 0
+            self.pid = 1234
+            self.stdin = io.StringIO()
+            self.stdout = stream
+        def poll(self): return 0
+        def wait(self): return None
+
+    monkeypatch.setattr(module.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(module.os, "killpg", lambda *a: None)
+
+    class FakeResult:
+        def __init__(self, rc, out="", err=""):
+            self.returncode, self.stdout, self.stderr = rc, out, err
+
+    def fake_run(cmd, *args, **kwargs):
+        if "--version" in cmd:
+            return FakeResult(0, out="opencode 1.15.0\n")
+        if any("check-frontmatter" in str(c) for c in cmd):
+            return FakeResult(0)
+        return FakeResult(0)
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    prompt_file = tmp_path / "phase.md"
+    prompt_file.write_text("run recon", encoding="utf-8")
+    monkeypatch.setattr(module.sys, "argv", [
+        "run-agent.py", "--phase", "1", "--label", "test",
+        "--agent", "recon", "--prompt-file", str(prompt_file),
+    ])
+
+    rc = module.main()
+    assert rc == 0
+
+    # The session terminated with 'stop', no frontmatter errors → single Popen call
+    assert len(popen_calls) == 1
