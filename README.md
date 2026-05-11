@@ -63,7 +63,11 @@ CodeCome uses a phased workflow:
     ├── README.md
     ├── AGENTS.md
     ├── codecome.yml
+    ├── .env.example
+    ├── .project/
     ├── src/
+    ├── tests/
+    ├── tmp/
     ├── sandbox/
     ├── itemdb/
     ├── runs/
@@ -245,6 +249,8 @@ coding agent.
 
        make validate-all             # Validate all PENDING findings
        make exploit-all              # Exploit all CONFIRMED findings
+       make list-risk-files          # List top-scoring risky files from index
+       make sweep                    # Run deep sweep on top-scoring files
 
 Each `make` target checks readiness gates before invoking the corresponding agent. Phase 4 and Phase 5 are invoked once per finding.
 
@@ -268,6 +274,7 @@ Available prompts:
     prompts/phase-4-validate.md
     prompts/phase-5-exploit.md
     prompts/phase-6-report.md
+    prompts/sweep.md
 
 ## Running the workflow
 
@@ -291,6 +298,7 @@ Bootstrap CLI:
     make sandbox-inspect ID=python
     make sandbox-bootstrap ID=python
     make sandbox-validate
+    make sandbox-regenerate
     make sandbox-status
 
 Sandbox runtime helpers (one make target per canonical capability):
@@ -313,6 +321,48 @@ See `docs/sandbox.md` for the full bootstrap workflow.
     make phase-2
 
 Creates candidate findings under `itemdb/findings/PENDING/`. Phase 2 is gated by the sandbox: it blocks if `sandbox/` is missing or if the most recent validation failed. Override with `CODECOME_ALLOW_NO_SANDBOX=1`.
+
+#### Deep Sweep (optional)
+
+A Deep Sweep runs the `auditor` agent once per file, forcing exhaustive line-by-line analysis and full source-to-sink context resolution for each target. It complements the broad Phase 2 pass rather than replacing it.
+
+**When to use it**
+
+- Phase 1 identified many score-4 or score-5 files and you want to ensure none are skipped.
+- Phase 2 produced few findings on a large or complex codebase.
+- A specific subsystem, library, or component deserves focused attention.
+- A confirmed finding leads you to re-examine closely related files.
+
+**Cost vs. benefit**
+
+| | |
+|---|---|
+| **Pro** | Exhaustive per-file analysis — catches issues that macro Phase 2 misses by fitting the full file into a single focused context window |
+| **Pro** | Smaller, file-scoped context lets the model concentrate without cross-component noise |
+| **Pro** | Glob targeting (`FILE="src/**/*.cs"`) lets you surgically focus on one subsystem |
+| **Con** | Token cost scales linearly with the number of files swept — one full agent session per file |
+| **Con** | Sequential execution — can be slow on targets with many high-risk files |
+| **Con** | Produces overlapping findings that require Phase 3 deduplication |
+
+Rule of thumb: a sweep on 10 high-risk files costs roughly as many tokens as 10 Phase 2 runs. Preview first with `--dry-run` to see how many files would be selected before committing.
+
+**How it works**
+
+The sweep runner reads `itemdb/notes/file-risk-index.yml` (written by Phase 1), selects all files at score 4 or above (or the files matched by `FILE=`), writes one prompt per file under `tmp/file-sweep-prompts/`, then invokes the `auditor` agent once per file in sequence.
+
+**Usage**
+
+    make list-risk-files                     # preview which files would be swept
+    python tools/run-sweep.py --dry-run      # show selected files and prompts, no agent calls
+    make sweep                               # sweep all files at score 4+
+    make sweep FILE="src/path/to/file.ext"   # sweep a specific file
+    make sweep FILE="src/**/*.cs"            # sweep all .cs files under src/
+
+**Relationship with Phase 2 and Phase 3**
+
+Normal Phase 2 (`make phase-2`) remains the default broad pass and should always be run first. Deep sweeps are optional follow-ups that trade token budget for depth. Because they run per-file, they can produce findings that overlap with Phase 2 output. Phase 3 (Counter-analysis) handles this: it deduplicates on semantic frontmatter fields — `sources`, `sinks`, `entry_points`, `trust_boundary`, `target_area` — rather than on titles or file paths, so overlaps are merged gracefully.
+
+See `docs/file-risk-sweeps.md` for the full reference on the file risk index format and score criteria.
 
 ### Phase 3: counter-analysis
 
@@ -366,6 +416,8 @@ The phase targets support these environment variables:
     CODECOME_SANDBOX_RENDER=0  # disable the structured Sandbox panel (fall back to a plain Bash panel)
     CODECOME_SANDBOX_VALIDATE_STDERR_LINES=20  # cap stderr_tail lines shown per failed validate tier
     CODECOME_SANDBOX_FILES_CAP=15  # cap files listed in sandbox apply/inspect/detect panels
+    CODECOME_BOOTSTRAP_MAX_RETRIES=3  # agent remediation budget during sandbox bootstrap (default: 3)
+    CODECOME_BOOTSTRAP_DRY_RUN=1  # force --dry-run on sandbox apply/regenerate
     CODECOME_BASH_SHIM_RENDER=0  # disable rtk/cat/head/tail/rg/ls/find/tree -> Read/Grep/Glob routing
     CODECOME_BASH_SHIM_LS_STRIP_LONG_FORMAT=0  # keep `ls -la` columns instead of stripping to filenames
     OPENCODE_ARGS='...'      # extra flags forwarded to opencode run
@@ -413,6 +465,15 @@ Direct manual `opencode run` usage remains unchanged. The styled wrapper is only
 Show available commands:
 
     make help
+
+List top-scoring risky files from index:
+
+    make list-risk-files
+
+Run deep sweep on specific file(s) or top-scoring files:
+
+    make sweep
+    make sweep FILE="src/foo.*"
 
 Validate workspace:
 
