@@ -43,6 +43,12 @@ help:
 	@printf "    $(BOLD)make validate-all$(RESET)             Validate all PENDING findings\n"
 	@printf "    $(BOLD)make exploit-all$(RESET)              Exploit all CONFIRMED findings\n"
 	@printf "\n"
+	@printf "  $(BOLD)$(CYAN)Deep Sweep (Optional):$(RESET)\n"
+	@printf "\n"
+	@printf "    $(BOLD)make list-risk-files$(RESET)          List top-scoring risky files from index\n"
+	@printf "    $(BOLD)make sweep$(RESET)                   Run deep sweep on top-scoring files\n"
+	@printf "    $(BOLD)make sweep FILE=\"src/foo.*\"$(RESET)  Run deep sweep on specific file(s)\n"
+	@printf "\n"
 	@printf "  $(BOLD)$(CYAN)Wrapper controls:$(RESET)\n"
 	@printf "\n"
 	@printf "    $(BOLD)CODECOME_USE_WRAPPER=0$(RESET)       Bypass styled wrapper and use raw opencode run\n"
@@ -175,6 +181,16 @@ phase-6: venv-check
 		opencode run --agent reporter "$$(cat prompts/phase-6-report.md)"; \
 	else \
 		$(PYTHON) tools/run-agent.py --phase 6 --label "Reporting" --agent reporter --prompt-file prompts/phase-6-report.md; \
+	fi
+
+list-risk-files: venv-check
+	@$(PYTHON) tools/list-risk-files.py
+
+sweep: venv-check
+	@if [ -n "$(FILE)" ]; then \
+		$(PYTHON) tools/run-sweep.py --file "$(FILE)"; \
+	else \
+		$(PYTHON) tools/run-sweep.py; \
 	fi
 
 validate-all: venv-check

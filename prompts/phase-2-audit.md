@@ -21,7 +21,7 @@ Examples:
 - `.opencode/skills/c-cpp-security/SKILL.md`
 - `.opencode/skills/juliet-benchmark/SKILL.md`
 
-## Target
+## Target & Scope
 
 Analyze the source tree under:
 
@@ -31,7 +31,9 @@ Use Phase 1 reconnaissance notes under:
 
     itemdb/notes/
 
-If `itemdb/notes/file-risk-index.yml` exists, use it to prioritize review order. Start with score 5 files, then score 4 files, unless another Phase 1 note gives a stronger reason to inspect a different area first.
+If `itemdb/notes/file-risk-index.yml` exists, use it to guide your attention to high-risk areas. **CRITICAL RULE:** In this global Phase 2 pass, focus on **macro-level vulnerabilities**: cross-component trust boundaries, architectural flaws, project-wide logic, and broad attack surfaces. 
+
+Do NOT perform exhaustive line-by-line deep dives of individual files. Leave deep, line-by-line vulnerability hunting for the optional `make sweep` tool. Your goal here is to establish the broad, high-impact hypotheses that span the architecture.
 
 ## Goal
 
@@ -163,15 +165,14 @@ Avoid duplicate root causes.
 
 Create separate findings only when the affected component, exploit path, impact, or remediation differs.
 
-## Optional file-scoped sweeps
+## Optional Deep Sweeps
 
-This global Phase 2 can be complemented with the file-scoped sweep mode:
+This global Phase 2 can be complemented with the optional deep-dive sweep mode:
 
-    ./tools/list-risk-files.py --min-score 4
-    ./tools/run-file-sweep.py --min-score 4 --limit 5
-    ./tools/run-file-sweep.py --file src/path/to/high-risk-file.ext
+    make sweep
+    make sweep FILE=src/path/to/high-risk-file.ext
 
-The sweep mode uses `prompts/phase-2-file.md` and is intentionally sequential by default so the operator can observe the model's reasoning and stop between files.
+This mode is intentionally sequential by default so the operator can observe the model's reasoning and stop between files. Mention this tool in your final summary if there are high-risk files you skipped over during this global pass.
 
 ## Benchmark targets
 
@@ -191,8 +192,8 @@ At the end, summarize:
 
 - number of findings created,
 - ids and titles,
-- highest-risk files reviewed,
-- high-risk files left for optional sweep,
+- highest-risk areas reviewed,
+- high-risk files left for optional deep sweeps,
 - most important assumptions,
 - recommended next phase,
 - files created or modified.

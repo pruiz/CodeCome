@@ -1,8 +1,8 @@
-# CodeCome Phase 2: File-Scoped Vulnerability Hypothesis Generation
+# CodeCome Optional Deep-Dive Sweep
 
-You are performing an optional CodeCome Phase 2 file-by-file sweep.
+You are performing an optional CodeCome deep-dive sweep on a specific file.
 
-This mode is intentionally narrower than the normal global Phase 2. It is used to inspect one high-risk file from `itemdb/notes/file-risk-index.yml` while still allowing the agent to read immediate dependencies needed to understand reachability and data flow.
+This mode is intentionally narrower than the normal global Phase 2. It is used to inspect high-risk files from `itemdb/notes/file-risk-index.yml` with intense focus, while still allowing you to read immediate dependencies needed to understand reachability and data flow.
 
 ## Required reading
 
@@ -30,9 +30,9 @@ Analyze this target file:
 Primary focus:
 
 - the target file,
-- functions/classes/routes/types defined in the target file,
-- immediate callers and callees needed to establish source-to-sink reasoning,
-- configuration, routes, templates, schemas, tests, or docs needed to prove reachability.
+- functions/classes/routes/types defined in the target file.
+
+**CRITICAL RULE:** You MUST read imported dependencies, models, configuration, or routing files to establish complete context and prove source-to-sink reachability. Do not analyze the target file in isolation if it relies on external logic or if you cannot determine if the input is actually attacker-controlled.
 
 Avoid drifting into a full-project audit. If you find a promising adjacent file, mention it in the final response as a recommended follow-up sweep instead of expanding the current run indefinitely.
 

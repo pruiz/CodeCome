@@ -3,21 +3,23 @@
 # SPDX-License-Identifier: GPL-3.0-or-later OR AGPL-3.0-or-later
 
 """
-Run optional file-scoped Phase 2 sweeps from itemdb/notes/file-risk-index.yml.
+Run optional deep-dive sweeps on specific files or from itemdb/notes/file-risk-index.yml.
 
 The runner is intentionally sequential by default so the operator can observe
 what the model is doing and interrupt or steer future runs.
 
 Examples:
 
-    ./tools/run-file-sweep.py --file src/app/controllers/upload.php
-    ./tools/run-file-sweep.py --min-score 4 --limit 5
-    ./tools/run-file-sweep.py --min-score 5 --dry-run
+    ./tools/run-sweep.py --file src/app/controllers/upload.php
+    ./tools/run-sweep.py --file "src/**/*.cs"
+    ./tools/run-sweep.py --min-score 4 --limit 5
+    ./tools/run-sweep.py --min-score 5 --dry-run
 """
 
 from __future__ import annotations
 
 import argparse
+import glob
 import os
 import re
 import subprocess
@@ -36,7 +38,7 @@ import _colors as C
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INDEX = ROOT / "itemdb" / "notes" / "file-risk-index.yml"
-PROMPT_TEMPLATE = ROOT / "prompts" / "phase-2-file.md"
+PROMPT_TEMPLATE = ROOT / "prompts" / "sweep.md"
 TMP_DIR = ROOT / "tmp" / "file-sweep-prompts"
 
 
@@ -83,14 +85,29 @@ def select_from_index(index_path: Path, min_score: int, limit: int | None) -> li
     return [str(entry["path"]) for entry in selected]
 
 
-def normalize_file_arg(file_path: str) -> str:
-    path = Path(file_path)
-    if path.is_absolute():
-        try:
-            return str(path.relative_to(ROOT))
-        except ValueError as exc:
-            raise ValueError(f"target file must be inside the workspace: {file_path}") from exc
-    return str(path)
+def expand_file_args(file_args: list[str]) -> list[str]:
+    resolved_paths = []
+    for arg in file_args:
+        # Handle wildcards if any
+        matches = glob.glob(arg, root_dir=str(ROOT), recursive=True) if "*" in arg else [arg]
+        if not matches:
+            raise FileNotFoundError(f"No files matched: {arg}")
+        
+        for match in matches:
+            path = Path(ROOT) / match
+            if not path.is_file():
+                continue
+                
+            try:
+                resolved_paths.append(str(path.relative_to(ROOT)))
+            except ValueError as exc:
+                raise ValueError(f"Target file must be inside the workspace: {path}") from exc
+                
+    if not resolved_paths:
+        raise FileNotFoundError(f"No valid files found for the given arguments: {file_args}")
+        
+    # Remove duplicates but preserve order
+    return list(dict.fromkeys(resolved_paths))
 
 
 def slugify(path: str) -> str:
@@ -108,7 +125,7 @@ def build_prompt_for_file(file_path: str) -> Path:
 
     TMP_DIR.mkdir(parents=True, exist_ok=True)
     prompt = template.replace(placeholder, file_path)
-    prompt_path = TMP_DIR / f"phase-2-file-{slugify(file_path)}.md"
+    prompt_path = TMP_DIR / f"sweep-{slugify(file_path)}.md"
     prompt_path.write_text(prompt, encoding="utf-8")
     return prompt_path
 
@@ -120,7 +137,7 @@ def run_gate_checks() -> None:
 
 def run_one_file(file_path: str, dry_run: bool) -> int:
     prompt_path = build_prompt_for_file(file_path)
-    print(C.header(f"File-scoped Phase 2: {file_path}"))
+    print(C.header(f"Deep Sweep: {file_path}"))
     print(f"Prompt: {prompt_path.relative_to(ROOT)}")
 
     if dry_run:
@@ -136,7 +153,7 @@ def run_one_file(file_path: str, dry_run: bool) -> int:
             "--phase",
             "2",
             "--label",
-            f"File-scoped Hypothesis Generation: {file_path}",
+            f"Deep Sweep: {file_path}",
             "--agent",
             "auditor",
             "--prompt-file",
@@ -148,13 +165,13 @@ def run_one_file(file_path: str, dry_run: bool) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run sequential CodeCome file-scoped Phase 2 sweeps")
-    parser.add_argument("--file", action="append", default=[], help="Specific file to sweep. May be repeated.")
+    parser = argparse.ArgumentParser(description="Run sequential CodeCome file-scoped sweeps")
+    parser.add_argument("--file", action="append", default=[], help="Specific file or glob to sweep. May be repeated.")
     parser.add_argument("--index", default=str(DEFAULT_INDEX), help="Path to file-risk-index.yml")
     parser.add_argument("--min-score", type=int, default=4, help="Minimum risk score when selecting from the index")
     parser.add_argument("--limit", type=int, default=None, help="Maximum number of indexed files to sweep")
     parser.add_argument("--dry-run", action="store_true", help="Print selected files and generated prompts without running OpenCode")
-    parser.add_argument("--skip-gates", action="store_true", help="Skip Phase 2 readiness and sandbox gates")
+    parser.add_argument("--skip-gates", action="store_true", help="Skip readiness and sandbox gates")
     args = parser.parse_args()
 
     index_path = Path(args.index)
@@ -163,7 +180,7 @@ def main() -> int:
 
     try:
         if args.file:
-            files = [normalize_file_arg(path) for path in args.file]
+            files = expand_file_args(args.file)
         else:
             files = select_from_index(index_path, args.min_score, args.limit)
     except Exception as exc:  # noqa: BLE001
