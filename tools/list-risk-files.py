@@ -92,11 +92,18 @@ def render_table(entries: list[dict[str, Any]]) -> None:
         score = entry["score"]
         confidence = entry.get("confidence", "")
         area = entry.get("target_area", "")
-        print(f"{C.SYM_BULLET} score={score} confidence={confidence} area={area}")
-        print(f"  {path}")
+        score_color = C.BOLD_RED if score >= 8 else (C.RED if score >= 6 else (C.YELLOW if score >= 4 else C.CYAN))
+        score_str = C.colorize(str(score), score_color)
+        conf_str = C.confidence_color(confidence) if confidence else C.colorize("none", C.DIM)
+        area_str = C.colorize(area, C.MAGENTA) if area else C.colorize("none", C.DIM)
+        
+        bullet = C.colorize(C.SYM_BULLET, C.CYAN)
+        print(f"{bullet} {C.colorize('score=', C.DIM)}{score_str} {C.colorize('confidence=', C.DIM)}{conf_str} {C.colorize('area=', C.DIM)}{area_str}")
+        print(f"  {C.colorize(path, C.BOLD)}")
+        
         reasons = format_reasons(entry)
         if reasons:
-            print(f"  reasons: {reasons}")
+            print(f"  {C.colorize('reasons:', C.DIM)} {reasons}")
 
 
 def main() -> int:
