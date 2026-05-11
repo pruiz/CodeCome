@@ -47,6 +47,8 @@ Also reference when writing run summaries:
 
 Create concrete vulnerability hypotheses.
 
+**Important Pathing Rule**: Your absolute workspace root is in your `<env>` block (`Workspace root folder`). Always prepend this to relative paths when using tools like `read`, `write`, or `edit`. Do NOT guess or hallucinate the root directory name.
+
 Each finding must be:
 
 - specific,

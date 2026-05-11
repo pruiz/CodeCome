@@ -32,6 +32,8 @@ Produce Markdown reports under:
 
     itemdb/reports/
 
+**Important Pathing Rule**: Your absolute workspace root is in your `<env>` block (`Workspace root folder`). Always prepend this to relative paths when using tools like `read`, `write`, or `edit`. Do NOT guess or hallucinate the root directory name.
+
 For the initial PoC, the default report is:
 
     itemdb/reports/report.md

@@ -43,6 +43,8 @@ For the assigned finding, determine whether it is:
 - `REJECTED`,
 - or still `PENDING`.
 
+**Important Pathing Rule**: Your absolute workspace root is in your `<env>` block (`Workspace root folder`). Always prepend this to relative paths when using tools like `read`, `write`, or `edit`. Do NOT guess or hallucinate the root directory name.
+
 Validation must produce durable evidence under:
 
     itemdb/evidence/<finding-id>/
