@@ -4206,6 +4206,72 @@ def main() -> int:
     if interrupted and returncode == 0:
         returncode = 130
 
+    # Auto-resume loop for frontmatter errors
+    if returncode == 0:
+        validation_result = subprocess.run(
+            [sys.executable, "tools/check-frontmatter.py"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True
+        )
+        if validation_result.returncode != 0:
+            retry_count = int(os.environ.get("CODECOME_FRONTMATTER_RETRIES", "0"))
+            max_retries = 2
+            
+            if retry_count < max_retries:
+                msg = f"\n[Auto-Correction] Frontmatter errors detected. Resuming session to fix (retry {retry_count + 1}/{max_retries})..."
+                if HAVE_RICH:
+                    console.print(Text(msg, style="bold yellow"))
+                else:
+                    print(C.warn(msg))
+                    
+                # We need the session_id to resume. Use the late discovery fallback if available.
+                # Since we didn't track session_id explicitly in the stream reader, we'll try to find it
+                # from the opencode DB via discovery, or we could have captured it earlier.
+                # Actually, we can get it from _discover_opencode_default_model but that returns a model.
+                # Let's run a quick opencode db query to get the last session ID.
+                try:
+                    db_query = subprocess.run(
+                        ["opencode", "db", "SELECT id FROM session ORDER BY time_updated DESC LIMIT 1", "--format", "tsv"],
+                        capture_output=True, text=True, timeout=1.0
+                    )
+                    if db_query.returncode == 0 and db_query.stdout.strip():
+                        last_session_id = db_query.stdout.strip().splitlines()[-1].strip()
+                        if last_session_id and last_session_id != "id":
+                            # Resume the session!
+                            resume_env = os.environ.copy()
+                            resume_env["CODECOME_FRONTMATTER_RETRIES"] = str(retry_count + 1)
+                            
+                            error_prompt = (
+                                "Validation failed with the following errors:\n"
+                                f"{validation_result.stderr or validation_result.stdout}\n"
+                                "Please fix the YAML/frontmatter errors."
+                            )
+                            
+                            resume_command = ["opencode", "run", "--session", last_session_id] + format_args + [error_prompt]
+                            
+                            if HAVE_RICH:
+                                console.print(Text(f"Resuming session {last_session_id}...", style="dim"))
+                                
+                            resume_process = subprocess.run(
+                                resume_command,
+                                cwd=ROOT,
+                                env=resume_env,
+                            )
+                            return resume_process.returncode
+                except Exception as e:
+                    if HAVE_RICH:
+                        console.print(Text(f"Failed to auto-resume: {e}", style="red"))
+                    else:
+                        print(C.fail(f"Failed to auto-resume: {e}"))
+            else:
+                msg = f"\n[Warning] Frontmatter errors persist after {max_retries} auto-retries."
+                if HAVE_RICH:
+                    console.print(Text(msg, style="bold red"))
+                else:
+                    print(C.fail(msg))
+                print(validation_result.stderr or validation_result.stdout)
+
     # Decide whether the LLM stream ended cleanly. Even when opencode
     # itself exits 0, a non-clean finish reason (e.g. content-filter,
     # length, error) means the model's response was cut short and the
