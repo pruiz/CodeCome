@@ -21,7 +21,7 @@ Examples:
 - `.opencode/skills/c-cpp-security/SKILL.md`
 - `.opencode/skills/juliet-benchmark/SKILL.md`
 
-## Target
+## Target & Scope
 
 Analyze the source tree under:
 
@@ -30,6 +30,10 @@ Analyze the source tree under:
 Use Phase 1 reconnaissance notes under:
 
     itemdb/notes/
+
+If `itemdb/notes/file-risk-index.yml` exists, use it to guide your attention to high-risk areas. **CRITICAL RULE:** In this global Phase 2 pass, focus on **macro-level vulnerabilities**: cross-component trust boundaries, architectural flaws, project-wide logic, and broad attack surfaces. 
+
+Do NOT perform exhaustive line-by-line deep dives of individual files. Leave deep, line-by-line vulnerability hunting for the optional `make sweep` tool. Your goal here is to establish the broad, high-impact hypotheses that span the architecture.
 
 ## Goal
 
@@ -73,6 +77,22 @@ Each finding must include:
 - validation plan,
 - counter-analysis placeholder,
 - evidence placeholder.
+
+## Semantic metadata
+
+Populate existing frontmatter fields as precisely as possible:
+
+- `files`
+- `symbols`
+- `entry_points`
+- `sources`
+- `sinks`
+- `trust_boundary`
+- `assets_at_risk`
+- `category`
+- `target_area`
+
+These fields are used by Phase 3 for semantic deduplication. Two findings are likely duplicates when they share the same root cause, source, sink, affected security property, and validation path, even if they were discovered from different files.
 
 ## Quality bar
 
@@ -145,6 +165,15 @@ Avoid duplicate root causes.
 
 Create separate findings only when the affected component, exploit path, impact, or remediation differs.
 
+## Optional Deep Sweeps
+
+This global Phase 2 can be complemented with the optional deep-dive sweep mode:
+
+    make sweep
+    make sweep FILE=src/path/to/high-risk-file.ext
+
+This mode is intentionally sequential by default so the operator can observe the model's reasoning and stop between files. Mention this tool in your final summary if there are high-risk files you skipped over during this global pass.
+
 ## Benchmark targets
 
 If the target is a benchmark corpus:
@@ -163,6 +192,8 @@ At the end, summarize:
 
 - number of findings created,
 - ids and titles,
+- highest-risk areas reviewed,
+- high-risk files left for optional deep sweeps,
 - most important assumptions,
 - recommended next phase,
 - files created or modified.

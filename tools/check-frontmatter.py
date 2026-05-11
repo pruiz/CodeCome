@@ -260,6 +260,43 @@ def validate_finding(path: Path) -> List[str]:
     return errors
 
 
+def validate_file_risk_index() -> List[str]:
+    errors: List[str] = []
+    index_path = ROOT / "itemdb" / "notes" / "file-risk-index.yml"
+    
+    if not index_path.exists():
+        return errors # It is perfectly fine if the index hasn't been generated yet
+        
+    try:
+        content = index_path.read_text(encoding="utf-8")
+        data = yaml.safe_load(content) or {}
+    except Exception as exc:
+        return [f"file-risk-index.yml is invalid YAML: {exc}"]
+        
+    if not isinstance(data, dict):
+        return ["file-risk-index.yml must contain a YAML object at the root"]
+        
+    files = data.get("files")
+    if files is not None:
+        if not isinstance(files, list):
+            errors.append("file-risk-index.yml 'files' property must be a list")
+        else:
+            for i, entry in enumerate(files):
+                if not isinstance(entry, dict):
+                    errors.append(f"file-risk-index.yml files[{i}] must be an object")
+                    continue
+                path = entry.get("path")
+                if not path or not isinstance(path, str):
+                    errors.append(f"file-risk-index.yml files[{i}] missing string 'path' field")
+                
+                try:
+                    int(entry.get("score", 0))
+                except (ValueError, TypeError):
+                    errors.append(f"file-risk-index.yml files[{i}] 'score' must be an integer")
+    
+    return errors
+
+
 def iter_finding_files() -> List[Path]:
     return sorted(FINDINGS_ROOT.rglob("CC-*.md"))
 
@@ -267,11 +304,23 @@ def iter_finding_files() -> List[Path]:
 def main() -> int:
     paths = iter_finding_files()
 
-    if not paths:
-        print(C.info("No findings to validate."))
-        return 0
-
     total_errors = 0
+
+    index_errors = validate_file_risk_index()
+    if index_errors:
+        total_errors += len(index_errors)
+        print(C.fail("itemdb/notes/file-risk-index.yml"))
+        for error in index_errors:
+            print(f"  {C.SYM_BULLET} {error}")
+    else:
+        index_path = ROOT / "itemdb" / "notes" / "file-risk-index.yml"
+        if index_path.exists():
+            print(C.ok("itemdb/notes/file-risk-index.yml"))
+
+    if not paths:
+        if not index_path.exists():
+            print(C.info("No findings or index to validate."))
+        return 0 if total_errors == 0 else 1
 
     for path in paths:
         errors = validate_finding(path)

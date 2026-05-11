@@ -23,6 +23,20 @@ audit:
     - exploit_development
     - reporting
 
+  semantic_deduplication:
+    enabled: true
+    phase: "counter_analysis"
+    compare_fields:
+      - "category"
+      - "target_area"
+      - "files"
+      - "symbols"
+      - "entry_points"
+      - "sources"
+      - "sinks"
+      - "trust_boundary"
+      - "assets_at_risk"
+
   # Per-phase extra instructions appended to the phase prompt.
   # These are persistent and always applied when the phase runs.
   # See also: PROMPT_EXTRA and PROMPT_EXTRA_FILE env vars for ad-hoc use.
@@ -177,11 +191,3 @@ agents:
   # reporter:
   #   model: "anthropic/claude-opus-4-7"
 
-future:
-  parallel_validation:
-    enabled: false
-    intended_model:
-      - "One validation worker per finding."
-      - "Each worker must have isolated runtime state."
-      - "Each worker writes only to its finding evidence directory and run directory."
-      - "Docker Compose project names or disposable VMs may be used for isolation."
