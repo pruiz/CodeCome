@@ -275,3 +275,5 @@ At the end, summarize:
 - halt requirements if Phase 1 is blocked,
 - optional follow-up scope controls users may pass via `PROMPT_EXTRA` or
   `PROMPT_EXTRA_FILE`.
+
+Run `make frontmatter` to ensure the generated file risk index has valid YAML and fix any reported errors before finishing.
