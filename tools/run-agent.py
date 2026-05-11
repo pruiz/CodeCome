@@ -4248,7 +4248,7 @@ def main() -> int:
                                 "Please fix the YAML/frontmatter errors."
                             )
                             
-                            resume_command = ["opencode", "run", "--session", last_session_id] + format_args + [error_prompt]
+                            resume_command = ["opencode", "run", "--session", last_session_id, "--format", "json", error_prompt]
                             
                             if HAVE_RICH:
                                 console.print(Text(f"Resuming session {last_session_id}...", style="dim"))

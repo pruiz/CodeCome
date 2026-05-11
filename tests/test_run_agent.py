@@ -1640,3 +1640,67 @@ def test_load_prompt_relative_extra_file(prompt_env, monkeypatch):
     monkeypatch.setenv("PROMPT_EXTRA_FILE", "notes/extra.md")
     result = module.load_prompt(prompt_file, None, phase="1")
     assert "Relative file content." in result
+
+
+@pytest.mark.component
+def test_auto_correction_resume_does_not_raise_nameerror(monkeypatch, tmp_path):
+    module = load_tool_module("run_agent_autocorrect", "tools/run-agent.py")
+    
+    import io
+    class MockPopen:
+        def __init__(self, *args, **kwargs):
+            self.returncode = 0
+            self.pid = 1234
+            self.stdin = io.StringIO()
+            # Simulate a clean step finish so it doesn't fail on finish_warning
+            self.stdout = io.StringIO('{"type": "step_finish", "part": {"reason": "stop"}}\n')
+        def poll(self):
+            return 0
+        def wait(self):
+            return 0
+        
+    class MockRunResult:
+        def __init__(self, returncode, stdout="", stderr=""):
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    run_args_captured = []
+
+    def mock_run(args, *a, **kw):
+        run_args_captured.append(args)
+        # Handle version check
+        if "--version" in args:
+            return MockRunResult(0, stdout="opencode 1.15.0\n", stderr="")
+        # Handle check-frontmatter
+        if len(args) > 1 and "check-frontmatter.py" in args[1]:
+            return MockRunResult(1, stdout="", stderr="frontmatter error")
+        # Handle opencode db
+        if "db" in args and "SELECT id FROM session" in args[2]:
+            return MockRunResult(0, stdout="id\nresume_session_id\n", stderr="")
+        # Handle opencode run
+        if "run" in args and "--session" in args:
+            return MockRunResult(0, stdout="", stderr="")
+        return MockRunResult(0, stdout="", stderr="")
+        
+    monkeypatch.setattr(module.subprocess, "Popen", MockPopen)
+    monkeypatch.setattr(module.subprocess, "run", mock_run)
+    
+    # Needs a real prompt file
+    prompt_file = tmp_path / "prompt.md"
+    prompt_file.write_text("Hello", encoding="utf-8")
+    
+    monkeypatch.setattr(module.sys, "argv", [
+        "run-agent.py", "--phase", "4", "--label", "test", "--agent", "recon", "--prompt-file", str(prompt_file)
+    ])
+    
+    # Run main, it should return 0 (simulated resume success)
+    # The crucial part is it shouldn't raise NameError
+    ret = module.main()
+    assert ret == 0
+    
+    # Verify the resume command was actually constructed and called
+    resume_calls = [args for args in run_args_captured if "run" in args and "--session" in args]
+    assert len(resume_calls) == 1
+    assert "--format" in resume_calls[0]
+    assert "json" in resume_calls[0]
