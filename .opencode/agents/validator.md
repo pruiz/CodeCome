@@ -86,6 +86,8 @@ Do not use real production credentials.
 
 Do not send exploit traffic to third-party systems.
 
+Do not use the absolute path `/tmp/` in any command, script, or tool. Always use the workspace-relative `tmp/` directory.
+
 ## Validation methods
 
 Choose the strongest practical method.

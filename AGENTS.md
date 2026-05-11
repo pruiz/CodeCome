@@ -44,6 +44,7 @@ Important security claims must be written to files under `itemdb/`, not left onl
 10. Use precise file paths, function names, symbols, routes, commands, or configuration keys whenever possible.
 11. If a target-specific skill applies, use it, but keep the core workflow target-agnostic.
 12. Do not rely only on filenames, comments, benchmark labels, or directory names to claim a vulnerability.
+13. NEVER use the absolute path `/tmp/` for any temporary files, downloads, or operations. The sandbox will reject `/tmp/`. Always use the workspace-relative `tmp/` directory.
 
 ## Local quality gate (no CI)
 

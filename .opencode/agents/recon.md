@@ -116,6 +116,7 @@ and the halt protocol.
 10. Identify how later validators can prove or disprove findings.
 11. Do not load vulnerability-family-specific skills such as `sql-injection` during reconnaissance unless needed only to improve attack-surface terminology. Do not let any target-specific skill narrow the target model before broad mapping is complete.
 12. Do not ask the user to choose Phase 2 scope during reconnaissance when a reasonable default can be inferred. Pick the primary target from repository evidence, document secondary surfaces as optional follow-up, and continue.
+13. NEVER use the absolute path `/tmp/` for any files, downloads, or tool arguments. Always use workspace-relative `tmp/`.
 
 ## Target profile
 
