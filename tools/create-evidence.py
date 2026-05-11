@@ -80,9 +80,19 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
-    readme_path = create_evidence(args.finding_id, args.force)
-    print(C.ok(str(readme_path.relative_to(ROOT))))
-    return 0
+    try:
+        readme_path = create_evidence(args.finding_id, args.force)
+        print(C.ok(str(readme_path.relative_to(ROOT))))
+        return 0
+    except ValueError as exc:
+        print(f"{C.fail(str(exc))}")
+        return 1
+    except FileNotFoundError as exc:
+        print(f"{C.fail(str(exc))}")
+        return 1
+    except FileExistsError as exc:
+        print(f"{C.fail(str(exc))}")
+        return 1
 
 
 if __name__ == "__main__":

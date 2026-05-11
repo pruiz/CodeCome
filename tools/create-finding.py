@@ -181,10 +181,20 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
-    output_path = create_finding(args)
-    relative_path = output_path.relative_to(ROOT)
-    print(C.ok(str(relative_path)))
-    return 0
+    try:
+        output_path = create_finding(args)
+        relative_path = output_path.relative_to(ROOT)
+        print(C.ok(str(relative_path)))
+        return 0
+    except ValueError as exc:
+        print(f"{C.fail(str(exc))}")
+        return 1
+    except FileNotFoundError as exc:
+        print(f"{C.fail(str(exc))}")
+        return 1
+    except FileExistsError as exc:
+        print(f"{C.fail(str(exc))}")
+        return 1
 
 
 if __name__ == "__main__":

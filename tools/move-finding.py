@@ -161,12 +161,25 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
-    path = find_finding(args.finding)
-    old_status = path.parent.name
-    target_path = move_finding(path, args.status)
+    try:
+        path = find_finding(args.finding)
+        old_status = path.parent.name
+        target_path = move_finding(path, args.status)
 
-    print(f"{C.ok(str(target_path.relative_to(ROOT)))} {C.transition(old_status, args.status)}")
-    return 0
+        print(f"{C.ok(str(target_path.relative_to(ROOT)))} {C.transition(old_status, args.status)}")
+        return 0
+    except FileNotFoundError as exc:
+        print(f"{C.fail(str(exc))}")
+        return 1
+    except RuntimeError as exc:
+        print(f"{C.fail(str(exc))}")
+        return 1
+    except ValueError as exc:
+        print(f"{C.fail(str(exc))}")
+        return 1
+    except FileExistsError as exc:
+        print(f"{C.fail(str(exc))}")
+        return 1
 
 
 if __name__ == "__main__":

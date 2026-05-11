@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import argparse
+
 from conftest import load_tool_module
 
 
@@ -45,3 +47,56 @@ def test_create_evidence_requires_existing_finding(tmp_path):
         raise AssertionError("Expected FileNotFoundError")
     except FileNotFoundError as exc:
         assert "Finding not found" in str(exc)
+
+
+def test_move_finding_not_found_shows_friendly_error(tmp_path, capsys, monkeypatch):
+    module = load_tool_module("move_finding", "tools/move-finding.py")
+    module.ROOT = tmp_path
+    module.FINDINGS_ROOT = tmp_path / "itemdb" / "findings"
+
+    monkeypatch.setattr("sys.argv", ["move-finding.py", "CC-9999", "PENDING"])
+
+    def mock_find_finding(identifier):
+        raise FileNotFoundError(f"Finding not found: {identifier}")
+
+    monkeypatch.setattr(module, "find_finding", mock_find_finding)
+
+    result = module.main()
+    assert result == 1
+    captured = capsys.readouterr()
+    assert "Finding not found: CC-9999" in captured.out
+
+
+def test_create_finding_invalid_id_shows_friendly_error(tmp_path, capsys, monkeypatch):
+    module = load_tool_module("create_finding", "tools/create-finding.py")
+    module.ROOT = tmp_path
+    module.FINDINGS_ROOT = tmp_path / "itemdb" / "findings"
+    module.TEMPLATE_PATH = tmp_path / "templates" / "finding.md"
+
+    module.TEMPLATE_PATH.parent.mkdir(parents=True)
+    module.TEMPLATE_PATH.write_text("---\nid: CC-0000\ntitle: Test\nstatus: PENDING\n---\n", encoding="utf-8")
+
+    monkeypatch.setattr("sys.argv", ["create-finding.py", "Test Title", "--id", "INVALID"])
+
+    result = module.main()
+    assert result == 1
+    captured = capsys.readouterr()
+    assert "Invalid finding id format" in captured.out
+
+
+def test_create_evidence_invalid_id_shows_friendly_error(tmp_path, capsys, monkeypatch):
+    module = load_tool_module("create_evidence", "tools/create-evidence.py")
+    module.ROOT = tmp_path
+    module.FINDINGS_ROOT = tmp_path / "itemdb" / "findings"
+    module.EVIDENCE_ROOT = tmp_path / "itemdb" / "evidence"
+    module.TEMPLATE_PATH = tmp_path / "templates" / "evidence-readme.md"
+
+    module.TEMPLATE_PATH.parent.mkdir(parents=True)
+    module.TEMPLATE_PATH.write_text("# Evidence\n", encoding="utf-8")
+
+    monkeypatch.setattr("sys.argv", ["create-evidence.py", "INVALID"])
+
+    result = module.main()
+    assert result == 1
+    captured = capsys.readouterr()
+    assert "Invalid finding id" in captured.out
