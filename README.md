@@ -180,7 +180,7 @@ CodeCome is the harness I wish I'd had the first time I tried to use an agent fo
 
 ## What a finding looks like
 
-Here is what one of those Markdown files actually looks like — trimmed from a real CC-0022 audit (SQL injection in Zabbix's `user.get` JSON-RPC API):
+Here is what one of those Markdown files actually looks like — trimmed from a example CC-0022 audit (SQL injection in Apps's `user.get` JSON-RPC API):
 
 ```markdown
 ---
@@ -195,7 +195,7 @@ cwe:
 language: "php"
 target_area: "JSON-RPC API user.get method"
 files:
-  - "src/zabbix-6.4.1/ui/include/classes/api/services/CUser.php"
+  - "src/app-1.4.1/ui/include/classes/api/services/CUser.php"
 symbols:
   - "CUser::addRelatedObjects()"
 sources:
