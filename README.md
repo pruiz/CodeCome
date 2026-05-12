@@ -46,7 +46,7 @@ CodeCome runs on top of [OpenCode](https://opencode.ai), an open-source AI codin
 
 `make check` will warn about missing optional tools, but the core workflow runs fine without them.
 
-Before pointing CodeCome at code you don't fully trust, read [Safety considerations](#safety-considerations--disclaimer).
+Before pointing CodeCome at code you don't fully trust, read [Safety considerations](#safety-considerations).
 
 ## Quick start
 
