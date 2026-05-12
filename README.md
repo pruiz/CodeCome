@@ -2,296 +2,245 @@
 
 <img src="CodeCome.png" alt="CodeCome Logo" width="300">
 
-> The harness for building your own Mythos of vulnerability research at home!
+> The harness for building your own Mythos of vulnerability research at home.
 
-CodeCome is an (open source) Agentic vulnerability research harness, or AI-assisted vulnerability research workspace.
+[![License: GPL-3.0-or-later OR AGPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later%20OR%20AGPL--3.0--or--later-blue.svg)](#license)
+[![Status: early PoC](https://img.shields.io/badge/status-early%20PoC-orange.svg)](#project-status)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](#prerequisites)
+[![Built on OpenCode](https://img.shields.io/badge/built%20on-OpenCode-7b3fe4.svg)](https://opencode.ai)
 
-It is designed to help language-model agents inspect source code, identify security-relevant attack surfaces, produce structured vulnerability hypotheses, validate those hypotheses inside an isolated execution environment, demonstrate real-world impact through exploit development, and produce reviewable Markdown reports.
+## What is CodeCome?
 
-CodeCome is not intended to be a traditional static analyzer, vulnerability scanner, or web pentest tool. Its core purpose is to provide a repeatable research workflow where every potential issue becomes a reviewable artifact.
+CodeCome is the harness I built to let an AI agent help me audit source code without losing the trail.
 
-## Goals
+It turns "I think there might be a bug here" into a structured Markdown finding, validates it inside a sandbox, escalates the ones that matter into working proof-of-concept exploits, and produces a report you can read, grep, and commit. It is not a scanner and not a pentest tool. Think of it as a **research methodology made executable**: the same six phases, the same artifact shapes, the same evidence rules — every time, for every target.
 
-- Provide a reusable workspace for source code security research.
-- Support different target types: web applications, services, CLI tools, libraries, benchmark corpora, infrastructure code, and mixed repositories.
-- Keep the workflow simple enough to run with `make phase-1` through `make phase-6`.
-- Store findings as Markdown files that can be reviewed by humans.
-- Separate hypothesis generation from validation.
-- Demonstrate real-world impact of confirmed vulnerabilities through exploit development.
-- Support future parallel validation workers without requiring that complexity in the initial PoC.
-- Keep the first PoC file-based: no database, no RAG, no external ticketing system.
+The whole audit lives on disk as plain Markdown and YAML. No database, no RAG, no ticketing system, nothing magical. If you can read a directory, you can review a CodeCome audit.
 
-## Non-goals
+## Screenshots
 
-- CodeCome is not a fully automated vulnerability scanner.
-- CodeCome does not guarantee complete coverage.
-- CodeCome does not replace manual security review.
-- CodeCome does not modify the target source code unless explicitly instructed.
-- CodeCome does not require a specific programming language, framework, or application type.
+Screenshots of the styled wrapper output, finding panels, and sandbox bootstrap will live here.
 
-## Core workflow
+<!-- TODO: replace with real assets once docs/images/ is populated -->
+<!-- ![CodeCome styled wrapper output](docs/images/wrapper-screenshot.png) -->
+<!-- ![Phase 4 validation panel](docs/images/phase-4-validation.png) -->
 
-CodeCome uses a phased workflow:
+A recorded run is also planned:
 
-1. **Target reconnaissance**
+<!-- TODO: replace with real asciinema cast -->
+<!-- [![asciicast](https://asciinema.org/a/PLACEHOLDER.svg)](https://asciinema.org/a/PLACEHOLDER) -->
 
-   The agent inspects the source tree and infers the target type, languages, frameworks, build model, execution model, attack surfaces, trust boundaries, assets, dangerous sinks, and likely vulnerability classes.
+## Quick start
 
-2. **Hypothesis generation**
+What CodeCome needs from you is simple: **drop a source tree under `src/`**, tell it the project name in `codecome.yml`, and run the phases.
 
-   The agent creates precise vulnerability hypotheses as Markdown findings under `itemdb/findings/PENDING/`.
+A few things to know up front about `src/`:
 
-3. **Counter-analysis**
+- It can be a copied source tree, a git submodule, a checked-out repo, an extracted archive, or a benchmark corpus. CodeCome doesn't care which.
+- The harness **will try to build, test, and run the target inside the sandbox**. That's the point — validation happens against a real build. Phase 1b bootstraps a Docker-based sandbox suited to your stack (Python, C/C++, .NET, PHP, etc.).
+- If your project has unusual build steps, vendored directories, or generated code, you'll want to adjust `audit.scope` (include/exclude globs) and `audit.focus` (vulnerability classes to prioritize) in `codecome.yml`. The defaults work for most projects, but five minutes spent here pays off.
+- You don't have to do everything at once. Run Phase 1, look at the recon notes, tweak `codecome.yml`, then keep going. Phases are designed to be re-runnable.
 
-   A review pass attempts to disprove, weaken, deduplicate, or reject candidate findings.
+When you're ready:
 
-4. **Validation**
+    make venv                       # set up the local Python virtualenv
+    make check                      # sanity-check the workspace
+    make phase-1                    # recon + sandbox bootstrap
+    make phase-2                    # generate candidate findings
+    make phase-3                    # counter-analysis (dedup / reject)
+    make phase-4 FINDING=CC-0001    # validate one finding
+    make phase-5 FINDING=CC-0001    # build a PoC for a confirmed finding
+    make phase-6                    # generate the report
 
-   A validator agent uses the sandboxed environment under `sandbox/` to prove or disprove individual findings. Validation may involve building the target, running tests, writing small PoCs, exercising APIs, triggering CLI inputs, using sanitizers, inspecting logs, or producing a static proof.
+There are convenience targets too — `make validate-all`, `make exploit-all`, `make sweep` — but you almost never want to use them on a fresh project. Walk one finding through end-to-end first; you'll learn more from one CC-0001 than from twenty PENDING ones.
 
-5. **Exploit development**
+## What a finding looks like
 
-   For selected confirmed findings, an exploiter agent develops proof-of-concept exploits that demonstrate real-world impact. This phase answers the question developers always ask: "So what? What can an attacker actually do with this?" The agent escalates from validation evidence (e.g., a crash) to concrete impact (e.g., code execution, data exfiltration, privilege escalation) and may adjust severity based on demonstrated impact.
+Every finding is a single Markdown file with YAML frontmatter. Here is a trimmed example from a real audit (CC-0022, an SQL injection in Zabbix's `user.get` JSON-RPC API):
 
-6. **Reporting**
+```markdown
+---
+id: "CC-0022"
+title: "SQL injection via unvalidated selectRole option in user.get JSON-RPC API"
+status: "EXPLOITED"
+severity: "CRITICAL"
+confidence: "CONFIRMED"
+category: "SQL Injection"
+cwe:
+  - "CWE-89"
+language: "php"
+target_area: "JSON-RPC API user.get method"
+files:
+  - "src/zabbix-6.4.1/ui/include/classes/api/services/CUser.php"
+symbols:
+  - "CUser::addRelatedObjects()"
+sources:
+  - "JSON-RPC options['selectRole'] parameter"
+sinks:
+  - "DBselect() at CUser.php:2243-2248"
+trust_boundary: "authenticated API user -> raw SQL SELECT clause"
+validation:
+  status: "CONFIRMED"
+  methods: ["http_exploit", "runtime_reproduction"]
+  evidence_dir: "itemdb/evidence/CC-0022"
+exploitation:
+  status: "DEMONSTRATED"
+  severity_before: "HIGH"
+  severity_after: "CRITICAL"
+  artifacts_dir: "itemdb/evidence/CC-0022/exploits"
+---
 
-   Findings are summarized into Markdown reports with technical detail, demonstrated impact narratives, and evidence references. Exploited findings (with proven impact) are highlighted above confirmed findings.
+# Summary
+
+The `user.get` JSON-RPC API accepts a `selectRole` array whose elements are
+concatenated into a SQL SELECT clause via `implode(',r.', ...)` without any
+allowlist check. Authenticated users at the lowest privilege level can inject
+arbitrary SQL fragments and extract data from the database.
+
+# Affected code
+
+`CUser::addRelatedObjects()` at `CUser.php:2238-2248` builds raw SQL from
+`$options['selectRole']` after `zbx_array_merge()` skipped input validation.
+
+# Counter-analysis
+
+- `CApiInputValidator` is not used on this code path. Verified by reading
+  `CUser::get()` at line 91.
+- `dbConditionInt()` only sanitises `$userIds`, not the SELECT clause.
+- No framework-level escaping of column lists in `DBselect()`.
+
+# Validation plan
+
+Send a `user.get` JSON-RPC request as a low-privilege user with
+`selectRole: ["roleid,(SELECT version())"]` and observe the version string
+returned inline. Evidence under `itemdb/evidence/CC-0022/`.
+```
+
+That single file is the entire interface between the model and you: a hypothesis with enough detail to either disprove it, validate it, or hand it to a developer.
+
+## How it works
+
+Six phases. Each one is a `make` target. Each one writes to disk.
+
+1. **Recon (`make phase-1`)** — agent reads `src/`, infers the target type, languages, build model, attack surface, and writes notes under `itemdb/notes/`. Also bootstraps a Docker sandbox suited to the stack.
+2. **Hypothesis (`make phase-2`)** — agent writes candidate findings under `itemdb/findings/PENDING/`. Each one points at specific code, sources, sinks, and a trust boundary.
+3. **Counter-analysis (`make phase-3`)** — a reviewer pass tries to disprove or deduplicate findings. Weak ones move to `REJECTED/`, repeats to `DUPLICATE/`.
+4. **Validation (`make phase-4 FINDING=CC-XXXX`)** — one finding at a time, in the sandbox. Build the target, write a small PoC, capture evidence, decide CONFIRMED or REJECTED.
+5. **Exploit (`make phase-5 FINDING=CC-XXXX`)** — for confirmed findings worth escalating, build a real PoC that shows concrete impact: code execution, data exfiltration, privilege escalation. Severity gets adjusted based on what you actually demonstrate.
+6. **Reporting (`make phase-6`)** — generate a Markdown report grouping exploited and confirmed findings with evidence references.
+
+The finding lifecycle:
+
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING
+    PENDING --> CONFIRMED : evidence captured
+    PENDING --> REJECTED : disproved
+    PENDING --> DUPLICATE : already filed
+    CONFIRMED --> EXPLOITED : impact demonstrated
+    CONFIRMED --> [*] : not feasible to exploit
+    EXPLOITED --> [*]
+    REJECTED --> [*]
+    DUPLICATE --> [*]
+```
+
+Phases 1–3 are batch operations. Phases 4 and 5 are run **per finding** — that's intentional. One finding at a time keeps evidence traceable and lets you mix model choices, prompt overrides, and rerun loops without polluting the audit.
+
+## Who is this for?
+
+- **Solo security researchers** who want LLM help on source-code audits but refuse to trust an opaque chat session.
+- **Blue and red teamers** doing internal source-code review and looking for a workflow that produces commit-friendly artifacts.
+- **People studying LLM-assisted security work** — the workspace is intentionally simple enough to instrument, fork, or compare across models.
+
+If you want a one-click vulnerability scanner, this is not it. CodeCome is for people who want **the model to help them think**, not to replace the thinking.
+
+## Why I built it
+
+After watching too many chat sessions produce confident-sounding "potential SQL injection" claims with zero evidence, I wanted a workflow where:
+
+- every claim is a file on disk,
+- every file points at specific lines of code,
+- every finding either has evidence or gets rejected,
+- and the whole thing is reviewable by a human in an afternoon.
+
+CodeCome is the harness I wish I'd had the first time I tried to use an agent for vulnerability research.
+
+## Prerequisites
+
+CodeCome runs on top of [OpenCode](https://opencode.ai), an open-source AI coding agent.
+
+1. **Install OpenCode** — follow the [installation guide](https://opencode.ai/docs/#install).
+2. **Configure a provider** — connect at least one LLM provider with an API key. See [provider setup](https://opencode.ai/docs/#configure).
+3. **Python 3.10+** — needed for workspace tooling (`make venv` creates a local virtualenv).
+4. **GNU Make** — drives the workflow.
+5. **Docker** — required for the sandboxed validation environment.
+6. **Optional: exploit recording tools** — for Phase 5 visual evidence:
+   - `asciinema` — terminal recordings.
+   - `agg` — renders `.cast` files to GIFs (CodeCome falls back to a Docker container if missing).
+   - `ffmpeg` and `xvfb` (or `xvfb-run`) — for GUI/browser exploits.
+
+`make check` will warn about missing optional tools, but the core workflow runs fine without them.
 
 ## Workspace layout
 
     .
-    ├── README.md
-    ├── AGENTS.md
-    ├── codecome.yml
-    ├── .env.example
-    ├── .project/
-    ├── src/
-    ├── tests/
-    ├── tmp/
-    ├── sandbox/
-    ├── itemdb/
-    ├── runs/
-    ├── templates/
-    ├── tools/
-    ├── prompts/
-    ├── docs/
-    └── .opencode/
+    ├── README.md                # you are here
+    ├── AGENTS.md                # rules the agents follow
+    ├── codecome.yml             # project + audit configuration
+    ├── src/                     # target source code
+    ├── sandbox/                 # Docker-based validation environment
+    ├── itemdb/                  # findings, evidence, notes, reports
+    ├── runs/                    # run summaries and transcripts
+    ├── templates/               # finding, evidence, report templates
+    ├── tools/                   # Python helper scripts
+    ├── prompts/                 # reusable phase prompts
+    ├── docs/                    # deeper documentation
+    └── .opencode/               # agents and skills
 
-### `src/`
+`itemdb/` is the heart of an audit. Everything important lives there:
 
-Target source code to audit.
+- `itemdb/notes/` — reconnaissance notes (target profile, attack surface, build model, trust boundaries, …)
+- `itemdb/findings/PENDING|CONFIRMED|EXPLOITED|REJECTED|DUPLICATE/` — findings by status.
+- `itemdb/evidence/<finding-id>/` — validation evidence and PoCs.
+- `itemdb/reports/` — generated reports.
 
-This may be:
+Agents live under `.opencode/agents/`:
 
-- a copied source tree,
-- a git submodule,
-- a checked-out repository,
-- a benchmark corpus,
-- or a generated/extracted source package.
+- `recon` — Phase 1
+- `auditor` — Phase 2
+- `reviewer` — Phase 3
+- `validator` — Phase 4
+- `exploiter` — Phase 5
+- `reporter` — Phase 6
 
-### `sandbox/`
+### `codecome.yml` at a glance
 
-Sandboxed execution environment for validation and exploit development.
+The shipped defaults work out of the box. The keys you'll most often touch:
 
-For the initial PoC this is expected to be Docker-based. Future versions may support per-finding containers, disposable VMs, or remote sandboxes.
-
-### `itemdb/`
-
-File-based item database.
-
-This directory contains:
-
-- reconnaissance notes,
-- candidate findings,
-- confirmed findings,
-- exploited findings (with demonstrated impact),
-- rejected findings,
-- evidence and exploitation artifacts,
-- reports,
-- and indexes.
-
-### `runs/`
-
-Execution logs, prompts, transcripts, and summaries from agent runs.
-
-### `templates/`
-
-Markdown templates used by agents and helper tools.
-
-### `tools/`
-
-Python helper scripts for creating, listing, moving, validating, and reporting findings. All tools support colored terminal output (respects `NO_COLOR`).
-
-### `prompts/`
-
-Reusable phase prompts for driving the workflow with OpenCode.
-
-### `.opencode/`
-
-Agent and skill definitions used by OpenCode.
-
-Agents:
-
-- `recon` -- Phase 1: target reconnaissance
-- `auditor` -- Phase 2: vulnerability hypothesis generation
-- `reviewer` -- Phase 3: counter-analysis and deduplication
-- `validator` -- Phase 4: finding validation
-- `exploiter` -- Phase 5: exploit development and impact demonstration
-- `reporter` -- Phase 6: Markdown report generation
-
-### `codecome.yml`
-
-Project configuration for the audit workspace. Key sections:
-
-- **`project`** — project name, source path, language hints. Set `name` to
-  identify your target in output and reports.
-- **`audit.scope`** — include/exclude globs controlling which files agents
-  inspect. Adjust `exclude` if your target has non-standard vendored or
-  generated directories.
-- **`audit.focus`** — vulnerability classes to prioritize during analysis.
-  Remove or add entries to match your target's risk profile.
-- **`audit.extra_prompts`** — optional per-phase extra instructions appended
-  to the phase prompt. Useful for persistent customization (e.g., sandbox
-  preferences, focus areas). For ad-hoc use, see `PROMPT_EXTRA` and
-  `PROMPT_EXTRA_FILE` below.
-- **`agents`** — optional per-agent model and variant pinning (see
-  "Model selection" below).
-- **`environment`** — sandbox paths and scripts. Typically left at defaults
-  unless you use a custom sandbox layout.
-- **`validation`** — confirmation policies, allowed write paths, and
-  validation methods. Defaults are safe for most targets.
-
-The shipped defaults work out of the box. Review and adjust `project.name`,
-`audit.scope`, and `audit.focus` before starting phase-1.
-
-## Finding lifecycle
-
-Findings move through a structured lifecycle:
-
-    PENDING
-        ├── CONFIRMED
-        │       └── EXPLOITED
-        ├── REJECTED
-        └── DUPLICATE
-
-- A finding should only be marked as `CONFIRMED` when there is clear evidence.
-- A finding should only be marked as `EXPLOITED` when a working proof-of-concept demonstrates concrete real-world impact beyond the initial validation.
-- If exploitation is not feasible, the finding stays in `CONFIRMED`.
-
-Valid evidence for confirmation may include:
-
-- runtime reproduction,
-- failing/passing test,
-- sanitizer output,
-- crash reproduction,
-- HTTP/CLI/file-based exploit,
-- log evidence,
-- database evidence,
-- or a strong static proof.
-
-Benchmark labels alone are not enough to mark a finding as confirmed.
-
-## Prerequisites
-
-CodeCome runs on top of [OpenCode](https://opencode.ai), an open-source AI
-coding agent.
-
-1. **Install OpenCode** — follow the
-   [installation guide](https://opencode.ai/docs/#install).
-
-2. **Configure a provider** — connect at least one LLM provider with an API
-   key. See [provider setup](https://opencode.ai/docs/#configure).
-
-3. **Python 3.10+** — needed for workspace tooling (`make venv` creates a
-   local virtualenv).
-
-4. **GNU Make** — used to drive the workflow.
-
-5. **Optional: Exploit recording tools** — Phase 5 (exploit development) can
-   produce visual recordings of confirmed vulnerabilities. To enable this,
-   install:
-   - `asciinema` — primary tool for TTY-driven terminal recordings.
-   - `agg` — renders `.cast` files to embeddable GIFs (if absent, CodeCome
-     will attempt to fall back to a Docker container).
-   - `ffmpeg` & `xvfb` (or `xvfb-run`) — fallbacks for capturing GUI/browser
-     exploits.
-   
-   *Note: `make check` will emit warnings if these tools are missing, but the
-   core CodeCome workflow functions perfectly fine without them.*
-
-## Quick start
-
-1. Place target source under `src/`.
-
-2. Review `codecome.yml` — set `project.name` to your target's name and
-   adjust `audit.scope` or `audit.focus` if needed. The defaults work for
-   most projects.
-
-3. Check workspace:
-
-       make venv
-       make check
-
-   Before committing or pushing changes, run:
-
-       make tests
-
-4. Run the workflow:
-
-       make phase-1                  # Reconnaissance
-       make phase-2                  # Hypothesis generation
-       make phase-3                  # Counter-analysis
-       make phase-4 FINDING=CC-0001  # Validate one finding
-       make phase-5 FINDING=CC-0001  # Develop exploit for one finding
-       make phase-6                  # Generate report
-
-5. Convenience targets:
-
-       make validate-all             # Validate all PENDING findings
-       make exploit-all              # Exploit all CONFIRMED findings
-       make list-risk-files          # List top-scoring risky files from index
-       make sweep                    # Run deep sweep on top-scoring files
-
-Each `make` target checks readiness gates before invoking the corresponding agent. Phase 4 and Phase 5 are invoked once per finding.
-
-By default, phase targets use a CodeCome-owned styled wrapper around `opencode run --format json` so assistant output, tool calls, and tool results render with consistent colors and structure. The wrapper pretty-renders `read`, `write`, `edit`, `apply_patch`, `grep`, `glob`, `bash`, `todowrite`, and `skill` tool calls; all others get a generic JSON panel. The wrapper also detects bash invocations of `tools/sandbox-bootstrap.py --format json …` (and `make sandbox-* BOOTSTRAP_ARGS='--format json'` wrappers) and renders them as a structured Sandbox panel with capability tables, validation tier summaries, and color-coded gate badges. Some models prefer to invoke CLI helpers via the bash tool instead of the OpenCode-native Read/Grep/Glob tools (e.g. `rtk read FILE`, `rtk grep PAT PATH`, `rtk ls`, plain `rg PAT`, `cat FILE`, `head -n N FILE`, `tail -n N FILE`, `find PATH`, `tree`); the wrapper detects those calls and routes their output through the matching styled renderer so the panels look the same regardless of how the agent invoked the operation. Pipelines, redirections and command substitutions are intentionally left for the generic Bash panel.
-
-All `make` targets that invoke Python tools expect a repo-local virtualenv at `.venv/`. If it is missing or stale, the command will stop with a setup message telling you to run `make venv`.
-
-`make tests` runs the Python test suite under `tests/` and validates finding YAML frontmatter via `tools/check-frontmatter.py`. This catches regressions such as malformed finding metadata that can break helper scripts.
-
-## Reusable prompts
-
-CodeCome includes reusable phase prompts under:
-
-    prompts/
-
-Available prompts:
-
-    prompts/phase-1-recon.md
-    prompts/phase-2-audit.md
-    prompts/phase-3-review.md
-    prompts/phase-4-validate.md
-    prompts/phase-5-exploit.md
-    prompts/phase-6-report.md
-    prompts/sweep.md
+- `project.name` — identifies the target in output and reports.
+- `audit.scope` — include/exclude globs for which files agents inspect.
+- `audit.focus` — vulnerability classes to prioritize.
+- `audit.extra_prompts` — persistent per-phase prompt additions.
+- `agents.<name>.model` / `.variant` — pin a specific model per phase (see [Model selection](#model-selection-and-rerunning-phases)).
+- `environment` — sandbox paths and scripts.
+- `validation` — confirmation policies, allowed write paths, validation methods.
 
 ## Running the workflow
 
-The recommended way to run CodeCome is through `make` targets, which handle readiness gate checks and agent selection automatically.
+Run phases through `make` targets — they handle readiness gates and agent selection for you.
 
-### Phase 1: reconnaissance + sandbox bootstrap
+### Phase 1 — reconnaissance + sandbox bootstrap
 
     make phase-1
 
-Phase 1 has two sub-stages run together:
+Two things happen together:
 
-- **1a — Source reconnaissance**: creates or updates reconnaissance notes under `itemdb/notes/`.
-- **1b — Sandbox bootstrap**: picks a curated baseline from `templates/sandboxes/<id>/`, applies it to `sandbox/` (with marker substitution), validates it, and writes `itemdb/notes/sandbox-plan.md` plus `sandbox/CODECOME-GENERATED.md`.
+- **1a (recon)** — notes written under `itemdb/notes/`.
+- **1b (sandbox bootstrap)** — picks a curated baseline from `templates/sandboxes/<id>/`, applies it to `sandbox/` (with marker substitution), validates it, and writes `itemdb/notes/sandbox-plan.md` plus `sandbox/CODECOME-GENERATED.md`.
 
 `sandbox/` is semi-ephemeral; Phase 1b regenerates its contents based on what is in `src/`.
 
-Bootstrap CLI:
+Bootstrap helpers:
 
     make sandbox-list
     make sandbox-detect
@@ -301,14 +250,14 @@ Bootstrap CLI:
     make sandbox-regenerate
     make sandbox-status
 
-Sandbox runtime helpers (one make target per canonical capability):
+Sandbox runtime helpers (one target per capability):
 
-    make sandbox-setup        # sandbox setup (setup.sh or `docker compose build`)
-    make sandbox-up           # sandbox start
-    make sandbox-check        # sandbox sanity
-    make sandbox-build        # target build
-    make sandbox-test         # target test
-    make sandbox-down         # sandbox stop
+    make sandbox-setup        # setup.sh or `docker compose build`
+    make sandbox-up           # start
+    make sandbox-check        # sanity
+    make sandbox-build        # build target
+    make sandbox-test         # run target tests
+    make sandbox-down         # stop
     make sandbox-shell        # open a shell
     make sandbox-logs         # tail logs
     make sandbox-clean        # clean runtime artifacts
@@ -316,41 +265,26 @@ Sandbox runtime helpers (one make target per canonical capability):
 
 See `docs/sandbox.md` for the full bootstrap workflow.
 
-### Phase 2: vulnerability hypothesis generation
+### Phase 2 — hypothesis generation
 
     make phase-2
 
-Creates candidate findings under `itemdb/findings/PENDING/`. Phase 2 is gated by the sandbox: it blocks if `sandbox/` is missing or if the most recent validation failed. Override with `CODECOME_ALLOW_NO_SANDBOX=1`.
+Creates candidate findings under `itemdb/findings/PENDING/`. Gated by the sandbox: blocks if `sandbox/` is missing or if the most recent validation failed. Override with `CODECOME_ALLOW_NO_SANDBOX=1`.
 
-#### Deep Sweep (optional)
+#### Deep sweep (optional)
 
-A Deep Sweep runs the `auditor` agent once per file, forcing exhaustive line-by-line analysis and full source-to-sink context resolution for each target. It complements the broad Phase 2 pass rather than replacing it.
+A Deep Sweep runs the `auditor` agent **once per file**, forcing exhaustive line-by-line analysis. It complements the broad Phase 2 pass.
 
-**When to use it**
+When to use it:
 
-- Phase 1 identified many score-4 or score-5 files and you want to ensure none are skipped.
-- Phase 2 produced few findings on a large or complex codebase.
-- A specific subsystem, library, or component deserves focused attention.
-- A confirmed finding leads you to re-examine closely related files.
+- Phase 1 flagged many score-4/5 files and you want to be sure none were skipped.
+- Phase 2 produced few findings on a large codebase.
+- A specific subsystem deserves focused attention.
+- A confirmed finding suggests related files deserve a second look.
 
-**Cost vs. benefit**
+Trade-off: token cost scales linearly with the number of files swept (one full agent session per file). Sweep on 10 high-risk files costs roughly as many tokens as 10 Phase 2 runs. It produces overlapping findings that Phase 3 has to deduplicate. Always preview first with `--dry-run`.
 
-| | |
-|---|---|
-| **Pro** | Exhaustive per-file analysis — catches issues that macro Phase 2 misses by fitting the full file into a single focused context window |
-| **Pro** | Smaller, file-scoped context lets the model concentrate without cross-component noise |
-| **Pro** | Glob targeting (`FILE="src/**/*.cs"`) lets you surgically focus on one subsystem |
-| **Con** | Token cost scales linearly with the number of files swept — one full agent session per file |
-| **Con** | Sequential execution — can be slow on targets with many high-risk files |
-| **Con** | Produces overlapping findings that require Phase 3 deduplication |
-
-Rule of thumb: a sweep on 10 high-risk files costs roughly as many tokens as 10 Phase 2 runs. Preview first with `--dry-run` to see how many files would be selected before committing.
-
-**How it works**
-
-The sweep runner reads `itemdb/notes/file-risk-index.yml` (written by Phase 1), selects all files at score 4 or above (or the files matched by `FILE=`), writes one prompt per file under `tmp/file-sweep-prompts/`, then invokes the `auditor` agent once per file in sequence.
-
-**Usage**
+How it works: the sweep runner reads `itemdb/notes/file-risk-index.yml` (written by Phase 1), selects all files at score 4 or above (or the files matched by `FILE=`), writes one prompt per file under `tmp/file-sweep-prompts/`, then invokes the `auditor` agent once per file in sequence.
 
     make list-risk-files                     # preview which files would be swept
     python tools/run-sweep.py --dry-run      # show selected files and prompts, no agent calls
@@ -358,197 +292,51 @@ The sweep runner reads `itemdb/notes/file-risk-index.yml` (written by Phase 1), 
     make sweep FILE="src/path/to/file.ext"   # sweep a specific file
     make sweep FILE="src/**/*.cs"            # sweep all .cs files under src/
 
-**Relationship with Phase 2 and Phase 3**
+Sweep findings overlap with Phase 2 output by design. Phase 3 deduplicates on semantic frontmatter fields (`sources`, `sinks`, `entry_points`, `trust_boundary`, `target_area`), so overlaps are merged gracefully.
 
-Normal Phase 2 (`make phase-2`) remains the default broad pass and should always be run first. Deep sweeps are optional follow-ups that trade token budget for depth. Because they run per-file, they can produce findings that overlap with Phase 2 output. Phase 3 (Counter-analysis) handles this: it deduplicates on semantic frontmatter fields — `sources`, `sinks`, `entry_points`, `trust_boundary`, `target_area` — rather than on titles or file paths, so overlaps are merged gracefully.
+See `docs/file-risk-sweeps.md` for the full reference.
 
-See `docs/file-risk-sweeps.md` for the full reference on the file risk index format and score criteria.
-
-### Phase 3: counter-analysis
+### Phase 3 — counter-analysis
 
     make phase-3
 
-Reviews candidate findings. May move findings to `itemdb/findings/REJECTED/` or `itemdb/findings/DUPLICATE/`.
+Reviews candidate findings. Moves weak findings to `itemdb/findings/REJECTED/` and repeats to `itemdb/findings/DUPLICATE/`.
 
-### Phase 4: validation
-
-Validate one finding at a time:
+### Phase 4 — validation
 
     make phase-4 FINDING=CC-0001
 
-Stores evidence under `itemdb/evidence/<finding-id>/` and may move findings to `CONFIRMED/` or `REJECTED/`.
+One finding at a time. Stores evidence under `itemdb/evidence/<finding-id>/` and moves findings to `CONFIRMED/` or `REJECTED/`.
 
-To validate all unvalidated findings:
+To run validation across all PENDING findings:
 
     make validate-all
 
-### Phase 5: exploit development
-
-Develop a proof-of-concept exploit for one confirmed finding:
+### Phase 5 — exploit development
 
     make phase-5 FINDING=CC-0001
 
-Stores exploitation artifacts under `itemdb/evidence/<finding-id>/exploits/` and may move findings to `EXPLOITED/`. The exploiter may adjust severity based on demonstrated impact.
+Develops a working PoC for one confirmed finding. Artifacts go under `itemdb/evidence/<finding-id>/exploits/`. The exploiter may adjust severity based on demonstrated impact, and may move findings to `EXPLOITED/`.
 
-To exploit all confirmed findings that have not already been marked as not feasible:
+For all confirmed findings that aren't already marked as not-feasible:
 
     make exploit-all
 
-### Phase 6: reporting
+### Phase 6 — reporting
 
     make phase-6
 
-A basic local report can also be generated without an agent:
+A lightweight local report (no agent involved) is also available:
 
     make report
 
 The default report path is `itemdb/reports/report.md`.
 
-### Wrapper controls
-
-The phase targets support these environment variables:
-
-    CODECOME_USE_WRAPPER=0   # bypass the styled wrapper and use raw opencode run
-    CODECOME_THINKING=1      # force --thinking on (default: per-provider, see below)
-    CODECOME_THINKING=0      # force --thinking off
-    CODECOME_RENDER_REASONING=0  # suppress on-screen Thinking panels even if --thinking is on
-    CODECOME_REASONING_MAX_CHARS=4000  # truncate individual reasoning blocks past this length
-    CODECOME_SANDBOX_RENDER=0  # disable the structured Sandbox panel (fall back to a plain Bash panel)
-    CODECOME_SANDBOX_VALIDATE_STDERR_LINES=20  # cap stderr_tail lines shown per failed validate tier
-    CODECOME_SANDBOX_FILES_CAP=15  # cap files listed in sandbox apply/inspect/detect panels
-    CODECOME_BOOTSTRAP_MAX_RETRIES=3  # agent remediation budget during sandbox bootstrap (default: 3)
-    CODECOME_BOOTSTRAP_DRY_RUN=1  # force --dry-run on sandbox apply/regenerate
-    CODECOME_BASH_SHIM_RENDER=0  # disable rtk/cat/head/tail/rg/ls/find/tree -> Read/Grep/Glob routing
-    CODECOME_BASH_SHIM_LS_STRIP_LONG_FORMAT=0  # keep `ls -la` columns instead of stripping to filenames
-    OPENCODE_ARGS='...'      # extra flags forwarded to opencode run
-    CODECOME_MODEL=<id>      # pin the model per phase, e.g. anthropic/claude-opus-4-7
-    CODECOME_MODEL_VARIANT=<v>  # pin the model variant, e.g. high, max
-
-The wrapper resolves the effective model in this order: `OPENCODE_ARGS` (`--model …` / `--variant …`) > env (`CODECOME_MODEL`, `CODECOME_MODEL_VARIANT`) > `codecome.yml` (`agents.<name>.model` / `.variant`) > the model used in your most recent OpenCode session for this project (best-effort, read from OpenCode's local DB) > unknown. The chosen value is shown in the phase header banner along with its source. When the resolved value comes from env or YAML, the wrapper appends `--model` / `--variant` to `opencode run` so the banner is the truth. Discovered defaults (the last-session lookup) are display-only and are not enforced.
-
-The wrapper picks a `--thinking` default per provider so all models produce comparable in-flight commentary:
-
-- `anthropic/*` → off. Claude already interleaves thinking with normal `text` blocks via OpenCode's interleaved-thinking beta header, so `Assistant` panels already show the model's working.
-- `openai/*`, `xai/*`, `github-copilot/*`, `groq/*`, `cerebras/*`, `google/*`, `google-vertex/*` → on. These providers hide reasoning unless `--thinking` is passed; without it the wrapper would only see one or zero `text` events per phase.
-- Anything else (unknown / future provider) → on. Cheaper to over-surface than under-surface in vulnerability research.
-
-Override precedence: `--thinking` already in `OPENCODE_ARGS` > `CODECOME_THINKING` env > per-provider default. Some providers bill reasoning tokens; set `CODECOME_THINKING=0` per phase to opt out without losing the styled wrapper.
-
-Print the full resolution table for any agent without launching a phase:
-
-    make show-model
-    make show-model AGENT=auditor
-
-The wrapper currently targets OpenCode 1.14.39 or newer.
-
-If `.venv` is missing required packages, rerun:
-
-    make venv
-
-### Manual invocation
-
-If you prefer direct `opencode run` commands instead of `make` targets:
-
-    opencode run --agent recon "$(cat prompts/phase-1-recon.md)"
-    opencode run --agent auditor "$(cat prompts/phase-2-audit.md)"
-    opencode run --agent reviewer "$(cat prompts/phase-3-review.md)"
-    opencode run --agent validator "$(sed 's#FINDING_PATH_OR_ID#CC-0001#g' prompts/phase-4-validate.md)"
-    opencode run --agent exploiter "$(sed 's#FINDING_PATH_OR_ID#CC-0001#g' prompts/phase-5-exploit.md)"
-    opencode run --agent reporter "$(cat prompts/phase-6-report.md)"
-
-`make report` is a lightweight local summary generator. Use `make phase-6` when you want the full AI-written report flow.
-
-Direct manual `opencode run` usage remains unchanged. The styled wrapper is only used by `make phase-*` targets.
-
-## Local helper commands
-
-Show available commands:
-
-    make help
-
-List top-scoring risky files from index:
-
-    make list-risk-files
-
-Run deep sweep on specific file(s) or top-scoring files:
-
-    make sweep
-    make sweep FILE="src/foo.*"
-
-Validate workspace:
-
-    make check
-
-Show finding status:
-
-    make status
-
-Show next finding id:
-
-    make next-id
-
-Validate finding frontmatter:
-
-    make frontmatter
-
-Reset local audit artifacts:
-
-    make itemdb-reset
-
-Regenerate finding index:
-
-    make index
-
-Regenerate report:
-
-    make report
-
-List findings (optionally filter by status):
-
-    make findings
-    make findings STATUS=PENDING
-
-Create a new finding from template:
-
-    make findings-create TITLE="Buffer overflow in parser"
-
-Move a finding to another status:
-
-    make findings-move FINDING=CC-0001 STATUS=CONFIRMED
-
-Create evidence directory for a finding:
-
-    make findings-evidence FINDING=CC-0001
-
-Check sandbox (requires phase-1 to bootstrap `sandbox/` first):
-
-    make sandbox-check
-
-Open sandbox shell:
-
-    make sandbox-shell
-
-## Starting over
-
-If you want a completely clean workspace, the safest option is to clone a
-fresh copy of CodeCome again.
-
-If you only want to clear generated local audit artifacts without recloning,
-use:
-
-    make itemdb-reset
-
-This removes local notes, findings, evidence, reports, run summaries, and
-temporary artifacts, then recreates the expected `.gitkeep` files. Do not use
-it if you want to preserve prior audit work.
-
 ## Customizing phase prompts
 
-Extra instructions can be appended to any phase prompt from three sources,
-applied in this order (all additive):
+Extra instructions can be appended to any phase prompt from three sources, applied in this order (all additive):
 
-1. **`codecome.yml`** — persistent per-phase instructions under
-   `audit.extra_prompts`. Always applied when the phase runs.
+1. **`codecome.yml`** — persistent per-phase instructions under `audit.extra_prompts`. Always applied when the phase runs.
 
        audit:
          extra_prompts:
@@ -566,19 +354,128 @@ applied in this order (all additive):
 
 All three can be combined in a single invocation.
 
+## Local helper commands
+
+    make help                                  # show all available commands
+    make check                                 # validate workspace
+    make status                                # show finding status counts
+    make findings                              # list findings
+    make findings STATUS=PENDING               # filter by status
+    make findings-create TITLE="Buffer overflow in parser"
+    make findings-move FINDING=CC-0001 STATUS=CONFIRMED
+    make findings-evidence FINDING=CC-0001     # create evidence dir
+    make next-id                               # next free finding id
+    make frontmatter                           # validate finding frontmatter
+    make index                                 # regenerate finding index
+    make report                                # regenerate report
+    make list-risk-files                       # top-scoring risky files from index
+    make itemdb-reset                          # reset local audit artifacts
+    make sandbox-check                         # sandbox sanity
+    make sandbox-shell                         # open sandbox shell
+
+## Starting over
+
+If you want a completely clean workspace, the safest option is to clone a fresh copy of CodeCome.
+
+If you only want to clear local audit artifacts without recloning:
+
+    make itemdb-reset
+
+This removes local notes, findings, evidence, reports, run summaries, and temporary artifacts, then recreates the expected `.gitkeep` files. Don't use it if you want to preserve prior audit work.
+
+## Advanced: wrapper internals
+
+By default, phase targets use a CodeCome-owned styled wrapper around `opencode run --format json` so assistant output, tool calls, and tool results render with consistent colors and structure. The wrapper pretty-renders `read`, `write`, `edit`, `apply_patch`, `grep`, `glob`, `bash`, `todowrite`, and `skill` tool calls; all others get a generic JSON panel.
+
+The wrapper also detects bash invocations of `tools/sandbox-bootstrap.py --format json …` (and `make sandbox-* BOOTSTRAP_ARGS='--format json'` wrappers) and renders them as a structured Sandbox panel with capability tables, validation tier summaries, and color-coded gate badges.
+
+Some models prefer to invoke CLI helpers via the bash tool instead of the OpenCode-native Read/Grep/Glob tools (e.g. `rtk read FILE`, `rtk grep PAT PATH`, `rtk ls`, plain `rg PAT`, `cat FILE`, `head -n N FILE`, `tail -n N FILE`, `find PATH`, `tree`). The wrapper detects those calls and routes their output through the matching styled renderer so the panels look the same regardless of how the agent invoked the operation. Pipelines, redirections, and command substitutions are intentionally left for the generic Bash panel.
+
+All `make` targets that invoke Python tools expect a repo-local virtualenv at `.venv/`. If it is missing or stale, the command will stop with a setup message telling you to run `make venv`.
+
+`make tests` runs the Python test suite under `tests/` and validates finding YAML frontmatter via `tools/check-frontmatter.py`. This catches regressions such as malformed finding metadata that can break helper scripts.
+
+### Reusable prompts
+
+CodeCome ships reusable phase prompts under `prompts/`:
+
+    prompts/phase-1-recon.md
+    prompts/phase-2-audit.md
+    prompts/phase-3-review.md
+    prompts/phase-4-validate.md
+    prompts/phase-5-exploit.md
+    prompts/phase-6-report.md
+    prompts/sweep.md
+
+### Wrapper environment variables
+
+    CODECOME_USE_WRAPPER=0              # bypass the styled wrapper
+    CODECOME_THINKING=1                 # force --thinking on
+    CODECOME_THINKING=0                 # force --thinking off
+    CODECOME_RENDER_REASONING=0         # suppress on-screen Thinking panels
+    CODECOME_REASONING_MAX_CHARS=4000   # truncate long reasoning blocks
+    CODECOME_SANDBOX_RENDER=0           # disable structured Sandbox panel
+    CODECOME_SANDBOX_VALIDATE_STDERR_LINES=20
+    CODECOME_SANDBOX_FILES_CAP=15
+    CODECOME_BOOTSTRAP_MAX_RETRIES=3    # agent remediation budget during bootstrap
+    CODECOME_BOOTSTRAP_DRY_RUN=1        # force --dry-run on sandbox apply/regenerate
+    CODECOME_BASH_SHIM_RENDER=0         # disable rtk/cat/head/tail/rg/ls/find/tree routing
+    CODECOME_BASH_SHIM_LS_STRIP_LONG_FORMAT=0
+    OPENCODE_ARGS='...'                 # extra flags forwarded to opencode run
+    CODECOME_MODEL=<id>                 # pin model per phase, e.g. anthropic/claude-opus-4-7
+    CODECOME_MODEL_VARIANT=<v>          # pin model variant, e.g. high, max
+
+### Model resolution and the `--thinking` flag
+
+The wrapper resolves the effective model in this order:
+
+1. `OPENCODE_ARGS` (`--model …` / `--variant …`)
+2. env (`CODECOME_MODEL`, `CODECOME_MODEL_VARIANT`)
+3. `codecome.yml` (`agents.<name>.model` / `.variant`)
+4. the model used in your most recent OpenCode session for this project (best-effort, read from OpenCode's local DB)
+5. unknown
+
+The chosen value is shown in the phase header banner along with its source. When the value comes from env or YAML, the wrapper appends `--model` / `--variant` to `opencode run` so the banner is the truth. Discovered defaults (the last-session lookup) are display-only and are not enforced.
+
+Per-provider `--thinking` defaults:
+
+- `anthropic/*` → off. Claude already interleaves thinking with normal `text` blocks via OpenCode's interleaved-thinking beta header, so `Assistant` panels already show the model's working.
+- `openai/*`, `xai/*`, `github-copilot/*`, `groq/*`, `cerebras/*`, `google/*`, `google-vertex/*` → on. These providers hide reasoning unless `--thinking` is passed; without it the wrapper would only see one or zero `text` events per phase.
+- Anything else (unknown / future provider) → on. Cheaper to over-surface than under-surface in vulnerability research.
+
+Override precedence: `--thinking` already in `OPENCODE_ARGS` > `CODECOME_THINKING` env > per-provider default. Some providers bill reasoning tokens; set `CODECOME_THINKING=0` per phase to opt out without losing the styled wrapper.
+
+Print the full resolution table for any agent without launching a phase:
+
+    make show-model
+    make show-model AGENT=auditor
+
+The wrapper currently targets OpenCode 1.14.39 or newer.
+
+### Manual invocation
+
+If you prefer direct `opencode run` commands instead of `make` targets:
+
+    opencode run --agent recon "$(cat prompts/phase-1-recon.md)"
+    opencode run --agent auditor "$(cat prompts/phase-2-audit.md)"
+    opencode run --agent reviewer "$(cat prompts/phase-3-review.md)"
+    opencode run --agent validator "$(sed 's#FINDING_PATH_OR_ID#CC-0001#g' prompts/phase-4-validate.md)"
+    opencode run --agent exploiter "$(sed 's#FINDING_PATH_OR_ID#CC-0001#g' prompts/phase-5-exploit.md)"
+    opencode run --agent reporter "$(cat prompts/phase-6-report.md)"
+
+`make report` is a lightweight local summary generator. Use `make phase-6` when you want the full AI-written report flow.
+
+Direct manual `opencode run` usage remains unchanged. The styled wrapper is only used by `make phase-*` targets.
+
 ## Design principles
 
 ### Findings are artifacts
 
-Every relevant issue must be written as a Markdown file.
-
-The model should not leave important security claims only in chat history or run transcripts.
+Every relevant issue must be written as a Markdown file. The model should not leave important security claims only in chat history or run transcripts.
 
 ### Hypotheses are not confirmed bugs
 
-A plausible vulnerability is first a hypothesis.
-
-Confirmation requires evidence.
+A plausible vulnerability is first a hypothesis. Confirmation requires evidence.
 
 ### Impact must be demonstrated
 
@@ -586,76 +483,65 @@ Confirmed vulnerabilities should have their real-world impact demonstrated throu
 
 ### Counter-analysis is mandatory
 
-Every finding should include an attempt to disprove it.
-
-The reviewer should look for:
-
-- unreachable code paths,
-- input validation,
-- authorization checks,
-- framework-level protections,
-- false assumptions,
-- duplicate reports,
-- and missing exploitability conditions.
+Every finding includes an attempt to disprove it. The reviewer looks for unreachable code paths, input validation, authorization checks, framework-level protections, false assumptions, duplicate reports, and missing exploitability conditions.
 
 ### Validation is sandboxed
 
-The validator and exploiter may freely experiment inside the sandbox environment, but should not modify target source code unless explicitly instructed.
+The validator and exploiter may freely experiment inside `sandbox/`, but should not modify target source code unless explicitly instructed.
 
 ### The core is target-agnostic
 
-CodeCome should adapt to the target placed under `src/`.
+CodeCome adapts to whatever sits under `src/`. Target-specific behavior lives in skills, adapters, notes, or config — not in the core workflow.
 
-Target-specific behavior should live in skills, adapters, notes, or config, not in the core workflow.
+## Model selection and rerunning phases
 
-## Current status
+The model you pick has a real effect on the output. Some patterns I've found useful:
 
-This repository is in early PoC stage.
+- **Different models see different bugs.** Running Phase 2 with two different models on the same codebase usually produces two partially overlapping sets of findings. Phase 3 deduplicates them on semantic frontmatter fields, so it's safe to combine the runs.
+- **Different models for different phases.** Reasoning-heavy models (Opus, GPT reasoning variants, Gemini Pro reasoning) tend to do better on Phase 2 (audit) and Phase 5 (exploit). Fast workhorses are often enough for Phase 3 (counter-analysis) and Phase 6 (reporting). Pin per phase with `agents.<name>.model` in `codecome.yml`, or pass `CODECOME_MODEL=…` on the command line.
+- **Rerunning a phase with a second model.** You can re-run Phase 2 with another model and end up with extra findings — they go into `PENDING/` alongside the existing ones. Phase 3 then folds duplicates into `DUPLICATE/`. Same trick works for Phase 4: if model A can't reproduce a finding, model B sometimes can with a different sandbox approach.
+- **Deep sweep as a feedback amplifier.** `make sweep` runs the auditor once per high-risk file. It produces noisier output and burns more tokens, but it catches bugs that broad Phase 2 sometimes misses because the model gets the whole file in a single focused context window. Use it on a subset (`FILE="src/auth/**"`) to keep cost contained.
+- **Use the resolution banner.** Every wrapped phase prints which model it actually picked and where the value came from. If a run feels off, that banner is the first place to look.
 
-The initial implementation is intentionally simple:
+The right combination depends on your provider mix, your token budget, and your target. Experiment.
 
-- Markdown findings.
-- File-based item database.
-- Python helper scripts with colored terminal output.
-- Docker-based validation environment.
-- One agent at a time.
-- One validation worker at a time.
+## Project status
 
-## Target setup
+This is early-stage software. Honestly:
 
-CodeCome expects the audited target source code to be placed under:
+**What works well today:**
 
-    src/
+- Markdown findings with structured YAML frontmatter — stable format, no surprise schema changes.
+- File-based item database — no DB, no RAG, easy to grep, easy to commit.
+- Per-phase make targets with readiness gates.
+- Docker-based sandbox bootstrap for common stacks (Python, C/C++, .NET, PHP, IaC, …).
+- Styled wrapper output with per-tool renderers.
+- Per-finding evidence directories and an exploit subdirectory layout for Phase 5.
 
-See:
+**What's still rough or missing:**
 
-    docs/target-setup.md
+- One agent at a time. No parallel validation, no parallel auditing.
+- One validation worker at a time. `make validate-all` is sequential.
+- Docker is the only first-class sandbox runtime today. Remote sandboxes and disposable VMs are future work.
+- Phase 2 and the deep sweep produce overlapping findings that Phase 3 has to clean up — this works, but it can be wasteful on tokens.
+- Provider coverage for the `--thinking` flag is hand-maintained.
+- No CI. Quality gate is `make tests` run locally.
 
-That document explains supported target layouts, including copied source trees, git submodules, extracted archives, benchmark corpora, and the initial Juliet/SARD PoC target.
+Patches, issues, and feedback all welcome.
 
-## Workflow
+## Documentation
 
-See:
+| Doc | What's in it |
+|-----|--------------|
+| [`docs/target-setup.md`](docs/target-setup.md) | Supported target layouts: copied source trees, submodules, archives, benchmark corpora |
+| [`docs/workflow.md`](docs/workflow.md) | Full phase-by-phase workflow reference |
+| [`docs/sandbox.md`](docs/sandbox.md) | Sandbox usage, boundaries, evidence capture, validation environment notes |
+| [`docs/file-risk-sweeps.md`](docs/file-risk-sweeps.md) | File risk index format and deep sweep reference |
+| [`docs/development.md`](docs/development.md) | Repository conventions, helper tools, contributor workflow |
 
-    docs/workflow.md
+## Contributing
 
-for the complete phase-by-phase workflow.
-
-## Development
-
-See:
-
-    docs/development.md
-
-for repository conventions, helper tools, and development workflow.
-
-## Sandbox
-
-See:
-
-    docs/sandbox.md
-
-for sandbox usage, boundaries, evidence capture, and validation environment notes.
+Issues, ideas, and pull requests are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md). If something feels rough, that's probably because it is; please tell me about it.
 
 ## License
 
@@ -666,13 +552,8 @@ CodeCome is dual-licensed under your choice of:
 
 SPDX expression: `GPL-3.0-or-later OR AGPL-3.0-or-later`.
 
-The files under `templates/sandboxes/` are an exception: they are
-licensed under the **MIT License** so they can be copied into user
-workspaces without imposing copyleft obligations on those user
-projects.
+The files under `templates/sandboxes/` are an exception: they are licensed under the **MIT License** so they can be copied into user workspaces without imposing copyleft obligations on those user projects.
 
-See `LICENSE`, `AGPL-LICENSE`, `templates/sandboxes/LICENSE`, and
-`NOTICE`. Contributions are accepted under the terms described in
-`CONTRIBUTING.md`.
+See `LICENSE`, `AGPL-LICENSE`, `templates/sandboxes/LICENSE`, and `NOTICE`. Contributions are accepted under the terms described in `CONTRIBUTING.md`.
 
 Copyright (C) 2025-2026 Pablo Ruiz García &lt;pablo.ruiz@gmail.com&gt;.
