@@ -19,32 +19,39 @@ The whole audit lives on disk as plain Markdown and YAML. No database, no RAG, n
 
 ## Screenshots
 
-These screenshots are sanitized/redrawn from real CodeCome runs: enough to show the workflow, without leaking target-specific exploit details or credentials.
-
-<p align="center">
-  <img src="docs/images/screenshots/finding-queue.svg" alt="CodeCome finding queue" width="900">
-</p>
-
-<p align="center"><sub><strong>From hypotheses to a reviewable queue.</strong> CodeCome keeps every candidate finding as a plain Markdown artifact with status, severity, confidence, and a concise title.</sub></p>
+These screenshots are sanitized/redrawn from real CodeCome runs: enough to show the workflow, without leaking target-specific exploit details or credentials. Click any image to open it at full size.
 
 <table>
   <tr>
-    <td width="50%">
-      <img src="docs/images/screenshots/agent-workflow.svg" alt="CodeCome agent task workflow">
+    <td width="50%" align="center">
+      <a href="docs/images/screenshots/finding-queue.svg">
+        <img src="docs/images/screenshots/finding-queue.svg" alt="CodeCome finding queue" width="420">
+      </a>
       <br>
-      <sub><strong>Agentic, but auditable.</strong> Each phase is decomposed into visible tasks: recon, source review, counter-analysis, validation, and reporting.</sub>
+      <sub><strong>Finding queue</strong><br>Hypotheses become reviewable artifacts.</sub>
     </td>
-    <td width="50%">
-      <img src="docs/images/screenshots/sandbox-validation.svg" alt="CodeCome sandbox validation">
+    <td width="50%" align="center">
+      <a href="docs/images/screenshots/agent-workflow.svg">
+        <img src="docs/images/screenshots/agent-workflow.svg" alt="CodeCome agent workflow" width="420">
+      </a>
       <br>
-      <sub><strong>Validation before belief.</strong> The sandbox build, runtime, target build, and tests are checked before deeper analysis.</sub>
+      <sub><strong>Agent workflow</strong><br>Agentic, but auditable.</sub>
     </td>
   </tr>
   <tr>
-    <td colspan="2">
-      <img src="docs/images/screenshots/evidence-artifacts.svg" alt="CodeCome evidence artifacts">
+    <td width="50%" align="center">
+      <a href="docs/images/screenshots/sandbox-validation.svg">
+        <img src="docs/images/screenshots/sandbox-validation.svg" alt="CodeCome sandbox validation" width="420">
+      </a>
       <br>
-      <sub><strong>Evidence on disk.</strong> Confirmed findings produce durable artifacts under <code>itemdb/evidence/</code> and run summaries under <code>runs/</code>.</sub>
+      <sub><strong>Sandbox validation</strong><br>Validation before belief.</sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="docs/images/screenshots/evidence-artifacts.svg">
+        <img src="docs/images/screenshots/evidence-artifacts.svg" alt="CodeCome evidence artifacts" width="420">
+      </a>
+      <br>
+      <sub><strong>Evidence artifacts</strong><br>Evidence written to disk.</sub>
     </td>
   </tr>
 </table>
