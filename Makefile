@@ -276,7 +276,8 @@ else
 endif
 
 findings-create: venv-check
-	$(PYTHON) tools/create-finding.py $(TITLE) $(ARGS)
+	@test -n "$(strip $(TITLE))" || (printf "TITLE is required. Usage: make findings-create TITLE=\"Short descriptive title\" [ARGS='...']\n" && exit 2)
+	$(PYTHON) tools/create-finding.py "$(TITLE)" $(ARGS)
 
 findings-move: venv-check
 	$(PYTHON) tools/move-finding.py $(FINDING) $(STATUS)
