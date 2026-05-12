@@ -127,8 +127,8 @@ code,pre,kbd{font-family:var(--mono)}
 
 /* ============== Generic ============== */
 .container{max-width:1240px;margin:0 auto;padding:0 24px}
-.section{padding:88px 0}
-.section-tight{padding:64px 0}
+.section{padding:56px 0}
+.section-tight{padding:40px 0}
 .eyebrow{
   display:inline-flex;align-items:center;gap:8px;
   font-family:var(--mono);font-size:12px;letter-spacing:.04em;text-transform:uppercase;
@@ -150,7 +150,7 @@ code,pre,kbd{font-family:var(--mono)}
 .pill.info .dot{background:var(--info)}
 .divider{height:1px;background:var(--line);margin:0}
 
-.grid{display:grid;gap:24px}
+.grid{display:grid;gap:18px}
 .g-2{grid-template-columns:repeat(2,minmax(0,1fr))}
 .g-3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .g-4{grid-template-columns:repeat(4,minmax(0,1fr))}
@@ -191,7 +191,7 @@ code,pre,kbd{font-family:var(--mono)}
   mask-image: radial-gradient(900px 600px at 50% 30%, #000 0%, transparent 80%);
   -webkit-mask-image: radial-gradient(900px 600px at 50% 30%, #000 0%, transparent 80%);
 }
-.hero-inner{position:relative;z-index:1;padding:96px 24px 120px;max-width:1240px;margin:0 auto;display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+.hero-inner{position:relative;z-index:1;padding:64px 24px 84px;max-width:1240px;margin:0 auto;display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center}
 .hero h1{
   font-size:60px;line-height:1.02;letter-spacing:-.03em;font-weight:800;margin:14px 0 16px;
   background:linear-gradient(180deg,#fff,#cfd2d8);-webkit-background-clip:text;background-clip:text;color:transparent;
@@ -260,7 +260,7 @@ code,pre,kbd{font-family:var(--mono)}
 .stats-strip .sep{width:1px;height:14px;background:#2a2e36}
 
 /* ============== Section heads ============== */
-.s-head{margin-bottom:36px;max-width:760px}
+.s-head{margin-bottom:24px;max-width:760px}
 .s-head .eyebrow{margin-bottom:6px}
 
 /* problem section */
@@ -410,7 +410,7 @@ code,pre,kbd{font-family:var(--mono)}
 
 /* ============== Quote rows / banner ============== */
 .banner{
-  background:var(--ink);color:#fff;border-radius:var(--r-xl);padding:48px;
+  background:var(--ink);color:#fff;border-radius:var(--r-xl);padding:36px 40px;
   display:grid;grid-template-columns:1fr auto;gap:32px;align-items:center;
 }
 .banner h2{margin:0;font-size:34px;line-height:1.1;letter-spacing:-.02em;font-weight:800}
@@ -553,7 +553,7 @@ code,pre,kbd{font-family:var(--mono)}
 
 /* ============== Footer ============== */
 .footer{
-  background:var(--t-bg);color:#bcc0c8;padding:64px 0 32px;border-top:1px solid #000;
+  background:var(--t-bg);color:#bcc0c8;padding:48px 0 28px;border-top:1px solid #000;
 }
 .footer .grid-foot{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:36px}
 .footer h5{font-size:13px;color:#fff;margin:0 0 12px;letter-spacing:.04em;text-transform:uppercase;font-family:var(--mono);font-weight:700}
@@ -569,11 +569,13 @@ code,pre,kbd{font-family:var(--mono)}
 @media (max-width:1080px){
   .h1, .hero h1{font-size:48px}
   .h2{font-size:32px}
-  .hero-inner{grid-template-columns:1fr;padding:64px 24px 80px;gap:32px}
+  .hero-inner{grid-template-columns:1fr;padding:48px 24px 60px;gap:28px}
   .problem .quote{font-size:34px}
-  .banner{padding:32px}
+  .banner{padding:28px}
   .banner h2{font-size:26px}
   .shots{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .section{padding:44px 0}
+  .section-tight{padding:32px 0}
 }
 @media (max-width:860px){
   .nav a:not(.gh){display:none}
