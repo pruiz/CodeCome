@@ -30,6 +30,22 @@ A recorded run is also planned:
 <!-- TODO: replace with real asciinema cast -->
 <!-- [![asciicast](https://asciinema.org/a/PLACEHOLDER.svg)](https://asciinema.org/a/PLACEHOLDER) -->
 
+## Prerequisites
+
+CodeCome runs on top of [OpenCode](https://opencode.ai), an open-source AI coding agent.
+
+1. **Install OpenCode** — follow the [installation guide](https://opencode.ai/docs/#install).
+2. **Configure a provider** — connect at least one LLM provider with an API key. See [provider setup](https://opencode.ai/docs/#configure).
+3. **Python 3.10+** — needed for workspace tooling (`make venv` creates a local virtualenv).
+4. **GNU Make** — drives the workflow.
+5. **Docker** — required for the sandboxed validation environment.
+6. **Optional: exploit recording tools** — for Phase 5 visual evidence:
+   - `asciinema` — terminal recordings.
+   - `agg` — renders `.cast` files to GIFs (CodeCome falls back to a Docker container if missing).
+   - `ffmpeg` and `xvfb` (or `xvfb-run`) — for GUI/browser exploits.
+
+`make check` will warn about missing optional tools, but the core workflow runs fine without them.
+
 ## Quick start
 
 What CodeCome needs from you is simple: **drop a source tree under `src/`**, tell it the project name in `codecome.yml`, and run the phases.
@@ -54,9 +70,56 @@ When you're ready:
 
 There are convenience targets too — `make validate-all`, `make exploit-all`, `make sweep` — but you almost never want to use them on a fresh project. Walk one finding through end-to-end first; you'll learn more from one CC-0001 than from twenty PENDING ones.
 
+## How it works
+
+Six phases. Each one is a `make` target. Each one writes to disk.
+
+1. **Recon (`make phase-1`)** — agent reads `src/`, infers the target type, languages, build model, attack surface, and writes notes under `itemdb/notes/`. Also bootstraps a Docker sandbox suited to the stack.
+2. **Hypothesis (`make phase-2`)** — agent writes candidate findings under `itemdb/findings/PENDING/`. Each one points at specific code, sources, sinks, and a trust boundary.
+3. **Counter-analysis (`make phase-3`)** — a reviewer pass tries to disprove or deduplicate findings. Weak ones move to `REJECTED/`, repeats to `DUPLICATE/`.
+4. **Validation (`make phase-4 FINDING=CC-XXXX`)** — one finding at a time, in the sandbox. Build the target, write a small PoC, capture evidence, decide CONFIRMED or REJECTED.
+5. **Exploit (`make phase-5 FINDING=CC-XXXX`)** — for confirmed findings worth escalating, build a real PoC that shows concrete impact: code execution, data exfiltration, privilege escalation. Severity gets adjusted based on what you actually demonstrate.
+6. **Reporting (`make phase-6`)** — generate a Markdown report grouping exploited and confirmed findings with evidence references.
+
+The finding lifecycle:
+
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING
+    PENDING --> CONFIRMED : evidence captured
+    PENDING --> REJECTED : disproved
+    PENDING --> DUPLICATE : already filed
+    CONFIRMED --> EXPLOITED : impact demonstrated
+    CONFIRMED --> [*] : not feasible to exploit
+    EXPLOITED --> [*]
+    REJECTED --> [*]
+    DUPLICATE --> [*]
+```
+
+Phases 1–3 are batch operations. Phases 4 and 5 are run **per finding** — that's intentional. One finding at a time keeps evidence traceable and lets you mix model choices, prompt overrides, and rerun loops without polluting the audit.
+
+## Who is this for?
+
+- **Solo security researchers** who want LLM help on source-code audits but refuse to trust an opaque chat session.
+- **Blue and red teamers** doing internal source-code review and looking for a workflow that produces commit-friendly artifacts.
+- **People studying LLM-assisted security work** — the workspace is intentionally simple enough to instrument, fork, or compare across models.
+
+If you want a one-click vulnerability scanner, this is not it. CodeCome is for people who want **the model to help them think**, not to replace the thinking.
+
+## Why I built it
+
+After watching too many chat sessions produce confident-sounding "potential SQL injection" claims with zero evidence, I wanted a workflow where:
+
+- every claim is a file on disk,
+- every file points at specific lines of code,
+- every finding either has evidence or gets rejected,
+- and the whole thing is reviewable by a human in an afternoon.
+
+CodeCome is the harness I wish I'd had the first time I tried to use an agent for vulnerability research.
+
 ## What a finding looks like
 
-Every finding is a single Markdown file with YAML frontmatter. Here is a trimmed example from a real audit (CC-0022, an SQL injection in Zabbix's `user.get` JSON-RPC API):
+Here is what one of those Markdown files actually looks like — trimmed from a real CC-0022 audit (SQL injection in Zabbix's `user.get` JSON-RPC API):
 
 ```markdown
 ---
@@ -117,69 +180,6 @@ returned inline. Evidence under `itemdb/evidence/CC-0022/`.
 ```
 
 That single file is the entire interface between the model and you: a hypothesis with enough detail to either disprove it, validate it, or hand it to a developer.
-
-## How it works
-
-Six phases. Each one is a `make` target. Each one writes to disk.
-
-1. **Recon (`make phase-1`)** — agent reads `src/`, infers the target type, languages, build model, attack surface, and writes notes under `itemdb/notes/`. Also bootstraps a Docker sandbox suited to the stack.
-2. **Hypothesis (`make phase-2`)** — agent writes candidate findings under `itemdb/findings/PENDING/`. Each one points at specific code, sources, sinks, and a trust boundary.
-3. **Counter-analysis (`make phase-3`)** — a reviewer pass tries to disprove or deduplicate findings. Weak ones move to `REJECTED/`, repeats to `DUPLICATE/`.
-4. **Validation (`make phase-4 FINDING=CC-XXXX`)** — one finding at a time, in the sandbox. Build the target, write a small PoC, capture evidence, decide CONFIRMED or REJECTED.
-5. **Exploit (`make phase-5 FINDING=CC-XXXX`)** — for confirmed findings worth escalating, build a real PoC that shows concrete impact: code execution, data exfiltration, privilege escalation. Severity gets adjusted based on what you actually demonstrate.
-6. **Reporting (`make phase-6`)** — generate a Markdown report grouping exploited and confirmed findings with evidence references.
-
-The finding lifecycle:
-
-```mermaid
-stateDiagram-v2
-    [*] --> PENDING
-    PENDING --> CONFIRMED : evidence captured
-    PENDING --> REJECTED : disproved
-    PENDING --> DUPLICATE : already filed
-    CONFIRMED --> EXPLOITED : impact demonstrated
-    CONFIRMED --> [*] : not feasible to exploit
-    EXPLOITED --> [*]
-    REJECTED --> [*]
-    DUPLICATE --> [*]
-```
-
-Phases 1–3 are batch operations. Phases 4 and 5 are run **per finding** — that's intentional. One finding at a time keeps evidence traceable and lets you mix model choices, prompt overrides, and rerun loops without polluting the audit.
-
-## Who is this for?
-
-- **Solo security researchers** who want LLM help on source-code audits but refuse to trust an opaque chat session.
-- **Blue and red teamers** doing internal source-code review and looking for a workflow that produces commit-friendly artifacts.
-- **People studying LLM-assisted security work** — the workspace is intentionally simple enough to instrument, fork, or compare across models.
-
-If you want a one-click vulnerability scanner, this is not it. CodeCome is for people who want **the model to help them think**, not to replace the thinking.
-
-## Why I built it
-
-After watching too many chat sessions produce confident-sounding "potential SQL injection" claims with zero evidence, I wanted a workflow where:
-
-- every claim is a file on disk,
-- every file points at specific lines of code,
-- every finding either has evidence or gets rejected,
-- and the whole thing is reviewable by a human in an afternoon.
-
-CodeCome is the harness I wish I'd had the first time I tried to use an agent for vulnerability research.
-
-## Prerequisites
-
-CodeCome runs on top of [OpenCode](https://opencode.ai), an open-source AI coding agent.
-
-1. **Install OpenCode** — follow the [installation guide](https://opencode.ai/docs/#install).
-2. **Configure a provider** — connect at least one LLM provider with an API key. See [provider setup](https://opencode.ai/docs/#configure).
-3. **Python 3.10+** — needed for workspace tooling (`make venv` creates a local virtualenv).
-4. **GNU Make** — drives the workflow.
-5. **Docker** — required for the sandboxed validation environment.
-6. **Optional: exploit recording tools** — for Phase 5 visual evidence:
-   - `asciinema` — terminal recordings.
-   - `agg` — renders `.cast` files to GIFs (CodeCome falls back to a Docker container if missing).
-   - `ffmpeg` and `xvfb` (or `xvfb-run`) — for GUI/browser exploits.
-
-`make check` will warn about missing optional tools, but the core workflow runs fine without them.
 
 ## Workspace layout
 
