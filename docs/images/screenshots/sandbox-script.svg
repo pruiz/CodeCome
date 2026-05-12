@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="520" viewBox="0 0 1280 520" role="img" aria-labelledby="title desc">
+  <title id="title">CodeCome validation helper script</title>
+  <desc id="desc">A generated sandbox validation script shown as a terminal diff.</desc>
+  <rect width="1280" height="520" rx="24" fill="#0b0f14"/>
+  <rect x="28" y="28" width="1224" height="464" rx="16" fill="#101820" stroke="#1f2937"/>
+  <text x="42" y="70" fill="#86efac" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="24">add  sandbox/scripts/validate-cc0001.sh  +102 -0</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="24" dominant-baseline="middle">
+    <text x="42" y="122" fill="#a3e635">+#!/usr/bin/env bash</text>
+    <text x="42" y="158" fill="#a3e635">+# CodeCome Phase 4 validation helper for CC-0001</text>
+    <text x="42" y="194" fill="#a3e635">+# Creates a temporary executable inside the sandbox container,</text>
+    <text x="42" y="230" fill="#a3e635">+# starts the target service, and sends a minimal reproduction request.</text>
+    <text x="42" y="286" fill="#a3e635">+docker compose -f sandbox/docker-compose.yml run --rm codecome-sandbox bash -lc '</text>
+    <text x="74" y="322" fill="#a3e635">+  set -euo pipefail</text>
+    <text x="74" y="358" fill="#a3e635">+  cd /workspace/src</text>
+    <text x="74" y="394" fill="#a3e635">+  ./build-target.sh</text>
+    <text x="74" y="430" fill="#a3e635">+  python3 test/reproduce.py --capture evidence/CC-0001</text>
+    <text x="42" y="466" fill="#a3e635">+'</text>
+  </g>
+</svg>

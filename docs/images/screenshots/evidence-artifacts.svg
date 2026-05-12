@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="520" viewBox="0 0 1280 520" role="img" aria-labelledby="title desc">
+  <title id="title">CodeCome evidence artifacts</title>
+  <desc id="desc">A terminal summary showing a validated finding and the evidence artifacts created on disk.</desc>
+  <rect width="1280" height="520" rx="24" fill="#0b0f14"/>
+  <rect x="28" y="28" width="1224" height="464" rx="16" fill="#05070a" stroke="#1d4ed8" stroke-width="2"/>
+  <text x="54" y="76" fill="#e5e7eb" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="25">Validated: <tspan fill="#67e8f9">CC-0001</tspan></text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="24" dominant-baseline="middle">
+    <text x="54" y="126" fill="#e5e7eb">Method: <tspan fill="#67e8f9">static_proof, sanitizer_detection, runtime_reproduction</tspan></text>
+    <text x="54" y="176" fill="#e5e7eb">Result: <tspan fill="#67e8f9">CONFIRMED</tspan></text>
+    <text x="54" y="234" fill="#e5e7eb">Evidence created:</text>
+    <text x="92" y="282" fill="#e5e7eb">• <tspan fill="#67e8f9">itemdb/evidence/CC-0001/README.md</tspan></text>
+    <text x="92" y="318" fill="#e5e7eb">• <tspan fill="#67e8f9">itemdb/evidence/CC-0001/commands.txt</tspan></text>
+    <text x="92" y="354" fill="#e5e7eb">• <tspan fill="#67e8f9">itemdb/evidence/CC-0001/static-proof.md</tspan></text>
+    <text x="92" y="390" fill="#e5e7eb">• <tspan fill="#67e8f9">itemdb/evidence/CC-0001/sanitizer.log</tspan></text>
+    <text x="92" y="426" fill="#e5e7eb">• <tspan fill="#67e8f9">runs/2026-05-08-phase-4-CC-0001-validation.md</tspan></text>
+    <text x="54" y="474" fill="#22c55e">✔ Phase 4 completed successfully</text>
+  </g>
+</svg>

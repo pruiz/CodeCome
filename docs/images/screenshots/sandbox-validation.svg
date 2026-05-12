@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="520" viewBox="0 0 1280 520" role="img" aria-labelledby="title desc">
+  <title id="title">CodeCome sandbox validation</title>
+  <desc id="desc">A styled sandbox validation panel with all validation tiers passing.</desc>
+  <rect width="1280" height="520" rx="24" fill="#0b0f14"/>
+  <rect x="28" y="28" width="1224" height="464" rx="16" fill="#05070a" stroke="#1f2937"/>
+  <text x="54" y="76" fill="#67e8f9" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="25">$ .venv/bin/python3 tools/sandbox-bootstrap.py --format json validate</text>
+  <text x="54" y="138" fill="#e5e7eb" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="31">🧹 overall: <tspan fill="#22c55e">✅ passed</tspan></text>
+  <rect x="54" y="188" width="1172" height="248" fill="#020617" stroke="#e5e7eb" stroke-width="3"/>
+  <line x1="54" y1="248" x2="1226" y2="248" stroke="#e5e7eb" stroke-width="3"/>
+  <line x1="280" y1="188" x2="280" y2="436" stroke="#e5e7eb" stroke-width="3"/>
+  <line x1="870" y1="188" x2="870" y2="436" stroke="#e5e7eb" stroke-width="3"/>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="25" dominant-baseline="middle">
+    <text x="78" y="220" fill="#67e8f9">tier</text><text x="310" y="220" fill="#67e8f9">purpose</text><text x="902" y="220" fill="#67e8f9">outcome</text>
+    <text x="78" y="282" fill="#e5e7eb">T1</text><text x="310" y="282" fill="#e5e7eb">Sandbox build</text><text x="902" y="282" fill="#22c55e">✅ passed</text>
+    <text x="78" y="318" fill="#e5e7eb">T2</text><text x="310" y="318" fill="#e5e7eb">Environment start</text><text x="902" y="318" fill="#22c55e">✅ passed</text>
+    <text x="78" y="354" fill="#e5e7eb">T3</text><text x="310" y="354" fill="#e5e7eb">Sandbox sanity</text><text x="902" y="354" fill="#22c55e">✅ passed</text>
+    <text x="78" y="390" fill="#e5e7eb">T4</text><text x="310" y="390" fill="#e5e7eb">Target build and test</text><text x="902" y="390" fill="#22c55e">✅ passed</text>
+  </g>
+</svg>

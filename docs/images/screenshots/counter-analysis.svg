@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="380" viewBox="0 0 1280 380" role="img" aria-labelledby="title desc">
+  <title id="title">CodeCome counter-analysis run</title>
+  <desc id="desc">A terminal task list showing counter-analysis completed for several candidate findings.</desc>
+  <rect width="1280" height="380" rx="24" fill="#0b0f14"/>
+  <rect x="28" y="28" width="1224" height="324" rx="16" fill="#05070a" stroke="#a3a000" stroke-width="2"/>
+  <text x="54" y="78" fill="#e5e7eb" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="28">9 tasks · 8 completed · 1 in progress</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="24" dominant-baseline="middle">
+    <text x="74" y="130"><tspan fill="#22c55e">✓</tspan><tspan fill="#ef4444">  H</tspan><tspan fill="#22c55e">  CC-0003 SelfupdateController - counter-analysis</tspan></text>
+    <text x="74" y="172"><tspan fill="#22c55e">✓</tspan><tspan fill="#ef4444">  H</tspan><tspan fill="#22c55e">  CC-0004 Queue worker DB leak - counter-analysis</tspan></text>
+    <text x="74" y="214"><tspan fill="#22c55e">✓</tspan><tspan fill="#ef4444">  H</tspan><tspan fill="#22c55e">  CC-0006 SubscriberURL SSRF - counter-analysis</tspan></text>
+    <text x="74" y="256"><tspan fill="#22c55e">✓</tspan><tspan fill="#ef4444">  H</tspan><tspan fill="#22c55e">  CC-0009 SetWebdb cookie DB switching - counter-analysis</tspan></text>
+    <text x="74" y="300"><tspan fill="#facc15">●</tspan><tspan fill="#facc15">  M</tspan><tspan fill="#e5e7eb">  Run make frontmatter to validate</tspan></text>
+  </g>
+</svg>
