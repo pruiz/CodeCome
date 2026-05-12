@@ -46,6 +46,8 @@ CodeCome runs on top of [OpenCode](https://opencode.ai), an open-source AI codin
 
 `make check` will warn about missing optional tools, but the core workflow runs fine without them.
 
+Before pointing CodeCome at code you don't fully trust, read [Safety considerations (⚠️ disclaimer)](#safety-considerations--disclaimer).
+
 ## Quick start
 
 What CodeCome needs from you is simple: **drop a source tree under `src/`**, tell it the project name in `codecome.yml`, and run the phases.
@@ -504,6 +506,61 @@ The model you pick has a real effect on the output. Some patterns I've found use
 - **Use the resolution banner.** Every wrapped phase prints which model it actually picked and where the value came from. If a run feels off, that banner is the first place to look.
 
 The right combination depends on your provider mix, your token budget, and your target. Experiment.
+
+## Safety considerations (⚠️ disclaimer)
+
+> ⚠️ **Disclaimer — read this before pointing CodeCome at code you did not write.**
+
+CodeCome operates by feeding target source code (under `src/`) to an LLM agent
+that has powerful tools at its disposal: it reads and writes files in the
+workspace, executes commands in a sandbox, builds and runs the target, and can
+fetch resources from the network. Treating unknown source code as data is not
+safe by default.
+
+The risks worth knowing about:
+
+- **Prompt injection from the target.** Comments, docstrings, README files,
+  test fixtures, log strings, commit messages, filenames, and even crafted
+  binary blobs inside `src/` can contain instructions aimed at the agent
+  ("ignore previous instructions…", "exfiltrate $HOME/.ssh/…", etc.). The
+  agent reads these as input, not as instructions, but LLMs are still
+  susceptible.
+- **Supply-chain hazards in the sandbox.** Phase 1b will try to build and run
+  the target. A malicious build script (`setup.py`, `package.json` lifecycle
+  hooks, `Makefile`, `Dockerfile`, `configure`, …) executes inside the
+  sandbox container with whatever permissions Docker gives it.
+- **Resource exhaustion and side effects.** Adversarial code may try to
+  consume CPU, disk, or network from the validation phase.
+- **Exfiltration via network.** If the sandbox or your host can reach the
+  internet, an injected agent or a malicious build step can attempt to send
+  data out.
+
+**Recommended precautions:**
+
+1. **Run the whole workspace inside an isolation boundary** when auditing
+   untrusted sources — a disposable VM (e.g. Multipass, Vagrant, UTM,
+   Proxmox), a dedicated container, or a remote throwaway host. Do not run
+   CodeCome on a machine that holds credentials, SSH keys, browser
+   profiles, or production access you cannot afford to lose.
+2. **Treat `src/` as untrusted.** Do not run anything from `src/` directly
+   on your host. CodeCome funnels execution through `sandbox/`, but the
+   `make` runner itself, the agent, and any helper scripts still execute on
+   the host.
+3. **Restrict network egress** from the sandbox (and ideally from the
+   outer VM) to only what you need for builds and package installs.
+4. **Use a fresh API key with low spend limits** for the LLM provider so
+   prompt-injected runaway loops cannot rack up an unbounded bill.
+5. **Review what the agent writes** under `itemdb/`, `sandbox/`, and
+   `tmp/` before trusting any of it. Findings, evidence, and reports are
+   all attacker-influenced when the target is untrusted.
+6. **Avoid `make exploit-all` / `make validate-all` on untrusted targets**
+   until you have walked at least one finding through manually and
+   confirmed the sandbox behaves the way you expect.
+
+CodeCome's sandbox is a containment aid, not a security boundary against a
+determined attacker. If you would not be willing to run `docker build` and
+`./run-tests.sh` from the target's repo on the host, you should not run
+CodeCome against it on the host either.
 
 ## Project status
 
