@@ -23,35 +23,63 @@ These screenshots are sanitized/redrawn from real CodeCome runs: enough to show 
 
 <table>
   <tr>
-    <td width="50%" align="center">
+    <td width="25%" align="center">
       <a href="docs/images/screenshots/finding-queue.svg">
-        <img src="docs/images/screenshots/finding-queue.svg" alt="CodeCome finding queue" width="420">
+        <img src="docs/images/screenshots/finding-queue.svg" alt="CodeCome finding queue" width="240">
       </a>
       <br>
-      <sub><strong>Finding queue</strong><br>Hypotheses become reviewable artifacts.</sub>
+      <sub><strong>Finding queue</strong><br>Reviewable hypotheses.</sub>
     </td>
-    <td width="50%" align="center">
+    <td width="25%" align="center">
       <a href="docs/images/screenshots/agent-workflow.svg">
-        <img src="docs/images/screenshots/agent-workflow.svg" alt="CodeCome agent workflow" width="420">
+        <img src="docs/images/screenshots/agent-workflow.svg" alt="CodeCome agent workflow" width="240">
       </a>
       <br>
       <sub><strong>Agent workflow</strong><br>Agentic, but auditable.</sub>
     </td>
-  </tr>
-  <tr>
-    <td width="50%" align="center">
+    <td width="25%" align="center">
       <a href="docs/images/screenshots/sandbox-validation.svg">
-        <img src="docs/images/screenshots/sandbox-validation.svg" alt="CodeCome sandbox validation" width="420">
+        <img src="docs/images/screenshots/sandbox-validation.svg" alt="CodeCome sandbox validation" width="240">
       </a>
       <br>
       <sub><strong>Sandbox validation</strong><br>Validation before belief.</sub>
     </td>
-    <td width="50%" align="center">
+    <td width="25%" align="center">
       <a href="docs/images/screenshots/evidence-artifacts.svg">
-        <img src="docs/images/screenshots/evidence-artifacts.svg" alt="CodeCome evidence artifacts" width="420">
+        <img src="docs/images/screenshots/evidence-artifacts.svg" alt="CodeCome evidence artifacts" width="240">
       </a>
       <br>
       <sub><strong>Evidence artifacts</strong><br>Evidence written to disk.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="25%" align="center">
+      <a href="docs/images/screenshots/sandbox-script.svg">
+        <img src="docs/images/screenshots/sandbox-script.svg" alt="CodeCome generated validation helper" width="240">
+      </a>
+      <br>
+      <sub><strong>Generated helpers</strong><br>Sandbox scripts on demand.</sub>
+    </td>
+    <td width="25%" align="center">
+      <a href="docs/images/screenshots/exploit-notes-sanitized.svg">
+        <img src="docs/images/screenshots/exploit-notes-sanitized.svg" alt="CodeCome exploit development notes" width="240">
+      </a>
+      <br>
+      <sub><strong>Exploit notes</strong><br>Readable PoC writeups.</sub>
+    </td>
+    <td width="25%" align="center">
+      <a href="docs/images/screenshots/counter-analysis.svg">
+        <img src="docs/images/screenshots/counter-analysis.svg" alt="CodeCome counter-analysis task list" width="240">
+      </a>
+      <br>
+      <sub><strong>Counter-analysis</strong><br>Try to disprove first.</sub>
+    </td>
+    <td width="25%" align="center">
+      <a href="docs/images/screenshots/exploit-impact.svg">
+        <img src="docs/images/screenshots/exploit-impact.svg" alt="CodeCome exploit impact summary" width="240">
+      </a>
+      <br>
+      <sub><strong>Impact summary</strong><br>Exploited findings with artifacts.</sub>
     </td>
   </tr>
 </table>
@@ -587,4 +615,4 @@ The files under `templates/sandboxes/` are an exception: they are licensed under
 
 See `LICENSE`, `AGPL-LICENSE`, `templates/sandboxes/LICENSE`, and `NOTICE`. Contributions are accepted under the terms described in `CONTRIBUTING.md`.
 
-Copyright (C) 2025-2026 Pablo Ruiz García &lt;pablo.ruiz@gmail.com&gt;.
+Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>.
