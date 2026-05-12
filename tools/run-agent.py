@@ -3937,15 +3937,161 @@ def resolve_runtime_model_for_banner(
     return model, variant, model_source, variant_source
 
 
+_PHASE1_REQUIRED_ARTIFACT_NAMES = [
+    "target-profile.md",
+    "attack-surface.md",
+    "build-model.md",
+    "execution-model.md",
+    "trust-boundaries.md",
+    "data-flow.md",
+    "validation-model.md",
+    "interesting-files.md",
+    "file-risk-index.yml",
+    "security-assumptions.md",
+    "sandbox-plan.md",
+]
+
+
+def _phase1_required_artifacts() -> list[Path]:
+    notes_dir = ROOT / "itemdb" / "notes"
+    return [notes_dir / name for name in _PHASE1_REQUIRED_ARTIFACT_NAMES]
+
+
+def _path_is_fresh(path: Path, run_start_time: float) -> bool:
+    return path.exists() and path.stat().st_mtime >= run_start_time
+
+
+def _iter_files(root: Path) -> Iterator[Path]:
+    if not root.exists():
+        return
+    for path in root.rglob("*"):
+        if path.is_file():
+            yield path
+
+
+def _phase_checklist_lines(phase: str, finding: str | None) -> list[str]:
+    if str(phase) == "1":
+        return [
+            "Ensure all required Phase 1 notes exist under itemdb/notes/.",
+            "Ensure itemdb/notes/file-risk-index.yml is present and consistent with interesting-files.md.",
+            "Ensure itemdb/notes/sandbox-plan.md documents the Phase 1b outcome.",
+            "If sandbox bootstrap succeeded, ensure sandbox/CODECOME-GENERATED.md exists; otherwise document the halt clearly in sandbox-plan.md.",
+        ]
+    if str(phase) in ("2", "sweep"):
+        return [
+            "Create or update precise findings under itemdb/findings/PENDING/.",
+            "Each finding must identify affected code, trust-boundary/source-to-sink reasoning, attackability, impact, validation plan, and counter-analysis placeholder.",
+            "Do not stop until the new or updated findings are durable on disk.",
+        ]
+    if str(phase) == "3":
+        return [
+            "Review all candidate findings under itemdb/findings/PENDING/.",
+            "Move clearly invalid findings to REJECTED and duplicates to DUPLICATE.",
+            "Leave surviving findings reviewable, deduplicated, and updated with counter-analysis.",
+        ]
+    if str(phase) == "4":
+        finding_ref = finding or "<finding-id>"
+        return [
+            f"Ensure validation evidence exists under itemdb/evidence/{finding_ref}/, including README.md.",
+            "Update the finding with validation results and move it to the correct status directory if needed.",
+            "Do not stop until the evidence and finding status are consistent.",
+        ]
+    if str(phase) == "5":
+        finding_ref = finding or "<finding-id>"
+        return [
+            f"If exploitation succeeds, ensure itemdb/evidence/{finding_ref}/exploits/ contains the exploit artifacts and exploits/README.md.",
+            "If exploitation is not feasible, keep the finding in CONFIRMED and update its exploitation.status to NOT_FEASIBLE with a clear explanation.",
+            "Do not stop until the exploit artifacts or the NOT_FEASIBLE documentation are durable and consistent.",
+        ]
+    if str(phase) == "6":
+        return [
+            "Ensure the report output under itemdb/reports/ is written and reviewable.",
+            "Include the required summary sections and evidence references for exploited and confirmed findings.",
+            "Do not stop until the report artifacts are durable on disk.",
+        ]
+    return ["Finish the remaining required work for the current phase before ending."]
+
+
+def _build_phase_resume_prompt(
+    phase: str,
+    finding: str | None,
+    reason: str,
+    step_finish_count: int,
+) -> str:
+    checklist = "\n".join(f"- {line}" for line in _phase_checklist_lines(phase, finding))
+    return (
+        "Your previous response was cut off by the model/provider before you produced a final completion signal.\n\n"
+        f"Observed finish reason: {reason}.\n"
+        f"Completed loops before cutoff: {step_finish_count}.\n\n"
+        "Treat your prior work as partial. First, briefly reassess what remains unfinished for this phase. "
+        "Then complete only the remaining required work. Do not restart from scratch unless necessary.\n\n"
+        f"Phase {phase} completion checklist:\n"
+        f"{checklist}\n\n"
+        "Before ending, verify that the required durable artifacts for this phase exist, are updated, and are internally consistent."
+    )
+
+
+def _build_frontmatter_resume_prompt(phase: str, finding: str | None, validation_output: str) -> str:
+    checklist = "\n".join(f"- {line}" for line in _phase_checklist_lines(phase, finding))
+    return (
+        "Your previous run produced files that failed local validation.\n\n"
+        "Validation errors:\n"
+        f"{validation_output}\n\n"
+        "Repair only the reported YAML/frontmatter issues with minimal changes. Do not redo unrelated analysis.\n\n"
+        f"Phase {phase} completion checklist:\n"
+        f"{checklist}\n\n"
+        "After fixing the validation errors, ensure the affected files remain in the correct status/location and are internally consistent."
+    )
+
+
+def _build_resume_command(initial_command: list[str], session_id: str, prompt: str) -> list[str]:
+    """Preserve connection/runtime flags needed to reach the original session."""
+    resume = ["opencode", "run"]
+    pending_passthrough_value = False
+    passthrough_value_flags = {"--attach", "--port", "-p"}
+    passthrough_standalone_flags = {"--thinking"}
+    drop_value_flags = {"--agent", "--model", "-m", "--variant", "--session", "-s", "--format"}
+    drop_standalone_flags = {"--continue", "-c", "--fork"}
+
+    for token in initial_command[2:]:
+        if pending_passthrough_value:
+            resume.append(token)
+            pending_passthrough_value = False
+            continue
+
+        name, has_equals, _ = token.partition("=")
+        if name in drop_standalone_flags:
+            continue
+        if name in drop_value_flags:
+            if not has_equals:
+                pending_passthrough_value = False
+            continue
+        if name in passthrough_standalone_flags:
+            resume.append(token)
+            continue
+        if name in passthrough_value_flags:
+            resume.append(token)
+            if not has_equals:
+                pending_passthrough_value = True
+            continue
+
+    resume.extend(["--session", session_id, "--format", "json", prompt])
+    return resume
+
+
 
 def check_phase_graceful_completion(phase: str, finding: str | None, run_start_time: float) -> bool:
     """Check if the phase produced its primary artifacts, allowing us to forgive mid-turn cutoffs."""
     try:
         if str(phase) == "1":
-            profile = ROOT / "itemdb" / "notes" / "target-profile.md"
-            surface = ROOT / "itemdb" / "notes" / "attack-surface.md"
-            if profile.exists() and surface.exists():
-                return profile.stat().st_mtime >= run_start_time or surface.stat().st_mtime >= run_start_time
+            required_artifacts = _phase1_required_artifacts()
+            if all(path.exists() for path in required_artifacts):
+                fresh_required = any(_path_is_fresh(path, run_start_time) for path in required_artifacts)
+                sandbox_generated = ROOT / "sandbox" / "CODECOME-GENERATED.md"
+                sandbox_state_recorded = _path_is_fresh(sandbox_generated, run_start_time) or _path_is_fresh(
+                    ROOT / "itemdb" / "notes" / "sandbox-plan.md", run_start_time
+                )
+                return fresh_required and sandbox_state_recorded
             return False
         elif str(phase) in ("2", "sweep"):
             pending_dir = ROOT / "itemdb" / "findings" / "PENDING"
@@ -3954,22 +4100,16 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
             return False
         elif str(phase) == "3":
             findings_dir = ROOT / "itemdb" / "findings"
-            if findings_dir.exists():
-                for root, _, files in os.walk(findings_dir):
-                    for file in files:
-                        if file.endswith(".md") and file != ".gitkeep":
-                            f = Path(root) / file
-                            if f.stat().st_mtime >= run_start_time:
-                                return True
-            return False
+            return any(
+                path.suffix == ".md" and path.name != ".gitkeep" and path.stat().st_mtime >= run_start_time
+                for path in _iter_files(findings_dir)
+            )
         elif str(phase) == "4" and finding:
             evidence_dir = ROOT / "itemdb" / "evidence" / finding
-            if evidence_dir.exists():
-                return any(f.stat().st_mtime >= run_start_time for f in evidence_dir.iterdir() if f.is_file())
-            return False
+            return any(path.stat().st_mtime >= run_start_time for path in _iter_files(evidence_dir))
         elif str(phase) == "5" and finding:
             exploits_dir = ROOT / "itemdb" / "evidence" / finding / "exploits"
-            if exploits_dir.exists() and any(f.stat().st_mtime >= run_start_time for f in exploits_dir.iterdir() if f.is_file()):
+            if any(path.stat().st_mtime >= run_start_time for path in _iter_files(exploits_dir)):
                 return True
             # Fallback for NOT_FEASIBLE
             finding_file = ROOT / "itemdb" / "findings" / "CONFIRMED" / f"{finding}.md"
@@ -4062,6 +4202,7 @@ def main() -> int:
     prompt_file = ROOT / args.prompt_file
     prompt = load_prompt(prompt_file, args.finding, phase=args.phase)
     command, model, variant, model_source, variant_source, thinking_on, thinking_source = build_child_command(args)
+    base_command = list(command)
     model, variant, model_source, variant_source = resolve_runtime_model_for_banner(
         args, command, model, variant, model_source, variant_source
     )
@@ -4123,7 +4264,9 @@ def main() -> int:
             ))
         print(C.warn("rich is not installed; using plain structured output fallback"))
 
+    attempt_number = 0
     while True:
+        attempt_number += 1
         process: subprocess.Popen[str] | None = None
         interrupted = False
 
@@ -4160,7 +4303,7 @@ def main() -> int:
             finding_tag = (args.finding or "no-finding").replace("/", "_")
             transcript_dir = ROOT / "tmp"
             transcript_dir.mkdir(parents=True, exist_ok=True)
-            transcript_path = transcript_dir / f"last-phase-{args.phase}-{finding_tag}.jsonl"
+            transcript_path = transcript_dir / f"last-phase-{args.phase}-{finding_tag}-attempt-{attempt_number}.jsonl"
             last_finish_reason: Optional[str] = None
             last_finish_tokens: dict[str, Any] = {}
             last_permission_error: Optional[str] = None
@@ -4262,38 +4405,43 @@ def main() -> int:
         if returncode == 0:
             if not any_step_finish_seen:
                 finish_warning = (
-                    "no step_finish events were observed in the JSON stream; "
-                    "the agent likely produced no work"
+                    "CodeCome observed no step_finish events in the JSON stream, so the model/provider did not emit a "
+                    "completion signal. Treating the run as incomplete."
                 )
             elif last_finish_reason is None:
-                finish_warning = "step_finish observed but reason was missing"
+                finish_warning = (
+                    "CodeCome observed a step_finish event without a finish reason, so the model/provider completion "
+                    "state is ambiguous. Treating the run as incomplete."
+                )
             elif last_finish_reason in _FINISH_FAILURE:
                 finish_warning = (
-                    f"LLM stream ended with finish reason '{last_finish_reason}' "
-                    "(provider truncated the response; the phase did not finish)"
+                    f"CodeCome observed finish reason '{last_finish_reason}', which means the model/provider stopped "
+                    "before completing the phase. Treating the run as incomplete rather than as a CodeCome logic error."
                 )
             elif last_finish_reason in _FINISH_MID_TURN:
                 if last_permission_error:
                     finish_warning = (
-                        f"{last_permission_error}; the run stopped mid-turn "
-                        f"(finish reason '{last_finish_reason}')"
+                        f"{last_permission_error}; CodeCome observed the model/provider stop mid-turn with finish "
+                        f"reason '{last_finish_reason}', so the phase did not reach a final completion signal."
                     )
                 else:
                     finish_warning = (
-                        f"LLM stream ended after a mid-turn step (reason "
-                        f"'{last_finish_reason}') without a terminal 'stop'; the "
-                        f"agent hit the internal iteration limit (completed {step_finish_count} loops) or was cut short by "
-                        "the provider before producing a final response"
+                        f"CodeCome observed the model/provider stop mid-turn with finish reason '{last_finish_reason}' "
+                        f"after {step_finish_count} completed loops, without a terminal completion signal. Treating the "
+                        "phase as incomplete because the model/provider cut off the response."
                     )
             elif last_finish_reason not in _FINISH_TERMINAL_OK:
                 finish_warning = (
-                    f"LLM stream ended with unrecognised finish reason "
-                    f"'{last_finish_reason}'; treating as incomplete"
+                    f"CodeCome observed an unrecognised model/provider finish reason '{last_finish_reason}'. Treating "
+                    "the run as incomplete rather than assuming success."
                 )
 
         if finish_warning is not None and returncode == 0:
             if last_finish_reason in _FINISH_MID_TURN and check_phase_graceful_completion(args.phase, args.finding, RUN_START_TIME):
-                msg = f"Phase {args.phase} hit iteration limit (completed {step_finish_count} loops), but all required artifacts were successfully generated. Forgiving mid-turn cutoff."
+                msg = (
+                    f"CodeCome observed a mid-turn model/provider cutoff for Phase {args.phase} after {step_finish_count} "
+                    "completed loops, but the required durable artifacts were already written. Treating the phase as complete."
+                )
                 if HAVE_RICH:
                     console.print(Text(msg, style="bold green"))
                 else:
@@ -4329,36 +4477,52 @@ def main() -> int:
             )
             if validation_result.returncode != 0:
                 max_frontmatter_retries = 2
+                validation_output = (validation_result.stderr or validation_result.stdout).strip() or "(no validator output)"
                 if frontmatter_retry_count < max_frontmatter_retries:
                     frontmatter_retry_count += 1
-                    msg = f"\n[Auto-Correction] Frontmatter errors detected. Resuming session to fix (retry {frontmatter_retry_count}/{max_frontmatter_retries})..."
+                    msg = (
+                        "\n[Auto-Correction] The model completed a turn, but its output failed local frontmatter "
+                        f"validation. CodeCome will resume the same session and ask for a minimal repair "
+                        f"(retry {frontmatter_retry_count}/{max_frontmatter_retries})."
+                    )
                     if HAVE_RICH:
                         console.print(Text(msg, style="bold yellow"))
                     else:
                         print(C.warn(msg))
                         
                     if last_session_id and last_session_id != "id":
-                        prompt = (
-                            "Validation failed with the following errors:\n"
-                            f"{validation_result.stderr or validation_result.stdout}\n"
-                            "Please fix the YAML/frontmatter errors."
+                        prompt = _build_frontmatter_resume_prompt(
+                            args.phase,
+                            args.finding,
+                            validation_output,
                         )
-                        command = ["opencode", "run", "--session", last_session_id, "--format", "json", prompt]
+                        command = _build_resume_command(base_command, last_session_id, prompt)
                         if HAVE_RICH:
                             console.print(Text(f"Resuming session {last_session_id}...", style="dim"))
                         continue # loop back and retry
                     else:
+                        returncode = 2
+                        finish_warning = (
+                            "The model output failed local frontmatter validation, and CodeCome could not determine a "
+                            "session ID to resume for repair. Treating the phase as incomplete so the validator output "
+                            "can be reported back with the saved transcript."
+                        )
                         if HAVE_RICH:
                             console.print(Text("Could not determine session ID to resume.", style="red"))
                         else:
                             print(C.fail("Could not determine session ID to resume."))
                 else:
+                    returncode = 2
+                    finish_warning = (
+                        f"The model output still fails local frontmatter validation after {max_frontmatter_retries} "
+                        "auto-repair attempts. Treating the phase as incomplete so the validation errors can be reported back."
+                    )
                     msg = f"\n[Warning] Frontmatter errors persist after {max_frontmatter_retries} auto-retries."
                     if HAVE_RICH:
                         console.print(Text(msg, style="bold red"))
                     else:
                         print(C.fail(msg))
-                    print(validation_result.stderr or validation_result.stdout)
+                    print(validation_output)
             
             # If no frontmatter errors or we ran out of retries, we are done
             break
@@ -4368,22 +4532,31 @@ def main() -> int:
             max_iteration_retries = int(os.environ.get("CODECOME_MAX_ITERATION_RETRIES", "1"))
             if iteration_retry_count < max_iteration_retries:
                 iteration_retry_count += 1
-                msg = f"\n[Auto-Resume] Agent hit iteration limit ({step_finish_count} loops). Resuming session to allow it to finish... (retry {iteration_retry_count}/{max_iteration_retries})"
+                msg = (
+                    "\n[Auto-Resume] CodeCome observed a mid-turn model/provider cutoff and will resume the same "
+                    f"session once to let the model finish the interrupted work (retry {iteration_retry_count}/{max_iteration_retries})."
+                )
                 if HAVE_RICH:
                     console.print(Text(msg, style="bold yellow"))
                 else:
                     print(C.warn(msg))
                 
                 if last_session_id and last_session_id != "id":
-                    prompt = (
-                        "You were interrupted by the system's iteration limit. "
-                        "Please continue your previous plan and finish the task."
+                    prompt = _build_phase_resume_prompt(
+                        args.phase,
+                        args.finding,
+                        last_finish_reason,
+                        step_finish_count,
                     )
-                    command = ["opencode", "run", "--session", last_session_id, "--format", "json", prompt]
+                    command = _build_resume_command(base_command, last_session_id, prompt)
                     if HAVE_RICH:
                         console.print(Text(f"Resuming session {last_session_id}...", style="dim"))
                     continue # loop back and retry
                 else:
+                    finish_warning = (
+                        "CodeCome correctly detected that the model/provider stopped mid-turn, but it could not determine "
+                        "a session ID for automatic continuation. Treating the phase as incomplete."
+                    )
                     if HAVE_RICH:
                         console.print(Text("Could not determine session ID to resume.", style="red"))
                     else:

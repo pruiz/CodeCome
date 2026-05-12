@@ -1651,6 +1651,7 @@ def test_auto_correction_resume_loops_back_via_popen(monkeypatch, tmp_path):
 
     module = load_tool_module("run_agent_autocorrect", "tools/run-agent.py")
     monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setenv("OPENCODE_ARGS", "--attach http://127.0.0.1:7777 --port 4317")
 
     # Build a minimal JSON event stream that conveys a clean stop
     def _make_stream(session_id: str) -> io.StringIO:
@@ -1709,10 +1710,74 @@ def test_auto_correction_resume_loops_back_via_popen(monkeypatch, tmp_path):
     # The while loop should have called Popen twice: initial run + frontmatter resume
     assert len(popen_calls) == 2, f"expected 2 Popen calls, got {len(popen_calls)}"
     resume_cmd = popen_calls[1]
+    assert "--attach" in resume_cmd
+    assert "http://127.0.0.1:7777" in resume_cmd
+    assert "--port" in resume_cmd
+    assert "4317" in resume_cmd
     assert "--session" in resume_cmd
     assert "ses_test_abc" in resume_cmd
     assert "--format" in resume_cmd
     assert "json" in resume_cmd
+    assert "Repair only the reported YAML/frontmatter issues with minimal changes." in resume_cmd[-1]
+    assert "Phase 1 completion checklist:" in resume_cmd[-1]
+    assert "Ensure itemdb/notes/sandbox-plan.md documents the Phase 1b outcome." in resume_cmd[-1]
+
+
+@pytest.mark.component
+def test_frontmatter_failure_without_session_id_exits_nonzero(monkeypatch, tmp_path):
+    """Frontmatter validation failures must not be reported as success when
+    the wrapper cannot determine a resumable session ID."""
+    import io, json
+
+    module = load_tool_module("run_agent_frontmatter_no_session", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+
+    events = [
+        {"type": "step_finish", "part": {"reason": "stop", "tokens": {}}},
+    ]
+
+    popen_calls: list[list] = []
+
+    class FakePopen:
+        def __init__(self, cmd, *args, **kwargs):
+            popen_calls.append(list(cmd))
+            self.returncode = 0
+            self.pid = 9999
+            self.stdin = io.StringIO()
+            self.stdout = io.StringIO("".join(json.dumps(e) + "\n" for e in events))
+        def poll(self):
+            return 0
+        def wait(self):
+            return None
+
+    monkeypatch.setattr(module.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(module.os, "killpg", lambda *a: None)
+
+    class FakeResult:
+        def __init__(self, rc, out="", err=""):
+            self.returncode, self.stdout, self.stderr = rc, out, err
+
+    def fake_run(cmd, *args, **kwargs):
+        if "--version" in cmd:
+            return FakeResult(0, out="opencode 1.15.0\n")
+        if any("check-frontmatter" in str(c) for c in cmd):
+            return FakeResult(1, err="bad frontmatter")
+        if "db" in cmd:
+            return FakeResult(0, out="")
+        return FakeResult(0)
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    prompt_file = tmp_path / "phase.md"
+    prompt_file.write_text("run recon", encoding="utf-8")
+    monkeypatch.setattr(module.sys, "argv", [
+        "run-agent.py", "--phase", "1", "--label", "test",
+        "--agent", "recon", "--prompt-file", str(prompt_file),
+    ])
+
+    rc = module.main()
+    assert rc == 2
+    assert len(popen_calls) == 1
 
 
 @pytest.mark.component
@@ -1780,6 +1845,10 @@ def test_iteration_limit_triggers_auto_resume(monkeypatch, tmp_path):
     resume_cmd = popen_calls[1]
     assert "--session" in resume_cmd
     assert "ses_iter_xyz" in resume_cmd
+    assert "Your previous response was cut off by the model/provider" in resume_cmd[-1]
+    assert "Observed finish reason: tool-calls." in resume_cmd[-1]
+    assert "Phase 4 completion checklist:" in resume_cmd[-1]
+    assert "Ensure validation evidence exists under itemdb/evidence/CC-9999/, including README.md." in resume_cmd[-1]
 
 
 # ---------------------------------------------------------------------------
@@ -1802,17 +1871,26 @@ def test_check_phase_graceful_completion_mtime(monkeypatch, tmp_path):
     # ---- Phase 1 ----
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
-    profile = notes / "target-profile.md"
-    surface = notes / "attack-surface.md"
+    phase1_files = {
+        name: notes / name for name in module._PHASE1_REQUIRED_ARTIFACT_NAMES
+    }
+    sandbox_generated = tmp_path / "sandbox" / "CODECOME-GENERATED.md"
+    sandbox_generated.parent.mkdir(parents=True)
 
     # missing files
     assert module.check_phase_graceful_completion("1", None, start) is False
 
-    profile.write_text("x"); surface.write_text("x")
-    os.utime(profile, (old, old)); os.utime(surface, (old, old))
+    for path in phase1_files.values():
+        path.write_text("x")
+        os.utime(path, (old, old))
     assert module.check_phase_graceful_completion("1", None, start) is False
 
-    os.utime(profile, (fresh, fresh))
+    sandbox_generated.write_text("x")
+    os.utime(sandbox_generated, (old, old))
+    os.utime(phase1_files["target-profile.md"], (fresh, fresh))
+    assert module.check_phase_graceful_completion("1", None, start) is False
+
+    os.utime(sandbox_generated, (fresh, fresh))
     assert module.check_phase_graceful_completion("1", None, start) is True
 
     # ---- Phase 2 ----
