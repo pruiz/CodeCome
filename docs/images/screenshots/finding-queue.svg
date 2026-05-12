@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="540" viewBox="0 0 1280 540" role="img" aria-labelledby="title desc">
+  <title id="title">CodeCome finding queue</title>
+  <desc id="desc">A terminal panel listing generated findings with status, severity, confidence and short titles.</desc>
+  <rect width="1280" height="540" rx="24" fill="#0b0f14"/>
+  <rect x="28" y="28" width="1224" height="484" rx="16" fill="#05070a" stroke="#1f2937"/>
+  <circle cx="58" cy="54" r="7" fill="#ff5f57"/>
+  <circle cx="82" cy="54" r="7" fill="#febc2e"/>
+  <circle cx="106" cy="54" r="7" fill="#28c840"/>
+  <text x="42" y="96" fill="#7dd3fc" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="22">$ .venv/bin/python3 tools/list-findings.py</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="28" dominant-baseline="middle">
+    <text x="42" y="150"><tspan fill="#e5e7eb">CC-0001  </tspan><tspan fill="#facc15">[PENDING]</tspan><tspan fill="#facc15"> MEDIUM</tspan><tspan fill="#4ade80">/HIGH</tspan><tspan fill="#e5e7eb"> - HTTP mode bypasses anonymous restrictions</tspan></text>
+    <text x="42" y="198"><tspan fill="#e5e7eb">CC-0002  </tspan><tspan fill="#facc15">[PENDING]</tspan><tspan fill="#38bdf8"> LOW</tspan><tspan fill="#4ade80">/HIGH</tspan><tspan fill="#e5e7eb">    - REST upload offset allows sparse overwrite</tspan></text>
+    <text x="42" y="246"><tspan fill="#e5e7eb">CC-0003  </tspan><tspan fill="#facc15">[PENDING]</tspan><tspan fill="#facc15"> MEDIUM</tspan><tspan fill="#4ade80">/HIGH</tspan><tspan fill="#e5e7eb"> - Anonymous overwrite path retains control</tspan></text>
+    <text x="42" y="294"><tspan fill="#e5e7eb">CC-0007  </tspan><tspan fill="#facc15">[PENDING]</tspan><tspan fill="#facc15"> MEDIUM</tspan><tspan fill="#facc15">/MEDIUM</tspan><tspan fill="#e5e7eb"> - require_cert is bypassed by fallback path</tspan></text>
+    <text x="42" y="342"><tspan fill="#e5e7eb">CC-0009  </tspan><tspan fill="#facc15">[PENDING]</tspan><tspan fill="#ef4444"> HIGH</tspan><tspan fill="#facc15">/MEDIUM</tspan><tspan fill="#e5e7eb">  - user_sub_token accepts path traversal</tspan></text>
+    <text x="42" y="390"><tspan fill="#e5e7eb">CC-0018  </tspan><tspan fill="#facc15">[PENDING]</tspan><tspan fill="#ef4444"> HIGH</tspan><tspan fill="#4ade80">/HIGH</tspan><tspan fill="#e5e7eb">    - delete_failed_uploads deletes arbitrary files</tspan></text>
+    <text x="42" y="438"><tspan fill="#e5e7eb">CC-0019  </tspan><tspan fill="#facc15">[PENDING]</tspan><tspan fill="#ef4444"> HIGH</tspan><tspan fill="#facc15">/MEDIUM</tspan><tspan fill="#e5e7eb">  - run_as_launching_user disables isolation</tspan></text>
+  </g>
+</svg>
