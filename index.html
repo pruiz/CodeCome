@@ -1,0 +1,1810 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>CodeCome — AI-assisted vulnerability research without losing the trail</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="CodeCome is an AI-assisted vulnerability research harness. It turns source-code audits into a repeatable six-phase workflow with Markdown findings, YAML metadata, sandbox validation, proof-of-concept evidence and final reports." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+/* ===============================================================
+   CodeCome — open-source product site
+   - Dark hero / code / terminal panels
+   - Light body sections
+   - Accent: orange (logo) + navy (logo)
+   =============================================================== */
+
+:root{
+  /* Palette */
+  --bg:#ffffff;
+  --bg-alt:#f7f7f5;          /* warm off-white */
+  --bg-tint:#fbf6ec;         /* very soft orange tint */
+  --ink:#0b0d10;
+  --ink-2:#23262d;
+  --ink-3:#5a5f69;
+  --ink-4:#8b909a;
+  --line:#e7e6e1;
+  --line-2:#d8d6cf;
+
+  --navy:#143569;
+  --navy-2:#0c2148;
+  --navy-soft:#dfe5f0;
+
+  --orange:#f18f1d;
+  --orange-2:#d97a0a;
+  --orange-soft:#fde2c0;
+
+  --good:#2f8a4a;
+  --warn:#d68b1f;
+  --bad:#c53b3b;
+  --info:#3066c4;
+
+  /* Terminal palette */
+  --t-bg:#0c0e12;
+  --t-bg-2:#0f1218;
+  --t-line:#1d212a;
+  --t-fg:#e6e3da;
+  --t-fg-dim:#8a8f99;
+  --t-orange:#f5a04a;
+  --t-blue:#7aa7f0;
+  --t-green:#8bcf86;
+  --t-yellow:#e5cf6a;
+  --t-red:#e57a7a;
+  --t-mag:#c79bf0;
+
+  --sans: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --r-sm:6px;
+  --r-md:10px;
+  --r-lg:16px;
+  --r-xl:22px;
+
+  --shadow-1: 0 1px 0 rgba(11,13,16,.04), 0 1px 2px rgba(11,13,16,.04);
+  --shadow-2: 0 4px 16px rgba(11,13,16,.06), 0 1px 2px rgba(11,13,16,.04);
+  --shadow-3: 0 12px 40px rgba(11,13,16,.10), 0 2px 6px rgba(11,13,16,.06);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+img{max-width:100%;display:block}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit}
+code,pre,kbd{font-family:var(--mono)}
+
+/* ============== Header ============== */
+.site-head{
+  position:sticky;top:0;z-index:50;
+  background:rgba(255,255,255,.82);
+  backdrop-filter: saturate(160%) blur(10px);
+  border-bottom:1px solid var(--line);
+}
+.head-inner{
+  max-width:1240px;margin:0 auto;padding:12px 24px;
+  display:flex;align-items:center;gap:24px;
+}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em}
+.brand .mark{
+  width:28px;height:28px;display:grid;place-items:center;
+}
+.brand .word{font-size:18px;letter-spacing:-.02em}
+.brand .word .a{color:var(--orange)}
+.brand .word .b{color:var(--navy)}
+.nav{display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap}
+.nav a{
+  font-size:14px;font-weight:500;color:var(--ink-2);
+  padding:8px 10px;border-radius:8px;transition:background .15s ease, color .15s ease;
+}
+.nav a:hover{background:var(--bg-alt);color:var(--ink)}
+.nav a.gh{
+  display:inline-flex;align-items:center;gap:6px;
+  background:var(--ink);color:#fff;padding:8px 12px;
+}
+.nav a.gh:hover{background:var(--ink-2);color:#fff}
+
+/* ============== Buttons ============== */
+.btn{
+  display:inline-flex;align-items:center;gap:8px;
+  font-weight:600;font-size:14.5px;
+  border:1px solid transparent;border-radius:10px;
+  padding:10px 16px;cursor:pointer;
+  transition:background .15s ease, border-color .15s ease, transform .12s ease, box-shadow .15s ease;
+}
+.btn-primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+.btn-primary:hover{background:#000}
+.btn-orange{background:var(--orange);color:#fff;border-color:var(--orange)}
+.btn-orange:hover{background:var(--orange-2);border-color:var(--orange-2)}
+.btn-outline{background:transparent;color:var(--ink);border-color:var(--line-2)}
+.btn-outline:hover{border-color:var(--ink);background:var(--bg-alt)}
+.btn-ghost{background:transparent;color:var(--ink-2)}
+.btn-ghost:hover{background:var(--bg-alt);color:var(--ink)}
+.btn-dark-on-dark{background:#fff;color:var(--ink);border-color:#fff}
+.btn-dark-on-dark:hover{background:#eaeae5}
+.btn-outline-on-dark{background:transparent;color:#fff;border-color:rgba(255,255,255,.22)}
+.btn-outline-on-dark:hover{border-color:#fff;background:rgba(255,255,255,.06)}
+
+/* ============== Generic ============== */
+.container{max-width:1240px;margin:0 auto;padding:0 24px}
+.section{padding:88px 0}
+.section-tight{padding:64px 0}
+.eyebrow{
+  display:inline-flex;align-items:center;gap:8px;
+  font-family:var(--mono);font-size:12px;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--ink-3);
+}
+.eyebrow .sq{width:8px;height:8px;background:var(--orange);border-radius:2px;display:inline-block}
+.h1{font-size:64px;line-height:1.02;letter-spacing:-.03em;font-weight:800;margin:14px 0 14px;color:var(--ink)}
+.h2{font-size:40px;line-height:1.08;letter-spacing:-.025em;font-weight:800;margin:12px 0 14px;color:var(--ink)}
+.h3{font-size:22px;line-height:1.25;letter-spacing:-.01em;font-weight:700;margin:0 0 6px;color:var(--ink)}
+.h4{font-size:16px;font-weight:700;margin:0 0 4px}
+.lede{font-size:18px;line-height:1.55;color:var(--ink-2);max-width:62ch}
+.muted{color:var(--ink-3)}
+.k{font-family:var(--mono);font-size:13px;background:var(--bg-alt);border:1px solid var(--line);border-radius:6px;padding:1px 6px;color:var(--ink-2)}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;border-radius:999px;padding:3px 10px;border:1px solid var(--line);background:#fff;color:var(--ink-2)}
+.pill .dot{width:6px;height:6px;border-radius:999px;background:var(--ink-3)}
+.pill.ok .dot{background:var(--good)}
+.pill.warn .dot{background:var(--warn)}
+.pill.bad .dot{background:var(--bad)}
+.pill.info .dot{background:var(--info)}
+.divider{height:1px;background:var(--line);margin:0}
+
+.grid{display:grid;gap:24px}
+.g-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g-4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.g-6{grid-template-columns:repeat(6,minmax(0,1fr))}
+
+.card{
+  background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);
+  padding:22px;
+  transition:border-color .15s ease, transform .15s ease, box-shadow .15s ease;
+}
+.card:hover{border-color:var(--line-2);box-shadow:var(--shadow-2)}
+.card .num{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:28px;height:28px;border-radius:8px;
+  background:var(--bg-tint);color:var(--orange-2);
+  font-family:var(--mono);font-size:13px;font-weight:700;
+  border:1px solid var(--orange-soft);
+  margin-bottom:14px;
+}
+
+/* ============== Hero (dark) ============== */
+.hero{
+  position:relative;background:var(--t-bg);color:#fff;overflow:hidden;
+  border-bottom:1px solid #000;
+}
+.hero::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background-image:
+    radial-gradient(900px 400px at 80% -10%, rgba(241,143,29,.10), transparent 60%),
+    radial-gradient(600px 320px at -5% 30%, rgba(20,53,105,.32), transparent 60%);
+}
+.hero::after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background-image:
+    linear-gradient(transparent 23px, rgba(255,255,255,0.03) 24px),
+    linear-gradient(90deg, transparent 23px, rgba(255,255,255,0.03) 24px);
+  background-size: 24px 24px;
+  mask-image: radial-gradient(900px 600px at 50% 30%, #000 0%, transparent 80%);
+  -webkit-mask-image: radial-gradient(900px 600px at 50% 30%, #000 0%, transparent 80%);
+}
+.hero-inner{position:relative;z-index:1;padding:96px 24px 120px;max-width:1240px;margin:0 auto;display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+.hero h1{
+  font-size:60px;line-height:1.02;letter-spacing:-.03em;font-weight:800;margin:14px 0 16px;
+  background:linear-gradient(180deg,#fff,#cfd2d8);-webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.hero h1 .accent{color:var(--orange);background:none;-webkit-text-fill-color:var(--orange)}
+.hero .lede{color:#bcc0c8;max-width:54ch}
+.hero .ctas{margin-top:26px;display:flex;gap:10px;flex-wrap:wrap}
+.hero-meta{margin-top:22px;display:flex;gap:14px;flex-wrap:wrap;color:var(--t-fg-dim);font-size:13px}
+.hero-meta .dot{color:var(--t-fg-dim);margin:0 2px}
+
+/* Window panel (terminal / file tree) */
+.win{
+  background:var(--t-bg-2);border:1px solid var(--t-line);border-radius:14px;
+  box-shadow: 0 30px 60px rgba(0,0,0,.5), 0 4px 14px rgba(0,0,0,.3);
+  overflow:hidden;
+}
+.win-bar{
+  background:#0a0c10;border-bottom:1px solid var(--t-line);padding:9px 12px;
+  display:flex;align-items:center;gap:10px;
+}
+.win-bar .dots{display:flex;gap:6px}
+.win-bar .dots span{width:10px;height:10px;border-radius:50%;background:#2a2e36}
+.win-bar .dots span:nth-child(1){background:#e36464}
+.win-bar .dots span:nth-child(2){background:#e3c34a}
+.win-bar .dots span:nth-child(3){background:#7fb583}
+.win-bar .t{font-family:var(--mono);font-size:12px;color:var(--t-fg-dim)}
+.win-body{padding:14px 16px;font-family:var(--mono);font-size:13.2px;line-height:1.7;color:var(--t-fg)}
+.win-body .pr{color:var(--t-orange)}
+.win-body .cm{color:var(--t-fg-dim)}
+.win-body .ok{color:var(--t-green)}
+.win-body .warn{color:var(--t-yellow)}
+.win-body .bad{color:var(--t-red)}
+.win-body .info{color:var(--t-blue)}
+.win-body .mag{color:var(--t-mag)}
+.win-body .dim{color:var(--t-fg-dim)}
+
+.hero-split{display:grid;grid-template-rows:auto auto;gap:14px}
+
+/* file tree */
+.tree{padding:14px 14px 16px}
+.tree .line{display:flex;align-items:baseline;gap:8px;color:var(--t-fg);font-family:var(--mono);font-size:13px;line-height:1.7}
+.tree .line .ico{color:var(--t-fg-dim);width:14px;display:inline-block}
+.tree .name{color:var(--t-fg)}
+.tree .dir{color:var(--t-blue)}
+.tree .badge{color:var(--t-fg-dim);font-size:11.5px}
+.tree .l1{padding-left:14px}.tree .l2{padding-left:28px}.tree .l3{padding-left:42px}
+.tree .conf{color:var(--t-green)}
+.tree .pend{color:var(--t-yellow)}
+.tree .rej{color:var(--t-red)}
+.tree .exp{color:var(--t-mag)}
+.tree .dup{color:var(--t-fg-dim)}
+
+/* type-in cursor */
+.cursor{display:inline-block;width:8px;height:14px;background:var(--t-fg);vertical-align:-2px;animation:blink 1s steps(2) infinite;margin-left:2px}
+@keyframes blink{50%{opacity:0}}
+
+/* ============== Logo strip / quick stats ============== */
+.stats-strip{
+  background:var(--t-bg);color:#bcc0c8;border-top:1px solid #111;
+  padding:18px 0;font-family:var(--mono);font-size:12.5px;
+}
+.stats-strip .container{display:flex;gap:24px;flex-wrap:wrap;align-items:center}
+.stats-strip .item{display:flex;align-items:center;gap:8px}
+.stats-strip .k{background:transparent;border:none;color:var(--t-fg-dim);padding:0}
+.stats-strip .v{color:#fff}
+.stats-strip .sep{width:1px;height:14px;background:#2a2e36}
+
+/* ============== Section heads ============== */
+.s-head{margin-bottom:36px;max-width:760px}
+.s-head .eyebrow{margin-bottom:6px}
+
+/* problem section */
+.problem .quote{
+  font-size:44px;line-height:1.08;font-weight:800;letter-spacing:-.025em;
+  color:var(--ink);max-width:18ch;
+}
+.problem .quote .strike{
+  position:relative;display:inline-block;color:var(--ink-3);
+}
+.problem .quote .strike::after{
+  content:"";position:absolute;left:-4px;right:-4px;top:55%;height:6px;background:var(--orange);transform:skewY(-3deg);
+}
+.bullet-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:12px}
+.bullet-list li{display:flex;gap:10px;color:var(--ink-2);font-size:15.5px;line-height:1.55}
+.bullet-list li::before{content:"";flex:0 0 auto;margin-top:10px;width:6px;height:6px;border-radius:2px;background:var(--orange)}
+.bullet-list b{color:var(--ink)}
+
+/* ============== Phases ============== */
+.phase-card{
+  position:relative;background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);padding:22px;
+  display:flex;flex-direction:column;gap:8px;min-height:200px;
+  transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.phase-card:hover{border-color:var(--ink);box-shadow:var(--shadow-2)}
+.phase-card .pnum{
+  display:inline-flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-weight:700;font-size:12.5px;
+  width:auto;padding:2px 8px;border-radius:6px;background:var(--ink);color:#fff;align-self:flex-start;
+}
+.phase-card .pnum.alt{background:var(--orange);color:#fff}
+.phase-card h3{margin:4px 0 2px;font-size:20px}
+.phase-card p{margin:0;color:var(--ink-2);font-size:14.5px;line-height:1.55}
+.phase-card .meta{margin-top:auto;display:flex;gap:6px;flex-wrap:wrap;padding-top:10px}
+
+/* ============== Lifecycle flow ============== */
+.life{
+  display:grid;grid-template-columns:repeat(5, 1fr);gap:0;
+  border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;background:#fff;
+}
+.life .stage{
+  padding:18px 16px 16px;border-right:1px solid var(--line);
+  display:flex;flex-direction:column;gap:8px;background:#fff;position:relative;
+}
+.life .stage:last-child{border-right:none}
+.life .stage .status{
+  font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.04em;
+  padding:2px 7px;border-radius:4px;align-self:flex-start;border:1px solid var(--line);background:var(--bg-alt);
+}
+.life .stage h4{margin:0}
+.life .stage p{margin:0;font-size:13.5px;color:var(--ink-3);line-height:1.5}
+.life .stage.pending .status{background:#fff5e3;border-color:#f3d8a0;color:#7a5410}
+.life .stage.confirmed .status{background:#e5f4ea;border-color:#bee0c8;color:#1f6336}
+.life .stage.exploited .status{background:#f4e8ff;border-color:#d9c2f0;color:#5a2a8c}
+.life .stage.rejected .status{background:#fbe5e5;border-color:#f1bdbd;color:#8c2828}
+.life .stage.duplicate .status{background:#eef0f3;border-color:#d8dce3;color:#3a414c}
+
+/* ============== Code blocks ============== */
+.code{
+  background:var(--t-bg);color:var(--t-fg);border:1px solid var(--t-line);border-radius:12px;overflow:hidden;
+  font-family:var(--mono);font-size:13px;line-height:1.65;
+}
+.code .hd{
+  background:#0a0c10;color:var(--t-fg-dim);font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;
+  padding:8px 12px;border-bottom:1px solid var(--t-line);display:flex;align-items:center;justify-content:space-between;
+}
+.code .hd .copy{
+  font-family:var(--mono);font-size:11px;color:var(--t-fg-dim);border:1px solid var(--t-line);
+  border-radius:6px;padding:2px 8px;cursor:pointer;background:transparent;letter-spacing:.04em;
+}
+.code .hd .copy:hover{color:#fff;border-color:#3a3f4a}
+.code pre{margin:0;padding:14px 16px;overflow:auto}
+.code .tok-c{color:var(--t-fg-dim)} /* comment */
+.code .tok-k{color:var(--t-mag)}    /* keyword */
+.code .tok-s{color:var(--t-green)}  /* string */
+.code .tok-n{color:var(--t-blue)}   /* name */
+.code .tok-y{color:var(--t-yellow)} /* yaml-key / number */
+.code .tok-o{color:var(--t-orange)} /* operator */
+.code .tok-h{color:#fff;font-weight:700} /* heading */
+
+/* ============== Finding panel ============== */
+.finding{
+  background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;
+}
+.finding .hd{
+  display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line);background:var(--bg-alt);
+  flex-wrap:wrap;
+}
+.finding .hd .id{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--ink)}
+.finding .hd h3{margin:0;font-size:17px;font-weight:700}
+.finding .hd .sp{flex:1}
+.finding .body{display:grid;grid-template-columns: 1fr 1.4fr;gap:0}
+.finding .meta{padding:18px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:12px;background:#fff}
+.finding .meta .row{display:grid;grid-template-columns:120px 1fr;gap:12px;font-size:14px}
+.finding .meta .row .lbl{color:var(--ink-3);font-size:12px;text-transform:uppercase;letter-spacing:.04em;padding-top:2px}
+.finding .meta .row .val{color:var(--ink)}
+.finding .md{padding:18px;background:#fff;font-family:var(--mono);font-size:13px;line-height:1.7;color:var(--ink-2);overflow:auto}
+.finding .md .h{color:var(--ink);font-weight:700}
+.finding .md .y{color:var(--orange-2)}
+.finding .md .v{color:var(--navy)}
+.finding .md .s{color:var(--good)}
+.finding .md .x{color:var(--bad)}
+
+/* severity pills */
+.sev{
+  display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;
+  padding:3px 9px;border-radius:6px;letter-spacing:.02em;
+}
+.sev.crit{background:#fbe5e5;color:#8c2828;border:1px solid #f1bdbd}
+.sev.high{background:#fdecd9;color:#84450f;border:1px solid #f3c994}
+.sev.med {background:#fbf3cf;color:#735a1a;border:1px solid #ecd87a}
+.sev.low {background:#e8f1e6;color:#2a5a2e;border:1px solid #c6dfc4}
+.sev.info{background:#e3ecf7;color:#1d3a64;border:1px solid #b8cae5}
+
+/* ============== Sandbox section ============== */
+.sandbox-flow{
+  display:grid;grid-template-columns: 1.05fr 1fr;gap:32px;align-items:stretch;
+}
+.sb-graphic{
+  background:linear-gradient(180deg, #f7f4eb 0%, #fff 100%);
+  border:1px solid var(--line);border-radius:var(--r-lg);padding:28px;
+  display:flex;flex-direction:column;gap:14px;
+}
+.sb-node{
+  display:flex;align-items:center;gap:12px;padding:12px 14px;
+  background:#fff;border:1px solid var(--line);border-radius:12px;
+}
+.sb-node .ic{
+  width:32px;height:32px;border-radius:8px;background:var(--bg-alt);border:1px solid var(--line);
+  display:grid;place-items:center;color:var(--ink-2);
+}
+.sb-node .ic.orange{background:var(--orange-soft);border-color:var(--orange-soft);color:var(--orange-2)}
+.sb-node .ic.navy{background:var(--navy-soft);border-color:var(--navy-soft);color:var(--navy)}
+.sb-node .t{font-weight:600;font-size:14.5px}
+.sb-node .s{font-size:12.5px;color:var(--ink-3)}
+.sb-arrow{
+  width:1px;background:var(--line);height:18px;margin-left:30px;
+}
+.sb-result{
+  display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;
+}
+.sb-result .r{
+  border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff;display:flex;flex-direction:column;gap:4px;
+}
+.sb-result .r .lbl{font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em}
+.sb-result .r .v{font-family:var(--mono);font-size:14px}
+
+/* ============== Quote rows / banner ============== */
+.banner{
+  background:var(--ink);color:#fff;border-radius:var(--r-xl);padding:48px;
+  display:grid;grid-template-columns:1fr auto;gap:32px;align-items:center;
+}
+.banner h2{margin:0;font-size:34px;line-height:1.1;letter-spacing:-.02em;font-weight:800}
+.banner p{margin:8px 0 0;color:#bcc0c8;max-width:60ch}
+
+/* ============== Features grid ============== */
+.feat{
+  background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);padding:22px;display:flex;flex-direction:column;gap:8px;
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+.feat:hover{border-color:var(--line-2);box-shadow:var(--shadow-1)}
+.feat .ic{
+  width:34px;height:34px;border-radius:9px;background:var(--bg-tint);border:1px solid var(--orange-soft);
+  color:var(--orange-2);display:grid;place-items:center;margin-bottom:6px;
+}
+.feat h3{margin:0;font-size:16.5px}
+.feat p{margin:0;color:var(--ink-3);font-size:14px;line-height:1.55}
+
+/* ============== Audience cards ============== */
+.aud{
+  background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);padding:24px;
+  display:flex;flex-direction:column;gap:8px;
+}
+.aud .role{font-family:var(--mono);font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--orange-2)}
+.aud h3{margin:0;font-size:18px}
+.aud p{margin:0;color:var(--ink-3);font-size:14.5px}
+
+/* ============== Status / Roadmap ============== */
+.status-list{display:flex;flex-direction:column;gap:8px}
+.status-list .row{display:grid;grid-template-columns:140px 1fr auto;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.status-list .row .pill{margin:0}
+
+/* ============== Docs cards / links ============== */
+.docs-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.doc-link{
+  border:1px solid var(--line);border-radius:var(--r-lg);padding:18px;background:#fff;
+  display:flex;flex-direction:column;gap:6px;transition:border-color .15s ease, box-shadow .15s ease;
+}
+.doc-link:hover{border-color:var(--ink);box-shadow:var(--shadow-2)}
+.doc-link .ic{color:var(--orange)}
+.doc-link h4{margin:0;font-size:16px}
+.doc-link p{margin:0;color:var(--ink-3);font-size:13.5px}
+.doc-link .arrow{margin-top:6px;color:var(--ink-3);font-size:12px;font-family:var(--mono)}
+
+/* ============== Screenshots grid ============== */
+.shots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px}
+.shot{
+  display:flex;flex-direction:column;gap:10px;
+  border:1px solid var(--line);border-radius:var(--r-lg);
+  padding:12px;background:#fff;
+  transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.shot:hover{border-color:var(--ink);box-shadow:var(--shadow-2);transform:translateY(-2px)}
+.shot .frame{
+  background:var(--t-bg-2);border:1px solid var(--line);border-radius:10px;
+  overflow:hidden;aspect-ratio:4/3;display:grid;place-items:center;
+}
+.shot .frame img{width:100%;height:100%;object-fit:cover;display:block}
+.shot h4{margin:2px 0 0;font-size:14.5px;color:var(--ink);font-weight:700}
+.shot p{margin:0;color:var(--ink-3);font-size:12.5px;line-height:1.45}
+.shot .open{font-family:var(--mono);font-size:11px;color:var(--ink-4);align-self:flex-start;margin-top:2px}
+.shot:hover .open{color:var(--orange-2)}
+
+/* ============== Prerequisites ============== */
+.req-row{
+  display:grid;grid-template-columns:40px 1fr;gap:14px;align-items:start;
+  padding:12px 14px;background:#fff;border:1px solid var(--line);border-radius:10px;
+  transition:border-color .15s ease;
+}
+.req-row:hover{border-color:var(--line-2)}
+.req-row strong{color:var(--ink);font-size:14.5px;font-weight:700;display:block}
+.req-row p{margin:3px 0 0;font-size:13.5px;color:var(--ink-3);line-height:1.5}
+.req-row a{color:var(--orange-2);text-decoration:underline;text-underline-offset:3px}
+.req-ic{
+  width:32px;height:32px;border-radius:8px;
+  background:var(--bg-tint);color:var(--orange-2);
+  display:grid;place-items:center;
+  font-family:var(--mono);font-size:12px;font-weight:700;
+  border:1px solid var(--orange-soft);
+}
+.req-ic.alt{background:var(--bg-alt);color:var(--ink-3);border-color:var(--line)}
+.req-group-head{
+  display:flex;align-items:center;gap:10px;margin:0 0 14px;flex-wrap:wrap;
+  font-size:13px;color:var(--ink-3);
+}
+
+/* ============== Safety section ============== */
+.safety-section{
+  background:linear-gradient(180deg, #fdf6e8 0%, #fff 60%);
+  border-top:1px solid var(--orange-soft);
+}
+.warn-banner{
+  display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;
+  padding:18px 22px;
+  background:#fff8eb;
+  border:1px solid var(--orange-soft);
+  border-left:4px solid var(--orange);
+  border-radius:var(--r-lg);
+}
+.warn-banner .icon{
+  width:40px;height:40px;border-radius:10px;
+  background:var(--orange);color:#fff;
+  display:grid;place-items:center;
+  font-size:20px;font-weight:700;flex-shrink:0;
+}
+.warn-banner h3{margin:0 0 4px;font-size:16px;font-weight:700;color:var(--ink)}
+.warn-banner p{margin:0;color:var(--ink-2);font-size:14.5px;line-height:1.55}
+.risk-card{
+  background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);
+  padding:20px;display:flex;flex-direction:column;gap:8px;
+  border-top:3px solid var(--orange);
+  transition:box-shadow .15s ease;
+}
+.risk-card:hover{box-shadow:var(--shadow-2)}
+.risk-card h4{margin:0;font-size:16px;font-weight:700;color:var(--ink)}
+.risk-card p{margin:0;color:var(--ink-3);font-size:14px;line-height:1.55}
+.precautions{counter-reset:prec;display:grid;gap:10px}
+.precaution{
+  counter-increment:prec;
+  display:grid;grid-template-columns:36px 1fr;gap:14px;align-items:start;
+  background:#fff;border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;
+}
+.precaution::before{
+  content:counter(prec, decimal-leading-zero);
+  width:32px;height:28px;border-radius:6px;
+  background:var(--ink);color:#fff;
+  display:grid;place-items:center;
+  font-family:var(--mono);font-size:12px;font-weight:700;
+}
+.precaution p{margin:0;font-size:14.5px;color:var(--ink-2);line-height:1.55}
+.precaution strong{color:var(--ink);font-weight:700}
+.safety-quote{
+  margin-top:28px;padding:18px 22px;
+  border-left:3px solid var(--ink);
+  background:#fff;border:1px solid var(--line);border-radius:0 10px 10px 0;
+  font-size:15px;color:var(--ink-2);line-height:1.6;
+}
+.safety-quote strong{color:var(--ink)}
+
+/* ============== Footer ============== */
+.footer{
+  background:var(--t-bg);color:#bcc0c8;padding:64px 0 32px;border-top:1px solid #000;
+}
+.footer .grid-foot{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:36px}
+.footer h5{font-size:13px;color:#fff;margin:0 0 12px;letter-spacing:.04em;text-transform:uppercase;font-family:var(--mono);font-weight:700}
+.footer ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;font-size:14px}
+.footer a:hover{color:#fff}
+.footer .bot{
+  margin-top:36px;padding-top:18px;border-top:1px solid #1d212a;
+  display:flex;justify-content:space-between;align-items:center;font-size:13px;gap:18px;flex-wrap:wrap;
+}
+.footer .brand .word .b{color:#fff}
+
+/* ============== Responsive ============== */
+@media (max-width:1080px){
+  .h1, .hero h1{font-size:48px}
+  .h2{font-size:32px}
+  .hero-inner{grid-template-columns:1fr;padding:64px 24px 80px;gap:32px}
+  .problem .quote{font-size:34px}
+  .banner{padding:32px}
+  .banner h2{font-size:26px}
+  .shots{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media (max-width:860px){
+  .nav a:not(.gh){display:none}
+  .g-3, .g-4, .g-6{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .life{grid-template-columns:1fr 1fr}
+  .life .stage{border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .life .stage:nth-child(2n){border-right:none}
+  .docs-grid{grid-template-columns:1fr 1fr}
+  .shots{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .finding .body{grid-template-columns:1fr}
+  .finding .meta{border-right:none;border-bottom:1px solid var(--line)}
+  .sandbox-flow{grid-template-columns:1fr}
+  .footer .grid-foot{grid-template-columns:1fr 1fr}
+  .banner{grid-template-columns:1fr;padding:28px}
+}
+@media (max-width:600px){
+  .h1,.hero h1{font-size:38px}
+  .h2{font-size:26px}
+  .g-2, .g-3, .g-4, .g-6{grid-template-columns:1fr}
+  .docs-grid{grid-template-columns:1fr}
+  .shots{grid-template-columns:1fr 1fr}
+  .life{grid-template-columns:1fr}
+  .life .stage{border-right:none}
+  .status-list .row{grid-template-columns:1fr;gap:6px}
+  .footer .grid-foot{grid-template-columns:1fr}
+}
+
+</style>
+</head>
+<body>
+
+<!-- ====================== HEADER ====================== -->
+<header class="site-head">
+  <div class="head-inner">
+    <a class="brand" href="#top" aria-label="CodeCome home">
+      <span class="mark" aria-hidden="true">
+        <!-- compact mark inspired by the logo -->
+        <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="16" cy="16" r="7" stroke="#143569" stroke-width="2"/>
+          <circle cx="16" cy="3.5" r="2.2" fill="#fff" stroke="#143569" stroke-width="1.7"/>
+          <circle cx="16" cy="28.5" r="2.2" fill="#fff" stroke="#143569" stroke-width="1.7"/>
+          <circle cx="3.5" cy="16" r="2.2" fill="#fff" stroke="#143569" stroke-width="1.7"/>
+          <circle cx="28.5" cy="16" r="2.2" fill="#fff" stroke="#143569" stroke-width="1.7"/>
+          <circle cx="6.5" cy="6.5" r="2.2" fill="#fff" stroke="#143569" stroke-width="1.7"/>
+          <circle cx="25.5" cy="25.5" r="2.2" fill="#fff" stroke="#143569" stroke-width="1.7"/>
+          <line x1="16" y1="5.7" x2="16" y2="9" stroke="#143569" stroke-width="1.7"/>
+          <line x1="16" y1="23" x2="16" y2="26.3" stroke="#143569" stroke-width="1.7"/>
+          <line x1="5.7" y1="16" x2="9" y2="16" stroke="#143569" stroke-width="1.7"/>
+          <line x1="23" y1="16" x2="26.3" y2="16" stroke="#143569" stroke-width="1.7"/>
+          <line x1="8.1" y1="8.1" x2="11" y2="11" stroke="#143569" stroke-width="1.7"/>
+          <line x1="21" y1="21" x2="23.9" y2="23.9" stroke="#143569" stroke-width="1.7"/>
+          <rect x="12" y="13.3" width="8" height="1.4" fill="#143569"/>
+          <rect x="12" y="15.3" width="6" height="1.4" fill="#f18f1d"/>
+          <rect x="12" y="17.3" width="7" height="1.4" fill="#143569"/>
+        </svg>
+      </span>
+      <span class="word"><span class="a">Code</span><span class="b">Come</span></span>
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="#overview">Overview</a>
+      <a href="#workflow">Workflow</a>
+      <a href="#screenshots">Screenshots</a>
+      <a href="#prerequisites">Prerequisites</a>
+      <a href="#safety">Safety</a>
+      <a href="#docs">Docs</a>
+      <a href="#contributing">Contributing</a>
+      <a class="gh" href="https://github.com/pruiz/CodeCome" target="_blank" rel="noopener" aria-label="GitHub">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.92.58.1.79-.25.79-.55v-2.1c-3.2.7-3.87-1.36-3.87-1.36-.52-1.31-1.27-1.66-1.27-1.66-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.68 1.25 3.34.96.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.96 10.96 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.73.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.4-5.25 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.66.8.55C20.21 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5Z"/></svg>
+        GitHub
+      </a>
+    </nav>
+  </div>
+</header>
+
+<a id="top"></a>
+
+<!-- ====================== HERO ====================== -->
+<section class="hero" data-screen-label="01 Hero">
+  <div class="hero-inner">
+    <div>
+      <span class="eyebrow" style="color:#f18f1d">
+        <span class="sq"></span>
+        open-source · vulnerability research harness
+      </span>
+      <h1>AI-assisted vulnerability research <span class="accent">without losing the trail.</span></h1>
+      <p class="lede">CodeCome is the harness for building your own <em>Mythos</em> of vulnerability research at home. It turns source-code audits into a repeatable six-phase workflow with Markdown findings, YAML metadata, sandbox validation, proof-of-concept evidence and final reports.</p>
+      <div class="ctas">
+        <a class="btn btn-orange" href="https://github.com/pruiz/CodeCome" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.92.58.1.79-.25.79-.55v-2.1c-3.2.7-3.87-1.36-3.87-1.36-.52-1.31-1.27-1.66-1.27-1.66-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.68 1.25 3.34.96.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.96 10.96 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.73.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.4-5.25 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.66.8.55C20.21 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5Z"/></svg>
+          Star on GitHub
+        </a>
+        <a class="btn btn-outline-on-dark" href="#docs">Read the docs</a>
+      </div>
+      <div class="hero-meta">
+        <span><span class="dot">•</span> Dual GPL / AGPL</span>
+        <span><span class="dot">•</span> Local-first</span>
+        <span><span class="dot">•</span> Bring your own model</span>
+        <span><span class="dot">•</span> v0.x · early</span>
+      </div>
+    </div>
+
+    <div class="hero-split">
+      <!-- Terminal -->
+      <div class="win" aria-label="Terminal example">
+        <div class="win-bar">
+          <span class="dots"><span></span><span></span><span></span></span>
+          <span class="t">~/research/itemdb — codecome</span>
+        </div>
+        <div class="win-body" id="heroTerm">
+<span class="cm"># run the six phases of an audit</span>
+<span class="pr">$</span> make phase-1
+<span class="pr">$</span> make phase-2
+<span class="pr">$</span> make phase-3
+<span class="pr">$</span> make phase-4 <span class="info">FINDING=</span><span class="ok">CC-0001</span>
+<span class="pr">$</span> make phase-5 <span class="info">FINDING=</span><span class="ok">CC-0001</span>
+<span class="pr">$</span> make phase-6<span class="cursor"></span>
+        </div>
+      </div>
+
+      <!-- File tree -->
+      <div class="win" aria-label="Workspace layout">
+        <div class="win-bar">
+          <span class="dots"><span></span><span></span><span></span></span>
+          <span class="t">workspace · itemdb/</span>
+        </div>
+        <div class="tree win-body" style="padding-top:10px;padding-bottom:14px">
+          <div class="line"><span class="ico">▸</span><span class="dir">itemdb/</span></div>
+          <div class="line l1"><span class="ico">├─</span><span class="dir">notes/</span> <span class="badge">audit log, ideas</span></div>
+          <div class="line l1"><span class="ico">├─</span><span class="dir">findings/</span></div>
+          <div class="line l2"><span class="ico">│  ├─</span><span class="pend">PENDING/</span>      <span class="badge">CC-0003 · CC-0004</span></div>
+          <div class="line l2"><span class="ico">│  ├─</span><span class="conf">CONFIRMED/</span>   <span class="badge">CC-0001</span></div>
+          <div class="line l2"><span class="ico">│  ├─</span><span class="exp">EXPLOITED/</span>   <span class="badge">CC-0002</span></div>
+          <div class="line l2"><span class="ico">│  ├─</span><span class="rej">REJECTED/</span>    <span class="badge">CC-0005</span></div>
+          <div class="line l2"><span class="ico">│  └─</span><span class="dup">DUPLICATE/</span>   <span class="badge">CC-0006</span></div>
+          <div class="line l1"><span class="ico">├─</span><span class="dir">evidence/</span>   <span class="badge">PoCs, logs, payloads</span></div>
+          <div class="line l1"><span class="ico">└─</span><span class="dir">reports/</span>    <span class="badge">final Markdown / PDF</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ====================== STATS STRIP ====================== -->
+<div class="stats-strip">
+  <div class="container">
+    <div class="item"><span class="k">phases</span><span class="v">6</span></div>
+    <div class="sep"></div>
+    <div class="item"><span class="k">finding states</span><span class="v">5</span></div>
+    <div class="sep"></div>
+    <div class="item"><span class="k">data plane</span><span class="v">Markdown + YAML on disk</span></div>
+    <div class="sep"></div>
+    <div class="item"><span class="k">validation</span><span class="v">Docker sandbox</span></div>
+    <div class="sep"></div>
+    <div class="item"><span class="k">models</span><span class="v">BYO (OpenAI · Anthropic · local)</span></div>
+  </div>
+</div>
+
+<!-- ====================== PROBLEM ====================== -->
+<section class="section problem" id="overview" data-screen-label="02 Problem">
+  <div class="container">
+    <div class="grid g-2" style="gap:48px;align-items:center">
+      <div>
+        <span class="eyebrow"><span class="sq"></span>the problem</span>
+        <h2 class="quote">Chat is not <span class="strike">an audit trail.</span></h2>
+        <p class="lede" style="margin-top:16px">
+          LLM-assisted security research has a memory problem. Findings live inside chat threads that get pruned, summarized, and lost. The model "remembers" your audit until it doesn't. CodeCome treats every step of an audit like an artifact you can re-read, diff and ship.
+        </p>
+      </div>
+      <ul class="bullet-list">
+        <li><span><b>No database. No RAG. No disappearing chat history.</b> Everything lives on disk as Markdown and YAML you can grep.</span></li>
+        <li><span><b>Every claim becomes an artifact.</b> A hypothesis is a file. A confirmation is a file. A PoC is a file.</span></li>
+        <li><span><b>Hypotheses are not bugs until evidence says so.</b> Findings move through explicit states; you decide when something is real.</span></li>
+        <li><span><b>The audit lives on disk.</b> Reproducible months later, by you or anyone who clones the workspace.</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ====================== WHAT IT IS ====================== -->
+<section class="section" data-screen-label="03 What it is">
+  <div class="container">
+    <div class="s-head">
+      <span class="eyebrow"><span class="sq"></span>what CodeCome is</span>
+      <h2 class="h2">Research methodology, made executable.</h2>
+      <p class="lede">CodeCome is <b>not</b> a vulnerability scanner. It is <b>not</b> a pentest tool. It is <b>not</b> a magic AI bug finder. It is a harness — a set of conventions, prompts, and Make targets — that encodes how a careful researcher actually audits code. The model helps you think. You stay in control.</p>
+    </div>
+
+    <div class="grid g-3">
+      <div class="card">
+        <span class="num">01</span>
+        <h3 class="h3">Conventions over magic</h3>
+        <p class="muted">A workspace layout, naming scheme, finding template and Make targets. Nothing you can't read in an afternoon.</p>
+      </div>
+      <div class="card">
+        <span class="num">02</span>
+        <h3 class="h3">Prompts as code</h3>
+        <p class="muted">Each phase has explicit prompts checked into the repo. You can fork, audit and version them like any other code.</p>
+      </div>
+      <div class="card">
+        <span class="num">03</span>
+        <h3 class="h3">Evidence over vibes</h3>
+        <p class="muted">A finding is not "real" until it has been counter-argued, validated in a sandbox, and reproduced from an artifact.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ====================== HOW IT WORKS ====================== -->
+<section class="section" id="workflow" data-screen-label="04 How it works">
+  <div class="container">
+    <div class="s-head">
+      <span class="eyebrow"><span class="sq"></span>how it works</span>
+      <h2 class="h2">Drop source under <span style="font-family:var(--mono);font-size:.85em">src/</span>, configure <span style="font-family:var(--mono);font-size:.85em">codecome.yml</span>, run the phases.</h2>
+      <p class="lede">CodeCome doesn't ingest your repo into a black box. You mount source code into a workspace, declare scope in a YAML file, and trigger phases via <span class="k">make</span>. Each phase reads and writes plain files. You can stop and resume anywhere.</p>
+    </div>
+
+    <div class="grid g-2" style="align-items:start">
+      <div class="code" role="region" aria-label="codecome.yml example">
+        <div class="hd"><span>codecome.yml</span><button class="copy" data-copy-target="cc-yml">Copy</button></div>
+<pre id="cc-yml"><span class="tok-c"># Scope and configuration for this audit</span>
+<span class="tok-y">project</span>: <span class="tok-s">itemdb</span>
+<span class="tok-y">language</span>: <span class="tok-s">go</span>
+<span class="tok-y">entrypoints</span>:
+  - <span class="tok-s">cmd/server/main.go</span>
+  - <span class="tok-s">internal/http/router.go</span>
+
+<span class="tok-y">scope</span>:
+  <span class="tok-y">include</span>: [<span class="tok-s">"internal/**"</span>, <span class="tok-s">"pkg/**"</span>]
+  <span class="tok-y">exclude</span>: [<span class="tok-s">"vendor/**"</span>, <span class="tok-s">"**/_test.go"</span>]
+
+<span class="tok-y">model</span>:
+  <span class="tok-y">provider</span>: <span class="tok-s">anthropic</span>      <span class="tok-c"># or openai · ollama · …</span>
+  <span class="tok-y">name</span>:     <span class="tok-s">claude-sonnet-4-5</span>
+  <span class="tok-y">small</span>:    <span class="tok-s">claude-haiku-4-5</span>    <span class="tok-c"># cheap pass for triage</span>
+
+<span class="tok-y">sandbox</span>:
+  <span class="tok-y">image</span>: <span class="tok-s">codecome/sandbox:itemdb</span>
+  <span class="tok-y">build</span>: <span class="tok-s">make -C sandbox build</span>
+  <span class="tok-y">run</span>:   <span class="tok-s">./sandbox/run.sh</span>
+</pre>
+      </div>
+      <div>
+        <h3 class="h3">A flat, explicit workflow</h3>
+        <ul class="bullet-list">
+          <li><span><b>1. Mount.</b> Put the source you want to audit under <span class="k">src/</span>.</span></li>
+          <li><span><b>2. Configure.</b> Declare scope, entry points and model in <span class="k">codecome.yml</span>.</span></li>
+          <li><span><b>3. Run the phases.</b> Each <span class="k">make phase-N</span> target is a discrete, restartable step.</span></li>
+          <li><span><b>4. Inspect on disk.</b> Findings, evidence and reports are plain files you can grep and diff.</span></li>
+          <li><span><b>5. Ship.</b> Generate the report or hand the workspace to a teammate.</span></li>
+        </ul>
+        <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+          <a class="btn btn-outline" href="#docs">Read the workflow guide</a>
+          <a class="btn btn-ghost" href="#quickstart">Skip to commands →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ====================== SIX PHASES ====================== -->
+<section class="section" data-screen-label="05 Phases">
+  <div class="container">
+    <div class="s-head">
+      <span class="eyebrow"><span class="sq"></span>six phases</span>
+      <h2 class="h2">The audit, broken into six discrete steps.</h2>
+      <p class="lede">Each phase has its own prompt, its own outputs, and writes to a known location on disk. You can re-run a single phase without losing previous work.</p>
+    </div>
+    <div class="grid g-3">
+      <div class="phase-card">
+        <span class="pnum">PHASE 01</span>
+        <h3 class="h3">Recon</h3>
+        <p>Read the codebase. Build a map of modules, trust boundaries, entry points, sinks and external dependencies. Output: <span class="k">notes/recon.md</span>.</p>
+        <div class="meta"><span class="pill"><span class="dot"></span>read-only</span><span class="pill"><span class="dot"></span>map</span></div>
+      </div>
+      <div class="phase-card">
+        <span class="pnum">PHASE 02</span>
+        <h3 class="h3">Hypothesis</h3>
+        <p>From the recon map, generate concrete attack hypotheses. Each one is a file under <span class="k">findings/PENDING/</span> with severity, attacker model and code references.</p>
+        <div class="meta"><span class="pill warn"><span class="dot"></span>PENDING</span></div>
+      </div>
+      <div class="phase-card">
+        <span class="pnum">PHASE 03</span>
+        <h3 class="h3">Counter-analysis</h3>
+        <p>Argue against each hypothesis. The model plays devil's advocate and looks for reasons the bug isn't exploitable. Weak hypotheses get marked <span class="k">REJECTED</span>.</p>
+        <div class="meta"><span class="pill bad"><span class="dot"></span>filter</span></div>
+      </div>
+      <div class="phase-card">
+        <span class="pnum">PHASE 04</span>
+        <h3 class="h3">Validation</h3>
+        <p>Build a minimal proof inside a Docker sandbox. If a payload survives, the finding moves to <span class="k">CONFIRMED</span>. If it can't be reproduced, back to <span class="k">PENDING</span> or <span class="k">REJECTED</span>.</p>
+        <div class="meta"><span class="pill ok"><span class="dot"></span>sandbox</span><span class="pill"><span class="dot"></span>CONFIRMED</span></div>
+      </div>
+      <div class="phase-card">
+        <span class="pnum alt">PHASE 05</span>
+        <h3 class="h3">Exploit</h3>
+        <p>Turn the validated finding into a working proof-of-concept. Capture payloads, command output and logs under <span class="k">evidence/</span>. Status moves to <span class="k">EXPLOITED</span>.</p>
+        <div class="meta"><span class="pill info"><span class="dot"></span>EXPLOITED</span></div>
+      </div>
+      <div class="phase-card">
+        <span class="pnum">PHASE 06</span>
+        <h3 class="h3">Reporting</h3>
+        <p>Compile the workspace into a coherent report: executive summary, findings with evidence links and remediation. Markdown in, Markdown or PDF out.</p>
+        <div class="meta"><span class="pill"><span class="dot"></span>report</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ====================== LIFECYCLE ====================== -->
+<section class="section" data-screen-label="06 Lifecycle">
+  <div class="container">
+    <div class="s-head">
+      <span class="eyebrow"><span class="sq"></span>finding lifecycle</span>
+      <h2 class="h2">Five states. No ambiguity.</h2>
+      <p class="lede">Every finding lives in exactly one folder, named after its current state. Moving a finding between states is just <span class="k">git mv</span> — nothing magical, nothing hidden.</p>
+    </div>
+
+    <div class="life">
+      <div class="stage pending">
+        <span class="status">PENDING</span>
+        <h4 class="h4">Hypothesis filed</h4>
+        <p>An idea worth investigating. Not yet validated. Might be a real bug, might be wrong.</p>
+      </div>
+      <div class="stage confirmed">
+        <span class="status">CONFIRMED</span>
+        <h4 class="h4">Reproduced in sandbox</h4>
+        <p>The condition has been demonstrated. Not weaponized yet, but no longer in doubt.</p>
+      </div>
+      <div class="stage exploited">
+        <span class="status">EXPLOITED</span>
+        <h4 class="h4">Working PoC on disk</h4>
+        <p>A reproducible exploit exists under <span class="k">evidence/</span>. Reproducible by anyone with the workspace.</p>
+      </div>
+      <div class="stage rejected">
+        <span class="status">REJECTED</span>
+        <h4 class="h4">Falsified</h4>
+        <p>Counter-analysis or validation killed the hypothesis. Kept on disk so it isn't re-investigated for free.</p>
+      </div>
+      <div class="stage duplicate">
+        <span class="status">DUPLICATE</span>
+        <h4 class="h4">Already tracked</h4>
+        <p>The same root cause as another finding. Linked, not deleted, to preserve the audit trail.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ====================== ARTIFACT-FIRST ====================== -->
+<section class="section" id="artifacts" data-screen-label="07 Artifacts">
+  <div class="container">
+    <div class="s-head">
+      <span class="eyebrow"><span class="sq"></span>artifact-first workflow</span>
+      <h2 class="h2">Plain Markdown. Plain YAML. Real evidence.</h2>
+      <p class="lede">A finding is a Markdown file with a YAML frontmatter. Tools and humans read the same thing. No schema lock-in, no proprietary format.</p>
+    </div>
+
+    <div class="grid g-2" style="align-items:stretch">
+      <div class="code" aria-label="Finding source">
+        <div class="hd">
+          <span>findings/CONFIRMED/CC-0001-sqli-search.md</span>
+          <button class="copy" data-copy-target="cc-md">Copy</button>
+        </div>
+<pre id="cc-md"><span class="tok-c">---</span>
+<span class="tok-y">id</span>:        <span class="tok-s">CC-0001</span>
+<span class="tok-y">title</span>:     <span class="tok-s">SQL injection in /search</span>
+<span class="tok-y">status</span>:    <span class="tok-s">CONFIRMED</span>
+<span class="tok-y">severity</span>:  <span class="tok-s">high</span>
+<span class="tok-y">cwe</span>:       [<span class="tok-s">CWE-89</span>]
+<span class="tok-y">component</span>: <span class="tok-s">internal/http/search.go</span>
+<span class="tok-y">discovered</span>: <span class="tok-s">2026-05-11</span>
+<span class="tok-y">phases</span>:
+  <span class="tok-y">recon</span>:        <span class="tok-s">done</span>
+  <span class="tok-y">hypothesis</span>:   <span class="tok-s">done</span>
+  <span class="tok-y">counter</span>:      <span class="tok-s">done</span>
+  <span class="tok-y">validation</span>:   <span class="tok-s">done</span>
+<span class="tok-y">evidence</span>:
+  - <span class="tok-s">evidence/CC-0001/payload.sql</span>
+  - <span class="tok-s">evidence/CC-0001/curl.log</span>
+<span class="tok-c">---</span>
+
+<span class="tok-h"># CC-0001 — SQL injection in /search</span>
+
+<span class="tok-h">## Summary</span>
+The <span class="tok-n">/search</span> endpoint concatenates the <span class="tok-n">q</span> parameter
+into a raw SQL statement. Authentication is not required.
+
+<span class="tok-h">## Reproduction</span>
+1. Run the sandbox: <span class="tok-n">make sandbox-up</span>
+2. <span class="tok-k">curl</span> <span class="tok-s">"http://localhost:8080/search?q=' OR 1=1--"</span>
+3. Observe full table dump in response body.
+
+<span class="tok-h">## Remediation</span>
+Use <span class="tok-n">database/sql</span> parameterized queries; reject input
+containing SQL meta-characters before logging.
+</pre>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="card" style="padding:20px">
+          <h3 class="h3">Why files, not a database</h3>
+          <p class="muted" style="margin:0">A vulnerability research project should still be readable in five years. Files survive renaming, forking, GitHub outages and SQL migrations. <code class="k">grep</code>, <code class="k">git log</code> and <code class="k">diff</code> are the only tools you need.</p>
+        </div>
+        <div class="card" style="padding:20px">
+          <h3 class="h3">YAML you can validate</h3>
+          <p class="muted" style="margin:0">The frontmatter is validated against a schema in <span class="k">schemas/finding.yml</span>. Bad metadata fails fast in CI. The Markdown body stays free-form so researchers aren't fighting a form.</p>
+        </div>
+        <div class="card" style="padding:20px">
+          <h3 class="h3">Tooling that travels</h3>
+          <p class="muted" style="margin:0">Findings render in any Markdown viewer — GitHub, Obsidian, an editor preview pane. The "dashboard" is just a folder.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ====================== SANDBOX ====================== -->
+<section class="section" id="sandbox" data-screen-label="08 Sandbox" style="background:var(--bg-alt)">
+  <div class="container">
+    <div class="s-head">
+      <span class="eyebrow"><span class="sq"></span>sandbox validation</span>
+      <h2 class="h2">Validation happens in a sandbox.</h2>
+      <p class="lede">Before a finding is marked <span class="k">CONFIRMED</span>, CodeCome reproduces it against a real build of the project — in a Docker container, behind a network namespace, away from your host. If the payload doesn't fire there, it doesn't make the cut.</p>
+    </div>
+
+    <div class="sandbox-flow">
+      <div class="sb-graphic" aria-hidden="true">
+        <div class="sb-node">
+          <span class="ic navy">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/><path d="M12 2 2 7l10 5 10-5z"/></svg>
+          </span>
+          <div><div class="t">Build the sandbox image</div><div class="s">Reproducible build of the project under audit · pinned dependencies</div></div>
+        </div>
+        <div class="sb-arrow"></div>
+        <div class="sb-node">
+          <span class="ic orange">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          </span>
+          <div><div class="t">Run the payload</div><div class="s">Script under <span class="k">evidence/&lt;id&gt;/replay.sh</span> · captured stdout / stderr / status</div></div>
+        </div>
+        <div class="sb-arrow"></div>
+        <div class="sb-node">
+          <span class="ic">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </span>
+          <div><div class="t">Score the result</div><div class="s">Exit code · log signature · response body match · timing</div></div>
+        </div>
+
+        <div class="sb-result">
+          <div class="r">
+            <span class="lbl">CC-0001</span>
+            <span class="v" style="color:var(--good)">PASS · CONFIRMED</span>
+          </div>
+          <div class="r">
+            <span class="lbl">CC-0009</span>
+            <span class="v" style="color:var(--bad)">FAIL · REJECTED</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="code" aria-label="Sandbox run">
+        <div class="hd"><span>$ make phase-4 FINDING=CC-0001</span><button class="copy" data-copy-target="cc-sandbox">Copy</button></div>
+<pre id="cc-sandbox"><span class="tok-c">→</span> building sandbox image  <span class="tok-c">… 8.2s</span>
+<span class="tok-c">→</span> starting container       <span class="tok-c">… healthy</span>
+<span class="tok-c">→</span> replaying payload        <span class="tok-c">… evidence/CC-0001/replay.sh</span>
+
+  HTTP/1.1 200 OK
+  Content-Length: 4188
+  Body contains: <span class="tok-o">"users.email"</span>, <span class="tok-o">"users.pw_hash"</span>
+
+<span class="tok-c">→</span> assertions
+  ✓ status 200
+  ✓ response contains <span class="tok-n">users.pw_hash</span>
+  ✓ query log shows <span class="tok-n">UNION SELECT</span>
+
+<span class="tok-c">→</span> result: <span class="tok-s">CONFIRMED</span>
+<span class="tok-c">→</span> moved findings/PENDING/CC-0001 → findings/CONFIRMED/CC-0001
+</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ====================== EXAMPLE FINDING PANEL ====================== -->
+<section class="section" data-screen-label="09 Example finding">
+  <div class="container">
+    <div class="s-head">
+      <span class="eyebrow"><span class="sq"></span>example finding</span>
+      <h2 class="h2">What a finding looks like in practice.</h2>
+      <p class="lede">A single Markdown file, validated frontmatter, links to evidence on disk. This is the unit of work in CodeCome — not a Jira ticket, not a row in a database.</p>
+    </div>
+
+    <div class="finding">
+      <div class="hd">
+        <span class="id">CC-0001</span>
+        <h3>SQL injection in /search</h3>
+        <span class="sp"></span>
+        <span class="sev high">HIGH</span>
+        <span class="pill ok"><span class="dot"></span>CONFIRMED</span>
+        <span class="pill"><span class="dot"></span>CWE-89</span>
+      </div>
+      <div class="body">
+        <div class="meta">
+          <div class="row"><span class="lbl">Component</span><span class="val">internal/http/search.go</span></div>
+          <div class="row"><span class="lbl">Entry point</span><span class="val">GET /search?q=…</span></div>
+          <div class="row"><span class="lbl">Attacker</span><span class="val">Unauthenticated</span></div>
+          <div class="row"><span class="lbl">Impact</span><span class="val">Full DB read</span></div>
+          <div class="row"><span class="lbl">Validated</span><span class="val">2026-05-11 in sandbox</span></div>
+          <div class="row"><span class="lbl">Phases</span><span class="val" style="display:flex;gap:4px;flex-wrap:wrap">
+            <span class="pill ok"><span class="dot"></span>recon</span>
+            <span class="pill ok"><span class="dot"></span>hypothesis</span>
+            <span class="pill ok"><span class="dot"></span>counter</span>
+            <span class="pill ok"><span class="dot"></span>validation</span>
+          </span></div>
+          <div class="row"><span class="lbl">Evidence</span><span class="val">
+            <div><span class="k">evidence/CC-0001/payload.sql</span></div>
+            <div><span class="k">evidence/CC-0001/curl.log</span></div>
+            <div><span class="k">evidence/CC-0001/replay.sh</span></div>
+          </span></div>
+        </div>
+        <div class="md">
+<span class="h"># CC-0001 — SQL injection in /search</span>
+
+<span class="h">## Summary</span>
+The <span class="v">/search</span> endpoint concatenates the
+<span class="v">q</span> parameter directly into the SQL string
+used to query <span class="v">users</span>. Authentication is not
+required.
+
+<span class="h">## Reproduction</span>
+<span class="y">1.</span> <span class="v">make sandbox-up</span>
+<span class="y">2.</span> <span class="v">curl "http://localhost:8080/search?q=' UNION SELECT email,pw_hash,1 FROM users--"</span>
+<span class="y">3.</span> Observe the response containing emails and password hashes.
+
+<span class="h">## Counter-analysis</span>
+<span class="x">- Argued:</span> rate-limiter would block enumeration.
+<span class="s">- Outcome:</span> rate-limiter is keyed per token; anonymous
+  requests share a single bucket → attacker can bypass.
+
+<span class="h">## Remediation</span>
+Use parameterized queries (<span class="v">database/sql</span>) and
+treat the search field as opaque text. Log queries with the raw
+parameter redacted.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ====================== SCREENSHOTS ====================== -->
+<section class="section" id="screenshots" data-screen-label="Screenshots">
+  <div class="container">
+    <div class="s-head">
+      <span class="eyebrow"><span class="sq"></span>screenshots</span>
+      <h2 class="h2">What CodeCome actually looks like.</h2>
+      <p class="lede">Sanitized snapshots from real audits — enough to show the workflow, not enough to leak target-specific exploit details or credentials. Click any tile for the full-size image.</p>
+    </div>
+
+    <div class="shots">
+      <a class="shot" href="docs/images/screenshots/finding-queue.svg" target="_blank" rel="noopener">
+        <div class="frame"><img src="docs/images/screenshots/finding-queue.svg" alt="CodeCome finding queue" loading="lazy" /></div>
+        <h4>Finding queue</h4>
+        <p>Reviewable hypotheses awaiting validation.</p>
+        <span class="open">open ↗</span>
+      </a>
+      <a class="shot" href="docs/images/screenshots/agent-workflow.svg" target="_blank" rel="noopener">
+        <div class="frame"><img src="docs/images/screenshots/agent-workflow.svg" alt="CodeCome agent workflow" loading="lazy" /></div>
+        <h4>Agent workflow</h4>
+        <p>Agentic, but auditable from the file system up.</p>
+        <span class="open">open ↗</span>
+      </a>
+      <a class="shot" href="docs/images/screenshots/sandbox-validation.svg" target="_blank" rel="noopener">
+        <div class="frame"><img src="docs/images/screenshots/sandbox-validation.svg" alt="CodeCome sandbox validation" loading="lazy" /></div>
+        <h4>Sandbox validation</h4>
+        <p>Validation before belief — inside Docker.</p>
+        <span class="open">open ↗</span>
+      </a>
+      <a class="shot" href="docs/images/screenshots/evidence-artifacts.svg" target="_blank" rel="noopener">
+        <div class="frame"><img src="docs/images/screenshots/evidence-artifacts.svg" alt="CodeCome evidence artifacts" loading="lazy" /></div>
+        <h4>Evidence artifacts</h4>
+        <p>Every confirmed claim leaves files behind.</p>
+        <span class="open">open ↗</span>
+      </a>
+      <a class="shot" href="docs/images/screenshots/sandbox-script.svg" target="_blank" rel="noopener">
+        <div class="frame"><img src="docs/images/screenshots/sandbox-script.svg" alt="CodeCome generated validation helper" loading="lazy" /></div>
+        <h4>Generated helpers</h4>
+        <p>Sandbox scripts produced on demand per finding.</p>
+        <span class="open">open ↗</span>
+      </a>
+      <a class="shot" href="docs/images/screenshots/exploit-notes-sanitized.svg" target="_blank" rel="noopener">
+        <div class="frame"><img src="docs/images/screenshots/exploit-notes-sanitized.svg" alt="CodeCome exploit development notes" loading="lazy" /></div>
+        <h4>Exploit notes</h4>
+        <p>Readable PoC writeups, not chat scrollback.</p>
+        <span class="open">open ↗</span>
+      </a>
+      <a class="shot" href="docs/images/screenshots/counter-analysis.svg" target="_blank" rel="noopener">
+        <div class="frame"><img src="docs/images/screenshots/counter-analysis.svg" alt="CodeCome counter-analysis task list" loading="lazy" /></div>
+        <h4>Counter-analysis</h4>
+        <p>Try to disprove first — then validate.</p>
+        <span class="open">open ↗</span>
+      </a>
+      <a class="shot" href="docs/images/screenshots/exploit-impact.svg" target="_blank" rel="noopener">
+        <div class="frame"><img src="docs/images/screenshots/exploit-impact.svg" alt="CodeCome exploit impact summary" loading="lazy" /></div>
+        <h4>Impact summary</h4>
+        <p>Exploited findings with linked artifacts.</p>
+        <span class="open">open ↗</span>
+      </a>
+    </div>
+
+    <p class="muted" style="margin-top:18px;font-size:13.5px">An asciinema cast of a full run is planned.</p>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ====================== AUDIENCE ====================== -->
+<section class="section" data-screen-label="10 Who it is for">
+  <div class="container">
+    <div class="s-head">
+      <span class="eyebrow"><span class="sq"></span>who it's for</span>
+      <h2 class="h2">Built for people who already do this work.</h2>
+      <p class="lede">CodeCome won't turn a non-researcher into one. It will save a researcher hours of bookkeeping per audit.</p>
+    </div>
+    <div class="grid g-3">
+      <div class="aud"><span class="role">Solo security researcher</span><h3>Keep the trail of your private hunts</h3><p>Audit codebases at your own pace without losing context when you come back a month later.</p></div>
+      <div class="aud"><span class="role">AppSec engineer</span><h3>Audit your own product, repeatably</h3><p>Bring a structured methodology to internal security reviews. Hand the workspace to the next on-call.</p></div>
+      <div class="aud"><span class="role">Red teamer</span><h3>Document offensive work as you go</h3><p>From recon to PoC, every step lands in the workspace, ready to be turned into a deliverable.</p></div>
+      <div class="aud"><span class="role">Blue teamer</span><h3>Reproduce vendor advisories</h3><p>Pin a sandbox build, replay a payload, decide if your patch actually closed the door.</p></div>
+      <div class="aud"><span class="role">LLM researcher</span><h3>Study LLM-assisted research</h3><p>An opinionated, instrumented harness for experimenting with prompt strategies and counter-analysis loops.</p></div>
+      <div class="aud"><span class="role">Educator</span><h3>Teach methodology, not tools</h3><p>Walk students through six phases of a real audit using a project they can clone.</p></div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ====================== PREREQUISITES ====================== -->
+<section class="section" id="prerequisites" data-screen-label="Prerequisites">
+  <div class="container">
+    <div class="s-head">
+      <span class="eyebrow"><span class="sq"></span>prerequisites</span>
+      <h2 class="h2">What you need before running it.</h2>
+      <p class="lede">CodeCome runs on top of <a href="https://opencode.ai" target="_blank" rel="noopener" style="color:var(--orange-2);text-decoration:underline;text-underline-offset:3px">OpenCode</a> with your own LLM provider, plus a small Python + Make + Docker stack. <span class="k">make check</span> warns about anything missing — but the core workflow runs without the optional tools.</p>
+    </div>
+
+    <div class="grid g-2" style="align-items:start;gap:32px">
+      <div>
+        <div class="req-group-head">
+          <span class="pill ok"><span class="dot"></span>required</span>
+          <span>core stack · every audit needs these</span>
+        </div>
+        <div class="grid" style="gap:10px">
+          <div class="req-row">
+            <div class="req-ic">OC</div>
+            <div>
+              <strong>OpenCode</strong>
+              <p>The open-source AI coding agent CodeCome drives. <a href="https://opencode.ai/docs/#install" target="_blank" rel="noopener">Install guide</a>.</p>
+            </div>
+          </div>
+          <div class="req-row">
+            <div class="req-ic">K</div>
+            <div>
+              <strong>An LLM provider key</strong>
+              <p>At least one of Anthropic, OpenAI, Google, xAI, Groq, Cerebras — or a local OpenAI-compatible endpoint. <a href="https://opencode.ai/docs/#configure" target="_blank" rel="noopener">Provider setup</a>.</p>
+            </div>
+          </div>
+          <div class="req-row">
+            <div class="req-ic">PY</div>
+            <div>
+              <strong>Python 3.10+</strong>
+              <p>For workspace tooling. <span class="k">make venv</span> creates a local virtualenv.</p>
+            </div>
+          </div>
+          <div class="req-row">
+            <div class="req-ic">MK</div>
+            <div>
+              <strong>GNU Make</strong>
+              <p>The entire workflow is driven through <span class="k">make</span> targets.</p>
+            </div>
+          </div>
+          <div class="req-row">
+            <div class="req-ic">D</div>
+            <div>
+              <strong>Docker</strong>
+              <p>Required for the sandboxed validation environment in Phases 1b / 4 / 5.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="req-group-head">
+          <span class="pill"><span class="dot"></span>optional</span>
+          <span>for Phase 5 visual evidence</span>
+        </div>
+        <div class="grid" style="gap:10px">
+          <div class="req-row">
+            <div class="req-ic alt">▶</div>
+            <div>
+              <strong>asciinema</strong>
+              <p>Terminal recordings of exploit replays.</p>
+            </div>
+          </div>
+          <div class="req-row">
+            <div class="req-ic alt">GIF</div>
+            <div>
+              <strong>agg</strong>
+              <p>Renders <span class="k">.cast</span> files to GIFs. CodeCome falls back to a Docker container if missing.</p>
+            </div>
+          </div>
+          <div class="req-row">
+            <div class="req-ic alt">●</div>
+            <div>
+              <strong>ffmpeg + xvfb</strong>
+              <p>For GUI / browser exploits where video evidence matters. <span class="k">xvfb-run</span> is fine too.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="warn-banner" style="margin-top:18px">
+          <div class="icon" aria-hidden="true">!</div>
+          <div>
+            <h3>Auditing untrusted code?</h3>
+            <p>Read <a href="#safety" style="color:var(--orange-2);text-decoration:underline;font-weight:600">Safety considerations</a> below before pointing CodeCome at code you didn't write.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ====================== SAFETY ====================== -->
+<section class="section safety-section" id="safety" data-screen-label="Safety">
+  <div class="container">
+    <div class="s-head">
+      <span class="eyebrow"><span class="sq"></span>safety considerations</span>
+      <h2 class="h2">Treat unknown source code as data, not safe input.</h2>
+    </div>
+
+    <div class="warn-banner" style="margin-bottom:32px">
+      <div class="icon" aria-hidden="true">⚠</div>
+      <div>
+        <h3>Read this before pointing CodeCome at code you did not write.</h3>
+        <p>CodeCome feeds target source code to an LLM agent with powerful tools — it reads and writes files in the workspace, executes commands in a sandbox, builds and runs the target, and can fetch resources from the network. Treating unknown source code as data is not safe by default.</p>
+      </div>
+    </div>
+
+    <h3 class="h3" style="margin:32px 0 16px;font-size:22px">Risks worth knowing about</h3>
+    <div class="grid g-2" style="margin-bottom:40px;gap:18px">
+      <div class="risk-card">
+        <h4>Prompt injection from the target</h4>
+        <p>Comments, docstrings, READMEs, test fixtures, log strings, commit messages, filenames — even crafted binary blobs inside <span class="k">src/</span> — can carry instructions aimed at the agent ("ignore previous instructions…", "exfiltrate <span class="k">$HOME/.ssh/</span>…"). The agent reads these as input, but LLMs are still susceptible.</p>
+      </div>
+      <div class="risk-card">
+        <h4>Supply-chain hazards in the sandbox</h4>
+        <p>Phase 1b will try to build and run the target. A malicious <span class="k">setup.py</span>, <span class="k">package.json</span> lifecycle hook, <span class="k">Makefile</span>, <span class="k">Dockerfile</span>, or <span class="k">configure</span> script executes inside the sandbox container with whatever permissions Docker gives it.</p>
+      </div>
+      <div class="risk-card">
+        <h4>Resource exhaustion and side effects</h4>
+        <p>Adversarial code may try to burn CPU, fill disk, or hammer the network from the validation phase. A prompt-injected runaway agent loop can burn tokens just as easily.</p>
+      </div>
+      <div class="risk-card">
+        <h4>Exfiltration via network</h4>
+        <p>If the sandbox (or your host) can reach the internet, an injected agent or a malicious build step can attempt to send data out. The default policy assumes egress is possible.</p>
+      </div>
+    </div>
+
+    <h3 class="h3" style="margin:0 0 16px;font-size:22px">Recommended precautions</h3>
+    <div class="precautions">
+      <div class="precaution"><p><strong>Run the whole workspace inside an isolation boundary</strong> when auditing untrusted sources — a disposable VM (Multipass, Vagrant, UTM, Proxmox), a dedicated container, or a remote throwaway host. Do not run CodeCome on a machine that holds credentials, SSH keys, browser profiles, or production access you can't afford to lose.</p></div>
+      <div class="precaution"><p><strong>Treat <span class="k">src/</span> as untrusted.</strong> CodeCome funnels execution through <span class="k">sandbox/</span>, but the <span class="k">make</span> runner itself, the agent, and any helper scripts still execute on the host.</p></div>
+      <div class="precaution"><p><strong>Restrict network egress</strong> from the sandbox (and ideally from the outer VM) to only what you need for builds and package installs.</p></div>
+      <div class="precaution"><p><strong>Use a fresh API key with low spend limits</strong> for the LLM provider, so a prompt-injected runaway loop can't rack up an unbounded bill.</p></div>
+      <div class="precaution"><p><strong>Review what the agent writes</strong> under <span class="k">itemdb/</span>, <span class="k">sandbox/</span> and <span class="k">tmp/</span> before trusting any of it. Findings, evidence and reports are all attacker-influenced when the target is untrusted.</p></div>
+      <div class="precaution"><p><strong>Avoid <span class="k">make exploit-all</span> and <span class="k">make validate-all</span></strong> on untrusted targets until you have walked at least one finding through manually and confirmed the sandbox behaves the way you expect.</p></div>
+    </div>
+
+    <div class="safety-quote">
+      CodeCome's sandbox is a <strong>containment aid</strong>, not a security boundary against a determined attacker. If you wouldn't be willing to run <span class="k">docker build</span> and <span class="k">./run-tests.sh</span> from the target's repo on the host, you shouldn't run CodeCome against it on the host either.
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ====================== QUICK START ====================== -->
+<section class="section" id="quickstart" data-screen-label="11 Quick start" style="background:var(--bg-alt)">
+  <div class="container">
+    <div class="s-head">
+      <span class="eyebrow"><span class="sq"></span>quick start</span>
+      <h2 class="h2">Run your first audit in eight commands.</h2>
+      <p class="lede">Clone the repo, drop your source under <span class="k">src/</span>, edit <span class="k">codecome.yml</span>, and run the phases. Each target is restartable.</p>
+    </div>
+    <div class="grid g-2" style="align-items:start;gap:32px">
+      <div class="code" aria-label="Quick start commands">
+        <div class="hd"><span>quick start</span><button class="copy" data-copy-target="cc-qs">Copy</button></div>
+<pre id="cc-qs"><span class="tok-c"># bootstrap a virtual env and install deps</span>
+<span class="tok-o">$</span> make venv
+
+<span class="tok-c"># sanity-check your environment, model creds, sandbox</span>
+<span class="tok-o">$</span> make check
+
+<span class="tok-c"># six phases of an audit</span>
+<span class="tok-o">$</span> make phase-1
+<span class="tok-o">$</span> make phase-2
+<span class="tok-o">$</span> make phase-3
+<span class="tok-o">$</span> make phase-4 <span class="tok-n">FINDING</span>=<span class="tok-s">CC-0001</span>
+<span class="tok-o">$</span> make phase-5 <span class="tok-n">FINDING</span>=<span class="tok-s">CC-0001</span>
+<span class="tok-o">$</span> make phase-6
+</pre>
+      </div>
+      <div>
+        <h3 class="h3">What each target does</h3>
+        <ul class="bullet-list">
+          <li><span><span class="k">make venv</span> — sets up Python, OpenCode CLI and Docker dependencies.</span></li>
+          <li><span><span class="k">make check</span> — validates <span class="k">codecome.yml</span>, model credentials and that Docker is reachable.</span></li>
+          <li><span><span class="k">make phase-1..3</span> — recon, hypothesis, counter-analysis. Work on the whole workspace.</span></li>
+          <li><span><span class="k">make phase-4 / 5 FINDING=&lt;id&gt;</span> — operate on a specific finding so you can iterate safely.</span></li>
+          <li><span><span class="k">make phase-6</span> — assemble the report from the current state of the workspace.</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ====================== FEATURES GRID ====================== -->
+<section class="section" data-screen-label="12 Features">
+  <div class="container">
+    <div class="s-head">
+      <span class="eyebrow"><span class="sq"></span>features</span>
+      <h2 class="h2">What's in the harness.</h2>
+    </div>
+    <div class="grid g-4">
+      <div class="feat"><span class="ic">⌘</span><h3>Six-phase Makefile</h3><p>Recon, hypothesis, counter-analysis, validation, exploit, reporting — each a single target.</p></div>
+      <div class="feat"><span class="ic">⎘</span><h3>Markdown findings</h3><p>YAML frontmatter, free-form body. Validated against a schema, rendered everywhere.</p></div>
+      <div class="feat"><span class="ic">⎔</span><h3>Docker sandbox</h3><p>Reproducible build of the audited project, isolated from the host.</p></div>
+      <div class="feat"><span class="ic">⇄</span><h3>State as folders</h3><p>Findings move between <span class="k">PENDING/</span>, <span class="k">CONFIRMED/</span> and the rest with <span class="k">git mv</span>.</p></div>
+      <div class="feat"><span class="ic">∿</span><h3>Versioned prompts</h3><p>Phase prompts checked into the repo. Diff them, fork them, A/B them.</p></div>
+      <div class="feat"><span class="ic">≡</span><h3>Replay scripts</h3><p>Every confirmed finding ships a <span class="k">replay.sh</span>. Reproduction is one command.</p></div>
+      <div class="feat"><span class="ic">↺</span><h3>Restartable phases</h3><p>Crashed mid-audit? Re-run a single phase without losing the rest.</p></div>
+      <div class="feat"><span class="ic">⎕</span><h3>Plain-file dashboard</h3><p>Your repo browser is the UI. <span class="k">tree findings/</span> tells you the whole state.</p></div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ====================== WORKSPACE LAYOUT ====================== -->
+<section class="section" id="layout" data-screen-label="13 Workspace">
+  <div class="container">
+    <div class="s-head">
+      <span class="eyebrow"><span class="sq"></span>workspace layout</span>
+      <h2 class="h2">One repo. Everything on disk.</h2>
+      <p class="lede">A CodeCome workspace is a normal git repo with a small, fixed set of folders. You can drop it into any IDE and read it as code.</p>
+    </div>
+    <div class="grid g-2" style="align-items:stretch">
+      <div class="win" style="background:var(--t-bg-2)">
+        <div class="win-bar"><span class="dots"><span></span><span></span><span></span></span><span class="t">~/research/itemdb</span></div>
+        <div class="tree win-body" style="padding:14px 18px">
+          <div class="line"><span class="ico">▸</span><span class="dir">itemdb/</span></div>
+          <div class="line l1"><span class="ico">├─</span><span class="name">codecome.yml</span><span class="badge">scope &amp; model</span></div>
+          <div class="line l1"><span class="ico">├─</span><span class="dir">src/</span><span class="badge">code under audit</span></div>
+          <div class="line l1"><span class="ico">├─</span><span class="dir">notes/</span></div>
+          <div class="line l2"><span class="ico">│  ├─</span><span class="name">recon.md</span></div>
+          <div class="line l2"><span class="ico">│  └─</span><span class="name">audit-log.md</span></div>
+          <div class="line l1"><span class="ico">├─</span><span class="dir">findings/</span></div>
+          <div class="line l2"><span class="ico">│  ├─</span><span class="pend">PENDING/</span></div>
+          <div class="line l2"><span class="ico">│  ├─</span><span class="conf">CONFIRMED/</span></div>
+          <div class="line l2"><span class="ico">│  ├─</span><span class="exp">EXPLOITED/</span></div>
+          <div class="line l2"><span class="ico">│  ├─</span><span class="rej">REJECTED/</span></div>
+          <div class="line l2"><span class="ico">│  └─</span><span class="dup">DUPLICATE/</span></div>
+          <div class="line l1"><span class="ico">├─</span><span class="dir">evidence/</span><span class="badge">PoCs, payloads, logs</span></div>
+          <div class="line l1"><span class="ico">├─</span><span class="dir">sandbox/</span><span class="badge">Dockerfile, scripts</span></div>
+          <div class="line l1"><span class="ico">├─</span><span class="dir">prompts/</span><span class="badge">per-phase prompts</span></div>
+          <div class="line l1"><span class="ico">└─</span><span class="dir">reports/</span><span class="badge">final deliverables</span></div>
+        </div>
+      </div>
+      <div>
+        <h3 class="h3">Why this shape</h3>
+        <ul class="bullet-list">
+          <li><span><b>Code under audit lives under <span class="k">src/</span>.</b> Vendor it, submodule it, or symlink it — your call.</span></li>
+          <li><span><b>Findings are folders.</b> No DB, no SaaS. State is "which folder is this file in".</span></li>
+          <li><span><b>Prompts and sandbox are first-class.</b> They live in the repo and ship with the audit.</span></li>
+          <li><span><b>Evidence is auditable.</b> Replay scripts and logs sit next to the finding that proves them.</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ====================== OPENCODE INTEGRATION ====================== -->
+<section class="section" data-screen-label="14 OpenCode">
+  <div class="container">
+    <div class="s-head">
+      <span class="eyebrow"><span class="sq"></span>opencode integration</span>
+      <h2 class="h2">Drives a real coding agent, not a chat box.</h2>
+      <p class="lede">Each phase runs through <a href="https://opencode.ai" target="_blank" rel="noopener" style="color:var(--orange-2);text-decoration:underline;text-underline-offset:3px">OpenCode</a>, a local agent CLI that reads and writes files. The model isn't dictating to a chat window — it is editing your workspace under the harness's supervision.</p>
+    </div>
+    <div class="grid g-3">
+      <div class="card">
+        <h3 class="h3">File-aware, not chat-aware</h3>
+        <p class="muted">The agent reads <span class="k">notes/</span>, <span class="k">findings/</span> and <span class="k">src/</span> directly. Context is the workspace, not a sliding window.</p>
+      </div>
+      <div class="card">
+        <h3 class="h3">Tool calls you can audit</h3>
+        <p class="muted">Every shell command, file read and file write is logged. The audit trail includes the agent's actions, not just its prose.</p>
+      </div>
+      <div class="card">
+        <h3 class="h3">Drop-in replaceable</h3>
+        <p class="muted">OpenCode is the default. If you prefer another agent runner, the phase scripts call a thin wrapper you can swap.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ====================== MODEL STRATEGY ====================== -->
+<section class="section" data-screen-label="15 Models" style="background:var(--bg-alt)">
+  <div class="container">
+    <div class="s-head">
+      <span class="eyebrow"><span class="sq"></span>model strategy</span>
+      <h2 class="h2">Bring your own model. Two tiers.</h2>
+      <p class="lede">CodeCome separates a <b>"main"</b> model that does the heavy reasoning from a cheaper <b>"small"</b> model used for triage, classification and prompt-shaping. You can mix providers; you can run fully local.</p>
+    </div>
+
+    <div class="grid g-3">
+      <div class="card">
+        <span class="num">M</span>
+        <h3 class="h3">Main model</h3>
+        <p class="muted">Used for recon, hypothesis, counter-analysis and exploit. Picks: Anthropic Claude Sonnet, OpenAI GPT-4-class, or a strong local model.</p>
+      </div>
+      <div class="card">
+        <span class="num">S</span>
+        <h3 class="h3">Small model</h3>
+        <p class="muted">Used for triage, deduplication and metadata extraction. Picks: Anthropic Haiku, OpenAI mini, or a 7B–13B local model.</p>
+      </div>
+      <div class="card">
+        <span class="num">L</span>
+        <h3 class="h3">Local mode</h3>
+        <p class="muted">Point both tiers at <span class="k">ollama://</span> or any OpenAI-compatible local endpoint. No code leaves your machine.</p>
+      </div>
+    </div>
+
+    <p class="lede" style="margin-top:18px;color:var(--ink-3);font-size:15px"><b>The model helps you think. You stay in control.</b> Nothing is committed to a finding folder without an explicit phase being run.</p>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ====================== PROJECT STATUS ====================== -->
+<section class="section" data-screen-label="16 Status">
+  <div class="container">
+    <div class="s-head">
+      <span class="eyebrow"><span class="sq"></span>project status</span>
+      <h2 class="h2">Early. Useful. Honest about both.</h2>
+      <p class="lede">CodeCome is v0.x. The conventions are stable enough to use; the tooling around them is still moving. We won't pretend otherwise.</p>
+    </div>
+    <div class="status-list">
+      <div class="row">
+        <span class="pill ok"><span class="dot"></span>Stable</span>
+        <span>Workspace layout · finding schema · phase contracts</span>
+        <span class="k">core/</span>
+      </div>
+      <div class="row">
+        <span class="pill ok"><span class="dot"></span>Stable</span>
+        <span>Markdown + YAML finding format</span>
+        <span class="k">schemas/</span>
+      </div>
+      <div class="row">
+        <span class="pill warn"><span class="dot"></span>Beta</span>
+        <span>OpenCode integration · phase prompts</span>
+        <span class="k">prompts/</span>
+      </div>
+      <div class="row">
+        <span class="pill warn"><span class="dot"></span>Beta</span>
+        <span>Docker sandbox templates</span>
+        <span class="k">sandbox/</span>
+      </div>
+      <div class="row">
+        <span class="pill info"><span class="dot"></span>Experimental</span>
+        <span>Cross-finding deduplication · roll-up reports</span>
+        <span class="k">reports/</span>
+      </div>
+      <div class="row">
+        <span class="pill"><span class="dot"></span>Planned</span>
+        <span>Multi-repo audits · SARIF export · CI integration</span>
+        <span class="k">v0.next</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ====================== DOCS ====================== -->
+<section class="section" id="docs" data-screen-label="17 Docs">
+  <div class="container">
+    <div class="s-head">
+      <span class="eyebrow"><span class="sq"></span>documentation</span>
+      <h2 class="h2">Read the docs before you trust the output.</h2>
+      <p class="lede">CodeCome's value is in its methodology, not its UI. The docs explain how each phase works and what its prompts assume.</p>
+    </div>
+    <div class="docs-grid">
+      <a class="doc-link" href="https://github.com/pruiz/CodeCome#readme" target="_blank" rel="noopener">
+        <span class="ic" aria-hidden="true">📘</span>
+        <h4>Getting started</h4>
+        <p>Install, configure a model, run your first audit.</p>
+        <span class="arrow">README ↗</span>
+      </a>
+      <a class="doc-link" href="https://github.com/pruiz/CodeCome/tree/main/docs" target="_blank" rel="noopener">
+        <span class="ic" aria-hidden="true">📐</span>
+        <h4>Methodology</h4>
+        <p>The six phases in detail, with the reasoning behind each prompt.</p>
+        <span class="arrow">docs/methodology.md ↗</span>
+      </a>
+      <a class="doc-link" href="https://github.com/pruiz/CodeCome/tree/main/docs" target="_blank" rel="noopener">
+        <span class="ic" aria-hidden="true">📦</span>
+        <h4>Workspace reference</h4>
+        <p>Layout, frontmatter schema, naming conventions.</p>
+        <span class="arrow">docs/workspace.md ↗</span>
+      </a>
+      <a class="doc-link" href="https://github.com/pruiz/CodeCome/tree/main/docs" target="_blank" rel="noopener">
+        <span class="ic" aria-hidden="true">🧪</span>
+        <h4>Sandbox cookbook</h4>
+        <p>Templates for Go, Python, Node, Rust and C/C++ projects.</p>
+        <span class="arrow">docs/sandbox.md ↗</span>
+      </a>
+      <a class="doc-link" href="https://github.com/pruiz/CodeCome/tree/main/prompts" target="_blank" rel="noopener">
+        <span class="ic" aria-hidden="true">🧠</span>
+        <h4>Prompt catalog</h4>
+        <p>All phase prompts, versioned and commented.</p>
+        <span class="arrow">prompts/ ↗</span>
+      </a>
+      <a class="doc-link" href="https://github.com/pruiz/CodeCome/issues" target="_blank" rel="noopener">
+        <span class="ic" aria-hidden="true">🐛</span>
+        <h4>Known limitations</h4>
+        <p>What CodeCome won't do today, and what we are working on next.</p>
+        <span class="arrow">Issues ↗</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ====================== CONTRIBUTING ====================== -->
+<section class="section" id="contributing" data-screen-label="18 Contributing">
+  <div class="container">
+    <div class="grid g-2" style="gap:48px;align-items:center">
+      <div>
+        <span class="eyebrow"><span class="sq"></span>contributing</span>
+        <h2 class="h2">Help shape an honest research harness.</h2>
+        <p class="lede">CodeCome is small. A patch to a phase prompt, a sandbox template for a new language, or a bug report on a confusing convention are all valuable. We won't accept PRs that turn this into a scanner.</p>
+        <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+          <a class="btn btn-primary" href="https://github.com/pruiz/CodeCome/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Read CONTRIBUTING</a>
+          <a class="btn btn-outline" href="https://github.com/pruiz/CodeCome/labels/good%20first%20issue" target="_blank" rel="noopener">Good first issues</a>
+        </div>
+      </div>
+      <div class="grid g-2">
+        <div class="card">
+          <h3 class="h3">Prompts</h3>
+          <p class="muted">Improve a phase prompt with a diff and a short rationale. Bring an audit log if you can.</p>
+        </div>
+        <div class="card">
+          <h3 class="h3">Sandbox templates</h3>
+          <p class="muted">Contribute a Dockerfile + <span class="k">run.sh</span> for a stack we don't cover yet.</p>
+        </div>
+        <div class="card">
+          <h3 class="h3">Methodology</h3>
+          <p class="muted">Disagree with a phase boundary? Open a discussion before a PR.</p>
+        </div>
+        <div class="card">
+          <h3 class="h3">Tooling</h3>
+          <p class="muted">CLI ergonomics, schema validation, report generation — all welcome.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ====================== LICENSE ====================== -->
+<section class="section-tight" data-screen-label="19 License">
+  <div class="container" style="display:flex;gap:24px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+    <div>
+      <span class="eyebrow"><span class="sq"></span>license</span>
+      <h2 class="h2" style="margin-top:8px;font-size:30px">GPL-3.0-or-later <span style="color:var(--ink-3);font-weight:500">OR</span> AGPL-3.0-or-later.</h2>
+      <p class="lede" style="margin:0;color:var(--ink-3);max-width:62ch">Dual-licensed — pick whichever copyleft fits your context. Sandbox templates under <span class="k">templates/sandboxes/</span> ship under MIT so they can be copied into user workspaces without imposing copyleft on those projects.</p>
+    </div>
+    <a class="btn btn-outline" href="https://github.com/pruiz/CodeCome/blob/main/LICENSE" target="_blank" rel="noopener">Read the licenses</a>
+  </div>
+</section>
+
+<!-- ====================== FINAL CTA ====================== -->
+<section class="section" style="padding-top:32px" data-screen-label="20 CTA">
+  <div class="container">
+    <div class="banner">
+      <div>
+        <h2>Start your next audit with a trail you can re-read.</h2>
+        <p>Clone CodeCome, drop a codebase under <span class="k" style="background:#1d212a;border-color:#2a2e36;color:#fff">src/</span>, and run the six phases. Your findings will be on disk in plain Markdown when you're done.</p>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <a class="btn btn-orange" href="https://github.com/pruiz/CodeCome" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.92.58.1.79-.25.79-.55v-2.1c-3.2.7-3.87-1.36-3.87-1.36-.52-1.31-1.27-1.66-1.27-1.66-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.68 1.25 3.34.96.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.96 10.96 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.73.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.4-5.25 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.66.8.55C20.21 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5Z"/></svg>
+          Clone on GitHub
+        </a>
+        <a class="btn btn-dark-on-dark" href="#docs">Read the docs</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ====================== FOOTER ====================== -->
+<footer class="footer" data-screen-label="21 Footer">
+  <div class="container">
+    <div class="grid-foot">
+      <div>
+        <a class="brand" href="#top" aria-label="CodeCome home">
+          <span class="mark" aria-hidden="true">
+            <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="16" cy="16" r="7" stroke="#fff" stroke-width="2"/>
+              <circle cx="16" cy="3.5" r="2.2" fill="#0c0e12" stroke="#fff" stroke-width="1.7"/>
+              <circle cx="16" cy="28.5" r="2.2" fill="#0c0e12" stroke="#fff" stroke-width="1.7"/>
+              <circle cx="3.5" cy="16" r="2.2" fill="#0c0e12" stroke="#fff" stroke-width="1.7"/>
+              <circle cx="28.5" cy="16" r="2.2" fill="#0c0e12" stroke="#fff" stroke-width="1.7"/>
+              <circle cx="6.5" cy="6.5" r="2.2" fill="#0c0e12" stroke="#fff" stroke-width="1.7"/>
+              <circle cx="25.5" cy="25.5" r="2.2" fill="#0c0e12" stroke="#fff" stroke-width="1.7"/>
+              <line x1="16" y1="5.7" x2="16" y2="9" stroke="#fff" stroke-width="1.7"/>
+              <line x1="16" y1="23" x2="16" y2="26.3" stroke="#fff" stroke-width="1.7"/>
+              <line x1="5.7" y1="16" x2="9" y2="16" stroke="#fff" stroke-width="1.7"/>
+              <line x1="23" y1="16" x2="26.3" y2="16" stroke="#fff" stroke-width="1.7"/>
+              <line x1="8.1" y1="8.1" x2="11" y2="11" stroke="#fff" stroke-width="1.7"/>
+              <line x1="21" y1="21" x2="23.9" y2="23.9" stroke="#fff" stroke-width="1.7"/>
+              <rect x="12" y="13.3" width="8" height="1.4" fill="#fff"/>
+              <rect x="12" y="15.3" width="6" height="1.4" fill="#f18f1d"/>
+              <rect x="12" y="17.3" width="7" height="1.4" fill="#fff"/>
+            </svg>
+          </span>
+          <span class="word" style="color:#fff"><span style="color:#f18f1d">Code</span>Come</span>
+        </a>
+        <p style="margin:12px 0 0;max-width:34ch;font-size:13.5px;color:#8a8f99">
+          The harness for building your own Mythos of vulnerability research at home.
+        </p>
+      </div>
+      <div>
+        <h5>Project</h5>
+        <ul>
+          <li><a href="#overview">Overview</a></li>
+          <li><a href="#workflow">Workflow</a></li>
+          <li><a href="#artifacts">Artifacts</a></li>
+          <li><a href="#sandbox">Sandbox</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>Learn</h5>
+        <ul>
+          <li><a href="#docs">Documentation</a></li>
+          <li><a href="https://github.com/pruiz/CodeCome/tree/main/prompts" target="_blank" rel="noopener">Prompts</a></li>
+          <li><a href="#quickstart">Quick start</a></li>
+          <li><a href="#contributing">Contributing</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>Code</h5>
+        <ul>
+          <li><a href="https://github.com/pruiz/CodeCome" target="_blank" rel="noopener">GitHub</a></li>
+          <li><a href="https://github.com/pruiz/CodeCome/issues" target="_blank" rel="noopener">Issues</a></li>
+          <li><a href="https://github.com/pruiz/CodeCome/blob/main/LICENSE" target="_blank" rel="noopener">License (GPL / AGPL)</a></li>
+          <li><a href="https://github.com/pruiz/CodeCome/releases" target="_blank" rel="noopener">Releases</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="bot">
+      <span>© 2025–2026 Pablo Ruiz García · GPL-3.0-or-later OR AGPL-3.0-or-later</span>
+      <span style="font-family:var(--mono);font-size:12px;color:var(--t-fg-dim)">v0.x · early · audit-trail-first</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // copy buttons
+  document.querySelectorAll('[data-copy-target]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-copy-target');
+      const node = document.getElementById(id);
+      if (!node) return;
+      const text = node.innerText;
+      try {
+        await navigator.clipboard.writeText(text);
+        const orig = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(() => { btn.textContent = orig; }, 1200);
+      } catch (e) {
+        btn.textContent = 'Select & copy';
+      }
+    });
+  });
+
+  // smooth scroll for in-page anchors
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      const href = a.getAttribute('href');
+      if (href.length < 2) return;
+      const t = document.querySelector(href);
+      if (!t) return;
+      e.preventDefault();
+      const top = t.getBoundingClientRect().top + window.scrollY - 64;
+      window.scrollTo({top, behavior:'smooth'});
+    });
+  });
+</script>
+</body>
+</html>
