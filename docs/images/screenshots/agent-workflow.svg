@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="340" viewBox="0 0 1280 340" role="img" aria-labelledby="title desc">
+  <title id="title">CodeCome agent workflow</title>
+  <desc id="desc">A task list showing completed, in-progress and pending agent tasks.</desc>
+  <rect width="1280" height="340" rx="24" fill="#0b0f14"/>
+  <rect x="28" y="28" width="1224" height="284" rx="16" fill="#05070a" stroke="#a3a000" stroke-width="2"/>
+  <text x="54" y="78" fill="#e5e7eb" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="28">5 tasks · 2 completed · 1 in progress · 2 pending</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="25" dominant-baseline="middle">
+    <text x="72" y="132"><tspan fill="#8b5cf6">✔</tspan><tspan fill="#ef4444">  H</tspan><tspan fill="#22c55e">  Read required guidance, finding CC-0001, notes, and sandbox docs</tspan></text>
+    <text x="72" y="178"><tspan fill="#8b5cf6">✔</tspan><tspan fill="#ef4444">  H</tspan><tspan fill="#22c55e">  Inspect source files and determine exact claim plus validation approach</tspan></text>
+    <text x="72" y="224"><tspan fill="#facc15">●</tspan><tspan fill="#ef4444">  H</tspan><tspan fill="#facc15">  Execute validation in sandbox and capture durable evidence</tspan></text>
+    <text x="72" y="270"><tspan fill="#6b7280">○</tspan><tspan fill="#ef4444">  H</tspan><tspan fill="#6b7280">  Update evidence README and finding status/file location</tspan></text>
+  </g>
+</svg>
