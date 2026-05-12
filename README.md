@@ -507,7 +507,7 @@ The model you pick has a real effect on the output. Some patterns I've found use
 
 The right combination depends on your provider mix, your token budget, and your target. Experiment.
 
-## Safety considerations (⚠️ disclaimer)
+## Safety considerations
 
 > ⚠️ **Disclaimer — read this before pointing CodeCome at code you did not write.**
 
