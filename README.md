@@ -19,11 +19,35 @@ The whole audit lives on disk as plain Markdown and YAML. No database, no RAG, n
 
 ## Screenshots
 
-Screenshots of the styled wrapper output, finding panels, and sandbox bootstrap will live here.
+These screenshots are sanitized/redrawn from real CodeCome runs: enough to show the workflow, without leaking target-specific exploit details or credentials.
 
-<!-- TODO: replace with real assets once docs/images/ is populated -->
-<!-- ![CodeCome styled wrapper output](docs/images/wrapper-screenshot.png) -->
-<!-- ![Phase 4 validation panel](docs/images/phase-4-validation.png) -->
+<p align="center">
+  <img src="docs/images/screenshots/finding-queue.svg" alt="CodeCome finding queue" width="900">
+</p>
+
+<p align="center"><sub><strong>From hypotheses to a reviewable queue.</strong> CodeCome keeps every candidate finding as a plain Markdown artifact with status, severity, confidence, and a concise title.</sub></p>
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/images/screenshots/agent-workflow.svg" alt="CodeCome agent task workflow">
+      <br>
+      <sub><strong>Agentic, but auditable.</strong> Each phase is decomposed into visible tasks: recon, source review, counter-analysis, validation, and reporting.</sub>
+    </td>
+    <td width="50%">
+      <img src="docs/images/screenshots/sandbox-validation.svg" alt="CodeCome sandbox validation">
+      <br>
+      <sub><strong>Validation before belief.</strong> The sandbox build, runtime, target build, and tests are checked before deeper analysis.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2">
+      <img src="docs/images/screenshots/evidence-artifacts.svg" alt="CodeCome evidence artifacts">
+      <br>
+      <sub><strong>Evidence on disk.</strong> Confirmed findings produce durable artifacts under <code>itemdb/evidence/</code> and run summaries under <code>runs/</code>.</sub>
+    </td>
+  </tr>
+</table>
 
 A recorded run is also planned:
 
