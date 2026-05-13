@@ -11,7 +11,7 @@
 
 ## What is CodeCome?
 
-CodeCome is the harness I built to let an AI agent help me audit source code without losing the trail.
+[CodeCome](https://codecome.ai) is the harness I built to let an AI agent help me audit source code without losing the trail.
 
 It turns "I think there might be a bug here" into a structured Markdown finding, validates it inside a sandbox, escalates the ones that matter into working proof-of-concept exploits, and produces a report you can read, grep, and commit. It is not a scanner and not a pentest tool. Think of it as a **research methodology made executable**: the same six phases, the same artifact shapes, the same evidence rules — every time, for every target.
 
