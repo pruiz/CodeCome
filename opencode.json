@@ -1,5 +1,8 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    "./.opencode/plugins/status-forwarder.ts"
+  ],
   "permission": {
     "read": {
       "*": "allow",

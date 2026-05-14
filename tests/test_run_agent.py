@@ -206,14 +206,43 @@ def test_render_event_dispatches_reasoning_and_error(monkeypatch):
 
     def _fake_error(_console, _event):
         calls.append("error")
+        
+    def _fake_session_status(_console, _event):
+        calls.append("session.status")
 
     monkeypatch.setattr(module, "render_reasoning", _fake_reasoning)
     monkeypatch.setattr(module, "render_error", _fake_error)
+    monkeypatch.setattr(module, "render_session_status", _fake_session_status)
 
     module.render_event(None, "2", "x", {"type": "reasoning", "part": {"text": "x"}})
     module.render_event(None, "2", "x", {"type": "error", "error": "x"})
+    module.render_event(None, "2", "x", {"type": "session.status", "properties": {"status": {"type": "retry", "attempt": 1}}})
 
-    assert calls == ["reasoning", "error"]
+    assert calls == ["reasoning", "error", "session.status"]
+
+
+@pytest.mark.unit
+def test_render_session_status_plain_mode(monkeypatch, capsys):
+    module = load_tool_module("run_agent_session_status_plain", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+    
+    event = {
+        "type": "session.status",
+        "properties": {
+            "sessionID": "ses_123",
+            "status": {
+                "type": "retry",
+                "attempt": 2,
+                "message": "Rate limit exceeded"
+            }
+        }
+    }
+    
+    module.render_session_status(None, event)
+    out = capsys.readouterr().out
+    assert "Waiting for LLM provider response" in out
+    assert "retry attempt 2" in out
+    assert "Rate limit exceeded" in out
 
 
 @pytest.mark.unit
