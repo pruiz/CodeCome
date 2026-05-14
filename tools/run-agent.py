@@ -3795,8 +3795,25 @@ def render_event(console: Console, phase: str, label: str, event: dict[str, Any]
         render_step_finish(console, event)
     elif event_type == "error":
         render_error(console, event)
+    elif event_type == "session.status":
+        render_session_status(console, event)
     else:
         render_unknown(console, event)
+
+
+def render_session_status(console: Console, event: dict[str, Any]) -> None:
+    properties = event.get("properties", {})
+    status = properties.get("status", {})
+    status_type = status.get("type")
+    
+    if status_type == "retry":
+        attempt = status.get("attempt", 1)
+        message = status.get("message", "Unknown error")
+        text = f"⏳ Waiting for LLM provider response (retry attempt {attempt}): {message}"
+        if HAVE_RICH:
+            console.print(Text(text, style="bold yellow"))
+        else:
+            print(C.warn(text))
 
 
 def build_parser() -> argparse.ArgumentParser:
