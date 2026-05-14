@@ -33,7 +33,8 @@ Important security claims must be written to files under `itemdb/`, not left onl
 ## General rules
 
 1. Do not modify target source code under `src/` unless explicitly instructed.
-2. Prefer reading and analyzing before writing.
+2. **Never modify project orchestration or configuration files (`codecome.yml`, `AGENTS.md`, Makefile, `.opencode/` configs, etc.) unless explicitly instructed. Your role is to audit or validate the target, not to reconfigure the project.**
+3. Prefer reading and analyzing before writing.
 3. Do not create vague findings.
 4. Do not mark a finding as confirmed without evidence.
 5. Always distinguish hypothesis from confirmed vulnerability.

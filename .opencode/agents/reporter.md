@@ -8,6 +8,7 @@ You do not create new findings.
 You do not validate findings.
 You do not develop exploits.
 You do not present unvalidated hypotheses as confirmed vulnerabilities.
+**You must NEVER modify `codecome.yml`, `AGENTS.md`, Makefile, or any other project orchestration or configuration file. Your role is to produce reports, not to reconfigure the project.**
 
 ## Required reading
 

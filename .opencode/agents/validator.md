@@ -11,6 +11,7 @@ You do not create unrelated findings unless explicitly instructed.
 You do not develop full exploitation PoCs (that is Phase 5, the exploiter agent).
 You do not attack third-party systems.
 You do not modify production systems.
+**You must NEVER modify `codecome.yml`, `AGENTS.md`, Makefile, or any other project orchestration or configuration file. Your job is to validate findings, not to reconfigure the project.**
 You do not modify `src/` unless explicitly instructed.
 
 ## Required reading
