@@ -662,6 +662,16 @@ _BASH_SHIM_RENDER = os.environ.get("CODECOME_BASH_SHIM_RENDER", "1") not in ("0"
 _BASH_SHIM_LS_STRIP_LONG_FORMAT = os.environ.get("CODECOME_BASH_SHIM_LS_STRIP_LONG_FORMAT", "1") not in ("0", "false", "False", "no")
 _INTERNAL_READ_SUPPRESS = os.environ.get("CODECOME_INTERNAL_READ_SUPPRESS", "1") not in ("0", "false", "False", "no")
 
+# --- Subagent visibility tunables --------------------------------------------
+_SUBAGENT_HEARTBEAT_INTERVAL_S = int(os.environ.get("CODECOME_SUBAGENT_HEARTBEAT_INTERVAL_S", "30"))
+_SUBAGENT_UPDATE_THROTTLE_S = int(os.environ.get("CODECOME_SUBAGENT_UPDATE_THROTTLE_S", "5"))
+_TASK_PROMPT_PREVIEW_LINES = int(os.environ.get("CODECOME_TASK_PROMPT_PREVIEW_LINES", "5"))
+_RENDER_SUBAGENT_UPDATES = os.environ.get("CODECOME_RENDER_SUBAGENT_UPDATES", "1") not in ("0", "false", "False", "no")
+
+# Per-session deduplication state for subagent update events.
+_SUBAGENT_LAST_STATE: dict[str, tuple[dict[str, Any], float]] = {}
+
+
 _READ_FILE_FRAMING_RE = re.compile(
     r"<path>(?P<path>.*?)</path>\s*"
     r"<type>(?P<type>.*?)</type>\s*"
@@ -3438,6 +3448,97 @@ def _render_shim_ls(console: Optional[Any], state: dict[str, Any], shim: _BashSh
     return render_glob_plain(syn_state)
 
 
+# --- Subagent summary helper --------------------------------------------------
+
+def _format_subagent_summary(summary: Any) -> str:
+    """Format a Session.summary dict into a compact '+N -M  K files' string."""
+    if not isinstance(summary, dict):
+        return ""
+    additions = summary.get("additions")
+    deletions = summary.get("deletions")
+    files = summary.get("files")
+    parts: list[str] = []
+    if additions is not None or deletions is not None:
+        parts.append(f"+{additions or 0} -{deletions or 0}")
+    if files is not None:
+        parts.append(f"{files} file(s)")
+    return "  ".join(parts)
+
+
+# --- Task renderer ------------------------------------------------------------
+
+def render_task_rich(console: Console, state: dict[str, Any]) -> bool:
+    inp = state.get("input")
+    if not isinstance(inp, dict):
+        return False
+
+    description = str(inp.get("description", ""))
+    subagent_type = str(inp.get("subagent_type", inp.get("subagentType", "")))
+    prompt = str(inp.get("prompt", ""))
+    status = str(state.get("status", "unknown"))
+    border = "green" if status == "completed" else "yellow"
+
+    sections: list[Any] = []
+    if description:
+        type_tag = f"  [{subagent_type}]" if subagent_type else ""
+        sections.append(Text(f"{description}{type_tag}", style="bold cyan"))
+
+    if prompt:
+        sections.append(Text())
+        prompt_lines = prompt.split("\n")
+        preview_lines = prompt_lines[:_TASK_PROMPT_PREVIEW_LINES]
+        leftover = max(0, len(prompt_lines) - _TASK_PROMPT_PREVIEW_LINES)
+        sections.append(Text("\n".join(preview_lines), style="dim"))
+        if leftover > 0:
+            sections.append(Text(f"... {leftover} more lines", style="dim"))
+
+    output_data = state.get("output")
+    if output_data is not None:
+        sections.append(Text())
+        sections.append(Text("Output", style="bold green"))
+        output_str = str(output_data)
+        if len(output_str) > 200:
+            output_str = output_str[:200] + "..."
+        sections.append(Text(output_str, style="dim"))
+
+    console.print(
+        Panel(Group(*sections), title=Text(f"Task [{status}]"), border_style=border, expand=True)
+    )
+    return True
+
+
+def render_task_plain(state: dict[str, Any]) -> bool:
+    inp = state.get("input")
+    if not isinstance(inp, dict):
+        return False
+
+    description = str(inp.get("description", ""))
+    subagent_type = str(inp.get("subagent_type", inp.get("subagentType", "")))
+    prompt = str(inp.get("prompt", ""))
+    status = str(state.get("status", "unknown"))
+
+    type_tag = f" [{subagent_type}]" if subagent_type else ""
+    print(C.header(f"task {description}{type_tag} [{status}]"))
+
+    if prompt:
+        prompt_lines = prompt.split("\n")
+        for line in prompt_lines[:_TASK_PROMPT_PREVIEW_LINES]:
+            print(f"  {line}")
+        leftover = max(0, len(prompt_lines) - _TASK_PROMPT_PREVIEW_LINES)
+        if leftover > 0:
+            print(f"  ... {leftover} more lines")
+
+    output_data = state.get("output")
+    if output_data is not None:
+        print(C.info("Output"))
+        output_str = str(output_data)
+        if len(output_str) > 200:
+            output_str = output_str[:200] + "..."
+        print(f"  {output_str}")
+
+    return True
+
+
 # --- Skill renderer -----------------------------------------------------------
 
 def render_skill_rich(console: Console, state: dict[str, Any]) -> bool:
@@ -3538,6 +3639,12 @@ def _dispatch_tool_renderer(console: Console, tool: str, state: dict[str, Any]) 
             return render_skill_rich(console, state)
         else:
             return render_skill_plain(state)
+    elif tool_lower == "task":
+        _cache_invalidate_stale()
+        if HAVE_RICH:
+            return render_task_rich(console, state)
+        else:
+            return render_task_plain(state)
     else:
         _cache_invalidate_stale()
     return False
@@ -3797,6 +3904,8 @@ def render_event(console: Console, phase: str, label: str, event: dict[str, Any]
         render_error(console, event)
     elif event_type == "session.status":
         render_session_status(console, event)
+    elif event_type == "subagent.status":
+        render_subagent_status(console, event)
     else:
         render_unknown(console, event)
 
@@ -3814,6 +3923,84 @@ def render_session_status(console: Console, event: dict[str, Any]) -> None:
             console.print(Text(text, style="bold yellow"))
         else:
             print(C.warn(text))
+
+
+def render_subagent_status(console: Console, event: dict[str, Any]) -> None:
+    """Render a subagent.status event injected by the StatusForwarder plugin.
+
+    The plugin emits these events for subagent lifecycle (created/updated/
+    deleted) and heartbeats so that run-agent.py can show real-time progress
+    while child sessions work in parallel.
+    """
+    if not _RENDER_SUBAGENT_UPDATES:
+        return
+
+    properties = event.get("properties", {})
+    status_type = str(properties.get("statusType", ""))
+    session_id = str(properties.get("sessionID", ""))
+    title = str(properties.get("title", "(untitled)"))
+    summary = properties.get("summary")
+    elapsed_ms = properties.get("elapsedMs")
+
+    # Deduplicate unchanged update snapshots to avoid flooding the UI.
+    if status_type == "updated":
+        snapshot: dict[str, Any] = {"title": title}
+        if isinstance(summary, dict):
+            snapshot["additions"] = summary.get("additions")
+            snapshot["deletions"] = summary.get("deletions")
+            snapshot["files"] = summary.get("files")
+
+        last_snapshot, last_time = _SUBAGENT_LAST_STATE.get(session_id, ({}, 0.0))
+        now = time.time()
+        # Identical snapshot inside the throttle window -> suppress.
+        if (
+            last_snapshot == snapshot
+            and (now - last_time) < _SUBAGENT_UPDATE_THROTTLE_S
+        ):
+            return
+
+        _SUBAGENT_LAST_STATE[session_id] = (snapshot, now)
+
+    if status_type == "created":
+        if HAVE_RICH:
+            console.print(
+                Panel(
+                    Text(title, style="bold cyan"),
+                    title="Subagent started",
+                    border_style="cyan",
+                    expand=True,
+                )
+            )
+        else:
+            print(C.header(f"[subagent] started: {title}"))
+    elif status_type == "finished":
+        if HAVE_RICH:
+            console.print(
+                Panel(
+                    Text(title, style="bold cyan"),
+                    title="Subagent finished",
+                    border_style="green",
+                    expand=True,
+                )
+            )
+        else:
+            print(C.ok(f"[subagent] finished: {title}"))
+    elif status_type == "heartbeat" and elapsed_ms is not None:
+        elapsed_s = elapsed_ms // 1000
+        text = f"⏳ Subagent · {title} still running ({elapsed_s}s)"
+        if HAVE_RICH:
+            console.print(Text(text, style="bold yellow"))
+        else:
+            print(C.warn(text))
+    elif status_type == "updated":
+        summary_text = _format_subagent_summary(summary)
+        line = f"Subagent · {title}"
+        if summary_text:
+            line += f"  {summary_text}"
+        if HAVE_RICH:
+            console.print(Text(line, style="dim"))
+        else:
+            print(f"  {line}")
 
 
 def build_parser() -> argparse.ArgumentParser:
