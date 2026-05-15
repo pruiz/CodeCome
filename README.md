@@ -659,6 +659,18 @@ Patches, issues, and feedback all welcome.
 
 Issues, ideas, and pull requests are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md). If something feels rough, that's probably because it is; please tell me about it.
 
+## Authors
+
+- **Pablo Ruiz García** — Project Lead  
+  Architecture, engineering, implementation, and the person who turns vague ideas into working code.
+
+- **Alejandro Ramos** — Product Lead  
+  Product direction, use cases, requirements, and official provider of impossible requests that somehow keep becoming roadmap items.
+
+## Contributors
+
+Contributions are welcome. Pull requests are expected, encouraged, and appreciated.
+
 ## License
 
 CodeCome is dual-licensed under your choice of:
