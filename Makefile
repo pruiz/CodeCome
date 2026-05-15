@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later OR AGPL-3.0-or-later
 
 .PHONY: help venv venv-check check status next-id frontmatter tests itemdb-reset index report
-.PHONY: findings findings-create findings-move findings-evidence
+.PHONY: findings findings-create findings-move findings-evidence findings-package
 .PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all
 .PHONY: sandbox-setup sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-reset sandbox-build sandbox-test
 .PHONY: sandbox-list sandbox-inspect sandbox-detect sandbox-bootstrap sandbox-validate sandbox-regenerate sandbox-status show-model
@@ -80,6 +80,7 @@ help:
 	@printf "    $(BOLD)make findings-create TITLE=\"...\"$(RESET)    Create a new finding from template\n"
 	@printf "    $(BOLD)make findings-move FINDING=CC-0001 STATUS=CONFIRMED$(RESET)\n"
 	@printf "    $(BOLD)make findings-evidence FINDING=CC-0001$(RESET)\n"
+	@printf "    $(BOLD)make findings-package FINDING=CC-0001$(RESET)   Package all artifacts for a finding into a zip\n"
 	@printf "\n"
 	@printf "  $(BOLD)$(CYAN)Sandbox runtime:$(RESET)\n"
 	@printf "\n"
@@ -284,6 +285,10 @@ findings-move: venv-check
 
 findings-evidence: venv-check
 	$(PYTHON) tools/create-evidence.py $(FINDING)
+
+findings-package:
+	@test -n "$(FINDING)" || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) Missing FINDING argument for packaging.\n\n    make findings-package FINDING=CC-0001\n\n" && exit 1)
+	@$(PYTHON) tools/package-finding.py "$(FINDING)"
 
 # ---------------------------------------------------------------------------
 # Sandbox
