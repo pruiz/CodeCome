@@ -95,6 +95,7 @@ REQUIRED_EXPLOITATION_FIELDS = [
 
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 FINDING_ID_RE = re.compile(r"^CC-\d{4,}$")
+FINDING_FILENAME_RE = re.compile(r"^CC-\d{4}-[a-z0-9]+[-_a-z0-9]*\.md$", re.IGNORECASE)
 SECTION_RE = re.compile(r"^# (?P<title>.+?)\n(?P<body>.*?)(?=^# |\Z)", re.MULTILINE | re.DOTALL)
 
 REQUIRED_EXPLOITED_SECTIONS = [
@@ -172,6 +173,13 @@ def validate_finding(path: Path) -> List[str]:
 
     if status and path.parent.name != status:
         errors.append(f"status mismatch: frontmatter={status!r}, directory={path.parent.name!r}")
+
+    filename = path.name
+    if not FINDING_FILENAME_RE.match(filename):
+        errors.append(
+            f"filename must follow CC-XXXX-slug-title.md convention: "
+            f"bare CC-XXXX.md names are not allowed (got {filename!r})"
+        )
 
     severity = data.get("severity")
     if severity not in SEVERITIES:
