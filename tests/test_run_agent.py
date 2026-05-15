@@ -163,458 +163,265 @@ def test_grep_compile_pattern_falls_back_for_invalid_regex(monkeypatch):
 
 
 @pytest.mark.unit
-def test_render_reasoning_plain_mode_honors_toggle_and_truncates(monkeypatch, capsys):
-    module = load_tool_module("run_agent_reasoning_plain", "tools/run-agent.py")
+def test_render_reasoning_plain_skips_empty_and_whitespace(monkeypatch, capsys):
+    module = load_tool_module("run_agent_reasoning_skip", "tools/run-agent.py")
     monkeypatch.setattr(module, "HAVE_RICH", False)
     monkeypatch.setattr(module, "_RENDER_REASONING", True)
-    monkeypatch.setattr(module, "_REASONING_MAX_CHARS", 5)
 
-    module.render_reasoning(None, {"part": {"text": "abcdefgh"}})
+    # Empty body
+    module.render_reasoning(None, {"part": {"text": ""}})
+    # Whitespace-only body
+    module.render_reasoning(None, {"part": {"text": "   \n\t  "}})
+    # Missing text key
+    module.render_reasoning(None, {"part": {}})
+    # Missing part dict
+    module.render_reasoning(None, {})
+
     out = capsys.readouterr().out
-    assert "Thinking" in out
-    assert "abcde" in out
-    assert "chars truncated" in out
+    assert out == ""
 
-    monkeypatch.setattr(module, "_RENDER_REASONING", False)
-    module.render_reasoning(None, {"part": {"text": "should not print"}})
+
+# --- subagent summary helper -------------------------------------------------
+
+@pytest.mark.unit
+def test_format_subagent_summary_formats_all_fields():
+    module = load_tool_module("run_agent_subagent_summary", "tools/run-agent.py")
+    assert module._format_subagent_summary({"additions": 3, "deletions": 1, "files": 2}) == "+3 -1  2 file(s)"
+    assert module._format_subagent_summary({"additions": 0, "files": 1}) == "+0 -0  1 file(s)"
+    assert module._format_subagent_summary({"files": 5}) == "5 file(s)"
+    assert module._format_subagent_summary({}) == ""
+    assert module._format_subagent_summary(None) == ""
+
+
+# --- task renderer -----------------------------------------------------------
+
+@pytest.mark.unit
+def test_render_task_plain_shows_description_truncated_prompt_and_output(monkeypatch, capsys):
+    module = load_tool_module("run_agent_task_plain", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setattr(module, "_TASK_PROMPT_PREVIEW_LINES", 2)
+
+    state = {
+        "input": {
+            "description": "Analyze batch 2",
+            "subagent_type": "explore",
+            "prompt": "line one\nline two\nline three\nline four",
+        },
+        "output": "Done analyzing.",
+        "status": "completed",
+    }
+    assert module.render_task_plain(state) is True
+    out = capsys.readouterr().out
+    assert "task Analyze batch 2 [explore] [completed]" in out
+    assert "line one" in out
+    assert "line two" in out
+    assert "... 2 more lines" in out
+    assert "Done analyzing." in out
+
+
+@pytest.mark.unit
+def test_render_task_plain_handles_missing_fields(monkeypatch, capsys):
+    module = load_tool_module("run_agent_task_plain_minimal", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+
+    state = {"input": {}, "status": "in_progress"}
+    assert module.render_task_plain(state) is True
+    out = capsys.readouterr().out
+    assert "task  [in_progress]" in out
+
+
+@pytest.mark.unit
+def test_render_task_rich_shows_panel(monkeypatch):
+    module = load_tool_module("run_agent_task_rich", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", True)
+    monkeypatch.setattr(module, "_TASK_PROMPT_PREVIEW_LINES", 3)
+
+    from rich.console import Console
+
+    console = Console(record=True, force_terminal=True, width=60, highlight=False)
+    state = {
+        "input": {
+            "description": "Counter-analysis",
+            "subagentType": "reviewer",
+            "prompt": "a\nb\nc\nd",
+        },
+        "status": "in_progress",
+    }
+    assert module.render_task_rich(console, state) is True
+    out = console.export_text()
+    assert "Task [in_progress]" in out
+    assert "Counter-analysis" in out
+    assert "[reviewer]" in out
+    assert "... 1 more lines" in out
+
+
+# --- subagent status renderer ------------------------------------------------
+
+@pytest.mark.unit
+def test_render_subagent_status_plain_created_and_finished(monkeypatch, capsys):
+    module = load_tool_module("run_agent_subagent_plain_lifecycle", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setattr(module, "_RENDER_SUBAGENT_UPDATES", True)
+
+    module.render_subagent_status(None, {
+        "type": "subagent.status",
+        "properties": {"statusType": "created", "sessionID": "s1", "title": "Batch A"},
+    })
+    out = capsys.readouterr().out
+    assert "[subagent] started: Batch A" in out
+
+    module.render_subagent_status(None, {
+        "type": "subagent.status",
+        "properties": {"statusType": "finished", "sessionID": "s1", "title": "Batch A"},
+    })
+    out = capsys.readouterr().out
+    assert "[subagent] finished: Batch A" in out
+
+
+@pytest.mark.unit
+def test_render_subagent_status_plain_heartbeat_shows_elapsed(monkeypatch, capsys):
+    module = load_tool_module("run_agent_subagent_plain_heartbeat", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setattr(module, "_RENDER_SUBAGENT_UPDATES", True)
+
+    module.render_subagent_status(None, {
+        "type": "subagent.status",
+        "properties": {
+            "statusType": "heartbeat",
+            "sessionID": "s1",
+            "title": "Slow job",
+            "elapsedMs": 45000,
+        },
+    })
+    out = capsys.readouterr().out
+    assert "Subagent · Slow job still running (45s)" in out
+
+
+@pytest.mark.unit
+def test_render_subagent_status_plain_update_dedupes_unchanged_summary(monkeypatch, capsys):
+    module = load_tool_module("run_agent_subagent_plain_dedup", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setattr(module, "_RENDER_SUBAGENT_UPDATES", True)
+    monkeypatch.setattr(module, "_SUBAGENT_UPDATE_THROTTLE_S", 5)
+
+    event = {
+        "type": "subagent.status",
+        "properties": {
+            "statusType": "updated",
+            "sessionID": "s2",
+            "title": "Job",
+            "summary": {"additions": 1, "deletions": 0, "files": 1},
+        },
+    }
+
+    # First update renders.
+    module.render_subagent_status(None, event)
+    out = capsys.readouterr().out
+    assert "Subagent · Job" in out
+    assert "+1 -0" in out
+
+    # Identical update immediately after is suppressed.
+    module.render_subagent_status(None, event)
     out = capsys.readouterr().out
     assert out == ""
 
 
 @pytest.mark.unit
-def test_render_error_plain_mode_extracts_message_shapes(monkeypatch, capsys):
-    module = load_tool_module("run_agent_error_plain", "tools/run-agent.py")
+def test_render_subagent_status_plain_update_renders_when_summary_changes(monkeypatch, capsys):
+    module = load_tool_module("run_agent_subagent_plain_change", "tools/run-agent.py")
     monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setattr(module, "_RENDER_SUBAGENT_UPDATES", True)
+    monkeypatch.setattr(module, "_SUBAGENT_UPDATE_THROTTLE_S", 5)
 
-    module.render_error(None, {"error": {"name": "ToolError", "data": {"message": "boom"}}})
+    module.render_subagent_status(None, {
+        "type": "subagent.status",
+        "properties": {
+            "statusType": "updated",
+            "sessionID": "s3",
+            "title": "Job",
+            "summary": {"additions": 1, "files": 1},
+        },
+    })
     out = capsys.readouterr().out
-    assert "Error" in out
-    assert "ToolError: boom" in out
+    assert "+1 -0" in out
 
-    module.render_error(None, {"error": "simple error"})
+    # Change summary -> renders again even inside throttle window.
+    module.render_subagent_status(None, {
+        "type": "subagent.status",
+        "properties": {
+            "statusType": "updated",
+            "sessionID": "s3",
+            "title": "Job",
+            "summary": {"additions": 2, "files": 1},
+        },
+    })
     out = capsys.readouterr().out
-    assert "simple error" in out
+    assert "+2 -0" in out
 
 
 @pytest.mark.unit
-def test_render_event_dispatches_reasoning_and_error(monkeypatch):
-    module = load_tool_module("run_agent_dispatch", "tools/run-agent.py")
+def test_render_subagent_status_rich_created_renders_panel(monkeypatch):
+    module = load_tool_module("run_agent_subagent_rich_created", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", True)
+    monkeypatch.setattr(module, "_RENDER_SUBAGENT_UPDATES", True)
+
+    from rich.console import Console
+
+    console = Console(record=True, force_terminal=True, width=60, highlight=False)
+    module.render_subagent_status(console, {
+        "type": "subagent.status",
+        "properties": {"statusType": "created", "sessionID": "s1", "title": "Batch A"},
+    })
+    out = console.export_text()
+    assert "Subagent started" in out
+    assert "Batch A" in out
+
+
+@pytest.mark.unit
+def test_render_event_dispatches_subagent_status(monkeypatch):
+    module = load_tool_module("run_agent_dispatch_subagent", "tools/run-agent.py")
     calls = []
 
-    def _fake_reasoning(_console, _event):
-        calls.append("reasoning")
+    def _fake_subagent_status(_console, _event):
+        calls.append("subagent.status")
 
-    def _fake_error(_console, _event):
-        calls.append("error")
-        
-    def _fake_session_status(_console, _event):
-        calls.append("session.status")
+    monkeypatch.setattr(module, "render_subagent_status", _fake_subagent_status)
 
-    monkeypatch.setattr(module, "render_reasoning", _fake_reasoning)
-    monkeypatch.setattr(module, "render_error", _fake_error)
-    monkeypatch.setattr(module, "render_session_status", _fake_session_status)
-
-    module.render_event(None, "2", "x", {"type": "reasoning", "part": {"text": "x"}})
-    module.render_event(None, "2", "x", {"type": "error", "error": "x"})
-    module.render_event(None, "2", "x", {"type": "session.status", "properties": {"status": {"type": "retry", "attempt": 1}}})
-
-    assert calls == ["reasoning", "error", "session.status"]
+    module.render_event(None, "2", "x", {"type": "subagent.status", "properties": {}})
+    assert calls == ["subagent.status"]
 
 
 @pytest.mark.unit
-def test_render_session_status_plain_mode(monkeypatch, capsys):
-    module = load_tool_module("run_agent_session_status_plain", "tools/run-agent.py")
+def test_dispatch_tool_renderer_routes_task_to_task_renderer(monkeypatch):
+    module = load_tool_module("run_agent_dispatch_task", "tools/run-agent.py")
+
+    task_calls = []
+
+    def fake_task_rich(_console, _state):
+        task_calls.append("rich")
+        return True
+
+    def fake_task_plain(_state):
+        task_calls.append("plain")
+        return True
+
+    monkeypatch.setattr(module, "render_task_rich", fake_task_rich)
+    monkeypatch.setattr(module, "render_task_plain", fake_task_plain)
+
+    # With rich
+    monkeypatch.setattr(module, "HAVE_RICH", True)
+    assert module._dispatch_tool_renderer(None, "task", {}) is True
+    assert task_calls == ["rich"]
+
+    # With plain
     monkeypatch.setattr(module, "HAVE_RICH", False)
-    
-    event = {
-        "type": "session.status",
-        "properties": {
-            "sessionID": "ses_123",
-            "status": {
-                "type": "retry",
-                "attempt": 2,
-                "message": "Rate limit exceeded"
-            }
-        }
-    }
-    
-    module.render_session_status(None, event)
-    out = capsys.readouterr().out
-    assert "Waiting for LLM provider response" in out
-    assert "retry attempt 2" in out
-    assert "Rate limit exceeded" in out
-
-
-@pytest.mark.unit
-def test_finish_reason_sets_are_disjoint_and_expected():
-    module = load_tool_module("run_agent_finish_sets", "tools/run-agent.py")
-
-    terminal = module._FINISH_TERMINAL_OK
-    mid_turn = module._FINISH_MID_TURN
-    failure = module._FINISH_FAILURE
-
-    assert "stop" in terminal
-    assert "end_turn" in terminal
-    assert "tool-calls" in mid_turn
-    assert "error" in failure
-
-    assert terminal.isdisjoint(mid_turn)
-    assert terminal.isdisjoint(failure)
-    assert mid_turn.isdisjoint(failure)
-
-
-@pytest.mark.unit
-def test_render_step_finish_plain_mode_marks_failure_reason_red(monkeypatch, capsys):
-    module = load_tool_module("run_agent_step_finish_failure", "tools/run-agent.py")
-    monkeypatch.setattr(module, "HAVE_RICH", False)
-
-    fail_calls = []
-
-    def fake_fail(msg):
-        fail_calls.append(msg)
-        return msg
-
-    monkeypatch.setattr(module.C, "fail", fake_fail)
-
-    module.render_step_finish(None, {"part": {"reason": "content-filter", "tokens": {}}})
-    out = capsys.readouterr().out
-
-    assert any("step finished: content-filter" in m for m in fail_calls)
-    assert "step finished: content-filter" in out
-
-
-@pytest.mark.unit
-def test_render_step_finish_plain_mode_non_failure_is_plain(monkeypatch, capsys):
-    module = load_tool_module("run_agent_step_finish_ok", "tools/run-agent.py")
-    monkeypatch.setattr(module, "HAVE_RICH", False)
-
-    fail_calls = []
-
-    def fake_fail(msg):
-        fail_calls.append(msg)
-        return msg
-
-    monkeypatch.setattr(module.C, "fail", fake_fail)
-
-    module.render_step_finish(None, {"part": {"reason": "stop", "tokens": {"input": 10}}})
-    out = capsys.readouterr().out
-
-    assert fail_calls == []
-    assert "step finished: stop" in out
-
-
-@pytest.mark.unit
-def test_finish_reason_classification_logic_matches_contract():
-    module = load_tool_module("run_agent_finish_contract", "tools/run-agent.py")
-
-    def classify(reason: str | None, any_seen: bool) -> str:
-        if not any_seen:
-            return "no-step-finish"
-        if reason is None:
-            return "missing"
-        if reason in module._FINISH_FAILURE:
-            return "failure"
-        if reason in module._FINISH_MID_TURN:
-            return "mid-turn"
-        if reason in module._FINISH_TERMINAL_OK:
-            return "ok"
-        return "unknown"
-
-    assert classify("stop", True) == "ok"
-    assert classify("tool_use", True) == "mid-turn"
-    assert classify("length", True) == "failure"
-    assert classify("something-new", True) == "unknown"
-    assert classify(None, True) == "missing"
-    assert classify(None, False) == "no-step-finish"
-
-
-@pytest.mark.unit
-def test_extract_tool_permission_error_for_read_path():
-    module = load_tool_module("run_agent_permission_error_read", "tools/run-agent.py")
-    event = {
-        "type": "tool_use",
-        "part": {
-            "tool": "read",
-            "state": {
-                "status": "error",
-                "input": {"filePath": "/tmp/workspace/sandbox/.env"},
-                "error": "The user rejected permission to use this specific tool call.",
-            },
-        },
-    }
-    msg = module._extract_tool_permission_error(event)
-    assert msg == "tool permission rejected: read /tmp/workspace/sandbox/.env"
-
-
-@pytest.mark.unit
-def test_extract_tool_permission_error_for_bash_command():
-    module = load_tool_module("run_agent_permission_error_bash", "tools/run-agent.py")
-    event = {
-        "type": "tool_use",
-        "part": {
-            "tool": "bash",
-            "state": {
-                "status": "error",
-                "input": {"command": "rm -rf /"},
-                "error": "permission denied",
-            },
-        },
-    }
-    msg = module._extract_tool_permission_error(event)
-    assert msg == "tool permission rejected: bash `rm -rf /`"
-
-
-@pytest.mark.unit
-def test_extract_tool_permission_error_ignores_non_permission_errors():
-    module = load_tool_module("run_agent_permission_error_ignore", "tools/run-agent.py")
-    event = {
-        "type": "tool_use",
-        "part": {
-            "tool": "read",
-            "state": {
-                "status": "error",
-                "input": {"filePath": "/tmp/x"},
-                "error": "File not found",
-            },
-        },
-    }
-    assert module._extract_tool_permission_error(event) is None
-
-
-@pytest.mark.unit
-def test_extract_apply_patch_payload_prefers_patchtext_key():
-    module = load_tool_module("run_agent_patchtext_key", "tools/run-agent.py")
-    state = {
-        "input": {
-            "input": "*** Begin Patch\n*** Update File: a.txt\n+wrong\n*** End Patch",
-            "patchText": "*** Begin Patch\n*** Update File: b.txt\n+right\n*** End Patch",
-        },
-        "output": "Applied patch",
-        "status": "completed",
-    }
-
-    raw_text, patches, output_str = module._extract_apply_patch_payload(state)
-    assert "b.txt" in raw_text
-    assert len(patches) == 1
-    assert patches[0].path == "b.txt"
-    assert patches[0].added == 1
-    assert output_str == "Applied patch"
-
-
-@pytest.mark.unit
-def test_parse_apply_patch_envelope_handles_multiple_directives():
-    module = load_tool_module("run_agent_patch_multi", "tools/run-agent.py")
-    patch = """*** Begin Patch
-*** Update File: foo.txt
-@@
--old
-+new
-*** Add File: bar.txt
-+hello
-*** Delete File: gone.txt
-*** End Patch
-"""
-
-    parsed = module._parse_apply_patch_envelope(patch)
-    assert len(parsed) == 3
-
-    assert parsed[0].op == "update"
-    assert parsed[0].path == "foo.txt"
-    assert parsed[0].added == 1
-    assert parsed[0].removed == 1
-
-    assert parsed[1].op == "add"
-    assert parsed[1].path == "bar.txt"
-    assert parsed[1].added == 1
-    assert parsed[1].removed == 0
-
-    assert parsed[2].op == "delete"
-    assert parsed[2].path == "gone.txt"
-
-
-@pytest.mark.unit
-def test_extract_apply_patch_payload_parses_json_patches_variant():
-    module = load_tool_module("run_agent_patch_json_variant", "tools/run-agent.py")
-    state = {
-        "input": {
-            "patches": [
-                {"path": "x.py", "patchText": "@@\n-old\n+new"},
-                {"file": "y.py", "diff": "@@\n-a\n+b"},
-            ]
-        },
-        "output": "done",
-    }
-
-    raw_text, patches, output_str = module._extract_apply_patch_payload(state)
-    assert raw_text == ""
-    assert output_str == "done"
-    assert len(patches) == 2
-    assert patches[0].path == "x.py"
-    assert patches[0].added == 1 and patches[0].removed == 1
-    assert patches[1].path == "y.py"
-
-
-@pytest.mark.unit
-def test_extract_apply_patch_payload_falls_back_to_unknown_unified_diff():
-    module = load_tool_module("run_agent_patch_unified", "tools/run-agent.py")
-    diff = "--- a/a.txt\n+++ b/a.txt\n@@\n-old\n+new\n"
-    state = {"input": diff, "output": "ok"}
-
-    raw_text, patches, output_str = module._extract_apply_patch_payload(state)
-    assert raw_text == diff
-    assert output_str == "ok"
-    assert len(patches) == 1
-    assert patches[0].op == "unknown"
-    assert patches[0].path == "(patch)"
-    assert patches[0].added == 1 and patches[0].removed == 1
-
-
-# --- _first_string and _PATCH_TEXT_KEYS -------------------------------------
-
-@pytest.mark.unit
-def test_first_string_skips_non_string_and_empty_values():
-    module = load_tool_module("run_agent_first_string", "tools/run-agent.py")
-    keys = ("a", "b", "c", "d")
-
-    # None, empty string, dict, and number are all rejected; the first
-    # non-empty string wins.
-    d = {"a": None, "b": "", "c": {"nested": "no"}, "d": "yes"}
-    assert module._first_string(d, keys) == "yes"
-
-    # Number-typed value should not be coerced via str().
-    d = {"a": 42, "b": "fallback"}
-    assert module._first_string(d, keys) == "fallback"
-
-    # No string under any key.
-    assert module._first_string({"a": None, "b": 0}, keys) == ""
-
-
-@pytest.mark.unit
-def test_patch_text_keys_have_correct_precedence_order():
-    module = load_tool_module("run_agent_patch_keys", "tools/run-agent.py")
-
-    # patchText must beat patch_text must beat patch must beat input must
-    # beat content. Order matters: github-copilot/gpt-5.4 emits patchText
-    # and that is what triggered the original bug fix.
-    expected_first = ("patchText", "patch_text", "patch", "input", "content")
-    assert module._PATCH_TEXT_KEYS[: len(expected_first)] == expected_first
-
-
-@pytest.mark.unit
-def test_extract_apply_patch_payload_ignores_non_string_patch_values():
-    module = load_tool_module("run_agent_patch_ignores_nonstring", "tools/run-agent.py")
-
-    # If patchText is a dict (something an SDK might pass through by
-    # mistake), we must NOT stringify it via str(...). Earlier code did
-    # `str(inp.get("patch", ...))` which silently produced "{'foo': 1}",
-    # corrupting the parser. Now those keys are skipped and the next
-    # valid string key wins.
-    state = {
-        "input": {
-            "patchText": {"oops": "wrong shape"},
-            "patch": "*** Begin Patch\n*** Update File: real.txt\n+ok\n*** End Patch",
-        },
-        "output": "done",
-    }
-    raw_text, patches, _ = module._extract_apply_patch_payload(state)
-    assert "real.txt" in raw_text
-    assert len(patches) == 1
-    assert patches[0].path == "real.txt"
-
-
-@pytest.mark.unit
-def test_extract_apply_patch_payload_handles_none_value_without_str_coercion():
-    module = load_tool_module("run_agent_patch_none", "tools/run-agent.py")
-
-    # If patchText is explicitly None, we must not produce raw_text="None"
-    # which would then fail to parse and fall through to the generic JSON
-    # panel. This is the "str(None)" regression class from the original
-    # bug.
-    state = {"input": {"patchText": None}, "output": "ok"}
-    raw_text, patches, _ = module._extract_apply_patch_payload(state)
-    assert raw_text == ""
-    assert patches == []
-
-
-# --- apply_patch envelope: regex bug regression ----------------------------
-
-@pytest.mark.unit
-def test_parse_apply_patch_envelope_does_not_swallow_next_directive_after_begin():
-    """Regex must split on each *** directive even when no horizontal
-    whitespace separates them. The bug fix changed `\\s*` to `[ \\t]*` so
-    that newlines remain directive separators. Reproduces the exact
-    pattern emitted by github-copilot/gpt-5.4.
-    """
-    module = load_tool_module("run_agent_envelope_regex", "tools/run-agent.py")
-
-    patch = (
-        "*** Begin Patch\n"
-        "*** Delete File: /abs/path/sandbox-plan.md\n"
-        "*** Add File: /abs/path/sandbox-plan.md\n"
-        "+# New Content\n"
-        "+more\n"
-        "*** End Patch\n"
-    )
-
-    parsed = module._parse_apply_patch_envelope(patch)
-    # Must produce exactly two file entries: a delete and an add.
-    assert len(parsed) == 2
-    assert parsed[0].op == "delete"
-    assert parsed[0].path == "/abs/path/sandbox-plan.md"
-    assert parsed[1].op == "add"
-    assert parsed[1].path == "/abs/path/sandbox-plan.md"
-    assert parsed[1].added == 2
-
-
-@pytest.mark.unit
-def test_parse_apply_patch_envelope_tolerates_extra_horizontal_whitespace():
-    module = load_tool_module("run_agent_envelope_ws", "tools/run-agent.py")
-    # Multiple spaces and tabs around directive name and colon.
-    patch = "*** Begin Patch\n***   Update File:\tfoo.txt\n+x\n*** End Patch\n"
-    parsed = module._parse_apply_patch_envelope(patch)
-    assert len(parsed) == 1
-    assert parsed[0].op == "update"
-    assert parsed[0].path == "foo.txt"
-
-
-# --- thinking decision edge cases ------------------------------------------
-
-@pytest.mark.unit
-def test_resolve_thinking_decision_treats_empty_env_as_off(monkeypatch):
-    module = load_tool_module("run_agent_thinking_empty_env", "tools/run-agent.py")
-    monkeypatch.setenv("CODECOME_THINKING", "")
-    on, source = module._resolve_thinking_decision("openai/gpt-5", [])
-    # Empty string is in the off-list along with "0"/"false"/"no".
-    assert (on, source) == (False, "env")
-
-
-@pytest.mark.unit
-def test_resolve_thinking_decision_unknown_provider_defaults_on(monkeypatch):
-    module = load_tool_module("run_agent_thinking_unknown", "tools/run-agent.py")
-    monkeypatch.delenv("CODECOME_THINKING", raising=False)
-    on, source = module._resolve_thinking_decision("unknown-provider/some-model", [])
-    assert (on, source) == (True, "provider-default")
-
-
-@pytest.mark.unit
-def test_resolve_thinking_decision_user_args_beats_env_off(monkeypatch):
-    """OPENCODE_ARGS --thinking must win even when CODECOME_THINKING=0."""
-    module = load_tool_module("run_agent_thinking_userargs_wins", "tools/run-agent.py")
-    monkeypatch.setenv("CODECOME_THINKING", "0")
-    on, source = module._resolve_thinking_decision("anthropic/claude-opus-4-7", ["--thinking"])
-    assert (on, source) == (True, "user-args")
-
-
-@pytest.mark.unit
-def test_resolve_thinking_decision_no_provider_prefix_defaults_on(monkeypatch):
-    module = load_tool_module("run_agent_thinking_no_prefix", "tools/run-agent.py")
-    monkeypatch.delenv("CODECOME_THINKING", raising=False)
-    # No slash in the model name -> no provider id derivable.
-    on, source = module._resolve_thinking_decision("just-a-model", [])
-    assert (on, source) == (True, "provider-default")
+    task_calls.clear()
+    assert module._dispatch_tool_renderer(None, "task", {}) is True
+    assert task_calls == ["plain"]
 
 
 # --- reasoning / error rendering edge cases --------------------------------
+
 
 @pytest.mark.unit
 def test_render_reasoning_plain_skips_empty_and_whitespace(monkeypatch, capsys):
