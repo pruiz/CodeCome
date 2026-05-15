@@ -1751,18 +1751,43 @@ def test_check_phase_graceful_completion_mtime(monkeypatch, tmp_path):
     os.utime(f3, (fresh, fresh))
     assert module.check_phase_graceful_completion("3", None, start) is True
 
-    # ---- Phase 5 fallback: not-feasible updates the CONFIRMED finding ----
-    conf5 = confirmed / "CC-0005.md"; conf5.write_text("x")
+    # ---- Phase 5: NOT_FEASIBLE fallback (CONFIRMED finding with frontmatter) ----
+    conf5 = confirmed / "CC-0005.md"
+    conf5.write_text(
+        "---\n"
+        "status: CONFIRMED\n"
+        "exploitation:\n"
+        "  status: NOT_FEASIBLE\n"
+        "---\n"
+    )
     os.utime(conf5, (old, old))
     assert module.check_phase_graceful_completion("5", "CC-0005", start) is False
     os.utime(conf5, (fresh, fresh))
     assert module.check_phase_graceful_completion("5", "CC-0005", start) is True
 
-    # ---- Phase 5 exploit artifacts ----
+    # ---- Phase 5: EXPLOITED path requires frontmatter + exploit artifacts ----
+    # Age the NOT_FEASIBLE fallback so it no longer matches.
+    os.utime(conf5, (old, old))
+    exploited_dir = tmp_path / "itemdb" / "findings" / "EXPLOITED"
+    exploited_dir.mkdir(parents=True)
+    exp5 = exploited_dir / "CC-0005.md"
+    exp5.write_text(
+        "---\n"
+        "status: EXPLOITED\n"
+        "exploitation:\n"
+        "  status: COMPLETED\n"
+        "---\n"
+    )
+    os.utime(exp5, (old, old))
+    # Still False: no fresh exploit artifacts
+    assert module.check_phase_graceful_completion("5", "CC-0005", start) is False
+
     exploits = tmp_path / "itemdb" / "evidence" / "CC-0005" / "exploits"
     exploits.mkdir(parents=True)
-    xf = exploits / "exploit.py"; xf.write_text("x")
+    xf = exploits / "exploit.py"
+    xf.write_text("x")
     os.utime(xf, (fresh, fresh))
+    os.utime(exp5, (fresh, fresh))
     assert module.check_phase_graceful_completion("5", "CC-0005", start) is True
 
     # ---- Phase 6 ----

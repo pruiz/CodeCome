@@ -627,6 +627,25 @@ def render_todowrite_plain(state: dict[str, Any]) -> bool:
     return True
 
 
+# --- Permission-error renderer ------------------------------------------------
+
+def render_permission_error_rich(console: Console, message: str) -> None:
+    """Draw a bold red panel when a tool permission is auto-rejected."""
+    console.print(
+        Panel(
+            Text(message, style="bold red"),
+            title="Permission Denied",
+            border_style="red",
+            expand=True,
+        )
+    )
+
+
+def render_permission_error_plain(message: str) -> None:
+    print(C.fail("Permission Denied"))
+    print(C.fail(f"  {message}"))
+
+
 # --- Shared helper utilities --------------------------------------------------
 
 _SNAPSHOT_CACHE: OrderedDict[str, tuple[str, float]] = OrderedDict()
@@ -4284,6 +4303,37 @@ def _build_resume_command(initial_command: list[str], session_id: str, prompt: s
 
 
 
+_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+
+
+def _load_finding_frontmatter(path: Path) -> dict[str, Any] | None:
+    """Return the YAML frontmatter dict from a finding file, or None."""
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    m = _FRONTMATTER_RE.match(content)
+    if not m:
+        return None
+    try:
+        import yaml  # type: ignore
+        data = yaml.safe_load(m.group(1))
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _exploitation_status_looks_real(frontmatter: dict[str, Any] | None) -> bool:
+    """Return True when the exploitation block has a non-placeholder status."""
+    if not isinstance(frontmatter, dict):
+        return False
+    exploitation = frontmatter.get("exploitation")
+    if not isinstance(exploitation, dict):
+        return False
+    status = str(exploitation.get("status", "")).strip().lower()
+    return bool(status and status not in ("", "pending.", "todo.", "tbd."))
+
+
 def check_phase_graceful_completion(phase: str, finding: str | None, run_start_time: float) -> bool:
     """Check if the phase produced its primary artifacts, allowing us to forgive mid-turn cutoffs."""
     try:
@@ -4312,13 +4362,41 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
             evidence_dir = ROOT / "itemdb" / "evidence" / finding
             return any(path.stat().st_mtime >= run_start_time for path in _iter_files(evidence_dir))
         elif str(phase) == "5" and finding:
-            exploits_dir = ROOT / "itemdb" / "evidence" / finding / "exploits"
-            if any(path.stat().st_mtime >= run_start_time for path in _iter_files(exploits_dir)):
-                return True
-            # Fallback for NOT_FEASIBLE
-            finding_file = ROOT / "itemdb" / "findings" / "CONFIRMED" / f"{finding}.md"
-            if finding_file.exists() and finding_file.stat().st_mtime >= run_start_time:
-                return True
+            # Path A: finding promoted to EXPLOITED with real frontmatter + exploit artifacts.
+            exploited_file = ROOT / "itemdb" / "findings" / "EXPLOITED" / f"{finding}.md"
+            if (
+                exploited_file.exists()
+                and exploited_file.stat().st_mtime >= run_start_time
+            ):
+                fm = _load_finding_frontmatter(exploited_file)
+                if (
+                    isinstance(fm, dict)
+                    and fm.get("status") == "EXPLOITED"
+                    and _exploitation_status_looks_real(fm)
+                ):
+                    exploits_dir = ROOT / "itemdb" / "evidence" / finding / "exploits"
+                    if any(
+                        path.stat().st_mtime >= run_start_time
+                        for path in _iter_files(exploits_dir)
+                    ):
+                        return True
+
+            # Path B: CONFIRMED finding documented as NOT_FEASIBLE.
+            confirmed_file = ROOT / "itemdb" / "findings" / "CONFIRMED" / f"{finding}.md"
+            if (
+                confirmed_file.exists()
+                and confirmed_file.stat().st_mtime >= run_start_time
+            ):
+                fm = _load_finding_frontmatter(confirmed_file)
+                if (
+                    isinstance(fm, dict)
+                    and fm.get("status") == "CONFIRMED"
+                    and isinstance(fm.get("exploitation"), dict)
+                    and str(fm["exploitation"].get("status", "")).upper()
+                    == "NOT_FEASIBLE"
+                ):
+                    return True
+
             return False
         elif str(phase) == "6":
             reports_dir = ROOT / "itemdb" / "reports"
@@ -4574,6 +4652,10 @@ def main() -> int:
                     permission_error = _extract_tool_permission_error(event)
                     if permission_error is not None:
                         last_permission_error = permission_error
+                        if HAVE_RICH and console is not None:
+                            render_permission_error_rich(console, permission_error)
+                        else:
+                            render_permission_error_plain(permission_error)
 
                     render_event(console, args.phase, args.label, event)
             finally:
@@ -4641,7 +4723,11 @@ def main() -> int:
                 )
 
         if finish_warning is not None and returncode == 0:
-            if last_finish_reason in _FINISH_MID_TURN and check_phase_graceful_completion(args.phase, args.finding, RUN_START_TIME):
+            if (
+                last_finish_reason in _FINISH_MID_TURN
+                and last_permission_error is None
+                and check_phase_graceful_completion(args.phase, args.finding, RUN_START_TIME)
+            ):
                 msg = (
                     f"CodeCome observed a mid-turn model/provider cutoff for Phase {args.phase} after {step_finish_count} "
                     "completed loops, but the required durable artifacts were already written. Treating the phase as complete."

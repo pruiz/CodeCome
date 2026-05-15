@@ -103,10 +103,11 @@ validation:
     - "./itemdb"
     - "./runs"
     - "./sandbox"
-    - "./templates"
     - "./tmp"
-    - "./tools"
-    - "./.opencode"
+    - "/workspace/itemdb"
+    - "/workspace/runs"
+    - "/workspace/sandbox"
+    - "/workspace/tmp"
 
   methods:
     - "static_proof"
