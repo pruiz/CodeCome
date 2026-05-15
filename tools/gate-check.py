@@ -120,9 +120,14 @@ def find_finding(identifier: str) -> Path | None:
         status_dir = findings_root / status
         if not status_dir.exists():
             continue
+        # Exact match: CC-0003.md (no slug)
+        exact = status_dir / f"{identifier}.md"
+        if exact.exists():
+            return exact.resolve()
+        # Slug match: CC-0003-some-title.md
         matches = list(status_dir.glob(f"{identifier}-*.md"))
         if matches:
-            return matches[0]
+            return matches[0].resolve()
     return None
 
 

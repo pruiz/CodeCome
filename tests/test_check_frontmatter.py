@@ -216,3 +216,41 @@ Broken.
     errors = module.validate_finding(finding)
     assert len(errors) == 1
     assert "while parsing a block mapping" in errors[0]
+
+
+def test_validate_rejects_bare_cc_xxxx_filename(tmp_path):
+    module = load_tool_module("check_frontmatter_bare_name", "tools/check-frontmatter.py")
+    finding = tmp_path / "itemdb" / "findings" / "PENDING" / "CC-0001.md"
+    finding.parent.mkdir(parents=True)
+    finding.write_text(VALID_FRONTMATTER, encoding="utf-8")
+
+    errors = module.validate_finding(finding)
+    assert any("bare CC-XXXX.md names are not allowed" in e for e in errors)
+
+
+def test_validate_accepts_slug_filename(tmp_path):
+    module = load_tool_module("check_frontmatter_slug", "tools/check-frontmatter.py")
+    finding = tmp_path / "itemdb" / "findings" / "PENDING" / "CC-0001-some-finding.md"
+    finding.parent.mkdir(parents=True)
+    finding.write_text(VALID_FRONTMATTER, encoding="utf-8")
+
+    errors = module.validate_finding(finding)
+    assert errors == []
+
+
+def test_validate_rejects_bare_with_valid_frontmatter(tmp_path):
+    module = load_tool_module("check_frontmatter_bare_valid_fm", "tools/check-frontmatter.py")
+    finding = tmp_path / "itemdb" / "findings" / "CONFIRMED" / "CC-0003.md"
+    finding.parent.mkdir(parents=True)
+    finding.write_text(
+        VALID_FRONTMATTER.replace('status: "PENDING"', 'status: "CONFIRMED"').replace(
+            'id: "CC-0001"', 'id: "CC-0003"'
+        )
+        + "\n# Remediation idea\n\n```c\nsafe();\n```\n",
+        encoding="utf-8",
+    )
+
+    errors = module.validate_finding(finding)
+    filename_errors = [e for e in errors if "bare CC-XXXX.md names" in e]
+    assert len(filename_errors) == 1
+    assert "CC-0003.md" in filename_errors[0]
