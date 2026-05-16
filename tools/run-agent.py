@@ -3,14 +3,15 @@
 # SPDX-License-Identifier: GPL-3.0-or-later OR AGPL-3.0-or-later
 
 """
-Structured wrapper around `opencode run --format json` for CodeCome phase targets.
+Structured wrapper around `opencode serve` HTTP+SSE API for CodeCome phase targets.
 
-Minimum supported OpenCode version: 1.14.39
+Minimum supported OpenCode version: 1.14.50
 """
 
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import difflib
 import json
 import os
@@ -20,15 +21,19 @@ import signal
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
+from collections import OrderedDict
 from dataclasses import dataclass
 from functools import lru_cache
-from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import _colors as C
+from opencode.serve import ServerRunner, ServerRunnerError
+from events import EventLoop, RunResult
 
 try:
     from rich.console import Console, Group
@@ -50,7 +55,7 @@ except ImportError:  # pragma: no cover
     HAVE_RICH = False
 
 ROOT = Path(__file__).resolve().parents[1]
-MINIMUM_OPENCODE_VERSION = "1.14.39"
+MINIMUM_OPENCODE_VERSION = "1.14.50"
 
 
 def check_opencode_version() -> None:
@@ -4409,6 +4414,166 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
         pass
     return False
 
+def _send_prompt_to_session(base_url: str, session_id: str, prompt: str) -> None:
+    """Send a prompt text to a session via POST /session/{id}/prompt_async."""
+    url = f"{base_url}/session/{session_id}/prompt_async"
+    payload = {"parts": [{"type": "text", "text": prompt}]}
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30.0) as resp:
+            pass  # 204 expected
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"Failed to send prompt: HTTP {exc.code}") from exc
+
+
+def _configure_session(base_url: str, session_id: str, agent: str, model: str | None, variant: str | None, thinking_on: bool) -> None:
+    """Apply agent/model/variant to the session via PATCH."""
+    payload: dict[str, Any] = {"agent": agent}
+
+    if model:
+        parts = model.split("/", 1)
+        if len(parts) == 2:
+            payload["model"] = {"providerID": parts[0], "modelID": parts[1]}
+        else:
+            payload["model"] = {"modelID": model}
+    if variant:
+        payload["variant"] = variant
+    if thinking_on is not None:
+        payload["thinking"] = thinking_on
+
+    url = f"{base_url}/session/{session_id}"
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="PATCH",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10.0):
+            pass
+    except urllib.error.HTTPError:
+        # Session might reject unknown fields; not fatal.
+        pass
+
+
+def _create_session(base_url: str, phase: str) -> str:
+    """Create a session via POST /session and return its ID."""
+    resp = urllib.request.urlopen(
+        urllib.request.Request(
+            f"{base_url}/session",
+            data=json.dumps({"title": f"CodeCome Phase {phase}"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        ),
+        timeout=10.0,
+    )
+    data = json.loads(resp.read().decode("utf-8"))
+    sid = str(data.get("id", ""))
+    if not sid:
+        raise RuntimeError("Server returned empty session ID")
+    return sid
+
+
+def _consume_events(
+    base_url: str,
+    session_id: str,
+    console: Any,
+    phase: str,
+    label: str,
+    args: argparse.Namespace,
+    transcript_fp: Any | None,
+) -> RunResult:
+    """Create an EventLoop, consume SSE until idle, and return RunResult."""
+    event_loop = EventLoop(
+        base_url=base_url,
+        session_id=session_id,
+        console=console,
+        phase=phase,
+        label=label,
+    )
+
+    def _render_and_log(console_: Any, phase_: str, label_: str, event: dict[str, Any]) -> None:
+        if transcript_fp is not None:
+            try:
+                transcript_fp.write(json.dumps(event) + "\n")
+            except OSError:
+                pass
+        if args.debug:
+            sys.stderr.write(json.dumps(event) + "\n")
+            sys.stderr.flush()
+        render_event(console_, phase_, label_, event)
+
+    return event_loop.run(_render_and_log)
+
+
+def _run_single_attempt(
+    args: argparse.Namespace,
+    console: Any,
+    prompt: str,
+    model: str | None,
+    variant: str | None,
+    thinking_on: bool,
+    base_url: str,
+    existing_session_id: str | None = None,
+) -> tuple[int, str, RunResult, Path]:
+    """Run or resume a single phase attempt via opencode serve.
+
+    If existing_session_id is provided, reuses that session (resume).
+    Otherwise creates a new session.
+
+    Returns (returncode, session_id, run_result, transcript_path).
+    """
+    finding_tag = (args.finding or "no-finding").replace("/", "_")
+    transcript_dir = ROOT / "tmp"
+    transcript_dir.mkdir(parents=True, exist_ok=True)
+
+    # Use a module-level counter for attempt numbers across resume attempts.
+    counter = getattr(_run_single_attempt, "_attempt_counter", 1)
+    transcript_path = transcript_dir / f"last-phase-{args.phase}-{finding_tag}-attempt-{counter}.jsonl"
+    setattr(_run_single_attempt, "_attempt_counter", counter + 1)
+
+    transcript_fp = None
+    try:
+        transcript_fp = transcript_path.open("w", encoding="utf-8")
+    except OSError as exc:
+        if HAVE_RICH:
+            console.print(Text(f"warning: could not open transcript {transcript_path}: {exc}", style="yellow"))
+        else:
+            print(C.warn(f"warning: could not open transcript {transcript_path}: {exc}"))
+
+    try:
+        if existing_session_id:
+            session_id = existing_session_id
+        else:
+            session_id = _create_session(base_url, str(args.phase))
+            _configure_session(base_url, session_id, args.agent, model, variant, thinking_on)
+
+        _send_prompt_to_session(base_url, session_id, prompt)
+        run_result = _consume_events(base_url, session_id, console, str(args.phase), str(args.label), args, transcript_fp)
+    except Exception as exc:
+        if HAVE_RICH:
+            console.print(Panel(Text(str(exc), style="red"), title="Server Error", border_style="red"))
+        else:
+            print(C.fail(str(exc)), file=sys.stderr)
+        return 1, existing_session_id or "", RunResult(), transcript_path
+    finally:
+        if transcript_fp is not None:
+            try:
+                transcript_fp.flush()
+                transcript_fp.close()
+            except OSError:
+                pass
+
+    return 0, session_id, run_result, transcript_path
+
+
 def show_model_table(agent_name: str) -> int:
     """Print the model-resolution table for an agent and exit."""
     extra_args = shlex.split(os.environ.get("OPENCODE_ARGS", ""))
@@ -4485,30 +4650,17 @@ def main() -> int:
     console = build_console(color_mode)
     prompt_file = ROOT / args.prompt_file
     prompt = load_prompt(prompt_file, args.finding, phase=args.phase)
-    command, model, variant, model_source, variant_source, thinking_on, thinking_source = build_child_command(args)
-    base_command = list(command)
-    model, variant, model_source, variant_source = resolve_runtime_model_for_banner(
-        args, command, model, variant, model_source, variant_source
+    # Model resolution is still needed for banner display.
+    extra_args = shlex.split(os.environ.get("OPENCODE_ARGS", ""))
+    model, variant, model_source, variant_source = resolve_model_and_variant(
+        args.agent, extra_args
     )
-
-    # If the runtime probe revealed a different provider and the user
-    # didn't explicitly pin --thinking via env or OPENCODE_ARGS, redo
-    # the per-provider decision now. This keeps the banner truthful.
-    if thinking_source == "provider-default":
-        new_thinking_on, _ = _resolve_thinking_decision(model, shlex.split(os.environ.get("OPENCODE_ARGS", "")))
-        if new_thinking_on != thinking_on:
-            # Adjust the command for the late discovery: add or remove --thinking.
-            if new_thinking_on and "--thinking" not in command:
-                command.append("--thinking")
-            elif not new_thinking_on and "--thinking" in command:
-                command.remove("--thinking")
-            thinking_on = new_thinking_on
+    thinking_on, thinking_source = _resolve_thinking_decision(model, extra_args)
 
     model_label = model or "(unknown)"
     variant_label = variant or "(unknown)"
 
-    # Build the single-line banner. Order: agent  model  variant?  prompt
-    # followed by a trailing parenthetical with the resolution source(s).
+    # Build the single-line banner.
     parts = [f"agent={args.agent}", f"model={model_label}"]
     if variant is not None:
         parts.append(f"variant={variant_label}")
@@ -4549,151 +4701,47 @@ def main() -> int:
         print(C.warn("rich is not installed; using plain structured output fallback"))
 
     attempt_number = 0
-    while True:
-        attempt_number += 1
-        process: subprocess.Popen[str] | None = None
-        interrupted = False
+    last_session_id: str = ""
+    last_finish_reason: Optional[str] = None
+    last_finish_tokens: dict[str, Any] = {}
+    last_permission_error: Optional[str] = None
+    any_step_finish_seen = False
+    step_finish_count = 0
+    transcript_path: Path = Path()
 
-        def forward_signal(signum: int, _frame: Any) -> None:
-            nonlocal interrupted
-            interrupted = True
-            if process is not None and process.poll() is None:
-                try:
-                    os.killpg(process.pid, signum)
-                except ProcessLookupError:
-                    pass
+    # Start the server once for this phase
+    runner = ServerRunner()
+    server_info: Any = None
+    try:
+        server_info = runner.start(port=0, hostname="127.0.0.1", log_level="WARN")
+    except ServerRunnerError as exc:
+        if HAVE_RICH:
+            console.print(Panel(Text(str(exc), style="red"), title="Server Error", border_style="red"))
+        else:
+            print(C.fail(f"Server Error: {exc}"), file=sys.stderr)
+        return 1
 
-        previous_sigint = signal.signal(signal.SIGINT, forward_signal)
-        previous_sigterm = signal.signal(signal.SIGTERM, forward_signal)
+    base_url = server_info.base_url
 
-        try:
-            env = os.environ.copy()
-            env["_CODECOME_INSIDE_HARNESS"] = "1"
-            process = subprocess.Popen(
-                command,
-                cwd=ROOT,
-                env=env,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=None,
-                text=True,
-                bufsize=1,
-                preexec_fn=os.setsid,
+    try:
+        while True:
+            attempt_number += 1
+            returncode, session_id, run_result, transcript_path = _run_single_attempt(
+                args, console, prompt, model, variant, thinking_on, base_url,
+                existing_session_id=last_session_id or None
             )
 
-            assert process.stdin is not None
-            process.stdin.write(prompt)
-            process.stdin.close()
+            if returncode != 0:
+                break
 
-            assert process.stdout is not None
-            late_model_announced = False
-            finding_tag = (args.finding or "no-finding").replace("/", "_")
-            transcript_dir = ROOT / "tmp"
-            transcript_dir.mkdir(parents=True, exist_ok=True)
-            transcript_path = transcript_dir / f"last-phase-{args.phase}-{finding_tag}-attempt-{attempt_number}.jsonl"
-            last_finish_reason: Optional[str] = None
-            last_finish_tokens: dict[str, Any] = {}
-            last_permission_error: Optional[str] = None
-            any_step_finish_seen = False
-            step_finish_count = 0
-            stream_session_id: Optional[str] = None
-            
-            try:
-                transcript_fp: Optional[Any] = transcript_path.open("w", encoding="utf-8")
-            except OSError as exc:
-                transcript_fp = None
-                if HAVE_RICH:
-                    console.print(Text(f"warning: could not open transcript {transcript_path}: {exc}", style="yellow"))
-                else:
-                    print(C.warn(f"warning: could not open transcript {transcript_path}: {exc}"))
+            last_session_id = session_id
+            last_finish_reason = run_result.last_finish_reason
+            last_finish_tokens = run_result.last_finish_tokens
+            last_permission_error = run_result.last_permission_error
+            any_step_finish_seen = run_result.any_step_finish_seen
+            step_finish_count = run_result.step_finish_count
 
-            try:
-                for raw_line in process.stdout:
-                    if transcript_fp is not None:
-                        try:
-                            transcript_fp.write(raw_line)
-                        except OSError:
-                            pass
-                    line = raw_line.strip()
-                    if not line:
-                        continue
-                    if args.debug:
-                        sys.stderr.write(line + "\n")
-                        sys.stderr.flush()
-                    try:
-                        event = json.loads(line)
-                        if stream_session_id is None and "sessionID" in event:
-                            stream_session_id = event["sessionID"]
-                    except json.JSONDecodeError:
-                        if args.debug:
-                            sys.stderr.write(f"json-parse-error: {line}\n")
-                            sys.stderr.flush()
-                        continue
-
-                    if not late_model_announced:
-                        discovered_in_stream = _scan_event_for_model(event)
-                        if discovered_in_stream and discovered_in_stream != model:
-                            late_model_announced = True
-                            msg = (
-                                f"[model resolved from stream] {discovered_in_stream} "
-                                f"(banner showed {model_label})"
-                            )
-                            if HAVE_RICH:
-                                console.print(Text(msg, style="yellow"))
-                            else:
-                                print(C.warn(msg))
-
-                    if event.get("type") == "step_finish":
-                        any_step_finish_seen = True
-                        step_finish_count += 1
-                        part = event.get("part") or {}
-                        reason = part.get("reason")
-                        if isinstance(reason, str):
-                            last_finish_reason = reason
-                        tokens = part.get("tokens")
-                        if isinstance(tokens, dict):
-                            last_finish_tokens = tokens
-
-                    permission_error = _extract_tool_permission_error(event)
-                    if permission_error is not None:
-                        last_permission_error = permission_error
-                        if HAVE_RICH and console is not None:
-                            render_permission_error_rich(console, permission_error)
-                        else:
-                            render_permission_error_plain(permission_error)
-
-                    render_event(console, args.phase, args.label, event)
-            finally:
-                if transcript_fp is not None:
-                    try:
-                        transcript_fp.flush()
-                        transcript_fp.close()
-                    except OSError:
-                        pass
-
-            process.wait()
-            returncode = process.returncode
-        except Exception as exc:
-            if HAVE_RICH:
-                console.print(Panel(Text(str(exc), style="red"), title="Wrapper Error", border_style="red"))
-            else:
-                print(C.fail(str(exc)), file=sys.stderr)
-            return 1
-        finally:
-            signal.signal(signal.SIGINT, previous_sigint)
-            signal.signal(signal.SIGTERM, previous_sigterm)
-
-        if returncode is None:
-            returncode = 1
-
-        if returncode < 0:
-            returncode = 128 + abs(returncode)
-
-        if interrupted and returncode == 0:
-            returncode = 130
-
-        finish_warning: Optional[str] = None
-        if returncode == 0:
+            finish_warning: Optional[str] = None
             if not any_step_finish_seen:
                 finish_warning = (
                     "CodeCome observed no step_finish events in the JSON stream, so the model/provider did not emit a "
@@ -4727,141 +4775,104 @@ def main() -> int:
                     "the run as incomplete rather than assuming success."
                 )
 
-        if finish_warning is not None and returncode == 0:
-            if (
-                last_finish_reason in _FINISH_MID_TURN
-                and last_permission_error is None
-                and check_phase_graceful_completion(args.phase, args.finding, RUN_START_TIME)
-            ):
-                msg = (
-                    f"CodeCome observed a mid-turn model/provider cutoff for Phase {args.phase} after {step_finish_count} "
-                    "completed loops, but the required durable artifacts were already written. Treating the phase as complete."
-                )
-                if HAVE_RICH:
-                    console.print(Text(msg, style="bold green"))
-                else:
-                    print(C.ok(msg))
-                finish_warning = None
-                last_finish_reason = "graceful_forgiveness"
-            else:
-                returncode = 2
-
-        # -----------------------------------------------------
-        # Auto-Resume Logic
-        # -----------------------------------------------------
-        
-        last_session_id = stream_session_id
-        if not last_session_id:
-            try:
-                db_query = subprocess.run(
-                    ["opencode", "db", "SELECT id FROM session ORDER BY time_updated DESC LIMIT 1", "--format", "tsv"],
-                    capture_output=True, text=True, timeout=1.0
-                )
-                if db_query.returncode == 0 and db_query.stdout.strip():
-                    last_session_id = db_query.stdout.strip().splitlines()[-1].strip()
-            except Exception:
-                pass
-
-        # Frontmatter Resume
-        if returncode == 0:
-            validation_result = subprocess.run(
-                [sys.executable, "tools/check-frontmatter.py"],
-                cwd=ROOT,
-                capture_output=True,
-                text=True
-            )
-            if validation_result.returncode != 0:
-                max_frontmatter_retries = 2
-                validation_output = (validation_result.stderr or validation_result.stdout).strip() or "(no validator output)"
-                if frontmatter_retry_count < max_frontmatter_retries:
-                    frontmatter_retry_count += 1
+            if finish_warning is not None:
+                if (
+                    last_finish_reason in _FINISH_MID_TURN
+                    and last_permission_error is None
+                    and check_phase_graceful_completion(args.phase, args.finding, RUN_START_TIME)
+                ):
                     msg = (
-                        "\n[Auto-Correction] The model completed a turn, but its output failed local frontmatter "
-                        f"validation. CodeCome will resume the same session and ask for a minimal repair "
-                        f"(retry {frontmatter_retry_count}/{max_frontmatter_retries})."
+                        f"CodeCome observed a mid-turn model/provider cutoff for Phase {args.phase} after {step_finish_count} "
+                        "completed loops, but the required durable artifacts were already written. Treating the phase as complete."
+                    )
+                    if HAVE_RICH:
+                        console.print(Text(msg, style="bold green"))
+                    else:
+                        print(C.ok(msg))
+                    finish_warning = None
+                    last_finish_reason = "graceful_forgiveness"
+                else:
+                    returncode = 2
+
+            # Frontmatter Resume (only if returncode == 0)
+            if returncode == 0:
+                validation_result = subprocess.run(
+                    [sys.executable, "tools/check-frontmatter.py"],
+                    cwd=ROOT,
+                    capture_output=True,
+                    text=True
+                )
+                if validation_result.returncode != 0:
+                    max_frontmatter_retries = 2
+                    validation_output = (validation_result.stderr or validation_result.stdout).strip() or "(no validator output)"
+                    if frontmatter_retry_count < max_frontmatter_retries:
+                        frontmatter_retry_count += 1
+                        msg = (
+                            "\n[Auto-Correction] The model completed a turn, but its output failed local frontmatter "
+                            f"validation. CodeCome will resume the same session and ask for a minimal repair "
+                            f"(retry {frontmatter_retry_count}/{max_frontmatter_retries})."
+                        )
+                        if HAVE_RICH:
+                            console.print(Text(msg, style="bold yellow"))
+                        else:
+                            print(C.warn(msg))
+                        if last_session_id and last_session_id != "id":
+                            prompt = _build_frontmatter_resume_prompt(args.phase, args.finding, validation_output)
+                            continue
+                        else:
+                            returncode = 2
+                            finish_warning = (
+                                "The model output failed local frontmatter validation, and CodeCome could not determine a "
+                                "session ID to resume for repair. Treating the phase as incomplete so the validator output "
+                                "can be reported back with the saved transcript."
+                            )
+                    else:
+                        returncode = 2
+                        finish_warning = (
+                            f"The model output still fails local frontmatter validation after {max_frontmatter_retries} "
+                            "auto-repair attempts. Treating the phase as incomplete so the validation errors can be reported back."
+                        )
+                        msg = f"\n[Warning] Frontmatter errors persist after {max_frontmatter_retries} auto-retries."
+                        if HAVE_RICH:
+                            console.print(Text(msg, style="bold red"))
+                        else:
+                            print(C.fail(msg))
+                        print(validation_output)
+                    break
+                break
+
+            # Iteration Limit Resume
+            if returncode == 2 and last_finish_reason in _FINISH_MID_TURN:
+                max_iteration_retries = int(os.environ.get("CODECOME_MAX_ITERATION_RETRIES", "1"))
+                if iteration_retry_count < max_iteration_retries:
+                    iteration_retry_count += 1
+                    msg = (
+                        "\n[Auto-Resume] CodeCome observed a mid-turn model/provider cutoff and will resume the same "
+                        f"session once to let the model finish the interrupted work (retry {iteration_retry_count}/{max_iteration_retries})."
                     )
                     if HAVE_RICH:
                         console.print(Text(msg, style="bold yellow"))
                     else:
                         print(C.warn(msg))
-                        
                     if last_session_id and last_session_id != "id":
-                        prompt = _build_frontmatter_resume_prompt(
-                            args.phase,
-                            args.finding,
-                            validation_output,
+                        prompt = _build_phase_resume_prompt(
+                            args.phase, args.finding, last_finish_reason, step_finish_count
                         )
-                        command = _build_resume_command(base_command, last_session_id, prompt)
-                        if HAVE_RICH:
-                            console.print(Text(f"Resuming session {last_session_id}...", style="dim"))
-                        continue # loop back and retry
+                        continue
                     else:
-                        returncode = 2
                         finish_warning = (
-                            "The model output failed local frontmatter validation, and CodeCome could not determine a "
-                            "session ID to resume for repair. Treating the phase as incomplete so the validator output "
-                            "can be reported back with the saved transcript."
+                            "CodeCome correctly detected that the model/provider stopped mid-turn, but it could not determine "
+                            "a session ID for automatic continuation. Treating the phase as incomplete."
                         )
                         if HAVE_RICH:
                             console.print(Text("Could not determine session ID to resume.", style="red"))
                         else:
                             print(C.fail("Could not determine session ID to resume."))
-                else:
-                    returncode = 2
-                    finish_warning = (
-                        f"The model output still fails local frontmatter validation after {max_frontmatter_retries} "
-                        "auto-repair attempts. Treating the phase as incomplete so the validation errors can be reported back."
-                    )
-                    msg = f"\n[Warning] Frontmatter errors persist after {max_frontmatter_retries} auto-retries."
-                    if HAVE_RICH:
-                        console.print(Text(msg, style="bold red"))
-                    else:
-                        print(C.fail(msg))
-                    print(validation_output)
-            
-            # If no frontmatter errors or we ran out of retries, we are done
-            break
+                break
 
-        # Iteration Limit Resume
-        if returncode == 2 and last_finish_reason in _FINISH_MID_TURN:
-            max_iteration_retries = int(os.environ.get("CODECOME_MAX_ITERATION_RETRIES", "1"))
-            if iteration_retry_count < max_iteration_retries:
-                iteration_retry_count += 1
-                msg = (
-                    "\n[Auto-Resume] CodeCome observed a mid-turn model/provider cutoff and will resume the same "
-                    f"session once to let the model finish the interrupted work (retry {iteration_retry_count}/{max_iteration_retries})."
-                )
-                if HAVE_RICH:
-                    console.print(Text(msg, style="bold yellow"))
-                else:
-                    print(C.warn(msg))
-                
-                if last_session_id and last_session_id != "id":
-                    prompt = _build_phase_resume_prompt(
-                        args.phase,
-                        args.finding,
-                        last_finish_reason,
-                        step_finish_count,
-                    )
-                    command = _build_resume_command(base_command, last_session_id, prompt)
-                    if HAVE_RICH:
-                        console.print(Text(f"Resuming session {last_session_id}...", style="dim"))
-                    continue # loop back and retry
-                else:
-                    finish_warning = (
-                        "CodeCome correctly detected that the model/provider stopped mid-turn, but it could not determine "
-                        "a session ID for automatic continuation. Treating the phase as incomplete."
-                    )
-                    if HAVE_RICH:
-                        console.print(Text("Could not determine session ID to resume.", style="red"))
-                    else:
-                        print(C.fail("Could not determine session ID to resume."))
-                        
-            # If we run out of iteration retries, we break out
             break
-            
-        # Any other return code (e.g. failure, interrupt), we break
-        break
+    finally:
+        runner.stop()
 
     if returncode == 0:
         if HAVE_RICH:
@@ -4929,6 +4940,3 @@ def main() -> int:
             )
 
     return returncode
-
-if __name__ == "__main__":
-    raise SystemExit(main())
