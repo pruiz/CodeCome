@@ -65,6 +65,9 @@ function emitSubagentStatus(
 export default async function StatusForwarderPlugin(
   _input: PluginInput
 ): Promise<Hooks> {
+  if (!process.env._CODECOME_INSIDE_HARNESS) {
+    return {}
+  }
   // Heartbeat timer: every N seconds, emit a heartbeat for any tracked
   // subagent that has not produced an update in the last interval.
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null

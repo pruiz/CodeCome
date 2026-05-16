@@ -4567,9 +4567,12 @@ def main() -> int:
         previous_sigterm = signal.signal(signal.SIGTERM, forward_signal)
 
         try:
+            env = os.environ.copy()
+            env["_CODECOME_INSIDE_HARNESS"] = "1"
             process = subprocess.Popen(
                 command,
                 cwd=ROOT,
+                env=env,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=None,
