@@ -711,7 +711,9 @@ _READ_SUMMARY_RE = re.compile(
 _LEXER_MAP = {
     ".c": "c", ".h": "c", ".cpp": "cpp", ".cc": "cpp", ".cxx": "cpp",
     ".hpp": "cpp", ".hh": "cpp", ".cs": "csharp", ".java": "java",
-    ".py": "python", ".rb": "ruby", ".rs": "rust", ".go": "go",
+    ".erl": "erlang", ".hrl": "erlang", ".app.src": "erlang", ".config": "erlang",
+    ".ex": "elixir", ".exs": "elixir", ".py": "python", ".rb": "ruby",
+    ".rs": "rust", ".go": "go",
     ".js": "javascript", ".ts": "typescript", ".tsx": "tsx", ".jsx": "jsx",
     ".sh": "bash", ".bash": "bash", ".zsh": "bash",
     ".yml": "yaml", ".yaml": "yaml", ".json": "json", ".toml": "toml",

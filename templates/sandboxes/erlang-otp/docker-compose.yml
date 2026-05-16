@@ -1,0 +1,18 @@
+# Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
+# SPDX-License-Identifier: MIT
+
+services:
+  codecome-sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workspace
+    volumes:
+      - ../:/workspace
+    tty: true
+    stdin_open: true
+    security_opt:
+      - seccomp:unconfined
+    ports:
+      - "__APP_PORT__:__APP_PORT__"
+      - "__MANAGEMENT_PORT__:__MANAGEMENT_PORT__"

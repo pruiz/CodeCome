@@ -150,6 +150,11 @@ _LANGUAGE_HINTS_BY_FILE: Dict[str, str] = {
     "CMakeLists.txt": "c-cpp",
     "Cargo.toml": "rust",
     "go.mod": "go",
+    "rebar.config": "erlang-otp",
+    "rebar.lock": "erlang-otp",
+    "erlang.mk": "erlang-otp",
+    "mix.exs": "erlang-otp",
+    ".elp.toml": "erlang-otp",
     "package.json": "node",
     "pyproject.toml": "python",
     "requirements.txt": "python",
@@ -173,6 +178,8 @@ _LANGUAGE_HINTS_BY_SUFFIX: Dict[str, str] = {
     ".csproj": "dotnet",
     ".fsproj": "dotnet",
     ".vbproj": "dotnet",
+    ".erl": "erlang-otp",
+    ".hrl": "erlang-otp",
     ".py": "python",
     ".rs": "rust",
     ".go": "go",
@@ -238,10 +245,15 @@ def _scan_recon_notes() -> Dict[str, Any]:
     for hint in {
         "c", "c++", "cpp", "rust", "go", "python", "node", "javascript",
         "typescript", "java", "kotlin", "scala", "php", "ruby", ".net",
-        "dotnet", "c#", "csharp", "terraform", "hcl", "shell", "bash",
+        "dotnet", "c#", "csharp", "erlang", "elixir", "otp", "rebar3",
+        "common test", "dialyzer", "xref", "eqwalizer", "elp",
+        "terraform", "hcl", "shell", "bash",
     }:
         if re.search(rf"\b{re.escape(hint)}\b", text_blob):
-            languages.append(hint)
+            if hint in {"erlang", "elixir", "otp", "rebar3", "common test", "dialyzer", "xref", "eqwalizer", "elp"}:
+                languages.append("erlang-otp")
+            else:
+                languages.append(hint)
 
     manifests: List[str] = []
     for name in declared_manifests():
@@ -280,6 +292,9 @@ def _scan_src_top_levels(max_depth: int = 2) -> Dict[str, Any]:
             if filename in _LANGUAGE_HINTS_BY_FILE:
                 seen_manifests.append(filename)
                 seen_languages.append(_LANGUAGE_HINTS_BY_FILE[filename])
+            if filename.endswith(".app.src"):
+                seen_manifests.append("*.app.src")
+                seen_languages.append("erlang-otp")
             suffix = Path(filename).suffix.lower()
             if suffix in _LANGUAGE_HINTS_BY_SUFFIX:
                 seen_languages.append(_LANGUAGE_HINTS_BY_SUFFIX[suffix])

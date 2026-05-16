@@ -7,6 +7,7 @@ Each subdirectory `<id>/` is a stack-specific seed:
 
 - `c-cpp/`
 - `dotnet/`
+- `erlang-otp/`
 - `generic/`
 - `go/`
 - `iac-terraform/`
