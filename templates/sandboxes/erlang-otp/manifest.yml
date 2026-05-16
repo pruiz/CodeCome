@@ -1,0 +1,37 @@
+# Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
+# SPDX-License-Identifier: MIT
+
+id: "erlang-otp"
+display_name: "Erlang / OTP project"
+applies_when:
+  languages:
+    - "erlang-otp"
+    - "erlang"
+    - "elixir"
+  manifests:
+    - "rebar.config"
+    - "rebar.lock"
+    - "erlang.mk"
+    - "mix.exs"
+    - ".elp.toml"
+    - "*.app.src"
+required_tools:
+  - "erl"
+  - "erlc"
+  - "rebar3"
+  - "make"
+default_ports:
+  - 5672
+  - 15672
+build_command: "gmake || rebar3 compile || mix compile"
+test_command: "gmake ct-* || rebar3 eunit,ct || mix test"
+notes_md: "notes.md"
+caveats:
+  - "Uses the official Erlang OTP image and expects the agent to pin __ERLANG_OTP_TAG__ to the target version."
+  - "RabbitMQ-class targets often use GNU Make over rebar3. Prefer gmake when a Makefile is present."
+  - "Adjust exposed ports and runtime helpers for targets that are not brokers or network listeners."
+template_vars:
+  - TARGET_NAME
+  - ERLANG_OTP_TAG
+  - APP_PORT
+  - MANAGEMENT_PORT

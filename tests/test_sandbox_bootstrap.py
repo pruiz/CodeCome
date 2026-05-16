@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import sys
 from conftest import ROOT, load_tool_module
 
 
@@ -79,3 +78,49 @@ def test_opencode_json_allows_src_and_sandbox_env_reads():
     assert read_rules["src/**/.env"] == "allow"
     assert read_rules["src/**/.env.*"] == "allow"
     assert read_rules["sandbox/.env"] == "allow"
+
+
+def test_detect_signals_prefers_erlang_otp_for_rebar_targets(tmp_path, monkeypatch):
+    module = load_tool_module("sandbox_bootstrap_erlang_detect", "tools/sandbox-bootstrap.py")
+
+    src_root = tmp_path / "src"
+    (src_root / "apps").mkdir(parents=True)
+    (src_root / "rebar.config").write_text("{plugins, []}.\n", encoding="utf-8")
+    (src_root / "apps" / "demo.erl").write_text("-module(demo).\n", encoding="utf-8")
+    (src_root / "apps" / "demo.hrl").write_text("-define(DEMO, ok).\n", encoding="utf-8")
+    (src_root / "apps" / "demo.app.src").write_text("{application, demo, []}.\n", encoding="utf-8")
+
+    monkeypatch.setattr(module, "SRC_ROOT", src_root)
+    module._MANIFEST_CACHE = None
+
+    signals = module.detect_signals(force_src_walk=True)
+
+    assert "erlang-otp" in signals["languages"]
+    assert "rebar.config" in signals["manifests"]
+    assert "*.app.src" in signals["manifests"]
+
+    ranked = module.rank_examples(module.discover_examples(), signals)
+    assert ranked[0]["id"] == "erlang-otp"
+
+
+def test_detect_signals_reads_erlang_terms_from_recon_notes(tmp_path, monkeypatch):
+    module = load_tool_module("sandbox_bootstrap_erlang_notes", "tools/sandbox-bootstrap.py")
+
+    notes_root = tmp_path / "notes"
+    notes_root.mkdir(parents=True)
+    (notes_root / "target-profile.md").write_text(
+        "Target uses Erlang OTP with rebar3 and Common Test.\n",
+        encoding="utf-8",
+    )
+    (notes_root / "build-model.md").write_text(
+        "Build uses rebar.config, dialyzer, xref, and ELP.\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(module, "NOTES_ROOT", notes_root)
+    module._MANIFEST_CACHE = None
+
+    signals = module.detect_signals()
+
+    assert "erlang-otp" in signals["languages"]
+    assert "rebar.config" in signals["manifests"]

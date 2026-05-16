@@ -718,6 +718,14 @@ def test_is_sandbox_bootstrap_json_call(command, expected):
 
 
 @pytest.mark.unit
+def test_lexer_map_includes_erlang_extensions():
+    module = load_tool_module("run_agent_erlang_lexer", "tools/run-agent.py")
+
+    assert module._LEXER_MAP[".erl"] == "erlang"
+    assert module._LEXER_MAP[".hrl"] == "erlang"
+
+
+@pytest.mark.unit
 def test_sandbox_payload_matches_filters_unrelated_json():
     module = load_tool_module("run_agent_sandbox_match", "tools/run-agent.py")
 
