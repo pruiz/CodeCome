@@ -124,7 +124,9 @@ For new findings, include this initial text in the `# Evidence` section:
 
 Run `make frontmatter` to ensure all created findings have valid frontmatter and fix any reported errors before finishing.
 
-At the end, summarize:
+**Pathing rule for outputs:** When writing any scratch file, summary, or temporary output, use workspace-relative paths such as `tmp/` or `runs/`. **Never use the absolute path `/tmp/`** — it will be rejected by the sandbox.
+
+At the end, summarize in your response (or write a brief run summary under `runs/`):
 
 - target file reviewed,
 - number of findings created,
