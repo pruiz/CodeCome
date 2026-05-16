@@ -1,130 +1,88 @@
 # RabbitMQ Security Skill
 
-Use this skill when the target is RabbitMQ or a RabbitMQ-adjacent repository with broker core code, plugins, management API code, protocol adapters, CLI tools, peer discovery modules, or stream/quorum queue internals.
+Use this skill when the target is an application that uses RabbitMQ (or other AMQP 0-9-1 brokers) for messaging, queuing, background jobs, or pub/sub. This includes clients using libraries like Pika, Celery, Spring AMQP, amqplib, MassTransit, Broadway, or similar.
 
-This skill refines the generic Erlang / OTP workflow with RabbitMQ-specific attack surfaces, trust boundaries, and validation advice.
+This skill guides you to identify and validate client-side and architecture-level vulnerabilities related to how the application uses RabbitMQ.
 
-## Primary target areas
+*Note: If you are auditing the source code of the RabbitMQ broker itself, use the generic `erlang-security` skill instead.*
 
-Focus first on:
+## Scope
 
-- `deps/rabbit`
-- `deps/rabbit_common`
-- `deps/rabbitmq_management`
-- `deps/rabbitmq_management_agent`
-- `deps/rabbitmq_web_dispatch`
-- auth backend plugins
-- peer discovery plugins
-- stream, MQTT, STOMP, and WebSocket protocol implementations
-- CLI tools under `deps/rabbitmq_cli`
+Relevant files include:
 
-## RabbitMQ attack surfaces
+- Files interacting with RabbitMQ (publishers, consumers, configuration)
+- Worker scripts or background job processors
+- Files declaring connections, channels, queues, exchanges, and bindings
+- Message payload definitions and parsers
 
-Map these explicitly during reconnaissance:
+## Reconnaissance focus
 
-- AMQP 0-9-1 listeners
-- AMQP 1.0 listeners
-- MQTT listeners
-- STOMP listeners
-- WebSocket protocol bridges
-- HTTP management API
-- management UI assets and backend endpoints
-- CLI commands and control-plane RPCs
-- definitions import/export
-- configuration files and env-driven startup
-- cluster join and peer discovery
-- plugin enable/disable flows
-- metadata store transitions such as Mnesia and Khepri
+During reconnaissance, identify:
 
-## High-value trust boundaries
-
-Pay attention to:
-
-- unauthenticated network client to protocol parser
-- authenticated user to vhost-scoped resources
-- regular operator to administrator-only actions
-- HTTP API caller to internal broker state
-- plugin or auth backend response to core authorization logic
-- cluster peer discovery input to node membership decisions
-- imported definitions or metadata to privileged runtime configuration
-- local CLI caller to remote node RPC
+- How the application connects to RabbitMQ (URI, authentication, TLS)
+- Which exchanges, queues, and routing keys are used
+- What type of data is passed in messages (JSON, XML, Pickle, plain text)
+- Where and how messages are consumed and processed
+- Whether the application acknowledges (ack) or rejects (nack/reject) messages explicitly
+- Whether prefetch counts (QoS) are configured
+- Trust boundaries: Does a message cross from an untrusted source to a trusted processor?
 
 ## High-risk vulnerability classes
 
 Prioritize:
 
-- authorization bypass across vhosts, exchanges, queues, streams, or policies
-- management API authz inconsistencies
-- parser bugs in protocol frame handling
-- unsafe broker import/export or schema transitions
-- trust mistakes in auth backends, peer discovery, or TLS identity handling
-- denial of service through unbounded message, queue, channel, stream, or process growth
-- cross-node trust failures in clustering and distribution
-- management UI to backend privilege mismatches
-- SSRF-like behavior in outbound auth or peer discovery integrations
-- command or file handling issues in CLI and runtime scripts
+- **Unsafe Deserialization:** Parsing queue payloads (e.g., Pickle, YAML, unchecked XML/JSON) leading to RCE.
+- **Message Spoofing / Lack of Integrity:** The consumer blindly trusts the contents or origin of a message without verifying its signature or ensuring the exchange topology enforces origin.
+- **Routing Key / Topic Injection:** Attackers controlling routing keys to misroute messages, bypass queues, or intercept sensitive data.
+- **Consumer Denial of Service (DoS):**
+  - **Poison-Message Requeue Loops:** A malformed message causes an unhandled exception before an `ack`, leading the consumer to `nack` with `requeue=True` endlessly.
+  - **Missing Prefetch Limits (QoS):** Consumers without `prefetch_count` can be overwhelmed by too many messages, leading to OOM (Out Of Memory) crashes.
+- **Insecure Transport:** Hardcoded credentials, using `amqp://` instead of `amqps://` over untrusted networks, or disabling TLS certificate validation.
 
-## RabbitMQ review checklist
+## Review checklist
 
 Look for:
 
-- permission checks around configure, write, and read operations
-- vhost scoping and ownership checks
-- policy and parameter application paths
-- management endpoints that expose node-local or cluster-global state
-- plugin modules that bypass or duplicate core checks
-- definitions import/export code paths
-- peer discovery and cluster formation modules
-- stream and quorum queue metadata transitions
-- certificate and OAuth backend validation code
-- CLI commands that wrap RPC or privileged node actions
+- `pickle.loads()`, `yaml.load()`, or dangerous parsers applied directly to message bodies.
+- Code dynamically building routing keys or exchange names from user input without validation.
+- Connection strings in plaintext config files or version control.
+- `basic.consume` or `basic_consume` handlers that lack broad exception catching around message processing.
+- `basic.reject` or `basic.nack` with `requeue=true` in error-handling blocks.
+- Explicitly missing or disabled `basic.qos(prefetch_count=...)`.
+- Consumers performing privileged actions (e.g., executing commands, writing files) based on message fields without verifying the message sender.
 
 ## Validation guidance
 
-Useful documented workflows include:
-
-    gmake
-    gmake ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream rabbitmq_stream_management" run-broker
-    ./sbin/rabbitmq-diagnostics status
-    gmake ct-rabbit_mgmt_http
-    gmake ct-unit_log_management
-    RABBITMQ_METADATA_STORE=khepri gmake ct-quorum_queue
-
-Prefer:
-
-- a targeted Common Test suite for the affected component
-- a local broker start plus `rabbitmq-diagnostics` or HTTP API smoke checks
-- validation with and without optional plugins when the bug depends on them
-- both `mnesia` and `khepri` paths when the bug touches metadata storage logic
+- **Deserialization:** Look for ways an attacker can push a message onto the queue (e.g., via a web endpoint that publishes messages). Prove that the parser is vulnerable.
+- **Poison Message Loop:** Inject a syntactically invalid message (e.g., bad JSON). Show that the consumer crashes or constantly requeues it without dead-lettering or dropping it.
+- **Routing Injection:** Demonstrate that manipulating user input changes the routing key, allowing an attacker to bypass authorization, pollute another queue, or trigger unintended actions.
+- **Spoofing:** If an attacker has access to a low-privilege exchange or queue, show that they can craft a message that a high-privilege consumer will process as trusted.
 
 ## Good finding examples
 
 Good:
 
-    User-controlled management API request reaches a queue inspection path in
-    `rabbit_mgmt_wm_queue.erl` that returns queue details from another vhost
-    because the handler validates authentication but does not enforce the
-    caller's vhost authorization before querying broker state.
+    The `process_report` consumer uses `pickle.loads(message.body)` directly. 
+    An attacker can submit a crafted report via the public `POST /api/reports` 
+    endpoint, which publishes the user input to the `reports` queue. When the 
+    background worker picks it up, it leads to Remote Code Execution.
 
 Good:
 
-    Imported definitions field `...` reaches a privileged policy application
-    path in `...` without validation that the importing user is allowed to set
-    runtime parameters for the target vhost.
+    The `image_resize` worker catches `ImageFormatError` but calls 
+    `channel.basic_reject(delivery_tag, requeue=True)`. An attacker can 
+    upload a malformed image, causing the worker to repeatedly fail and 
+    requeue the message, pegging the CPU at 100% and preventing other 
+    images from being processed.
 
 Bad:
 
-    RabbitMQ probably has auth bugs because it exposes many protocols.
+    RabbitMQ credentials are used in the application.
 
 ## Counter-analysis reminders
 
 Before keeping a finding, check whether:
 
-- access is already gated by vhost permissions
-- the path is only reachable by administrators
-- the code runs only on trusted inter-node channels
-- the plugin is optional and disabled by default
-- the documented runtime requires stronger trust than initially assumed
-- the management endpoint normalizes or filters state before returning it
-
-Do not treat large attack surface alone as evidence.
+- The message queue is purely internal and cannot be influenced by any external input path.
+- The consumer framework (e.g., Celery) already handles serialization safely (e.g., using JSON by default) or drops bad messages.
+- The routing topology (exchange types, bindings) prevents messages from crossing tenant or privilege boundaries regardless of routing key injection.

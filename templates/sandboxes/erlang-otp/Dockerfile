@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y \
     bash \
     ca-certificates \
     curl \
+    elixir \
     file \
     gawk \
     git \
