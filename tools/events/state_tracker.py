@@ -45,8 +45,24 @@ class StateTracker:
             finalized = self._handle_updated(event)
             return finalized
 
+        if event_type == "session.error":
+            props = event.get("properties", {})
+            return [{
+                "type": "error",
+                "timestamp": event.get("timestamp", 0),
+                "sessionID": props.get("sessionID", ""),
+                "error": props.get("error"),
+            }]
+
+        if event_type == "session.diff":
+            mapped = self._map_session_diff(event)
+            return [mapped] if mapped else []
+
+        if event_type == "session.updated":
+            return []
+
         # Pass-through events that don't need accumulation.
-        if event_type in ("session.error", "session.status", "session.idle",
+        if event_type in ("session.status", "session.idle",
                          "permission.asked", "server.connected", "server.heartbeat"):
             return [event]
 
@@ -77,17 +93,20 @@ class StateTracker:
 
         if part_id and part_id in self._delta_buffers:
             part["text"] = self._delta_buffers.get(part_id, "")
-            del self._delta_buffers[part_id]
-            self._pending_part_ids.discard(part_id)
-
-        # Track that we've seen this part so we don't re-emit on reconnect.
-        if part_id:
-            self._seen_part_ids.add(part_id)
 
         # Build the finalized event.
         finalized = self._build_finalized_event(event)
+
         if finalized:
+            # Track that we've seen this part so we don't re-emit on reconnect.
+            if part_id:
+                self._seen_part_ids.add(part_id)
+                # Now it's safe to clear the buffer
+                if part_id in self._delta_buffers:
+                    del self._delta_buffers[part_id]
+                    self._pending_part_ids.discard(part_id)
             return [finalized]
+            
         return []
 
     def _build_finalized_event(self, event: dict[str, Any]) -> dict[str, Any] | None:
@@ -137,15 +156,31 @@ class StateTracker:
             return None
 
         if part_type == "tool":
-            return {
-                "type": "tool_use",
-                "timestamp": event.get("timestamp", 0),
-                "sessionID": props.get("sessionID", ""),
-                "part": part,
-            }
+            state = part.get("state", {})
+            if state.get("status") in ("completed", "error"):
+                return {
+                    "type": "tool_use",
+                    "timestamp": event.get("timestamp", 0),
+                    "sessionID": props.get("sessionID", ""),
+                    "part": part,
+                }
+            return None
 
         # Pass through unknown part types as raw event.
         return event
+
+    def _map_session_diff(self, event: dict[str, Any]) -> dict[str, Any] | None:
+        """Map non-empty session.diff into a compact compatibility event."""
+        props = event.get("properties", {})
+        diff = props.get("diff")
+        if not isinstance(diff, list) or not diff:
+            return None
+        return {
+            "type": "session.diff",
+            "timestamp": event.get("timestamp", 0),
+            "sessionID": props.get("sessionID", ""),
+            "properties": props,
+        }
 
     # ------------------------------------------------------------------
     # State queries

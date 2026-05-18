@@ -131,16 +131,33 @@ class TestStateTracker:
         assert len(finalized) == 1
         assert finalized[0]["type"] == "reasoning"
 
-    def test_tool_part_finalized_immediately(self, tracker):
-        finalized = tracker.ingest({
-            "type": "message.part.updated",
-            "properties": {
-                "sessionID": "s1",
-                "part": {"id": "t1", "type": "tool", "state": {"tool": "read", "status": "completed"}},
-            },
-        })
+    def test_tool_part_lifecycle(self, tracker):
+        # Should be ignored (not terminal)
+        pending = tracker.ingest({"type": "message.part.updated", "properties": {"sessionID": "s1", "part": {"id": "t1", "type": "tool", "state": {"status": "pending"}}}})
+        assert len(pending) == 0
+
+        running = tracker.ingest({"type": "message.part.updated", "properties": {"sessionID": "s1", "part": {"id": "t1", "type": "tool", "state": {"status": "running"}}}})
+        assert len(running) == 0
+
+        # Should be finalized
+        completed = tracker.ingest({"type": "message.part.updated", "properties": {"sessionID": "s1", "part": {"id": "t1", "type": "tool", "state": {"status": "completed"}}}})
+        assert len(completed) == 1
+        assert completed[0]["type"] == "tool_use"
+
+    def test_text_accumulation_survives_intermediate_updates(self, tracker):
+        tracker.ingest({"type": "message.part.delta", "properties": {"partID": "abc", "field": "text", "delta": "Hello"}})
+        
+        # An update without time.end should NOT clear the buffer
+        tracker.ingest({"type": "message.part.updated", "properties": {"sessionID": "s1", "part": {"id": "abc", "type": "text", "text": "Hello"}}})
+        
+        # We should still be able to accumulate
+        tracker.ingest({"type": "message.part.delta", "properties": {"partID": "abc", "field": "text", "delta": " world"}})
+        
+        # The final update with time.end should flush the entire combined string
+        finalized = tracker.ingest({"type": "message.part.updated", "properties": {"sessionID": "s1", "part": {"id": "abc", "type": "text", "time": {"end": 1}}}})
+        
         assert len(finalized) == 1
-        assert finalized[0]["type"] == "tool_use"
+        assert finalized[0]["part"]["text"] == "Hello world"
 
     def test_seen_and_pending(self, tracker):
         tracker.ingest({
@@ -296,22 +313,28 @@ class TestServerRunner:
         return load_serve()
 
     def test_parse_port_from_url_standard(self, classes):
-        _, _, _ = classes
-        from opencode.serve import _parse_port_from_url
-        assert _parse_port_from_url("http://127.0.0.1:49152") == 49152
+        """Port parsing removed; verify that known port is passed directly."""
+        _, ServerInfo, _ = classes
+        log_path = ROOT / "tmp" / "test.log"
+        info = ServerInfo(proc=None, pid=1234, base_url="http://127.0.0.1:49152", port=49152, log_path=log_path)  # type: ignore[arg-type]
+        assert info.port == 49152
 
     def test_parse_port_from_url_no_port_raises(self, classes):
-        from opencode.serve import _parse_port_from_url
-        with pytest.raises(ValueError):
-            _parse_port_from_url("http://127.0.0.1")
+        """Port is always known via ephemeral assignment; no parsing needed."""
+        _, ServerInfo, _ = classes
+        log_path = ROOT / "tmp" / "test.log"
+        info = ServerInfo(proc=None, pid=1234, base_url="http://127.0.0.1:8080", port=8080, log_path=log_path)  # type: ignore[arg-type]
+        assert info.port == 8080
 
     def test_server_info_fields(self, classes):
         ServerRunner, ServerInfo, ServerRunnerError = classes
+        log_path = ROOT / "tmp" / "test.log"
         # Construct a minimal ServerInfo with a None proc (not used in tests)
-        info = ServerInfo(proc=None, pid=1234, base_url="http://127.0.0.1:8080", port=8080)  # type: ignore[arg-type]
+        info = ServerInfo(proc=None, pid=1234, base_url="http://127.0.0.1:8080", port=8080, log_path=log_path)  # type: ignore[arg-type]
         assert info.pid == 1234
         assert info.port == 8080
         assert info.base_url == "http://127.0.0.1:8080"
+        assert info.log_path == log_path
 
     def test_server_runner_error_is_exception(self, classes):
         ServerRunner, ServerInfo, ServerRunnerError = classes
@@ -348,6 +371,32 @@ class TestServerRunner:
         assert captured["method"] == "POST"
         assert json.loads(captured["data"]) == {"key": "val"}
         assert captured["headers"]["Content-type"] == "application/json"
+
+    def test_start_treats_zero_port_as_ephemeral(self, classes, monkeypatch):
+        ServerRunner, _, _ = classes
+
+        class FakeProc:
+            pid = 1234
+
+            def poll(self):
+                return None
+
+            def terminate(self):
+                return None
+
+            def wait(self, timeout=None):
+                return 0
+
+        monkeypatch.setattr("opencode.serve._find_free_port", lambda hostname: 54321)
+        monkeypatch.setattr("opencode.serve._try_fetch_json", lambda url, timeout: {"healthy": True, "version": "1.14.50"})
+        monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: FakeProc())
+
+        runner = ServerRunner()
+        info = runner.start(port=0)
+
+        assert info.port == 54321
+        assert info.base_url == "http://127.0.0.1:54321"
+        runner.stop()
 
 
 # ---------------------------------------------------------------------------
@@ -433,7 +482,8 @@ class TestEventLoopEndToEnd:
 
         # Capture permission POSTs
         def fake_urlopen(req, **kw):
-            captured_perms.append((req.full_url, req.data))
+            if req.full_url.endswith("/permission/perm-1/reply"):
+                captured_perms.append((req.full_url, req.data))
             return type("R", (), {"read": lambda: b"{}", "__enter__": lambda s: s, "__exit__": lambda *a: None})()
 
         monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
@@ -447,7 +497,7 @@ class TestEventLoopEndToEnd:
         assert result.last_permission_error == "tool permission rejected: bash"
         assert len(captured_perms) == 1
         assert "permission/perm-1/reply" in captured_perms[0][0]
-        assert json.loads(captured_perms[0][1]) == {"reply": "reject"}
+        assert json.loads(captured_perms[0][1]) == {"reply": "reject", "message": "Auto-rejected by CodeCome configuration"}
 
     def test_session_idle_stops_consuming(self, event_loop_objects):
         EventLoop, RunResult, SseClient = event_loop_objects
@@ -504,3 +554,137 @@ class TestEventLoopEndToEnd:
         assert result.any_step_finish_seen is False
         assert result.step_finish_count == 0
         assert result.last_finish_reason is None
+
+    def test_session_snapshot_sync_emits_missing_assistant_parts(self, event_loop_objects, monkeypatch):
+        EventLoop, RunResult, SseClient = event_loop_objects
+
+        emitted: list[dict] = []
+
+        class FakeSseClient:
+            def __init__(self, *a, **kw):
+                pass
+
+            def events(self):
+                return iter([
+                    {"type": "server.connected", "properties": {}},
+                    {"type": "session.status", "properties": {"sessionID": "sess-1", "status": {"type": "busy"}}},
+                    {"type": "session.idle", "properties": {"sessionID": "sess-1"}},
+                ])
+
+            def stop(self):
+                pass
+
+        class FakeResp:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def read(self):
+                return json.dumps(self.payload).encode("utf-8")
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                pass
+
+        messages_payload = [
+            {
+                "info": {
+                    "id": "msg-1",
+                    "role": "assistant",
+                    "agent": "test",
+                    "modelID": "demo-model",
+                    "sessionID": "sess-1",
+                },
+                "parts": [
+                    {"id": "p1", "type": "step-start", "sessionID": "sess-1"},
+                    {"id": "p2", "type": "text", "sessionID": "sess-1", "text": "HELLO", "time": {"end": 1}},
+                    {"id": "p3", "type": "step-finish", "sessionID": "sess-1", "reason": "stop", "tokens": {"total": 1}},
+                ],
+            }
+        ]
+
+        def fake_urlopen(req, **kw):
+            if req.full_url.endswith("/session/sess-1/message"):
+                return FakeResp(messages_payload)
+            raise AssertionError(f"unexpected urlopen call: {req.full_url}")
+
+        import events as _events_mod
+        orig = _events_mod.SseClient
+        _events_mod.SseClient = FakeSseClient  # type: ignore[misc]
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+        try:
+            loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+            result = loop.run(lambda c, p, l, e: emitted.append(e))
+        finally:
+            _events_mod.SseClient = orig
+
+        assert result.any_step_finish_seen is True
+        assert result.last_finish_reason == "stop"
+        types = [e["type"] for e in emitted]
+        assert types == ["server.connected", "session.status", "message.updated", "step_start", "text", "step_finish", "session.idle"]
+
+    def test_session_snapshot_sync_emits_tool_use_from_completed_parts(self, event_loop_objects, monkeypatch):
+        EventLoop, RunResult, SseClient = event_loop_objects
+
+        emitted: list[dict] = []
+
+        class FakeSseClient:
+            def __init__(self, *a, **kw):
+                pass
+
+            def events(self):
+                return iter([
+                    {"type": "session.status", "properties": {"sessionID": "sess-1", "status": {"type": "busy"}}},
+                    {"type": "session.idle", "properties": {"sessionID": "sess-1"}},
+                ])
+
+            def stop(self):
+                pass
+
+        class FakeResp:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def read(self):
+                return json.dumps(self.payload).encode("utf-8")
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                pass
+
+        messages_payload = [
+            {
+                "info": {"id": "msg-1", "role": "assistant", "agent": "test", "modelID": "demo-model", "sessionID": "sess-1"},
+                "parts": [
+                    {
+                        "id": "tool-1",
+                        "type": "tool",
+                        "tool": "task",
+                        "sessionID": "sess-1",
+                        "state": {"status": "completed", "output": "OK"},
+                    }
+                ],
+            }
+        ]
+
+        def fake_urlopen(req, **kw):
+            if req.full_url.endswith("/session/sess-1/message"):
+                return FakeResp(messages_payload)
+            raise AssertionError(f"unexpected urlopen call: {req.full_url}")
+
+        import events as _events_mod
+        orig = _events_mod.SseClient
+        _events_mod.SseClient = FakeSseClient  # type: ignore[misc]
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+        try:
+            loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+            loop.run(lambda c, p, l, e: emitted.append(e))
+        finally:
+            _events_mod.SseClient = orig
+
+        assert any(e["type"] == "tool_use" for e in emitted)

@@ -1,0 +1,364 @@
+#!/usr/bin/env python3
+# Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later OR AGPL-3.0-or-later
+
+"""Deterministic parity test between opencode run and opencode serve using a mock LLM.
+
+Usage:
+  python tools/mock_llm_parity.py --script tools/mock_llm_scripts/basic.json
+"""
+
+from __future__ import annotations
+
+import argparse
+import copy
+import difflib
+import json
+import os
+import subprocess
+import sys
+import time
+import urllib.request
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools"))
+
+from events import EventLoop  # noqa: E402
+from opencode.serve import ServerRunner  # noqa: E402
+
+DEFAULT_PROMPT = "Say hello and then stop."
+DEFAULT_MODEL = "test/mockmodel"
+DEFAULT_AGENT = "test"
+DEFAULT_TIMEOUT_S = 30.0
+MOCK_HOST = "127.0.0.1"
+
+# Events that only appear in the serve path and should be ignored for parity.
+_SERVE_ONLY_TYPES = {"server.connected", "server.heartbeat", "session.status", "session.idle", "message.updated"}
+
+
+def _write_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+class MockServerInfo:
+    """Lightweight wrapper around a running mock server process."""
+
+    __slots__ = ("proc", "port")
+
+    def __init__(self, proc: subprocess.Popen[Any], port: int) -> None:
+        self.proc = proc
+        self.port = port
+
+
+def start_mock_server(script_path: Path, host: str = MOCK_HOST) -> MockServerInfo:
+    cmd = [
+        sys.executable,
+        str(ROOT / "tools" / "mock_llm_server.py"),
+        "--port",
+        "0",
+        "--script",
+        str(script_path),
+    ]
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=1,
+        text=True,
+    )
+
+    # --- Read the bound port from the first stdout line -------------------
+    # Line format: "MockLLM serving on http://127.0.0.1:49234"
+    first_line = ""
+    deadline = time.time() + 10.0
+    while time.time() < deadline and proc.poll() is None:
+        assert proc.stdout is not None
+        try:
+            first_line = proc.stdout.readline()
+        except Exception:
+            break
+        if first_line.strip():
+            break
+        time.sleep(0.1)
+
+    if not first_line:
+        raise RuntimeError("Mock LLM server died before announcing its port.")
+
+    import re
+    m = re.search(r"http://[^:]+:(\d+)", first_line)
+    if not m:
+        raise RuntimeError(f"Could not parse port from mock server output: {first_line!r}")
+    try:
+        port = int(m.group(1))
+    except ValueError:
+        raise RuntimeError(f"Could not parse port from mock server output: {first_line!r}")
+
+    # Verify health once just to be sure.
+    health_deadline = time.time() + 5.0
+    while time.time() < health_deadline:
+        try:
+            req = urllib.request.Request(f"http://{host}:{port}/v1/models", method="GET")
+            with urllib.request.urlopen(req, timeout=1.0) as resp:
+                if resp.status == 200:
+                    return MockServerInfo(proc, port)
+        except Exception:
+            pass
+        time.sleep(0.2)
+
+    raise RuntimeError("Mock LLM server failed health check after startup.")
+
+
+def stop_mock_server(info: MockServerInfo) -> None:
+    info.proc.terminate()
+    try:
+        info.proc.wait(timeout=5.0)
+    except subprocess.TimeoutExpired:
+        info.proc.kill()
+        info.proc.wait()
+    # Drain stdout/stderr so the OS buffers get closed (prevents BufferedReader leak).
+    if info.proc.stdout:
+        try:
+            info.proc.stdout.read()
+        except Exception:
+            pass
+    if info.proc.stderr:
+        try:
+            info.proc.stderr.read()
+        except Exception:
+            pass
+
+
+def _post_json(url: str, payload: dict[str, Any], timeout: float = 30.0) -> Any:
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        body = resp.read().decode("utf-8")
+        return json.loads(body) if body else None
+
+
+def run_reference(prompt: str, model: str, agent: str, timeout: float) -> list[dict[str, Any]]:
+    cmd = [
+        "opencode",
+        "run",
+        "--format",
+        "json",
+        "--agent",
+        agent,
+        "--model",
+        model,
+        prompt,
+    ]
+    result = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=timeout)
+    events: list[dict[str, Any]] = []
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            events.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return events
+
+
+def _create_model_payload(model: str, *, create: bool) -> dict[str, str]:
+    parts = model.split("/", 1)
+    if len(parts) == 2:
+        if create:
+            return {"providerID": parts[0], "id": parts[1]}
+        return {"providerID": parts[0], "modelID": parts[1]}
+    key = "id" if create else "modelID"
+    return {key: model}
+
+
+def run_serve(prompt: str, model: str, agent: str, timeout: float) -> list[dict[str, Any]]:
+    runner = ServerRunner()
+    info = runner.start(hostname="127.0.0.1", log_level="WARN")
+    base_url = info.base_url
+
+    collected: list[dict[str, Any]] = []
+
+    def collect_render(console: Any, phase: str, label: str, event: dict[str, Any]) -> None:
+        collected.append(event)
+
+    try:
+        created = _post_json(
+            f"{base_url}/session",
+            {
+                "title": "MockLLM parity test",
+                "agent": agent,
+                "model": _create_model_payload(model, create=True),
+            },
+            timeout=10.0,
+        )
+        session_id = str(created.get("id", ""))
+        if not session_id:
+            raise RuntimeError("session.create returned empty id")
+
+        body = {
+            "parts": [{"type": "text", "text": prompt}],
+            "agent": agent,
+            "model": _create_model_payload(model, create=False),
+        }
+        _post_json(
+            f"{base_url}/session/{session_id}/prompt_async",
+            body,
+            timeout=timeout,
+        )
+
+        loop = EventLoop(base_url, session_id, None, "1", "recon")
+        loop.run(collect_render)
+    finally:
+        runner.stop()
+
+    return collected
+
+
+def normalize_event(ev: dict[str, Any]) -> dict[str, Any] | None:
+    """Remove volatile fields and serve-only events for comparison."""
+    ev_type = ev.get("type", "")
+    if ev_type in _SERVE_ONLY_TYPES:
+        return None
+    out = dict(ev)
+    out.pop("timestamp", None)
+    out.pop("sessionID", None)
+    out.pop("id", None)
+    part = out.get("part")
+    if isinstance(part, dict):
+        part = dict(part)
+        part.pop("time", None)
+        part.pop("id", None)
+        part.pop("messageID", None)
+        part.pop("sessionID", None)
+        # Truncate large tool output/preview to avoid spurious diff noise
+        if ev_type == "tool_use":
+            state = part.get("state")
+            if isinstance(state, dict):
+                state = dict(state)
+                for key in ("output", "error"):
+                    val = state.get(key)
+                    if isinstance(val, str) and len(val) > 200:
+                        state[key] = f"<truncated len={len(val)}>"
+                metadata = state.get("metadata")
+                if isinstance(metadata, dict):
+                    metadata = dict(metadata)
+                    for key in ("preview", "output"):
+                        val = metadata.get(key)
+                        if isinstance(val, str) and len(val) > 200:
+                            metadata[key] = f"<truncated len={len(val)}>"
+                    state["metadata"] = metadata
+                # Remove execution timing from tool state
+                state.pop("time", None)
+                part["state"] = state
+        out["part"] = part
+    return out
+
+
+def compare_events(
+    run_events: list[dict[str, Any]], serve_events: list[dict[str, Any]]
+) -> tuple[bool, str]:
+    run_norm = [normalize_event(e) for e in run_events if normalize_event(e) is not None]
+    serve_norm = [normalize_event(e) for e in serve_events if normalize_event(e) is not None]
+
+    run_lines = [json.dumps(e, sort_keys=True) for e in run_norm]
+    serve_lines = [json.dumps(e, sort_keys=True) for e in serve_norm]
+
+    if run_lines == serve_lines:
+        return True, ""
+
+    diff = list(
+        difflib.unified_diff(
+            run_lines,
+            serve_lines,
+            fromfile="opencode-run",
+            tofile="opencode-serve",
+            lineterm="",
+        )
+    )
+    return False, "\n".join(diff)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Deterministic parity test between opencode run and opencode serve"
+    )
+    parser.add_argument(
+        "--script",
+        type=Path,
+        default=ROOT / "tools" / "mock_llm_scripts" / "basic.json",
+    )
+    parser.add_argument("--prompt", default=DEFAULT_PROMPT)
+    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--agent", default=DEFAULT_AGENT)
+    parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_S)
+    parser.add_argument(
+        "--out-dir",
+        type=Path,
+        default=ROOT / "tmp" / "mock-llm-parity",
+    )
+    args = parser.parse_args()
+
+    out_dir = args.out_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    _write_json(
+        out_dir / "meta.json",
+        {
+            "script": str(args.script),
+            "prompt": args.prompt,
+            "model": args.model,
+            "agent": args.agent,
+            "timeout": args.timeout,
+        },
+    )
+
+    config_path = ROOT / "opencode.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    original_base_url = config.get("provider", {}).get("test", {}).get("options", {}).get("baseURL", "")
+    mock_info: MockServerInfo | None = None
+
+    try:
+        # --- Start mock server and rewrite provider URL -------------------
+        mock_info = start_mock_server(args.script)
+        config["provider"]["test"]["options"]["baseURL"] = f"http://{MOCK_HOST}:{mock_info.port}/v1"
+        config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+
+        run_events = run_reference(args.prompt, args.model, args.agent, args.timeout)
+        serve_events = run_serve(args.prompt, args.model, args.agent, args.timeout)
+    finally:
+        # --- Restore original provider URL --------------------------------
+        if mock_info is not None:
+            stop_mock_server(mock_info)
+        if "options" not in config["provider"]["test"]:
+            config["provider"]["test"]["options"] = {}
+        if original_base_url:
+            config["provider"]["test"]["options"]["baseURL"] = original_base_url
+        else:
+            config["provider"]["test"]["options"].pop("baseURL", None)
+        config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+
+    _write_json(out_dir / "run.json", run_events)
+    _write_json(out_dir / "serve.json", serve_events)
+
+    ok, diff = compare_events(run_events, serve_events)
+    if ok:
+        print("Parity OK")
+        return 0
+
+    print("Parity FAILED", file=sys.stderr)
+    diff_path = out_dir / "diff.txt"
+    diff_path.write_text(diff, encoding="utf-8")
+    print(f"Diff written to {diff_path}", file=sys.stderr)
+    print(diff, file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

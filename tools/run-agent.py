@@ -20,7 +20,9 @@ import shlex
 import signal
 import subprocess
 import sys
+import threading
 import time
+import traceback
 import urllib.error
 import urllib.request
 from collections import OrderedDict
@@ -3873,6 +3875,46 @@ def render_unknown(console: Console, event: dict[str, Any]) -> None:
         print(message)
 
 
+def render_server_connected(console: Console, event: dict[str, Any]) -> None:
+    message = "connected to opencode event stream"
+    if HAVE_RICH:
+        console.print(Text(message, style="dim"))
+    else:
+        print(C.info(message))
+
+
+def render_server_heartbeat(console: Console, event: dict[str, Any]) -> None:
+    message = "server heartbeat"
+    if HAVE_RICH:
+        console.print(Text(message, style="dim"))
+    else:
+        print(C.info(message))
+
+
+def render_session_diff(console: Console, event: dict[str, Any]) -> None:
+    properties = event.get("properties", {})
+    diff = properties.get("diff", [])
+    if not isinstance(diff, list) or not diff:
+        return
+    count = len(diff)
+    message = f"session diff updated: {count} file{'s' if count != 1 else ''}"
+    if HAVE_RICH:
+        console.print(Text(message, style="dim"))
+    else:
+        print(C.info(message))
+
+
+def render_message_updated(console: Console, event: dict[str, Any]) -> None:
+    info = event.get("info", {}) if isinstance(event.get("info"), dict) else {}
+    agent = str(info.get("agent", "assistant"))
+    model_id = str(info.get("modelID", info.get("model", "")))
+    message = f"> {agent} · {model_id}" if model_id else f"> {agent}"
+    if HAVE_RICH:
+        console.print(Text(message, style="bold blue"))
+    else:
+        print(C.header(message))
+
+
 def render_error(console: Console, event: dict[str, Any]) -> None:
     """Render a session.error event from the OpenCode JSON stream.
 
@@ -3916,7 +3958,13 @@ def render_error(console: Console, event: dict[str, Any]) -> None:
 
 def render_event(console: Console, phase: str, label: str, event: dict[str, Any]) -> None:
     event_type = event.get("type")
-    if event_type == "step_start":
+    if event_type == "server.connected":
+        render_server_connected(console, event)
+    elif event_type == "server.heartbeat":
+        render_server_heartbeat(console, event)
+    elif event_type == "message.updated":
+        render_message_updated(console, event)
+    elif event_type == "step_start":
         render_step_start(console, phase, label, event)
     elif event_type == "text":
         render_text(console, event)
@@ -3930,6 +3978,8 @@ def render_event(console: Console, phase: str, label: str, event: dict[str, Any]
         render_error(console, event)
     elif event_type == "session.status":
         render_session_status(console, event)
+    elif event_type == "session.diff":
+        render_session_diff(console, event)
     elif event_type == "subagent.status":
         render_subagent_status(console, event)
     else:
@@ -3949,6 +3999,18 @@ def render_session_status(console: Console, event: dict[str, Any]) -> None:
             console.print(Text(text, style="bold yellow"))
         else:
             print(C.warn(text))
+    elif status_type == "busy":
+        text = "session status: busy"
+        if HAVE_RICH:
+            console.print(Text(text, style="dim"))
+        else:
+            print(C.info(text))
+    elif status_type == "idle":
+        text = "session status: idle"
+        if HAVE_RICH:
+            console.print(Text(text, style="dim"))
+        else:
+            print(C.info(text))
 
 
 def render_subagent_status(console: Console, event: dict[str, Any]) -> None:
@@ -4414,10 +4476,28 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
         pass
     return False
 
-def _send_prompt_to_session(base_url: str, session_id: str, prompt: str) -> None:
+def _send_prompt_to_session(
+    base_url: str,
+    session_id: str,
+    prompt: str,
+    agent: str,
+    model: str | None,
+    variant: str | None,
+) -> None:
     """Send a prompt text to a session via POST /session/{id}/prompt_async."""
     url = f"{base_url}/session/{session_id}/prompt_async"
-    payload = {"parts": [{"type": "text", "text": prompt}]}
+    payload: dict[str, Any] = {
+        "parts": [{"type": "text", "text": prompt}],
+        "agent": agent,
+    }
+    if model:
+        parts = model.split("/", 1)
+        if len(parts) == 2:
+            payload["model"] = {"providerID": parts[0], "modelID": parts[1]}
+        else:
+            payload["model"] = {"modelID": model}
+    if variant:
+        payload["variant"] = variant
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         url,
@@ -4432,43 +4512,19 @@ def _send_prompt_to_session(base_url: str, session_id: str, prompt: str) -> None
         raise RuntimeError(f"Failed to send prompt: HTTP {exc.code}") from exc
 
 
-def _configure_session(base_url: str, session_id: str, agent: str, model: str | None, variant: str | None, thinking_on: bool) -> None:
-    """Apply agent/model/variant to the session via PATCH."""
-    payload: dict[str, Any] = {"agent": agent}
-
+def _create_session(base_url: str, phase: str, agent: str, model: str | None) -> str:
+    """Create a session via POST /session and return its ID."""
+    payload: dict[str, Any] = {"title": f"CodeCome Phase {phase}", "agent": agent}
     if model:
         parts = model.split("/", 1)
         if len(parts) == 2:
-            payload["model"] = {"providerID": parts[0], "modelID": parts[1]}
+            payload["model"] = {"providerID": parts[0], "id": parts[1]}
         else:
-            payload["model"] = {"modelID": model}
-    if variant:
-        payload["variant"] = variant
-    if thinking_on is not None:
-        payload["thinking"] = thinking_on
-
-    url = f"{base_url}/session/{session_id}"
-    data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        url,
-        data=data,
-        headers={"Content-Type": "application/json"},
-        method="PATCH",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10.0):
-            pass
-    except urllib.error.HTTPError:
-        # Session might reject unknown fields; not fatal.
-        pass
-
-
-def _create_session(base_url: str, phase: str) -> str:
-    """Create a session via POST /session and return its ID."""
+            payload["model"] = {"id": model}
     resp = urllib.request.urlopen(
         urllib.request.Request(
             f"{base_url}/session",
-            data=json.dumps({"title": f"CodeCome Phase {phase}"}).encode("utf-8"),
+            data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",
         ),
@@ -4552,16 +4608,38 @@ def _run_single_attempt(
         if existing_session_id:
             session_id = existing_session_id
         else:
-            session_id = _create_session(base_url, str(args.phase))
-            _configure_session(base_url, session_id, args.agent, model, variant, thinking_on)
+            session_id = _create_session(base_url, str(args.phase), args.agent, model)
 
-        _send_prompt_to_session(base_url, session_id, prompt)
-        run_result = _consume_events(base_url, session_id, console, str(args.phase), str(args.label), args, transcript_fp)
+        run_result_box: dict[str, Any] = {}
+        consume_error_box: dict[str, Exception] = {}
+
+        def _consume() -> None:
+            try:
+                run_result_box["result"] = _consume_events(
+                    base_url,
+                    session_id,
+                    console,
+                    str(args.phase),
+                    str(args.label),
+                    args,
+                    transcript_fp,
+                )
+            except Exception as exc:  # noqa: BLE001
+                consume_error_box["error"] = exc
+
+        consumer = threading.Thread(target=_consume, name=f"codecome-events-{session_id}", daemon=True)
+        consumer.start()
+
+        _send_prompt_to_session(base_url, session_id, prompt, args.agent, model, variant)
+        consumer.join()
+
+        if "error" in consume_error_box:
+            raise consume_error_box["error"]
+        run_result = run_result_box.get("result")
+        if not isinstance(run_result, RunResult):
+            raise RuntimeError("Event loop ended without a RunResult")
     except Exception as exc:
-        if HAVE_RICH:
-            console.print(Panel(Text(str(exc), style="red"), title="Server Error", border_style="red"))
-        else:
-            print(C.fail(str(exc)), file=sys.stderr)
+        _emit_fatal_error(console, "Server Error", str(exc))
         return 1, existing_session_id or "", RunResult(), transcript_path
     finally:
         if transcript_fp is not None:
@@ -4611,6 +4689,14 @@ def show_model_table(agent_name: str) -> int:
           f"model: {model_source}  variant: {variant_source}  "
           f"thinking: {thinking_source}")
     return 0
+
+
+def _emit_fatal_error(console: Any, title: str, message: str) -> None:
+    """Show fatal startup/runtime errors in the UI and on stderr."""
+    formatted = C.fail(f"{title}: {message}")
+    if HAVE_RICH:
+        console.print(Panel(Text(message, style="red"), title=title, border_style="red"))
+    print(formatted, file=sys.stderr)
 
 
 def main() -> int:
@@ -4713,12 +4799,9 @@ def main() -> int:
     runner = ServerRunner()
     server_info: Any = None
     try:
-        server_info = runner.start(port=0, hostname="127.0.0.1", log_level="WARN")
+        server_info = runner.start(hostname="127.0.0.1", log_level="WARN")
     except ServerRunnerError as exc:
-        if HAVE_RICH:
-            console.print(Panel(Text(str(exc), style="red"), title="Server Error", border_style="red"))
-        else:
-            print(C.fail(f"Server Error: {exc}"), file=sys.stderr)
+        _emit_fatal_error(console, "Server Error", str(exc))
         return 1
 
     base_url = server_info.base_url
@@ -4940,3 +5023,17 @@ def main() -> int:
             )
 
     return returncode
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except KeyboardInterrupt:
+        raise SystemExit(130)
+    except SystemExit:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        print(C.fail(f"Fatal Error: {exc}"), file=sys.stderr)
+        if truthy_env("CODECOME_DEBUG"):
+            traceback.print_exc(file=sys.stderr)
+        raise SystemExit(1)

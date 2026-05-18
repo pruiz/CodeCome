@@ -8,7 +8,7 @@ Manage opencode serve lifecycle (start, stop, health check).
 Usage as a module:
     from opencode.serve import ServerRunner
     runner = ServerRunner()
-    info = runner.start(port=0, hostname="127.0.0.1", log_level="WARN")
+    info = runner.start(hostname="127.0.0.1", log_level="WARN")
     ...
     runner.stop()
 
@@ -23,52 +23,55 @@ import argparse
 import dataclasses
 import json
 import os
-import re
 import signal
+import socket
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# How long to wait for the "listening on" line from opencode serve stdout.
-_STARTUP_TIMEOUT_S = 20.0
 # How long to poll /global/health before giving up.
-_HEALTH_TIMEOUT_S = 10.0
+_HEALTH_TIMEOUT_S = 20.0
 # Delay between health poll attempts.
 _HEALTH_INTERVAL_S = 0.3
 # Graceful shutdown wait before SIGKILL.
 _GRACEFUL_SHUTDOWN_S = 5.0
 
-_LOG_LISTENING_RE = re.compile(
-    r"opencode server listening on (http://[^\s]+)"
-)
+
+def _find_free_port(hostname: str = "127.0.0.1") -> int:
+    """Find a free ephemeral port on the given hostname."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((hostname, 0))
+        return int(s.getsockname()[1])
+
+
+def _build_log_path() -> Path:
+    """Build a unique log file path in tmp/."""
+    tmp_dir = ROOT / "tmp"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    ts = int(time.time())
+    pid = os.getpid()
+    return tmp_dir / f"opencode-serve-{pid}-{ts}.log"
 
 
 @dataclasses.dataclass(frozen=True)
 class ServerInfo:
     """ immutable snapshot of a running opencode serve instance. """
-    proc: subprocess.Popen[str]
+    proc: subprocess.Popen[Any]
     pid: int
     base_url: str
     port: int
+    log_path: Path
 
 
 class ServerRunnerError(Exception):
     """ Raised when the server cannot be started or reached. """
     pass
-
-def _parse_port_from_url(url: str) -> int:
-    """ Extract the numeric port from a URL like http://127.0.0.1:49152 """
-    # urlsplit is overkill; simple regex works fine.
-    m = re.search(r":(\d+)$", url)
-    if not m:
-        raise ValueError(f"Cannot parse port from URL: {url}")
-    return int(m.group(1))
 
 
 def _try_fetch_json(url: str, timeout: float) -> dict | None:
@@ -79,6 +82,7 @@ def _try_fetch_json(url: str, timeout: float) -> dict | None:
             return json.loads(resp.read().decode("utf-8"))
     except Exception:  # noqa: BLE001
         return None
+
 
 def _post_json(base_url: str, path: str, payload: dict) -> dict:
     """ POST JSON and return parsed JSON response. """
@@ -125,16 +129,25 @@ class ServerRunner:
         self,
         *,
         hostname: str = "127.0.0.1",
-        port: int = 0,
+        port: int | None = None,
         log_level: str = "WARN",
         cwd: Optional[Path] = None,
     ) -> ServerInfo:
         """ Start opencode serve and return ServerInfo once healthy.
 
+        Uses a free ephemeral port if port is None or 0.
+        Server stdout/stderr is redirected to a log file in tmp/ to
+        avoid the classic subprocess PIPE deadlock.
+
         Raises ServerRunnerError on startup failure.
         """
         if self._info is not None:
             raise ServerRunnerError("Server already started")
+
+        if port in (None, 0):
+            port = _find_free_port(hostname)
+
+        log_path = _build_log_path()
 
         cmd = [
             "opencode", "serve",
@@ -143,13 +156,12 @@ class ServerRunner:
             "--log-level", log_level,
         ]
 
-        # Start the server, capturing stdout to read the "listening on" line.
         try:
+            log_file = log_path.open("w")
             proc = subprocess.Popen(
                 cmd,
-                stdout=subprocess.PIPE,
+                stdout=log_file,
                 stderr=subprocess.STDOUT,
-                text=True,
                 cwd=cwd or ROOT,
             )
         except FileNotFoundError:
@@ -161,43 +173,28 @@ class ServerRunner:
                 f"Failed to start opencode serve: {exc}"
             ) from exc
 
-        # Read stdout until we see the "listening on" line or timeout.
-        base_url: Optional[str] = None
-        deadline = time.time() + _STARTUP_TIMEOUT_S
-        try:
-            while proc.poll() is None and time.time() < deadline:
-                assert proc.stdout is not None
-                line = proc.stdout.readline()
-                if not line:
-                    time.sleep(0.05)
-                    continue
-                m = _LOG_LISTENING_RE.search(line)
-                if m:
-                    base_url = m.group(1).rstrip("/")
-                    break
-        except Exception as exc:  # noqa: BLE001
-            self._kill(proc)
-            raise ServerRunnerError(
-                f"Error reading opencode serve stdout: {exc}"
-            ) from exc
-
-        if base_url is None:
-            # Did we exit early?
-            rc = proc.poll()
-            self._kill(proc)
-            err_detail = ""
-            if rc is not None:
-                err_detail = f" (exit code {rc})"
-            raise ServerRunnerError(
-                f"opencode serve did not emit a listening line within {_STARTUP_TIMEOUT_S}s{err_detail}"
-            )
-
-        # Health-check loop.
+        base_url = f"http://{hostname}:{port}"
         health_url = f"{base_url}/global/health"
-        health_deadline = time.time() + _HEALTH_TIMEOUT_S
-        health_ok = False
+        deadline = time.time() + _HEALTH_TIMEOUT_S
+
         last_err: Optional[str] = None
-        while time.time() < health_deadline:
+        health_ok = False
+
+        while time.time() < deadline:
+            if proc.poll() is not None:
+                # Process exited early — show log tail for diagnosis.
+                log_tail = ""
+                try:
+                    with open(log_path, "r") as f:
+                        lines = f.readlines()
+                        log_tail = "".join(lines[-30:])
+                except OSError:
+                    pass
+                raise ServerRunnerError(
+                    f"opencode serve exited early (exit code {proc.returncode}).\n"
+                    f"Log file: {log_path}\n"
+                    f"Last lines:\n{log_tail or '(empty)'}"
+                )
             data = _try_fetch_json(health_url, timeout=2.0)
             if data and data.get("healthy") is True:
                 health_ok = True
@@ -206,16 +203,25 @@ class ServerRunner:
 
         if not health_ok:
             self._kill(proc)
+            log_tail = ""
+            try:
+                with open(log_path, "r") as f:
+                    lines = f.readlines()
+                    log_tail = "".join(lines[-30:])
+            except OSError:
+                pass
             raise ServerRunnerError(
-                f"opencode serve started at {base_url} but /global/health never returned healthy. "
-                f"Last error: {last_err or 'no response'}"
+                f"opencode serve started but /global/health never returned healthy. "
+                f"Log file: {log_path}\n"
+                f"Last lines:\n{log_tail or '(empty)'}"
             )
 
         self._info = ServerInfo(
             proc=proc,
             pid=proc.pid,
             base_url=base_url,
-            port=_parse_port_from_url(base_url),
+            port=port,
+            log_path=log_path,
         )
         return self._info
 
@@ -237,7 +243,7 @@ class ServerRunner:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _kill(proc: subprocess.Popen[str]) -> None:
+    def _kill(proc: subprocess.Popen[Any]) -> None:
         """ Send SIGTERM, wait, then SIGKILL if still alive. """
         try:
             if proc.poll() is None:
@@ -262,7 +268,7 @@ def _cli() -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     start_p = sub.add_parser("start", help="Start opencode serve")
-    start_p.add_argument("--port", type=int, default=0)
+    start_p.add_argument("--port", type=int, default=None)
     start_p.add_argument("--hostname", default="127.0.0.1")
     start_p.add_argument("--log-level", default="WARN")
     start_p.add_argument("--cwd", type=Path, default=ROOT)
@@ -282,6 +288,7 @@ def _cli() -> int:
                 cwd=args.cwd,
             )
             print(f"Server running at {info.base_url} (pid={info.pid})")
+            print(f"Log file: {info.log_path}")
             print("Press Ctrl-C to stop...")
             try:
                 while True:

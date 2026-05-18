@@ -1,7 +1,7 @@
 # Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later OR AGPL-3.0-or-later
 
-.PHONY: help venv venv-check check status next-id frontmatter tests itemdb-reset index report
+.PHONY: help venv venv-check check status next-id frontmatter tests test-parity itemdb-reset index report
 .PHONY: findings findings-create findings-move findings-evidence findings-package
 .PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all
 .PHONY: sandbox-setup sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-reset sandbox-build sandbox-test
@@ -239,6 +239,9 @@ frontmatter: venv-check
 tests: venv-check
 	$(PYTHON) -m pytest -q tests
 	$(PYTHON) tools/check-frontmatter.py
+
+test-parity: venv-check
+	$(PYTHON) tools/mock_llm_parity.py --script tools/mock_llm_scripts/basic.json
 
 itemdb-reset: venv-check
 	rm -f itemdb/notes/*.md

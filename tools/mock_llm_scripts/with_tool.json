@@ -1,0 +1,6 @@
+[
+  {"type": "text", "content": "Reading a file."},
+  {"type": "tool_call", "id": "call_1", "name": "read", "arguments": {"filePath": "README.md"}},
+  {"type": "text", "content": "Done reading."},
+  {"type": "done"}
+]
