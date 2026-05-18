@@ -132,7 +132,7 @@ venv-check:
 phase-1: venv-check
 	@$(PYTHON) tools/gate-check.py 1
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		opencode run --agent recon "$$(cat prompts/phase-1-recon.md)"; \
+		opencode run $$OPENCODE_ARGS --agent recon "$$(cat prompts/phase-1-recon.md)"; \
 	else \
 		$(PYTHON) tools/run-agent.py --phase 1 --label "Target Reconnaissance + Sandbox Bootstrap" --agent recon --prompt-file prompts/phase-1-recon.md; \
 	fi
@@ -145,7 +145,7 @@ phase-2: venv-check
 		printf "Or override (not recommended): CODECOME_ALLOW_NO_SANDBOX=1 make phase-2\n\n" ; \
 		exit 1 )
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		opencode run --agent auditor "$$(cat prompts/phase-2-audit.md)"; \
+		opencode run $$OPENCODE_ARGS --agent auditor "$$(cat prompts/phase-2-audit.md)"; \
 	else \
 		$(PYTHON) tools/run-agent.py --phase 2 --label "Hypothesis Generation" --agent auditor --prompt-file prompts/phase-2-audit.md; \
 	fi
@@ -153,7 +153,7 @@ phase-2: venv-check
 phase-3: venv-check
 	@$(PYTHON) tools/gate-check.py 3
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		opencode run --agent reviewer "$$(cat prompts/phase-3-review.md)"; \
+		opencode run $$OPENCODE_ARGS --agent reviewer "$$(cat prompts/phase-3-review.md)"; \
 	else \
 		$(PYTHON) tools/run-agent.py --phase 3 --label "Counter-analysis" --agent reviewer --prompt-file prompts/phase-3-review.md; \
 	fi
@@ -162,7 +162,7 @@ phase-4: venv-check
 	@test -n "$(FINDING)" || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) Missing required FINDING argument for Phase 4 (Validation).\n\nSpecify which finding you want to validate:\n\n    $(BOLD)make phase-4 FINDING=CC-0001$(RESET)\n\nTo list available pending findings: $(BOLD)make findings STATUS=PENDING$(RESET)\n\n" && exit 1)
 	@$(PYTHON) tools/gate-check.py 4 $(FINDING)
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		opencode run --agent validator "$$(sed 's#FINDING_PATH_OR_ID#$(FINDING)#g' prompts/phase-4-validate.md)"; \
+		opencode run $$OPENCODE_ARGS --agent validator "$$(sed 's#FINDING_PATH_OR_ID#$(FINDING)#g' prompts/phase-4-validate.md)"; \
 	else \
 		$(PYTHON) tools/run-agent.py --phase 4 --label "Validation" --agent validator --prompt-file prompts/phase-4-validate.md --finding "$(FINDING)"; \
 	fi
@@ -171,7 +171,7 @@ phase-5: venv-check
 	@test -n "$(FINDING)" || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) Missing required FINDING argument for Phase 5 (Exploitation).\n\nSpecify which finding you want to exploit:\n\n    $(BOLD)make phase-5 FINDING=CC-0001$(RESET)\n\nTo list available confirmed findings: $(BOLD)make findings STATUS=CONFIRMED$(RESET)\n\n" && exit 1)
 	@$(PYTHON) tools/gate-check.py 5 $(FINDING)
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		opencode run --agent exploiter "$$(sed 's#FINDING_PATH_OR_ID#$(FINDING)#g' prompts/phase-5-exploit.md)"; \
+		opencode run $$OPENCODE_ARGS --agent exploiter "$$(sed 's#FINDING_PATH_OR_ID#$(FINDING)#g' prompts/phase-5-exploit.md)"; \
 	else \
 		$(PYTHON) tools/run-agent.py --phase 5 --label "Exploit Development" --agent exploiter --prompt-file prompts/phase-5-exploit.md --finding "$(FINDING)"; \
 	fi
@@ -179,7 +179,7 @@ phase-5: venv-check
 phase-6: venv-check
 	@$(PYTHON) tools/gate-check.py 6
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		opencode run --agent reporter "$$(cat prompts/phase-6-report.md)"; \
+		opencode run $$OPENCODE_ARGS --agent reporter "$$(cat prompts/phase-6-report.md)"; \
 	else \
 		$(PYTHON) tools/run-agent.py --phase 6 --label "Reporting" --agent reporter --prompt-file prompts/phase-6-report.md; \
 	fi
@@ -375,3 +375,46 @@ sandbox-status: venv-check
 #   make show-model AGENT=auditor
 show-model: venv-check
 	@$(PYTHON) tools/run-agent.py --show-model --agent $(or $(AGENT),recon)
+
+# ---------------------------------------------------------------------------
+# E2E Mocking & Testing
+# ---------------------------------------------------------------------------
+
+.PHONY: e2e-server-start e2e-server-stop e2e-record test-e2e
+
+AIMOCK_PORT ?= 4010
+AIMOCK_API_KEY ?=
+AIMOCK_CONTAINER ?= codecome-aimock-server
+AIMOCK_FIXTURES := $(CURDIR)/tests/fixtures/llm-mocks
+AIMOCK_MODEL ?= minimax/minimax-m2.5:free
+AIMOCK_UPSTREAM_URL ?= https://openrouter.ai/api
+
+e2e-server-start:
+	@echo "Starting aimock container..."
+	@mkdir -p "$(AIMOCK_FIXTURES)" tmp
+	@docker run -d --name "$(AIMOCK_CONTAINER)" -p $(AIMOCK_PORT):4010 -v "$(AIMOCK_FIXTURES):/fixtures" ghcr.io/copilotkit/aimock -f /fixtures -h 0.0.0.0 > /dev/null
+	@sleep 2
+
+e2e-server-stop:
+	@echo "Stopping aimock container..."
+	@docker stop "$(AIMOCK_CONTAINER)" >/dev/null 2>&1 || true
+	@docker rm "$(AIMOCK_CONTAINER)" >/dev/null 2>&1 || true
+
+e2e-record: e2e-server-stop
+	@test -n "$(AIMOCK_API_KEY)" || (echo "Please set AIMOCK_API_KEY (your OpenRouter key) to run recording" && exit 1)
+	@echo "Starting aimock in RECORD mode against $(AIMOCK_UPSTREAM_URL)..."
+	@mkdir -p "$(AIMOCK_FIXTURES)" tests/fixtures/recordings tmp
+	@docker run -d --name "$(AIMOCK_CONTAINER)" \
+		-p $(AIMOCK_PORT):4010 \
+		-v "$(AIMOCK_FIXTURES):/fixtures" \
+		ghcr.io/copilotkit/aimock \
+			--log-level debug \
+			--record --provider-openai $(AIMOCK_UPSTREAM_URL) -f /fixtures -p 4010 -h 0.0.0.0 
+	@sleep 2
+	@echo "Running Phase 1 and dumping raw JSON to tests/fixtures/recordings/phase-1.json..."
+	@CODECOME_MODEL="aimock/$(AIMOCK_MODEL)" CODECOME_USE_WRAPPER=0 OPENCODE_ARGS="--format json -m $(CODECOME_MODEL)" $(MAKE) phase-1 > tests/fixtures/recordings/phase-1.json
+	@echo "Recording finished."
+	@$(MAKE) e2e-server-stop
+
+e2e-test: venv-check
+	@AIMOCK_MODEL=$(AIMOCK_MODEL) $(PYTHON) tools/test-e2e.py
