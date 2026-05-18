@@ -16,5 +16,24 @@
       "sandbox/.env": "allow",
       "*/sandbox/.env": "allow"
     }
+  },
+  "provider": {
+    "aimock": {
+      "type": "openai",
+      "options": {
+        "baseURL": "http://127.0.0.1:4010/v1",
+        "apiKey": "{env:AIMOCK_API_KEY}"
+      },
+      "models": {
+        "minimax/minimax-m2.5": {},
+        "minimax/minimax-m2.5:free": {}
+      }
+    }
+  },
+  "agent": {
+    "test": {
+      "temperature": 0,
+      "top_p": 1
+    }
   }
 }
