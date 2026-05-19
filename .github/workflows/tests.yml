@@ -32,6 +32,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
 
+      - name: Install opencode
+        run: curl -fsSL https://opencode.ai/install.sh | sh
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
