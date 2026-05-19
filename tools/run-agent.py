@@ -681,6 +681,7 @@ _GREP_TOTAL_LINE_CAP = int(os.environ.get("CODECOME_GREP_TOTAL_LINE_CAP", "200")
 _GREP_HIGHLIGHT = os.environ.get("CODECOME_GREP_HIGHLIGHT", "1") not in ("0", "false", "False", "no")
 _REASONING_MAX_CHARS = int(os.environ.get("CODECOME_REASONING_MAX_CHARS", "4000"))
 _RENDER_REASONING = os.environ.get("CODECOME_RENDER_REASONING", "1") not in ("0", "false", "False", "no")
+_DEBUG_UNKNOWN_EVENTS = os.environ.get("CODECOME_DEBUG_UNKNOWN_EVENTS", "0") not in ("", "0", "false", "False", "no")
 _SANDBOX_RENDER = os.environ.get("CODECOME_SANDBOX_RENDER", "1") not in ("0", "false", "False", "no")
 _SANDBOX_VALIDATE_STDERR_LINES = int(os.environ.get("CODECOME_SANDBOX_VALIDATE_STDERR_LINES", "20"))
 _SANDBOX_FILES_CAP = int(os.environ.get("CODECOME_SANDBOX_FILES_CAP", "15"))
@@ -3868,11 +3869,23 @@ def render_step_finish(console: Console, event: dict[str, Any]) -> None:
 
 
 def render_unknown(console: Console, event: dict[str, Any]) -> None:
-    message = f"unknown event type: {event.get('type', '<missing>')}"
+    event_type = event.get("type", "<missing>")
+    # For message.part.updated, surface the actual unknown part type.
+    if event_type == "message.part.updated":
+        part_type = event.get("part", {}).get("type", "<missing>")
+        message = f"unknown part type: {part_type}"
+    else:
+        message = f"unknown event type: {event_type}"
     if HAVE_RICH:
         console.print(Text(message, style="dim"))
     else:
         print(message)
+    if _DEBUG_UNKNOWN_EVENTS:
+        payload = json.dumps(event, indent=2, default=str)
+        if HAVE_RICH:
+            console.print(Text(payload, style="dim"))
+        else:
+            print(payload)
 
 
 def render_server_connected(console: Console, event: dict[str, Any]) -> None:
