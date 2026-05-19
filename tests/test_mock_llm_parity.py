@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import socket
 import subprocess
 import sys
 import time
@@ -24,28 +25,32 @@ def load_parity_module():
     return mod
 
 
+def _find_free_port(host: str = "127.0.0.1") -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((host, 0))
+        s.listen(1)
+        return int(s.getsockname()[1])
+
+
 class TestMockLLMServer:
     """Unit tests for the mock LLM server."""
 
     @pytest.fixture(scope="class")
     def server_proc(self):
         script = ROOT / "tools" / "mock_llm_scripts" / "basic.json"
+        port = _find_free_port()
         proc = subprocess.Popen(
-            [sys.executable, str(ROOT / "tools" / "mock-llm-server.py"), "--port", "0", "--script", str(script)],
-            stdout=subprocess.PIPE,
+            [sys.executable, str(ROOT / "tools" / "mock-llm-server.py"), "--port", str(port), "--script", str(script)],
+            stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             text=True,
         )
-        first_line = proc.stdout.readline()
-        import re
-        m = re.search(r"http://[^:]+:(\d+)", first_line)
-        if not m:
-            proc.terminate()
-            pytest.fail(f"Could not parse port from server output: {first_line!r}")
-        port = int(m.group(1))
         # Health-check
         deadline = time.time() + 5.0
         while time.time() < deadline:
+            if proc.poll() is not None:
+                stderr = proc.stderr.read() if proc.stderr else ""
+                pytest.fail(f"Mock server exited early (code {proc.returncode}). stderr: {stderr}")
             try:
                 req = urllib.request.Request(f"http://127.0.0.1:{port}/v1/models", method="GET")
                 with urllib.request.urlopen(req, timeout=1.0) as resp:

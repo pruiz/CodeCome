@@ -15,6 +15,7 @@ import copy
 import difflib
 import json
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -88,52 +89,40 @@ class MockServerInfo:
         self.port = port
 
 
+def _find_free_port(host: str = MOCK_HOST) -> int:
+    """Find a free TCP port on the given host."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((host, 0))
+        s.listen(1)
+        return int(s.getsockname()[1])
+
+
 def start_mock_server(script_path: Path, host: str = MOCK_HOST) -> MockServerInfo:
+    port = _find_free_port(host)
     cmd = [
         sys.executable,
         str(ROOT / "tools" / "mock-llm-server.py"),
         "--port",
-        "0",
+        str(port),
         "--script",
         str(script_path),
     ]
     proc = subprocess.Popen(
         cmd,
-        stdout=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
         bufsize=1,
         text=True,
     )
 
-    # --- Read the bound port from the first stdout line -------------------
-    # Line format: "MockLLM serving on http://127.0.0.1:49234"
-    first_line = ""
-    deadline = time.time() + 10.0
-    while time.time() < deadline and proc.poll() is None:
-        assert proc.stdout is not None
-        try:
-            first_line = proc.stdout.readline()
-        except Exception:
-            break
-        if first_line.strip():
-            break
-        time.sleep(0.1)
-
-    if not first_line:
-        raise RuntimeError("Mock LLM server died before announcing its port.")
-
-    import re
-    m = re.search(r"http://[^:]+:(\d+)", first_line)
-    if not m:
-        raise RuntimeError(f"Could not parse port from mock server output: {first_line!r}")
-    try:
-        port = int(m.group(1))
-    except ValueError:
-        raise RuntimeError(f"Could not parse port from mock server output: {first_line!r}")
-
-    # Verify health once just to be sure.
-    health_deadline = time.time() + 5.0
+    # Poll health check until the server is ready.
+    health_deadline = time.time() + 10.0
     while time.time() < health_deadline:
+        if proc.poll() is not None:
+            stderr = proc.stderr.read() if proc.stderr else ""
+            raise RuntimeError(
+                f"Mock LLM server exited early (code {proc.returncode}). stderr: {stderr}"
+            )
         try:
             req = urllib.request.Request(f"http://{host}:{port}/v1/models", method="GET")
             with urllib.request.urlopen(req, timeout=1.0) as resp:
@@ -141,8 +130,14 @@ def start_mock_server(script_path: Path, host: str = MOCK_HOST) -> MockServerInf
                     return MockServerInfo(proc, port)
         except Exception:
             pass
-        time.sleep(0.2)
+        time.sleep(0.1)
 
+    proc.terminate()
+    try:
+        proc.wait(timeout=5.0)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
     raise RuntimeError("Mock LLM server failed health check after startup.")
 
 
