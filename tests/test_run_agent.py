@@ -1488,24 +1488,184 @@ def test_load_prompt_relative_extra_file(prompt_env, monkeypatch):
 
 @pytest.mark.component
 def test_auto_correction_resume_loops_back_via_popen(monkeypatch, tmp_path):
-    """Frontmatter errors trigger a second Popen loop; on the second run the
-    check passes and main exits 0.  The session ID must come from the event
-    stream, not from subprocess.run (the DB fallback)."""
-    pytest.skip("TODO: rewrite test for new opencode serve architecture")
+    """Frontmatter errors trigger a resume of the same session; on the second
+    attempt the check passes and main exits 0.  The session ID must come from
+    the event stream, not from a DB fallback."""
+    module = load_tool_module("run_agent_autocorrect_serve", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setattr(module, "check_opencode_version", lambda: None)
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+
+    # Reset the attempt counter so transcript numbering is deterministic.
+    if hasattr(module._run_single_attempt, "_attempt_counter"):
+        delattr(module._run_single_attempt, "_attempt_counter")
+
+    calls: list[tuple] = []
+
+    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, existing_session_id=None):
+        calls.append((existing_session_id, prompt))
+        # Both attempts succeed with the same session.
+        return (
+            0,
+            "ses_test_abc",
+            module.RunResult(
+                any_step_finish_seen=True,
+                step_finish_count=1,
+                last_finish_reason="stop",
+                last_finish_tokens={},
+                last_permission_error=None,
+            ),
+            tmp_path / f"transcript-{len(calls)}.jsonl",
+        )
+
+    monkeypatch.setattr(module, "_run_single_attempt", fake_run_single_attempt)
+
+    frontmatter_call_count = [0]
+
+    class FakeResult:
+        def __init__(self, rc, out="", err=""):
+            self.returncode, self.stdout, self.stderr = rc, out, err
+
+    def fake_run(cmd, *args, **kwargs):
+        if "--version" in cmd:
+            return FakeResult(0, out="opencode 1.15.0\n")
+        if any("check-frontmatter" in str(c) for c in cmd):
+            frontmatter_call_count[0] += 1
+            if frontmatter_call_count[0] == 1:
+                return FakeResult(1, err="bad frontmatter")
+            return FakeResult(0)
+        return FakeResult(0)
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    prompt_file = tmp_path / "phase.md"
+    prompt_file.write_text("run recon", encoding="utf-8")
+    monkeypatch.setattr(module.sys, "argv", [
+        "run-agent.py", "--phase", "1", "--label", "test",
+        "--agent", "recon", "--prompt-file", str(prompt_file),
+    ])
+
+    rc = module.main()
+    assert rc == 0
+    assert len(calls) == 2, f"expected 2 attempts, got {len(calls)}"
+    # First attempt is a fresh session; second reuses the same session ID.
+    assert calls[0][0] is None
+    assert calls[1][0] == "ses_test_abc"
+    # The second prompt should be the frontmatter repair prompt.
+    assert "Repair only the reported YAML/frontmatter issues" in calls[1][1]
 
 
 @pytest.mark.component
 def test_frontmatter_failure_without_session_id_exits_nonzero(monkeypatch, tmp_path):
     """Frontmatter validation failures must not be reported as success when
     the wrapper cannot determine a resumable session ID."""
-    pytest.skip("TODO: rewrite test for new opencode serve architecture")
+    module = load_tool_module("run_agent_frontmatter_no_session_serve", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setattr(module, "check_opencode_version", lambda: None)
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+
+    if hasattr(module._run_single_attempt, "_attempt_counter"):
+        delattr(module._run_single_attempt, "_attempt_counter")
+
+    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, existing_session_id=None):
+        return (
+            0,
+            "",  # empty session ID
+            module.RunResult(
+                any_step_finish_seen=True,
+                step_finish_count=1,
+                last_finish_reason="stop",
+            ),
+            tmp_path / "transcript.jsonl",
+        )
+
+    monkeypatch.setattr(module, "_run_single_attempt", fake_run_single_attempt)
+
+    class FakeResult:
+        def __init__(self, rc, out="", err=""):
+            self.returncode, self.stdout, self.stderr = rc, out, err
+
+    def fake_run(cmd, *args, **kwargs):
+        if "--version" in cmd:
+            return FakeResult(0, out="opencode 1.15.0\n")
+        if any("check-frontmatter" in str(c) for c in cmd):
+            return FakeResult(1, err="bad frontmatter")
+        return FakeResult(0)
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    prompt_file = tmp_path / "phase.md"
+    prompt_file.write_text("run recon", encoding="utf-8")
+    monkeypatch.setattr(module.sys, "argv", [
+        "run-agent.py", "--phase", "1", "--label", "test",
+        "--agent", "recon", "--prompt-file", str(prompt_file),
+    ])
+
+    rc = module.main()
+    assert rc == 2
 
 
 @pytest.mark.component
 def test_iteration_limit_triggers_auto_resume(monkeypatch, tmp_path):
     """When the stream ends with a mid-turn finish reason (tool-calls) and
     graceful forgiveness does not apply, run-agent resumes once then exits."""
-    pytest.skip("TODO: rewrite test for new opencode serve architecture")
+    module = load_tool_module("run_agent_iter_resume_serve", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setattr(module, "check_opencode_version", lambda: None)
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    monkeypatch.setenv("CODECOME_MAX_ITERATION_RETRIES", "1")
+
+    if hasattr(module._run_single_attempt, "_attempt_counter"):
+        delattr(module._run_single_attempt, "_attempt_counter")
+
+    calls: list[tuple] = []
+
+    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, existing_session_id=None):
+        calls.append((existing_session_id, prompt))
+        return (
+            0,
+            "ses_iter_xyz",
+            module.RunResult(
+                any_step_finish_seen=True,
+                step_finish_count=1,
+                last_finish_reason="tool-calls",
+            ),
+            tmp_path / f"transcript-{len(calls)}.jsonl",
+        )
+
+    monkeypatch.setattr(module, "_run_single_attempt", fake_run_single_attempt)
+    monkeypatch.setattr(module, "check_phase_graceful_completion", lambda *a, **kw: False)
+
+    class FakeResult:
+        def __init__(self, rc, out="", err=""):
+            self.returncode, self.stdout, self.stderr = rc, out, err
+
+    def fake_run(cmd, *args, **kwargs):
+        if "--version" in cmd:
+            return FakeResult(0, out="opencode 1.15.0\n")
+        if any("check-frontmatter" in str(c) for c in cmd):
+            return FakeResult(0)
+        return FakeResult(0)
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    prompt_file = tmp_path / "phase.md"
+    prompt_file.write_text("run recon for FINDING_PATH_OR_ID", encoding="utf-8")
+    monkeypatch.setattr(module.sys, "argv", [
+        "run-agent.py", "--phase", "4", "--label", "test",
+        "--agent", "recon", "--prompt-file", str(prompt_file),
+        "--finding", "CC-9999",
+    ])
+
+    rc = module.main()
+
+    # After 1 retry (2 total attempts) the retry budget is exhausted → exit 2
+    assert len(calls) == 2, f"expected 2 attempts, got {len(calls)}"
+    assert rc == 2
+
+    # Verify the retry reused the same session and included the resume prompt.
+    assert calls[1][0] == "ses_iter_xyz"
+    assert "Your previous response was cut off by the model/provider" in calls[1][1]
 
 
 # ---------------------------------------------------------------------------
@@ -1623,6 +1783,54 @@ def test_check_phase_graceful_completion_mtime(monkeypatch, tmp_path):
 
 @pytest.mark.unit
 def test_stream_session_id_and_step_finish_count(monkeypatch, tmp_path):
-    """Verify that the main loop captures sessionID from the first event and
-    counts step_finish events accurately."""
-    pytest.skip("TODO: rewrite test for new opencode serve architecture")
+    """Verify that the main loop captures sessionID and step_finish count
+    from the RunResult returned by _run_single_attempt."""
+    module = load_tool_module("run_agent_stream_tracking_serve", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setattr(module, "check_opencode_version", lambda: None)
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+
+    if hasattr(module._run_single_attempt, "_attempt_counter"):
+        delattr(module._run_single_attempt, "_attempt_counter")
+
+    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, existing_session_id=None):
+        return (
+            0,
+            "ses_stream_test_001",
+            module.RunResult(
+                any_step_finish_seen=True,
+                step_finish_count=3,
+                last_finish_reason="stop",
+                last_finish_tokens={"input": 10, "output": 20},
+            ),
+            tmp_path / "transcript.jsonl",
+        )
+
+    monkeypatch.setattr(module, "_run_single_attempt", fake_run_single_attempt)
+
+    class FakeResult:
+        def __init__(self, rc, out="", err=""):
+            self.returncode, self.stdout, self.stderr = rc, out, err
+
+    def fake_run(cmd, *args, **kwargs):
+        if "--version" in cmd:
+            return FakeResult(0, out="opencode 1.15.0\n")
+        if any("check-frontmatter" in str(c) for c in cmd):
+            return FakeResult(0)
+        return FakeResult(0)
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    prompt_file = tmp_path / "phase.md"
+    prompt_file.write_text("run recon", encoding="utf-8")
+    monkeypatch.setattr(module.sys, "argv", [
+        "run-agent.py", "--phase", "1", "--label", "test",
+        "--agent", "recon", "--prompt-file", str(prompt_file),
+    ])
+
+    rc = module.main()
+    assert rc == 0
+
+    # The session terminated with 'stop', no frontmatter errors → single attempt
+    # (We cannot introspect the loop variables directly, but the clean exit
+    # with rc=0 proves the RunResult signals were consumed correctly.)

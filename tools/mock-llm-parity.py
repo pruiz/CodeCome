@@ -5,7 +5,7 @@
 """Deterministic parity test between opencode run and opencode serve using a mock LLM.
 
 Usage:
-  python tools/mock_llm_parity.py --script tools/mock_llm_scripts/basic.json
+  python tools/mock-llm-parity.py --script tools/mock_llm_scripts/basic.json
 """
 
 from __future__ import annotations
@@ -91,7 +91,7 @@ class MockServerInfo:
 def start_mock_server(script_path: Path, host: str = MOCK_HOST) -> MockServerInfo:
     cmd = [
         sys.executable,
-        str(ROOT / "tools" / "mock_llm_server.py"),
+        str(ROOT / "tools" / "mock-llm-server.py"),
         "--port",
         "0",
         "--script",
@@ -237,6 +237,22 @@ def run_serve(prompt: str, model: str, agent: str, timeout: float) -> list[dict[
         if not session_id:
             raise RuntimeError("session.create returned empty id")
 
+        loop = EventLoop(base_url, session_id, None, "1", "recon")
+
+        # Start event consumer BEFORE sending prompt to avoid losing early SSE events.
+        import threading
+
+        event_result_box: dict[str, Any] = {}
+
+        def _consume() -> None:
+            try:
+                event_result_box["result"] = loop.run(collect_render)
+            except Exception as exc:
+                event_result_box["error"] = exc
+
+        consumer = threading.Thread(target=_consume, name=f"parity-events-{session_id}", daemon=True)
+        consumer.start()
+
         body = {
             "parts": [{"type": "text", "text": prompt}],
             "agent": agent,
@@ -248,8 +264,9 @@ def run_serve(prompt: str, model: str, agent: str, timeout: float) -> list[dict[
             timeout=timeout,
         )
 
-        loop = EventLoop(base_url, session_id, None, "1", "recon")
-        loop.run(collect_render)
+        consumer.join()
+        if "error" in event_result_box:
+            raise event_result_box["error"]
     finally:
         runner.stop()
 

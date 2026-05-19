@@ -51,7 +51,7 @@ Build a deterministic mock LLM **provider** (not replacing OpenCode) that:
 
 ### 3.1 Mock LLM Server
 
-**Approach:** Small custom FastAPI/uvicorn server (`tools/mock_llm_server.py`).
+**Approach:** Small custom stdlib-only OpenAI-compatible mock server (`tools/mock-llm-server.py`).
 - Reads a JSON script file at startup (e.g., `--script tools/mock_llm_scripts/basic.json`).
 - Serves standard OpenAI-compatible endpoints:
   - `POST /v1/chat/completions` — streaming SSE with deterministic deltas.
@@ -109,11 +109,11 @@ This allows `-m test/mockmodel` to resolve correctly in both CLI and server cont
 
 ## 5. Test Orchestration
 
-### 5.1 Test Script: `tools/mock_llm_parity.py`
+### 5.1 Test Script: `tools/mock-llm-parity.py`
 
 Replaces `tools/opencode-parity.py`. Steps:
 
-1. **Start mock server** on ephemeral port (`python tools/mock_llm_server.py --port $PORT --script $SCRIPT`).
+1. **Start mock server** on ephemeral port (`python tools/mock-llm-server.py --port $PORT --script $SCRIPT`).
 2. **Path A — opencode run:**
    - Execute `opencode run --format json -m test/mockmodel -p "Test prompt"`.
    - Capture stdout ND-JSON to `tmp/parity-run.jsonl`.
@@ -140,10 +140,10 @@ Add a new test class `TestMockLLMParity` that:
 
 ## 6. Acceptance Criteria
 
-- [x] `tools/mock_llm_server.py` exists and serves deterministic OpenAI-compatible SSE streams from JSON script files.
+- [x] `tools/mock-llm-server.py` exists and serves deterministic OpenAI-compatible SSE streams from JSON script files.
 - [x] `tools/mock_llm_scripts/` contains `basic.json`, `with_tool.json`, and `with_permission.json`.
 - [x] `opencode.json` contains `provider.test` block.
-- [x] `tools/mock_llm_parity.py` exists and can be invoked manually.
+- [x] `tools/mock-llm-parity.py` exists and can be invoked manually.
 - [x] `tests/test_mock_llm_parity.py` exists and passes in CI.
 - [x] Existing `tools/opencode-parity.py` is deleted.
 - [x] Existing `tests/test_opencode_parity.py` is deleted.

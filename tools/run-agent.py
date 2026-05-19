@@ -4795,6 +4795,10 @@ def main() -> int:
     step_finish_count = 0
     transcript_path: Path = Path()
 
+    # Signal to local opencode plugins (e.g. status-forwarder) that we are
+    # running inside the run-agent harness.
+    os.environ["_CODECOME_INSIDE_HARNESS"] = "1"
+
     # Start the server once for this phase
     runner = ServerRunner()
     server_info: Any = None

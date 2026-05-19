@@ -13,11 +13,15 @@ from conftest import ROOT
 
 
 def load_parity_module():
-    sys_path = str(ROOT / "tools")
-    if sys_path not in sys.path:
-        sys.path.insert(0, sys_path)
-    import mock_llm_parity
-    return mock_llm_parity
+    import importlib.util
+    path = ROOT / "tools" / "mock-llm-parity.py"
+    spec = importlib.util.spec_from_file_location("mock_llm_parity", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Cannot load module from {path}")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["mock_llm_parity"] = mod
+    spec.loader.exec_module(mod)
+    return mod
 
 
 class TestMockLLMServer:
@@ -27,7 +31,7 @@ class TestMockLLMServer:
     def server_proc(self):
         script = ROOT / "tools" / "mock_llm_scripts" / "basic.json"
         proc = subprocess.Popen(
-            [sys.executable, str(ROOT / "tools" / "mock_llm_server.py"), "--port", "0", "--script", str(script)],
+            [sys.executable, str(ROOT / "tools" / "mock-llm-server.py"), "--port", "0", "--script", str(script)],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -98,8 +102,14 @@ class TestMockLLMServer:
             {"type": "text", "content": "Done."},
             {"type": "done"},
         ]
-        sys.path.insert(0, str(ROOT / "tools"))
-        import mock_llm_server
+        import importlib.util
+        server_path = ROOT / "tools" / "mock-llm-server.py"
+        spec = importlib.util.spec_from_file_location("mock_llm_server", server_path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"Cannot load module from {server_path}")
+        mock_llm_server = importlib.util.module_from_spec(spec)
+        sys.modules["mock_llm_server"] = mock_llm_server
+        spec.loader.exec_module(mock_llm_server)
         turns = mock_llm_server._parse_script_into_turns(script)
         chunks = mock_llm_server._build_chunks(turns, 0)
         parsed = [json.loads(c) for c in chunks]
@@ -187,7 +197,7 @@ class TestMockLLMParity:
 ])
     def test_parity_script(self, script: Path):
         result = subprocess.run(
-            [sys.executable, str(ROOT / "tools" / "mock_llm_parity.py"), "--script", str(script), "--timeout", "45"],
+            [sys.executable, str(ROOT / "tools" / "mock-llm-parity.py"), "--script", str(script), "--timeout", "45"],
             cwd=ROOT,
             capture_output=True,
             text=True,

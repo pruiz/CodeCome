@@ -48,7 +48,7 @@ This plan is based on a deep source-code analysis of OpenCode v1.14.50, includin
 - Source-code walkthrough of `packages/opencode/src/cli/cmd/run.ts`, `packages/opencode/src/server/routes/instance/httpapi/handlers/event.ts`, and SDK internals
 - Identifying the exact mapping between SSE events and the ND-JSON events emitted by `opencode run --format json`
 
-Full research report: `itemdb/notes/opencode-run-internals-report.md`
+Full research report: `.project/opencode-run-internals-report.md`
 
 ---
 

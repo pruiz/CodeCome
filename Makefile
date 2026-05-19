@@ -241,7 +241,7 @@ tests: venv-check
 	$(PYTHON) tools/check-frontmatter.py
 
 test-parity: venv-check
-	$(PYTHON) tools/mock_llm_parity.py --script tools/mock_llm_scripts/basic.json
+	$(PYTHON) -m pytest tests/test_mock_llm_parity.py -v
 
 itemdb-reset: venv-check
 	rm -f itemdb/notes/*.md

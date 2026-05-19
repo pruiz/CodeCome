@@ -22,7 +22,7 @@ Multi-turn support:
   which turn to serve (stateless dispatch).
 
 Usage:
-  python tools/mock_llm_server.py --port 0 --script tools/mock_llm_scripts/basic.json
+  python tools/mock-llm-server.py --port 0 --script tools/mock_llm_scripts/basic.json
   # Prints: MockLLM serving on http://127.0.0.1:49234
 """
 
