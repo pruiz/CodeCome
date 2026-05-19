@@ -161,11 +161,18 @@ def stop_mock_server(info: MockServerInfo) -> None:
             pass
 
 
-def _post_json(url: str, payload: dict[str, Any], timeout: float = 30.0) -> Any:
+def _post_json(url: str, payload: dict[str, Any], timeout: float = 30.0, auth_token: str | None = None, workspace_dir: str | None = None) -> Any:
+    headers = {"Content-Type": "application/json"}
+    if auth_token:
+        import base64
+        encoded = base64.b64encode(f"opencode:{auth_token}".encode("utf-8")).decode("utf-8")
+        headers["Authorization"] = f"Basic {encoded}"
+    if workspace_dir:
+        headers["x-opencode-directory"] = workspace_dir
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -227,12 +234,14 @@ def run_serve(prompt: str, model: str, agent: str, timeout: float) -> list[dict[
                 "model": _create_model_payload(model, create=True),
             },
             timeout=10.0,
+            auth_token=info.password,
+            workspace_dir=str(ROOT),
         )
         session_id = str(created.get("id", ""))
         if not session_id:
             raise RuntimeError("session.create returned empty id")
 
-        loop = EventLoop(base_url, session_id, None, "1", "recon")
+        loop = EventLoop(base_url, session_id, None, "1", "recon", auth_token=info.password, workspace_dir=str(ROOT))
 
         # Start event consumer BEFORE sending prompt to avoid losing early SSE events.
         import threading
@@ -257,6 +266,8 @@ def run_serve(prompt: str, model: str, agent: str, timeout: float) -> list[dict[
             f"{base_url}/session/{session_id}/prompt_async",
             body,
             timeout=timeout,
+            auth_token=info.password,
+            workspace_dir=str(ROOT),
         )
 
         consumer.join()

@@ -80,19 +80,6 @@ def _parse_script_into_turns(script: list[dict]) -> list[list[dict]]:
     return turns
 
 
-def _count_tool_results(messages: list[dict]) -> int:
-    """Count how many tool/role messages are in the conversation history."""
-    count = 0
-    for m in messages:
-        role = m.get("role", "")
-        if role in ("tool", "function"):
-            count += 1
-        # Also check for tool_call_id which indicates a tool result
-        if m.get("tool_call_id"):
-            count += 1
-    return count
-
-
 class MockLLMHandler(BaseHTTPRequestHandler):
     """Handle OpenAI-compatible requests with deterministic scripted responses."""
 

@@ -4447,6 +4447,16 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
         pass
     return False
 
+def _get_headers(auth_token: str | None, workspace_dir: str | None) -> dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    if auth_token:
+        import base64
+        encoded = base64.b64encode(f"opencode:{auth_token}".encode("utf-8")).decode("utf-8")
+        headers["Authorization"] = f"Basic {encoded}"
+    if workspace_dir:
+        headers["x-opencode-directory"] = workspace_dir
+    return headers
+
 def _send_prompt_to_session(
     base_url: str,
     session_id: str,
@@ -4454,6 +4464,8 @@ def _send_prompt_to_session(
     agent: str,
     model: str | None,
     variant: str | None,
+    auth_token: str | None,
+    workspace_dir: str | None,
 ) -> None:
     """Send a prompt text to a session via POST /session/{id}/prompt_async."""
     url = f"{base_url}/session/{session_id}/prompt_async"
@@ -4473,7 +4485,7 @@ def _send_prompt_to_session(
     req = urllib.request.Request(
         url,
         data=data,
-        headers={"Content-Type": "application/json"},
+        headers=_get_headers(auth_token, workspace_dir),
         method="POST",
     )
     try:
@@ -4483,7 +4495,7 @@ def _send_prompt_to_session(
         raise RuntimeError(f"Failed to send prompt: HTTP {exc.code}") from exc
 
 
-def _create_session(base_url: str, phase: str, agent: str, model: str | None) -> str:
+def _create_session(base_url: str, phase: str, agent: str, model: str | None, auth_token: str | None, workspace_dir: str | None) -> str:
     """Create a session via POST /session and return its ID."""
     payload: dict[str, Any] = {"title": f"CodeCome Phase {phase}", "agent": agent}
     if model:
@@ -4492,15 +4504,13 @@ def _create_session(base_url: str, phase: str, agent: str, model: str | None) ->
             payload["model"] = {"providerID": parts[0], "id": parts[1]}
         else:
             payload["model"] = {"id": model}
-    resp = urllib.request.urlopen(
-        urllib.request.Request(
-            f"{base_url}/session",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        ),
-        timeout=10.0,
+    req = urllib.request.Request(
+        f"{base_url}/session",
+        data=json.dumps(payload).encode("utf-8"),
+        headers=_get_headers(auth_token, workspace_dir),
+        method="POST",
     )
+    resp = urllib.request.urlopen(req, timeout=10.0)
     data = json.loads(resp.read().decode("utf-8"))
     sid = str(data.get("id", ""))
     if not sid:
@@ -4517,6 +4527,8 @@ def _consume_events(
     args: argparse.Namespace,
     transcript_fp: Any | None,
     thinking_on: bool,
+    auth_token: str | None,
+    workspace_dir: str | None,
 ) -> RunResult:
     """Create an EventLoop, consume SSE until idle, and return RunResult."""
     event_loop = EventLoop(
@@ -4525,6 +4537,8 @@ def _consume_events(
         console=console,
         phase=phase,
         label=label,
+        auth_token=auth_token,
+        workspace_dir=workspace_dir,
     )
 
     def _render_and_log(console_: Any, phase_: str, label_: str, event: dict[str, Any]) -> None:
@@ -4551,6 +4565,8 @@ def _run_single_attempt(
     variant: str | None,
     thinking_on: bool,
     base_url: str,
+    auth_token: str | None,
+    workspace_dir: str | None,
     existing_session_id: str | None = None,
 ) -> tuple[int, str, RunResult, Path]:
     """Run or resume a single phase attempt via opencode serve.
@@ -4582,7 +4598,7 @@ def _run_single_attempt(
         if existing_session_id:
             session_id = existing_session_id
         else:
-            session_id = _create_session(base_url, str(args.phase), args.agent, model)
+            session_id = _create_session(base_url, str(args.phase), args.agent, model, auth_token, workspace_dir)
 
         run_result_box: dict[str, Any] = {}
         consume_error_box: dict[str, Exception] = {}
@@ -4598,6 +4614,8 @@ def _run_single_attempt(
                     args,
                     transcript_fp,
                     thinking_on,
+                    auth_token,
+                    workspace_dir,
                 )
             except Exception as exc:  # noqa: BLE001
                 consume_error_box["error"] = exc
@@ -4605,7 +4623,7 @@ def _run_single_attempt(
         consumer = threading.Thread(target=_consume, name=f"codecome-events-{session_id}", daemon=True)
         consumer.start()
 
-        _send_prompt_to_session(base_url, session_id, prompt, args.agent, model, variant)
+        _send_prompt_to_session(base_url, session_id, prompt, args.agent, model, variant, auth_token, workspace_dir)
         consumer.join()
 
         if "error" in consume_error_box:
@@ -4785,11 +4803,26 @@ def main() -> int:
 
     base_url = server_info.base_url
 
+    # Forward Ctrl+C / SIGTERM to the server process group so children die too.
+    def _forward_signal(signum: int, _frame: Any) -> None:
+        info = runner.info
+        if info is not None:
+            try:
+                os.killpg(info.pid, signum)
+            except ProcessLookupError:
+                pass
+        signal.signal(signum, signal.SIG_DFL)
+        os.kill(os.getpid(), signum)
+
+    previous_sigint = signal.signal(signal.SIGINT, _forward_signal)
+    previous_sigterm = signal.signal(signal.SIGTERM, _forward_signal)
+
     try:
         while True:
             attempt_number += 1
             returncode, session_id, run_result, transcript_path = _run_single_attempt(
                 args, console, prompt, model, variant, thinking_on, base_url,
+                server_info.password, str(ROOT),
                 existing_session_id=last_session_id or None
             )
 
@@ -4934,6 +4967,8 @@ def main() -> int:
 
             break
     finally:
+        signal.signal(signal.SIGINT, previous_sigint)
+        signal.signal(signal.SIGTERM, previous_sigterm)
         runner.stop()
 
     if returncode == 0:

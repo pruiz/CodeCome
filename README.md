@@ -482,7 +482,7 @@ CodeCome ships reusable phase prompts under `prompts/`:
     CODECOME_BOOTSTRAP_DRY_RUN=1        # force --dry-run on sandbox apply/regenerate
     CODECOME_BASH_SHIM_RENDER=0         # disable rtk/cat/head/tail/rg/ls/find/tree routing
     CODECOME_BASH_SHIM_LS_STRIP_LONG_FORMAT=0
-    OPENCODE_ARGS='...'                 # extra flags forwarded to opencode run
+    OPENCODE_ARGS='...'                 # extra flags for opencode run (forwarded directly when CODECOME_USE_WRAPPER=0; in wrapper mode only --model, --variant and --thinking are used)
     CODECOME_MODEL=<id>                 # pin model per phase, e.g. anthropic/claude-opus-4-7
     CODECOME_MODEL_VARIANT=<v>          # pin model variant, e.g. high, max
 

@@ -45,12 +45,17 @@ class EventLoop:
         console: Any,
         phase: str,
         label: str,
+        *,
+        auth_token: str | None = None,
+        workspace_dir: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.session_id = session_id
         self.console = console
         self.phase = phase
         self.label = label
+        self.auth_token = auth_token
+        self.workspace_dir = workspace_dir
 
         self._tracker = StateTracker()
         self._client: SseClient | None = None
@@ -83,6 +88,8 @@ class EventLoop:
 
         self._client = SseClient(
             self.base_url,
+            auth_token=self.auth_token,
+            workspace_dir=self.workspace_dir,
             reconnect=True,
             max_reconnects=10,
         )
@@ -117,7 +124,7 @@ class EventLoop:
                     emit_event(render_fn, self.console, self.phase, self.label, fe)
 
                 # Stop consuming when session goes idle.
-                if event.get("type") == "session.idle":
+                if self._is_session_idle(event):
                     return self._build_result(
                         _any_step_finish_seen,
                         _step_finish_count,
@@ -170,6 +177,31 @@ class EventLoop:
     # Internal
     # ------------------------------------------------------------------
 
+    def _get_headers(self) -> dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        if self.auth_token:
+            import base64
+            encoded = base64.b64encode(f"opencode:{self.auth_token}".encode("utf-8")).decode("utf-8")
+            headers["Authorization"] = f"Basic {encoded}"
+        if self.workspace_dir:
+            headers["x-opencode-directory"] = self.workspace_dir
+        return headers
+
+    @staticmethod
+    def _is_session_idle(event: dict[str, Any]) -> bool:
+        """Return True if this event signals the session reached idle.
+
+        Supports both the canonical ``session.status`` with
+        ``status.type == "idle"`` and the deprecated ``session.idle``.
+        """
+        event_type = event.get("type", "")
+        if event_type == "session.idle":
+            return True
+        if event_type == "session.status":
+            status = event.get("properties", {}).get("status", {})
+            return status.get("type") == "idle"
+        return False
+
     def _belongs_to_session(self, event: dict[str, Any]) -> bool:
         """ Return True if this event belongs to our tracked session. """
         props = event.get("properties", {})
@@ -193,7 +225,7 @@ class EventLoop:
         req = urllib.request.Request(
             url,
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers=self._get_headers(),
             method="POST",
         )
         try:
@@ -213,6 +245,10 @@ class EventLoop:
         event_type = event.get("type", "")
         if event_type in {"session.idle", "session.updated", "todo.updated"}:
             return True
+        if event_type == "session.status":
+            status = event.get("properties", {}).get("status", {})
+            if status.get("type") == "idle":
+                return True
         if event_type in {"session.status", "session.diff", "server.heartbeat"}:
             now = time.time()
             if now - self._last_message_sync_at >= 0.5:
@@ -233,6 +269,7 @@ class EventLoop:
         try:
             req = urllib.request.Request(
                 f"{self.base_url}/session/{self.session_id}/message",
+                headers=self._get_headers(),
                 method="GET",
             )
             with urllib.request.urlopen(req, timeout=10.0) as resp:

@@ -316,21 +316,21 @@ class TestServerRunner:
         """Port parsing removed; verify that known port is passed directly."""
         _, ServerInfo, _ = classes
         log_path = ROOT / "tmp" / "test.log"
-        info = ServerInfo(proc=None, pid=1234, base_url="http://127.0.0.1:49152", port=49152, log_path=log_path)  # type: ignore[arg-type]
+        info = ServerInfo(proc=None, pid=1234, base_url="http://127.0.0.1:49152", port=49152, log_path=log_path, password="dummy")  # type: ignore[arg-type]
         assert info.port == 49152
 
     def test_parse_port_from_url_no_port_raises(self, classes):
         """Port is always known via ephemeral assignment; no parsing needed."""
         _, ServerInfo, _ = classes
         log_path = ROOT / "tmp" / "test.log"
-        info = ServerInfo(proc=None, pid=1234, base_url="http://127.0.0.1:8080", port=8080, log_path=log_path)  # type: ignore[arg-type]
+        info = ServerInfo(proc=None, pid=1234, base_url="http://127.0.0.1:8080", port=8080, log_path=log_path, password="dummy")  # type: ignore[arg-type]
         assert info.port == 8080
 
     def test_server_info_fields(self, classes):
         ServerRunner, ServerInfo, ServerRunnerError = classes
         log_path = ROOT / "tmp" / "test.log"
         # Construct a minimal ServerInfo with a None proc (not used in tests)
-        info = ServerInfo(proc=None, pid=1234, base_url="http://127.0.0.1:8080", port=8080, log_path=log_path)  # type: ignore[arg-type]
+        info = ServerInfo(proc=None, pid=1234, base_url="http://127.0.0.1:8080", port=8080, log_path=log_path, password="dummy")  # type: ignore[arg-type]
         assert info.pid == 1234
         assert info.port == 8080
         assert info.base_url == "http://127.0.0.1:8080"
@@ -388,7 +388,7 @@ class TestServerRunner:
                 return 0
 
         monkeypatch.setattr("opencode.serve._find_free_port", lambda hostname: 54321)
-        monkeypatch.setattr("opencode.serve._try_fetch_json", lambda url, timeout: {"healthy": True, "version": "1.14.50"})
+        monkeypatch.setattr("opencode.serve._try_fetch_json", lambda url, timeout, auth_token=None: {"healthy": True, "version": "1.14.50"})
         monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: FakeProc())
 
         runner = ServerRunner()
@@ -527,6 +527,67 @@ class TestEventLoopEndToEnd:
         # Events after session.idle should be ignored, but session.idle itself is passed through
         assert len(emitted) == 1
         assert emitted[0]["type"] == "session.idle"
+
+    def test_session_status_idle_stops_consuming(self, event_loop_objects):
+        EventLoop, RunResult, SseClient = event_loop_objects
+
+        emitted: list[dict] = []
+
+        class FakeSseClient:
+            def __init__(self, *a, **kw):
+                pass
+            def events(self):
+                return iter([
+                    {"type": "session.status", "properties": {"sessionID": "sess-1", "status": {"type": "idle"}}},
+                    {"type": "message.part.updated", "properties": {"sessionID": "sess-1", "part": {"id": "late", "type": "text", "time": {"end": 1}}}},
+                ])
+            def stop(self):
+                pass
+
+        import events as _events_mod
+        orig = _events_mod.SseClient
+        _events_mod.SseClient = FakeSseClient  # type: ignore[misc]
+        try:
+            loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+            loop.run(lambda c, p, l, e: emitted.append(e))
+        finally:
+            _events_mod.SseClient = orig
+
+        # Events after session.status idle should be ignored.
+        assert len(emitted) == 1
+        assert emitted[0]["type"] == "session.status"
+
+    def test_both_idle_events_only_processed_once(self, event_loop_objects):
+        """When both canonical and deprecated idle arrive, run() exits on the first."""
+        EventLoop, RunResult, SseClient = event_loop_objects
+
+        emitted: list[dict] = []
+
+        class FakeSseClient:
+            def __init__(self, *a, **kw):
+                pass
+            def events(self):
+                return iter([
+                    {"type": "session.status", "properties": {"sessionID": "sess-1", "status": {"type": "idle"}}},
+                    {"type": "session.idle", "properties": {"sessionID": "sess-1"}},
+                    {"type": "message.part.updated", "properties": {"sessionID": "sess-1", "part": {"id": "late", "type": "text", "time": {"end": 1}}}},
+                ])
+            def stop(self):
+                pass
+
+        import events as _events_mod
+        orig = _events_mod.SseClient
+        _events_mod.SseClient = FakeSseClient  # type: ignore[misc]
+        try:
+            loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+            result = loop.run(lambda c, p, l, e: emitted.append(e))
+        finally:
+            _events_mod.SseClient = orig
+
+        # Only the first idle event should be processed; the loop returns immediately.
+        assert len(emitted) == 1
+        assert emitted[0]["type"] == "session.status"
+        assert result.last_session_id == "sess-1"
 
     def test_empty_stream_no_step_finish(self, event_loop_objects):
         EventLoop, RunResult, SseClient = event_loop_objects

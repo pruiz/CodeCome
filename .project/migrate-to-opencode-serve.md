@@ -91,10 +91,10 @@ server_info = runner.start(
 
 `ServerRunner.start()` will:
 
-1. Spawn `opencode serve --port 0 --hostname 127.0.0.1 --log-level WARN`
-2. Capture stdout to discover the assigned port (e.g., `listening on http://127.0.0.1:49152`)
-3. Poll `GET /global/health` until `{healthy: true}` is returned
-4. Return a `ServerInfo` dataclass
+1. Spawn `opencode serve --port 0` (or `_find_free_port()` internally) along with other flags.
+2. The server will bind to the assigned port and generate a random local authentication token.
+3. Poll `GET /global/health` until `{healthy: true}` is returned, passing the generated token.
+4. Return a `ServerInfo` dataclass (containing `port` and `password`).
 
 If startup fails, print error details and exit non-zero. **No auto-retry.**
 
@@ -112,7 +112,9 @@ session_id = session["id"]
 
 ### 5.3 Configure Session
 
-If `args.agent` or resolved model are explicitly pinned, set them on the session:
+`POST /session` accepts `agent` and `model` directly, so the create call in
+step 5.2 already pins them.  If you need to change them later you can also
+`PATCH /session/{id}`:
 
 ```python
 requests.patch(f"{server_info.base_url}/session/{session_id}", json={
@@ -120,8 +122,6 @@ requests.patch(f"{server_info.base_url}/session/{session_id}", json={
     "model": resolved_model,   # e.g. {"providerID": "github-copilot", "modelID": "gpt-5.4"}
 })
 ```
-
-> Note: `POST /session` body does not accept `agent` or `model` directly; these are set via `PATCH /session/{id}`.
 
 ### 5.4 Send Prompt
 

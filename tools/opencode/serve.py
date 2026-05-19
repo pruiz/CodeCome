@@ -23,6 +23,7 @@ import argparse
 import dataclasses
 import json
 import os
+import secrets
 import signal
 import socket
 import subprocess
@@ -67,6 +68,7 @@ class ServerInfo:
     base_url: str
     port: int
     log_path: Path
+    password: str
 
 
 class ServerRunnerError(Exception):
@@ -74,10 +76,15 @@ class ServerRunnerError(Exception):
     pass
 
 
-def _try_fetch_json(url: str, timeout: float) -> dict | None:
+def _try_fetch_json(url: str, timeout: float, auth_token: str | None = None) -> dict | None:
     """ Best-effort GET returning parsed JSON, or None on any failure. """
     try:
-        req = urllib.request.Request(url, method="GET")
+        headers = {}
+        if auth_token:
+            import base64
+            encoded = base64.b64encode(f"opencode:{auth_token}".encode("utf-8")).decode("utf-8")
+            headers["Authorization"] = f"Basic {encoded}"
+        req = urllib.request.Request(url, headers=headers, method="GET")
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except Exception:  # noqa: BLE001
@@ -144,86 +151,87 @@ class ServerRunner:
         if self._info is not None:
             raise ServerRunnerError("Server already started")
 
-        if port in (None, 0):
-            port = _find_free_port(hostname)
-
+        password = secrets.token_hex(16)
         log_path = _build_log_path()
+        env = dict(os.environ)
+        env["OPENCODE_SERVER_PASSWORD"] = password
 
         cmd = [
             "opencode", "serve",
             "--hostname", hostname,
-            "--port", str(port),
             "--log-level", log_level,
         ]
 
-        try:
-            log_file = log_path.open("w")
-            proc = subprocess.Popen(
-                cmd,
-                stdout=log_file,
-                stderr=subprocess.STDOUT,
-                cwd=cwd or ROOT,
-            )
-        except FileNotFoundError:
-            raise ServerRunnerError(
-                "opencode command not found. Is OpenCode installed and in PATH?"
-            ) from None
-        except OSError as exc:
-            raise ServerRunnerError(
-                f"Failed to start opencode serve: {exc}"
-            ) from exc
+        last_err: Optional[Exception] = None
+        for attempt in range(3):
+            actual_port = port
+            if actual_port in (None, 0):
+                actual_port = _find_free_port(hostname)
 
-        base_url = f"http://{hostname}:{port}"
-        health_url = f"{base_url}/global/health"
-        deadline = time.time() + _HEALTH_TIMEOUT_S
+            attempt_cmd = cmd + ["--port", str(actual_port)]
 
-        last_err: Optional[str] = None
-        health_ok = False
-
-        while time.time() < deadline:
-            if proc.poll() is not None:
-                # Process exited early — show log tail for diagnosis.
-                log_tail = ""
-                try:
-                    with open(log_path, "r") as f:
-                        lines = f.readlines()
-                        log_tail = "".join(lines[-30:])
-                except OSError:
-                    pass
-                raise ServerRunnerError(
-                    f"opencode serve exited early (exit code {proc.returncode}).\n"
-                    f"Log file: {log_path}\n"
-                    f"Last lines:\n{log_tail or '(empty)'}"
-                )
-            data = _try_fetch_json(health_url, timeout=2.0)
-            if data and data.get("healthy") is True:
-                health_ok = True
-                break
-            time.sleep(_HEALTH_INTERVAL_S)
-
-        if not health_ok:
-            self._kill(proc)
-            log_tail = ""
             try:
-                with open(log_path, "r") as f:
-                    lines = f.readlines()
-                    log_tail = "".join(lines[-30:])
-            except OSError:
-                pass
-            raise ServerRunnerError(
-                f"opencode serve started but /global/health never returned healthy. "
-                f"Log file: {log_path}\n"
-                f"Last lines:\n{log_tail or '(empty)'}"
-            )
+                log_file = log_path.open("a")
+                proc = subprocess.Popen(
+                    attempt_cmd,
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                    cwd=cwd or ROOT,
+                    env=env,
+                    start_new_session=True,
+                )
+            except FileNotFoundError:
+                raise ServerRunnerError(
+                    "opencode command not found. Is OpenCode installed and in PATH?"
+                ) from None
+            except OSError as exc:
+                raise ServerRunnerError(
+                    f"Failed to start opencode serve: {exc}"
+                ) from exc
 
-        self._info = ServerInfo(
-            proc=proc,
-            pid=proc.pid,
-            base_url=base_url,
-            port=port,
-            log_path=log_path,
+            base_url = f"http://{hostname}:{actual_port}"
+            health_url = f"{base_url}/global/health"
+            deadline = time.time() + _HEALTH_TIMEOUT_S
+
+            health_ok = False
+
+            while time.time() < deadline:
+                if proc.poll() is not None:
+                    last_err = ServerRunnerError(f"opencode serve exited early (exit code {proc.returncode}).")
+                    break
+                data = _try_fetch_json(health_url, timeout=2.0, auth_token=password)
+                if data and data.get("healthy") is True:
+                    health_ok = True
+                    break
+                time.sleep(_HEALTH_INTERVAL_S)
+
+            if health_ok:
+                self._info = ServerInfo(
+                    proc=proc,
+                    pid=proc.pid,
+                    base_url=base_url,
+                    port=actual_port,
+                    log_path=log_path,
+                    password=password,
+                )
+                return self._info
+
+            # If we reach here, this attempt failed. Kill and retry.
+            self._kill(proc)
+
+        log_tail = ""
+        try:
+            with open(log_path, "r") as f:
+                lines = f.readlines()
+                log_tail = "".join(lines[-30:])
+        except OSError:
+            pass
+
+        raise ServerRunnerError(
+            f"opencode serve failed to start after 3 attempts. Last error: {last_err}. "
+            f"Log file: {log_path}\n"
+            f"Last lines:\n{log_tail or '(empty)'}"
         )
-        return self._info
 
     def stop(self) -> None:
         """ Gracefully stop the server; no-op if not started. """
@@ -244,14 +252,20 @@ class ServerRunner:
 
     @staticmethod
     def _kill(proc: subprocess.Popen[Any]) -> None:
-        """ Send SIGTERM, wait, then SIGKILL if still alive. """
+        """Send SIGTERM to the process group, wait, then SIGKILL if still alive."""
         try:
             if proc.poll() is None:
-                proc.terminate()
+                try:
+                    os.killpg(proc.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    proc.terminate()
                 try:
                     proc.wait(timeout=_GRACEFUL_SHUTDOWN_S)
                 except subprocess.TimeoutExpired:
-                    proc.kill()
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        proc.kill()
                     proc.wait()
         except ProcessLookupError:
             pass

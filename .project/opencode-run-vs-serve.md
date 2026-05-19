@@ -91,7 +91,9 @@ Notable event types you will care about (all named exactly as they appear over t
      && event.properties.sessionID === <your sid>
      && event.properties.status.type === "idle"
    ```
-   Do not look for a `session.idle` type — that does not exist. It is `session.status` with `status.type === "idle"`.
+   Both `session.status { status.type: "idle" }` and the deprecated
+   `session.idle` event signal completion.  Prefer the `session.status`
+   form because `session.idle` may be removed in future versions.
 
 6. **Handle permissions if they happen.** On `permission.asked`, reply via:
    ```

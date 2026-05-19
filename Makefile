@@ -56,7 +56,7 @@ help:
 	@printf "\n"
 	@printf "    $(BOLD)CODECOME_USE_WRAPPER=0$(RESET)       Bypass styled wrapper and use raw opencode run\n"
 	@printf "        $(BOLD)CODECOME_THINKING=1$(RESET)          Show model reasoning/thinking blocks in output\n"
-	@printf "    $(BOLD)OPENCODE_ARGS='...'$(RESET)          Extra flags passed through to opencode run\n"
+	@printf "    $(BOLD)OPENCODE_ARGS='...'$(RESET)          Extra flags for opencode run (forwarded directly when CODECOME_USE_WRAPPER=0; in wrapper mode only --model, --variant and --thinking are used)\n"
 	@printf "    $(BOLD)CODECOME_MODEL=<id>$(RESET)          Pin the model per phase (e.g. anthropic/claude-opus-4-7)\n"
 	@printf "    $(BOLD)CODECOME_MODEL_VARIANT=<v>$(RESET)   Pin the model variant (e.g. high, max)\n"
 	@printf "    $(BOLD)PROMPT_EXTRA=\"...\"$(RESET)            Append extra instructions to phase prompt\n"

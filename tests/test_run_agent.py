@@ -1444,7 +1444,7 @@ def test_auto_correction_resume_loops_back_via_popen(monkeypatch, tmp_path):
 
     calls: list[tuple] = []
 
-    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, existing_session_id=None):
+    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, auth_token, workspace_dir, existing_session_id=None):
         calls.append((existing_session_id, prompt))
         # Both attempts succeed with the same session.
         return (
@@ -1509,7 +1509,7 @@ def test_frontmatter_failure_without_session_id_exits_nonzero(monkeypatch, tmp_p
     if hasattr(module._run_single_attempt, "_attempt_counter"):
         delattr(module._run_single_attempt, "_attempt_counter")
 
-    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, existing_session_id=None):
+    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, auth_token, workspace_dir, existing_session_id=None):
         return (
             0,
             "",  # empty session ID
@@ -1562,7 +1562,7 @@ def test_iteration_limit_triggers_auto_resume(monkeypatch, tmp_path):
 
     calls: list[tuple] = []
 
-    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, existing_session_id=None):
+    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, auth_token, workspace_dir, existing_session_id=None):
         calls.append((existing_session_id, prompt))
         return (
             0,
@@ -1735,7 +1735,7 @@ def test_stream_session_id_and_step_finish_count(monkeypatch, tmp_path):
     if hasattr(module._run_single_attempt, "_attempt_counter"):
         delattr(module._run_single_attempt, "_attempt_counter")
 
-    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, existing_session_id=None):
+    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, auth_token, workspace_dir, existing_session_id=None):
         return (
             0,
             "ses_stream_test_001",

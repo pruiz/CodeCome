@@ -26,17 +26,26 @@ _BACKOFF_MULTIPLIER = 2.0
 _HEARTBEAT_TIMEOUT_S = 15.0
 
 # Read timeout for the SSE connection.
-_SSE_READ_TIMEOUT_S = 60.0
+_SSE_READ_TIMEOUT_S = 30.0
 
 
-def _build_sse_request(base_url: str) -> urllib.request.Request:
+import base64
+
+def _build_sse_request(base_url: str, auth_token: str | None = None, workspace_dir: str | None = None) -> urllib.request.Request:
     """Return a GET /event request with SSE headers."""
+    headers = {
+        "Accept": "text/event-stream",
+        "Cache-Control": "no-cache",
+    }
+    if auth_token:
+        encoded = base64.b64encode(f"opencode:{auth_token}".encode("utf-8")).decode("utf-8")
+        headers["Authorization"] = f"Basic {encoded}"
+    if workspace_dir:
+        headers["x-opencode-directory"] = workspace_dir
+
     return urllib.request.Request(
         f"{base_url}/event",
-        headers={
-            "Accept": "text/event-stream",
-            "Cache-Control": "no-cache",
-        },
+        headers=headers,
         method="GET",
     )
 
@@ -53,10 +62,14 @@ class SseClient:
         self,
         base_url: str,
         *,
+        auth_token: str | None = None,
+        workspace_dir: str | None = None,
         reconnect: bool = True,
         max_reconnects: int = 10,
     ) -> None:
         self.base_url = base_url.rstrip("/")
+        self.auth_token = auth_token
+        self.workspace_dir = workspace_dir
         self.reconnect = reconnect
         self.max_reconnects = max_reconnects
 
@@ -126,7 +139,7 @@ class SseClient:
 
     def _open_stream(self) -> Iterator[dict]:
         """ Open the SSE connection and yield parsed events. """
-        req = _build_sse_request(self.base_url)
+        req = _build_sse_request(self.base_url, self.auth_token, self.workspace_dir)
         try:
             resp = urllib.request.urlopen(req, timeout=_SSE_READ_TIMEOUT_S)
         except urllib.error.HTTPError as exc:
