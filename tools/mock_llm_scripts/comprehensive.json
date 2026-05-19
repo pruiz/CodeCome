@@ -1,0 +1,16 @@
+[
+  {"type": "text", "content": "I'll read files."},
+  {"type": "tool_call", "id": "call_1", "name": "read", "arguments": {"filePath": "README.md"}},
+  {"type": "tool_call", "id": "call_2", "name": "read", "arguments": {"filePath": "AGENTS.md"}},
+  {"type": "text", "content": "Let me search."},
+  {"type": "tool_call", "id": "call_3", "name": "glob", "arguments": {"pattern": "src/**/*.c"}},
+  {"type": "tool_call", "id": "call_4", "name": "grep", "arguments": {"pattern": "main", "path": "src"}},
+  {"type": "text", "content": "Now I'll write a file."},
+  {"type": "tool_call", "id": "call_5", "name": "write", "arguments": {"filePath": "tmp/parity-test.txt", "content": "original\n"}},
+  {"type": "text", "content": "Running a command."},
+  {"type": "tool_call", "id": "call_7", "name": "bash", "arguments": {"command": "echo hello", "description": "Say hello"}},
+  {"type": "text", "content": "Creating todos."},
+  {"type": "tool_call", "id": "call_8", "name": "todowrite", "arguments": {"todos": [{"content":"test","status":"completed","priority":"high"}]}},
+  {"type": "text", "content": "Done!"},
+  {"type": "done"}
+]

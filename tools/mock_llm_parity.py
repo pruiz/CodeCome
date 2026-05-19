@@ -35,7 +35,42 @@ DEFAULT_TIMEOUT_S = 30.0
 MOCK_HOST = "127.0.0.1"
 
 # Events that only appear in the serve path and should be ignored for parity.
-_SERVE_ONLY_TYPES = {"server.connected", "server.heartbeat", "session.status", "session.idle", "message.updated"}
+_SERVE_ONLY_TYPES = {"server.connected", "server.heartbeat", "session.status", "session.idle", "message.updated", "file.edited", "file.watcher.updated", "todo.updated"}
+
+
+def _step_sort_key(ev: dict[str, Any]) -> tuple[int, str]:
+    """Return a sort key that orders events within a single step deterministically."""
+    t = ev.get("type", "")
+    if t == "step_start":
+        return (0, "")
+    if t == "text":
+        return (1, "")
+    if t == "tool_use":
+        call_id = str(ev.get("part", {}).get("callID", ""))
+        return (2, call_id)
+    if t == "step_finish":
+        return (3, "")
+    return (4, "")
+
+
+def _sort_events_by_step(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Group events by step (delimited by step_start) and sort within each step."""
+    groups: list[list[dict[str, Any]]] = []
+    current: list[dict[str, Any]] = []
+    for ev in events:
+        if ev.get("type") == "step_start":
+            if current:
+                groups.append(current)
+            current = [ev]
+        else:
+            current.append(ev)
+    if current:
+        groups.append(current)
+
+    result: list[dict[str, Any]] = []
+    for group in groups:
+        result.extend(sorted(group, key=_step_sort_key))
+    return result
 
 
 def _write_json(path: Path, payload: Any) -> None:
@@ -267,8 +302,11 @@ def compare_events(
     run_norm = [normalize_event(e) for e in run_events if normalize_event(e) is not None]
     serve_norm = [normalize_event(e) for e in serve_events if normalize_event(e) is not None]
 
-    run_lines = [json.dumps(e, sort_keys=True) for e in run_norm]
-    serve_lines = [json.dumps(e, sort_keys=True) for e in serve_norm]
+    run_sorted = _sort_events_by_step(run_norm)
+    serve_sorted = _sort_events_by_step(serve_norm)
+
+    run_lines = [json.dumps(e, sort_keys=True) for e in run_sorted]
+    serve_lines = [json.dumps(e, sort_keys=True) for e in serve_sorted]
 
     if run_lines == serve_lines:
         return True, ""

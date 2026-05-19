@@ -168,3 +168,126 @@ Add a new test class `TestMockLLMParity` that:
 - **Permission event:** The mock script includes a `tool_call` that triggers a permission check under the existing `opencode.json` rules.
 - **Rendered terminal output comparison:** Strip ANSI sequences before diffing; use ANSI-aware diffing if a lightweight library is available.
 - **Make target:** Add `make test-parity` to the Makefile.
+
+---
+
+## 9. Extension: Comprehensive Multi-Turn Parity Testing
+
+### 9.1 Problem: Current Scripts Are Too Simple
+
+The initial scripts (`basic.json`, `with_tool.json`, `with_permission.json`) only test:
+- Single text turn
+- One tool per turn
+- Two-turn sessions (text → tool → text)
+
+Real CodeCome sessions (from 25 recorded fixtures) show:
+- **3–5 tool calls per assistant message** (not 1)
+- **No content text before pure tool turns** (content=False)
+- **7–22 turns per session** (not 2)
+- **Mixed tool types**: `read`, `glob`, `bash`, `write`, `edit` in same session
+
+### 9.2 Solution: Fix Turn-Splitting Heuristic
+
+The current `mock_llm_server.py` splits at the **first** `tool_call`. It must instead split at **turn boundaries**:
+
+**New heuristic:**
+- A **turn** = optional leading `text` + **all consecutive** `tool_call`s that follow it.
+- Turn ends when the next action is `text` (after tools) or `done`.
+- `done` always ends with `finish_reason: "stop"`.
+- A turn with tools ends with `finish_reason: "tool_calls"`.
+- A turn without tools ends with `finish_reason: "stop"`.
+
+**Multi-turn dispatch (stateless):**
+Count `role: "tool"` messages in the incoming request to determine which turn to serve:
+- 0 tool messages → Turn 1
+- N tool messages (where N = sum of tools in all prior turns) → Turn K
+
+This requires no per-client tracking.
+
+### 9.3 Comprehensive Script Design
+
+Instead of ~10 small scripts, use **2–3 comprehensive scripts** that combine many patterns:
+
+#### `comprehensive.json` — Full tool coverage
+8 turns, exercises: `read` (multi), `glob`, `grep`, `write`, `edit`, `bash`, `todowrite`, `skill`.
+
+```json
+[
+  {"type": "text", "content": "I'll read files."},
+  {"type": "tool_call", "id": "call_1", "name": "read", "arguments": {"filePath": "README.md"}},
+  {"type": "tool_call", "id": "call_2", "name": "read", "arguments": {"filePath": "AGENTS.md"}},
+  {"type": "text", "content": "Let me search."},
+  {"type": "tool_call", "id": "call_3", "name": "glob", "arguments": {"pattern": "src/**/*.c"}},
+  {"type": "tool_call", "id": "call_4", "name": "grep", "arguments": {"pattern": "main", "path": "src"}},
+  {"type": "text", "content": "Now I'll write and edit."},
+  {"type": "tool_call", "id": "call_5", "name": "write", "arguments": {"filePath": "tmp/parity-test.txt", "content": "original"}},
+  {"type": "tool_call", "id": "call_6", "name": "edit", "arguments": {"filePath": "tmp/parity-test.txt", "oldString": "original", "newString": "modified"}},
+  {"type": "text", "content": "Running a command."},
+  {"type": "tool_call", "id": "call_7", "name": "bash", "arguments": {"command": "echo hello"}},
+  {"type": "text", "content": "Creating todos."},
+  {"type": "tool_call", "id": "call_8", "name": "todowrite", "arguments": {"todos": [{"content":"test","status":"completed","priority":"high"}]}},
+  {"type": "text", "content": "Loading skill."},
+  {"type": "tool_call", "id": "call_9", "name": "skill", "arguments": {"name": "source-recon"}},
+  {"type": "text", "content": "Done!"},
+  {"type": "done"}
+]
+```
+
+#### `with_permission_multi.json` — Permission + allowed
+3 turns: reads denied `.env` file (permission rejected), then reads allowed `README.md`.
+
+```json
+[
+  {"type": "text", "content": "Reading secret file."},
+  {"type": "tool_call", "id": "call_1", "name": "read", "arguments": {"filePath": "secret.env"}},
+  {"type": "text", "content": "Permission denied. Let me read allowed file."},
+  {"type": "tool_call", "id": "call_2", "name": "read", "arguments": {"filePath": "README.md"}},
+  {"type": "text", "content": "Done."},
+  {"type": "done"}
+]
+```
+
+#### `with_apply_patch.json` — Patch application
+2–3 turns: writes a file, then applies a patch to it.
+
+```json
+[
+  {"type": "text", "content": "Writing base file."},
+  {"type": "tool_call", "id": "call_1", "name": "write", "arguments": {"filePath": "tmp/patch-target.txt", "content": "line1\nline2\nline3\n"}},
+  {"type": "text", "content": "Applying patch."},
+  {"type": "tool_call", "id": "call_2", "name": "apply_patch", "arguments": {"patchText": "*** Begin Patch\n*** Update File: tmp/patch-target.txt\n--- a/tmp/patch-target.txt\n+++ b/tmp/patch-target.txt\n@@ -1,3 +1,3 @@\n line1\n-line2\n+line2_modified\n line3\n*** End Patch"}},
+  {"type": "text", "content": "Done."},
+  {"type": "done"}
+]
+```
+
+### 9.4 Tools NOT Covered (Recordings Missing)
+
+| Tool | Coverage | Note |
+|---|---|---|
+| `task` | ❌ | Creates child session; requires subagent request detection. **TODO: add separate test once recordings available.** |
+
+### 9.5 Mock Server Changes
+
+1. **Fix `_build_chunks`:** Parse script into turns (group consecutive `tool_call`s under preceding `text`).
+2. **Fix `do_POST`:** Count `role: "tool"` messages in request to determine turn index.
+3. **Emit multi-tool chunks:** Tool calls in same turn use `index: 0, 1, 2...` in `choices[0].delta.tool_calls` array.
+
+### 9.6 Test Changes
+
+1. **Add scripts to `tests/test_mock_llm_parity.py`:**
+   - Replace small script list with `comprehensive.json`, `with_permission_multi.json`, `with_apply_patch.json`.
+2. **Add unit test for multi-tool chunks:**
+   - Verify `test_chat_completions_streaming` returns `tool_calls` with correct `index` values.
+3. **Estimated runtime:** 3 E2E tests × ~15s = ~45s total (vs. ~120s for 10 small scripts).
+
+### 9.7 Acceptance Criteria (Extension)
+
+- [ ] `mock_llm_server.py` supports multi-tool turns and stateless multi-turn dispatch.
+- [ ] `comprehensive.json` covers `read`, `glob`, `grep`, `write`, `edit`, `bash`, `todowrite`, `skill`.
+- [ ] `with_permission_multi.json` covers permission rejection + allowed tool in same session.
+- [ ] `with_apply_patch.json` covers `write` + `apply_patch` stateful sequence.
+- [ ] All 3 new scripts pass parity test (`opencode run` vs `opencode serve`).
+- [ ] Unit tests verify multi-tool chunk indexing.
+- [ ] Total test time < 60s for E2E parity suite.
+- [ ] `task` tool documented as **TODO** with plan reference.

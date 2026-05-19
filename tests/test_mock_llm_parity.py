@@ -88,6 +88,26 @@ class TestMockLLMServer:
         assert any(c["choices"][0]["delta"].get("role") == "assistant" for c in chunks)
         assert any(c["choices"][0]["delta"].get("content") == "Hello world!" for c in chunks)
 
+    def test_multi_tool_chunks_have_increasing_index(self, server_proc):
+        """Verify that multiple tools in one turn get index 0, 1, 2..."""
+        # Build chunks directly without going through the server process.
+        script = [
+            {"type": "text", "content": "Reading files."},
+            {"type": "tool_call", "id": "call_1", "name": "read", "arguments": {"filePath": "README.md"}},
+            {"type": "tool_call", "id": "call_2", "name": "read", "arguments": {"filePath": "AGENTS.md"}},
+            {"type": "text", "content": "Done."},
+            {"type": "done"},
+        ]
+        sys.path.insert(0, str(ROOT / "tools"))
+        import mock_llm_server
+        turns = mock_llm_server._parse_script_into_turns(script)
+        chunks = mock_llm_server._build_chunks(turns, 0)
+        parsed = [json.loads(c) for c in chunks]
+        tool_chunks = [c for c in parsed if "tool_calls" in c["choices"][0]["delta"]]
+        assert len(tool_chunks) == 2, f"Expected 2 tool chunks, got {len(tool_chunks)}"
+        assert tool_chunks[0]["choices"][0]["delta"]["tool_calls"][0]["index"] == 0
+        assert tool_chunks[1]["choices"][0]["delta"]["tool_calls"][0]["index"] == 1
+
 
 class TestNormalizeEvent:
     """Unit tests for event normalization logic."""
@@ -159,10 +179,12 @@ class TestMockLLMParity:
     """End-to-end parity tests (heavy — invoke real opencode CLI)."""
 
     @pytest.mark.parametrize("script", [
-        ROOT / "tools" / "mock_llm_scripts" / "basic.json",
-        ROOT / "tools" / "mock_llm_scripts" / "with_tool.json",
-        ROOT / "tools" / "mock_llm_scripts" / "with_permission.json",
-    ])
+    ROOT / "tools" / "mock_llm_scripts" / "basic.json",
+    ROOT / "tools" / "mock_llm_scripts" / "with_tool.json",
+    ROOT / "tools" / "mock_llm_scripts" / "with_permission.json",
+    ROOT / "tools" / "mock_llm_scripts" / "comprehensive.json",
+    ROOT / "tools" / "mock_llm_scripts" / "with_permission_multi.json",
+])
     def test_parity_script(self, script: Path):
         result = subprocess.run(
             [sys.executable, str(ROOT / "tools" / "mock_llm_parity.py"), "--script", str(script), "--timeout", "45"],
