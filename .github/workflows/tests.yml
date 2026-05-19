@@ -33,7 +33,7 @@ jobs:
           cache: 'pip'
 
       - name: Install opencode
-        run: curl -fsSL https://opencode.ai/install.sh | sh
+        run: curl -fsSL https://opencode.ai/install | bash
 
       - name: Install dependencies
         run: |
