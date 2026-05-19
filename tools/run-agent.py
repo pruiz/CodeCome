@@ -4162,48 +4162,6 @@ def _resolve_thinking_decision(
     return enabled, "provider-default"
 
 
-def build_child_command(args: argparse.Namespace) -> tuple[list[str], Optional[str], Optional[str], str, str, bool, str]:
-    """Return the child command and the resolved model/variant + sources.
-
-    Appends --model/--variant from env or codecome.yml only when
-    OPENCODE_ARGS does not already pass them. Also resolves the
-    --thinking decision per provider and returns it for the banner.
-    """
-    cmd = ["opencode", "run", "--format", "json", "--agent", args.agent]
-
-    extra_args = shlex.split(os.environ.get("OPENCODE_ARGS", ""))
-    cmd.extend(extra_args)
-
-    model, variant, model_source, variant_source = resolve_model_and_variant(
-        args.agent, extra_args
-    )
-
-    # Append --model/--variant to enforce env/yaml-resolved values when
-    # OPENCODE_ARGS did not already pass them. OPENCODE_ARGS (and any
-    # earlier --model/-m/--variant in cmd) always wins because we never
-    # touch values that came from there. Discovered defaults
-    # ('opencode session history') are display-only and are NOT
-    # enforced — opencode will pick its own default anyway, and
-    # forcing it would surprise users when they switch models in the
-    # TUI between phases.
-    _ENFORCING_SOURCES = {"env CODECOME_MODEL", "codecome.yml"}
-    _ENFORCING_VARIANT_SOURCES = {"env CODECOME_MODEL_VARIANT", "codecome.yml"}
-
-    if model and model_source in _ENFORCING_SOURCES:
-        cmd.extend(["--model", model])
-    if variant and variant_source in _ENFORCING_VARIANT_SOURCES:
-        cmd.extend(["--variant", variant])
-
-    # Decide --thinking based on env override, OPENCODE_ARGS, or
-    # per-provider default. Skip appending if it was already in
-    # extra_args (already added via cmd.extend(extra_args) above).
-    thinking_on, thinking_source = _resolve_thinking_decision(model, extra_args)
-    if thinking_on and "--thinking" not in extra_args:
-        cmd.append("--thinking")
-
-    return cmd, model, variant, model_source, variant_source, thinking_on, thinking_source
-
-
 def resolve_runtime_model_for_banner(
     args: argparse.Namespace,
     command: list[str],
@@ -4545,6 +4503,7 @@ def _consume_events(
     label: str,
     args: argparse.Namespace,
     transcript_fp: Any | None,
+    thinking_on: bool,
 ) -> RunResult:
     """Create an EventLoop, consume SSE until idle, and return RunResult."""
     event_loop = EventLoop(
@@ -4564,6 +4523,8 @@ def _consume_events(
         if args.debug:
             sys.stderr.write(json.dumps(event) + "\n")
             sys.stderr.flush()
+        if not thinking_on and event.get("type") == "reasoning":
+            return
         render_event(console_, phase_, label_, event)
 
     return event_loop.run(_render_and_log)
@@ -4623,6 +4584,7 @@ def _run_single_attempt(
                     str(args.label),
                     args,
                     transcript_fp,
+                    thinking_on,
                 )
             except Exception as exc:  # noqa: BLE001
                 consume_error_box["error"] = exc

@@ -12,6 +12,9 @@ export PATH := $(CURDIR)/.venv/bin:$(PATH)
 export PROMPT_EXTRA
 export PROMPT_EXTRA_FILE
 
+# Pass --thinking to raw opencode run when CODECOME_THINKING=1
+OPENCODE_THINKING_FLAG := $(if $(filter 1,$(CODECOME_THINKING)),--thinking,)
+
 ifndef NO_COLOR
 RED := \033[31m
 YELLOW := \033[33m
@@ -52,7 +55,7 @@ help:
 	@printf "  $(BOLD)$(CYAN)Wrapper controls:$(RESET)\n"
 	@printf "\n"
 	@printf "    $(BOLD)CODECOME_USE_WRAPPER=0$(RESET)       Bypass styled wrapper and use raw opencode run\n"
-	@printf "    $(BOLD)CODECOME_THINKING=1$(RESET)          Enable --thinking in wrapper-driven phase runs\n"
+	@printf "        $(BOLD)CODECOME_THINKING=1$(RESET)          Show model reasoning/thinking blocks in output\n"
 	@printf "    $(BOLD)OPENCODE_ARGS='...'$(RESET)          Extra flags passed through to opencode run\n"
 	@printf "    $(BOLD)CODECOME_MODEL=<id>$(RESET)          Pin the model per phase (e.g. anthropic/claude-opus-4-7)\n"
 	@printf "    $(BOLD)CODECOME_MODEL_VARIANT=<v>$(RESET)   Pin the model variant (e.g. high, max)\n"
@@ -132,7 +135,7 @@ venv-check:
 phase-1: venv-check
 	@$(PYTHON) tools/gate-check.py 1
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		opencode run --agent recon "$$(cat prompts/phase-1-recon.md)"; \
+		opencode run --agent recon $(OPENCODE_THINKING_FLAG) "$$(cat prompts/phase-1-recon.md)"; \
 	else \
 		$(PYTHON) tools/run-agent.py --phase 1 --label "Target Reconnaissance + Sandbox Bootstrap" --agent recon --prompt-file prompts/phase-1-recon.md; \
 	fi
@@ -145,7 +148,7 @@ phase-2: venv-check
 		printf "Or override (not recommended): CODECOME_ALLOW_NO_SANDBOX=1 make phase-2\n\n" ; \
 		exit 1 )
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		opencode run --agent auditor "$$(cat prompts/phase-2-audit.md)"; \
+		opencode run --agent auditor $(OPENCODE_THINKING_FLAG) "$$(cat prompts/phase-2-audit.md)"; \
 	else \
 		$(PYTHON) tools/run-agent.py --phase 2 --label "Hypothesis Generation" --agent auditor --prompt-file prompts/phase-2-audit.md; \
 	fi
@@ -153,7 +156,7 @@ phase-2: venv-check
 phase-3: venv-check
 	@$(PYTHON) tools/gate-check.py 3
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		opencode run --agent reviewer "$$(cat prompts/phase-3-review.md)"; \
+		opencode run --agent reviewer $(OPENCODE_THINKING_FLAG) "$$(cat prompts/phase-3-review.md)"; \
 	else \
 		$(PYTHON) tools/run-agent.py --phase 3 --label "Counter-analysis" --agent reviewer --prompt-file prompts/phase-3-review.md; \
 	fi
@@ -162,7 +165,7 @@ phase-4: venv-check
 	@test -n "$(FINDING)" || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) Missing required FINDING argument for Phase 4 (Validation).\n\nSpecify which finding you want to validate:\n\n    $(BOLD)make phase-4 FINDING=CC-0001$(RESET)\n\nTo list available pending findings: $(BOLD)make findings STATUS=PENDING$(RESET)\n\n" && exit 1)
 	@$(PYTHON) tools/gate-check.py 4 $(FINDING)
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		opencode run --agent validator "$$(sed 's#FINDING_PATH_OR_ID#$(FINDING)#g' prompts/phase-4-validate.md)"; \
+		opencode run --agent validator $(OPENCODE_THINKING_FLAG) "$$(sed 's#FINDING_PATH_OR_ID#$(FINDING)#g' prompts/phase-4-validate.md)"; \
 	else \
 		$(PYTHON) tools/run-agent.py --phase 4 --label "Validation" --agent validator --prompt-file prompts/phase-4-validate.md --finding "$(FINDING)"; \
 	fi
@@ -171,7 +174,7 @@ phase-5: venv-check
 	@test -n "$(FINDING)" || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) Missing required FINDING argument for Phase 5 (Exploitation).\n\nSpecify which finding you want to exploit:\n\n    $(BOLD)make phase-5 FINDING=CC-0001$(RESET)\n\nTo list available confirmed findings: $(BOLD)make findings STATUS=CONFIRMED$(RESET)\n\n" && exit 1)
 	@$(PYTHON) tools/gate-check.py 5 $(FINDING)
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		opencode run --agent exploiter "$$(sed 's#FINDING_PATH_OR_ID#$(FINDING)#g' prompts/phase-5-exploit.md)"; \
+		opencode run --agent exploiter $(OPENCODE_THINKING_FLAG) "$$(sed 's#FINDING_PATH_OR_ID#$(FINDING)#g' prompts/phase-5-exploit.md)"; \
 	else \
 		$(PYTHON) tools/run-agent.py --phase 5 --label "Exploit Development" --agent exploiter --prompt-file prompts/phase-5-exploit.md --finding "$(FINDING)"; \
 	fi
@@ -179,7 +182,7 @@ phase-5: venv-check
 phase-6: venv-check
 	@$(PYTHON) tools/gate-check.py 6
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		opencode run --agent reporter "$$(cat prompts/phase-6-report.md)"; \
+		opencode run --agent reporter $(OPENCODE_THINKING_FLAG) "$$(cat prompts/phase-6-report.md)"; \
 	else \
 		$(PYTHON) tools/run-agent.py --phase 6 --label "Reporting" --agent reporter --prompt-file prompts/phase-6-report.md; \
 	fi

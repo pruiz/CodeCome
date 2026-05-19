@@ -76,27 +76,6 @@ def test_resolve_model_and_variant_precedence(monkeypatch):
 
 
 @pytest.mark.component
-def test_build_child_command_appends_enforced_env_model(monkeypatch):
-    module = load_tool_module("run_agent_child", "tools/run-agent.py")
-    monkeypatch.setenv("OPENCODE_ARGS", "")
-    monkeypatch.setenv("CODECOME_MODEL", "env/model")
-    monkeypatch.setenv("CODECOME_MODEL_VARIANT", "high")
-
-    class Args:
-        agent = "recon"
-
-    cmd, model, variant, model_source, variant_source, thinking_on, thinking_source = module.build_child_command(Args())
-    assert cmd[:5] == ["opencode", "run", "--format", "json", "--agent"]
-    assert "--model" in cmd and "env/model" in cmd
-    assert "--variant" in cmd and "high" in cmd
-    assert "--thinking" in cmd
-    assert thinking_on is True
-    assert thinking_source == "provider-default"
-    assert model_source == "env CODECOME_MODEL"
-    assert variant_source == "env CODECOME_MODEL_VARIANT"
-
-
-@pytest.mark.component
 def test_stream_model_scan_finds_nested_provider_model_pair():
     module = load_tool_module("run_agent_scan", "tools/run-agent.py")
     event = {
@@ -597,43 +576,6 @@ def test_parse_grep_output_70_percent_threshold_for_lines_mode():
     )
     mode, _ = module._parse_grep_output(output_low)
     assert mode == "files"
-
-
-# --- build_child_command thinking interactions -----------------------------
-
-@pytest.mark.component
-def test_build_child_command_user_args_thinking_is_not_duplicated(monkeypatch):
-    module = load_tool_module("run_agent_child_user_thinking", "tools/run-agent.py")
-    monkeypatch.setenv("OPENCODE_ARGS", "--thinking")
-    monkeypatch.setenv("CODECOME_MODEL", "anthropic/claude-opus-4-7")
-    monkeypatch.delenv("CODECOME_MODEL_VARIANT", raising=False)
-    monkeypatch.delenv("CODECOME_THINKING", raising=False)
-
-    class Args:
-        agent = "recon"
-
-    cmd, _, _, _, _, thinking_on, thinking_source = module.build_child_command(Args())
-    # Exactly one --thinking even though anthropic default is off.
-    assert cmd.count("--thinking") == 1
-    assert thinking_on is True
-    assert thinking_source == "user-args"
-
-
-@pytest.mark.component
-def test_build_child_command_anthropic_default_omits_thinking(monkeypatch):
-    module = load_tool_module("run_agent_child_anthropic_no_thinking", "tools/run-agent.py")
-    monkeypatch.setenv("OPENCODE_ARGS", "")
-    monkeypatch.setenv("CODECOME_MODEL", "anthropic/claude-opus-4-7")
-    monkeypatch.delenv("CODECOME_MODEL_VARIANT", raising=False)
-    monkeypatch.delenv("CODECOME_THINKING", raising=False)
-
-    class Args:
-        agent = "recon"
-
-    cmd, _, _, _, _, thinking_on, thinking_source = module.build_child_command(Args())
-    assert "--thinking" not in cmd
-    assert thinking_on is False
-    assert thinking_source == "provider-default"
 
 
 @pytest.mark.unit
