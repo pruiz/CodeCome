@@ -62,6 +62,9 @@ class EventLoop:
         self._stopped = False
         self._seen_message_ids: set[str] = set()
         self._last_message_sync_at = 0.0
+        self._pending_recovery_sync = False
+        self._emitted_signatures: set[tuple[str, str]] = set()
+        self._idle_event_to_sync_and_emit: dict[str, Any] | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -92,6 +95,7 @@ class EventLoop:
             workspace_dir=self.workspace_dir,
             reconnect=True,
             max_reconnects=10,
+            on_reconnect=self.trigger_recovery_sync,
         )
 
         try:
@@ -111,20 +115,52 @@ class EventLoop:
                         _last_permission_error = perm_err
                     continue
 
+                # Capture idle events for deferred sync-and-emit
+                _is_idle = self._is_session_idle(event)
+                if _is_idle and self._idle_event_to_sync_and_emit is None:
+                    self._idle_event_to_sync_and_emit = event
+
                 # Let the tracker accumulate deltas and produce finalized events.
                 finalized_events = self._tracker.ingest(event)
 
                 if self._should_sync_session_messages(event):
                     finalized_events.extend(self._sync_session_messages())
 
+                # Filter out idle events from finalized_events if we have a deferred idle
+                # (to avoid double-emitting: once from tracker, once from idle handler)
+                if self._idle_event_to_sync_and_emit is not None:
+                    finalized_events = [
+                        fe for fe in finalized_events
+                        if not (
+                            fe.get("type") == "session.idle" or
+                            (fe.get("type") == "session.status" and fe.get("properties", {}).get("status", {}).get("type") == "idle")
+                        )
+                    ]
+
                 for fe in finalized_events:
+                    sig = (fe.get("type", ""), fe.get("part", {}).get("id", ""))
+                    if sig[1] and sig in self._emitted_signatures:
+                        continue
+                    self._emitted_signatures.add(sig)
                     _any_step_finish_seen, _step_finish_count, _last_finish_reason, _last_finish_tokens = self._update_result(
                         fe, _any_step_finish_seen, _step_finish_count, _last_finish_reason, _last_finish_tokens
                     )
                     emit_event(render_fn, self.console, self.phase, self.label, fe)
 
-                # Stop consuming when session goes idle.
+                # Stop consuming when session goes idle - but sync and then emit the idle event.
                 if self._is_session_idle(event):
+                    idle_event = self._idle_event_to_sync_and_emit
+                    self._idle_event_to_sync_and_emit = None
+                    # Sync to catch any final events SSE might have missed
+                    self._sync_session_messages()
+                    # Now emit the idle event
+                    idle_sig = (event.get("type", ""), event.get("properties", {}).get("sessionID", ""))
+                    if idle_sig[1] and idle_sig in self._emitted_signatures:
+                        pass  # already emitted via finalize path
+                    else:
+                        if idle_sig[1]:
+                            self._emitted_signatures.add(idle_sig)
+                        emit_event(render_fn, self.console, self.phase, self.label, event)
                     return self._build_result(
                         _any_step_finish_seen,
                         _step_finish_count,
@@ -153,6 +189,10 @@ class EventLoop:
         self._stopped = True
         if self._client is not None:
             self._client.stop()
+
+    def trigger_recovery_sync(self) -> None:
+        """ Signal that a recovery sync is needed after SSE reconnection. """
+        self._pending_recovery_sync = True
 
     @staticmethod
     def _build_result(
@@ -241,17 +281,22 @@ class EventLoop:
         return f"tool permission rejected: {tool}"
 
     def _should_sync_session_messages(self, event: dict[str, Any]) -> bool:
-        """Return True when a session snapshot sync may reveal finalized parts."""
+        """Return True when a session snapshot sync may reveal finalized parts.
+
+        Sync is only triggered in two cases:
+        1. After SSE reconnection (recovery sync via _pending_recovery_sync flag)
+        2. Explicit idle event - but caller handles idle emission, not us
+        """
+        if self._pending_recovery_sync:
+            self._pending_recovery_sync = False
+            return True
+
         event_type = event.get("type", "")
-        if event_type in {"session.idle", "session.updated", "todo.updated"}:
+        if event_type == "session.idle":
             return True
         if event_type == "session.status":
             status = event.get("properties", {}).get("status", {})
             if status.get("type") == "idle":
-                return True
-        if event_type in {"session.status", "session.diff", "server.heartbeat"}:
-            now = time.time()
-            if now - self._last_message_sync_at >= 0.5:
                 return True
         return False
 
@@ -307,6 +352,7 @@ class EventLoop:
                     continue
                 part_id = part.get("id")
                 if isinstance(part_id, str) and self._tracker.has_seen(part_id):
+                    self._tracker.mark_seen(part_id)
                     continue
                 synthesized = {
                     "type": "message.part.updated",

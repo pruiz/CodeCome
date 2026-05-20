@@ -190,6 +190,10 @@ class StateTracker:
         """ Return True if we have already processed a finalized event for this part. """
         return part_id in self._seen_part_ids
 
+    def mark_seen(self, part_id: str) -> None:
+        """ Record that we have processed this part. """
+        self._seen_part_ids.add(part_id)
+
     def is_pending(self, part_id: str) -> bool:
         """ Return True if we have seen deltas but not yet the updated event. """
         return part_id in self._pending_part_ids

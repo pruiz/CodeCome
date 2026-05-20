@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import time
 import urllib.request
-from typing import Iterator
+from typing import Any, Callable, Iterator
 
 
 # Exponential backoff config for reconnect.
@@ -66,17 +66,20 @@ class SseClient:
         workspace_dir: str | None = None,
         reconnect: bool = True,
         max_reconnects: int = 10,
+        on_reconnect: Callable[[], None] | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.auth_token = auth_token
         self.workspace_dir = workspace_dir
         self.reconnect = reconnect
         self.max_reconnects = max_reconnects
+        self.on_reconnect = on_reconnect
 
         self._started = False
         self._stopped = False
         self._last_heartbeat = 0.0
         self._reconnect_count = 0
+        self._first_connection_done = False
 
     def events(self) -> Iterator[dict]:
         """ Yield parsed SSE event JSON dicts.
@@ -95,6 +98,9 @@ class SseClient:
                     if self._stopped:
                         return
                     self._on_event(event)
+                    if self._first_connection_done and self.on_reconnect:
+                        self.on_reconnect()
+                    self._first_connection_done = True
                     yield event
             except SseClientError:
                 if not self.reconnect or self._stopped:
