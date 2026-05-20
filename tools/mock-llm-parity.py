@@ -392,6 +392,12 @@ def main() -> int:
         config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
         run_events = run_reference(args.prompt, args.model, args.agent, args.timeout)
+
+        # Clean up files created by run_reference to ensure serve starts with a clean workspace.
+        # This prevents 'exists' metadata in write tool from reflecting leftover state.
+        for f in ROOT.glob("tmp/parity-*.txt"):
+            f.unlink()
+
         serve_events = run_serve(args.prompt, args.model, args.agent, args.timeout)
     finally:
         # --- Restore original provider URL --------------------------------
