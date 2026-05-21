@@ -212,3 +212,21 @@ class TestMockLLMParity:
             f"Parity failed for {script.name}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
         )
         assert "Parity OK" in result.stdout
+
+    @pytest.mark.parametrize("script,error_arg", [
+        (ROOT / "tools" / "mock_llm_scripts" / "rate_limit_retry.json", ["--429-after", "1"]),
+        (ROOT / "tools" / "mock_llm_scripts" / "internal_error.json", ["--500-after", "1"]),
+    ])
+    def test_parity_script_with_error(self, script: Path, error_arg: list[str]):
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "tools" / "mock-llm-parity.py"),
+             "--script", str(script), "--timeout", "60"] + error_arg,
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=180.0,
+        )
+        assert result.returncode == 0, (
+            f"Parity failed for {script.name}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        )
+        assert "Parity OK" in result.stdout

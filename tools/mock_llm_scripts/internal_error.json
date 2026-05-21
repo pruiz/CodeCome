@@ -1,0 +1,6 @@
+[
+  {"type": "text", "content": "Starting work."},
+  {"type": "done"},
+  {"type": "text", "content": "Continuing."},
+  {"type": "done"}
+]

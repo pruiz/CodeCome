@@ -36,7 +36,10 @@ DEFAULT_TIMEOUT_S = 30.0
 MOCK_HOST = "127.0.0.1"
 
 # Events that only appear in the serve path and should be ignored for parity.
-_SERVE_ONLY_TYPES = {"server.connected", "server.heartbeat", "session.status", "session.idle", "message.updated", "file.edited", "file.watcher.updated", "todo.updated"}
+# Note: session.status (retry/busy) is NOT serve-only when _CODECOME_INSIDE_HARNESS=1
+# because the status-forwarder plugin emits them to stdout.
+# session.idle is deprecated and serve-only.
+_SERVE_ONLY_TYPES = {"server.connected", "server.heartbeat", "session.idle", "message.updated", "file.edited", "file.watcher.updated", "todo.updated"}
 
 
 def _step_sort_key(ev: dict[str, Any]) -> tuple[int, str]:
@@ -45,17 +48,39 @@ def _step_sort_key(ev: dict[str, Any]) -> tuple[int, str]:
     if t == "step_start":
         return (0, "")
     if t == "text":
-        return (1, "")
+        return (1, ev.get("part", {}).get("text", "")[:50])
     if t == "tool_use":
         call_id = str(ev.get("part", {}).get("callID", ""))
         return (2, call_id)
     if t == "step_finish":
         return (3, "")
+    # session.status and error events sort after tool_use but before step_finish
+    # to keep them grouped with the step they occur in.
+    if t in ("session.status", "error"):
+        return (2.5, "")
     return (4, "")
 
 
 def _sort_events_by_step(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Group events by step (delimited by step_start) and sort within each step."""
+    """Group events by step (delimited by step_start) and sort within each step.
+    Also deduplicate session.status events by status_type to handle
+    transient status changes that don't affect parity.
+    """
+    # Deduplicate session.status events by (status_type, status_message).
+    # Both run and serve may emit slightly different counts of busy/idle
+    # events depending on timing, but the important ones (retry on error)
+    # should match.
+    seen_status: set[tuple] = set()
+    deduped: list[dict[str, Any]] = []
+    for ev in events:
+        if ev.get("type") == "session.status":
+            key = (ev.get("status_type"), ev.get("status_message"))
+            if key in seen_status:
+                continue
+            seen_status.add(key)
+        deduped.append(ev)
+    events = deduped
+
     groups: list[list[dict[str, Any]]] = []
     current: list[dict[str, Any]] = []
     for ev in events:
@@ -97,7 +122,7 @@ def _find_free_port(host: str = MOCK_HOST) -> int:
         return int(s.getsockname()[1])
 
 
-def start_mock_server(script_path: Path, host: str = MOCK_HOST) -> MockServerInfo:
+def start_mock_server(script_path: Path, host: str = MOCK_HOST, after_429: int = -1, after_500: int = -1) -> MockServerInfo:
     port = _find_free_port(host)
     cmd = [
         sys.executable,
@@ -107,6 +132,10 @@ def start_mock_server(script_path: Path, host: str = MOCK_HOST) -> MockServerInf
         "--script",
         str(script_path),
     ]
+    if after_429 >= 0:
+        cmd.extend(["--429-after", str(after_429)])
+    if after_500 >= 0:
+        cmd.extend(["--500-after", str(after_500)])
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.DEVNULL,
@@ -192,7 +221,9 @@ def run_reference(prompt: str, model: str, agent: str, timeout: float) -> list[d
         model,
         prompt,
     ]
-    result = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=timeout)
+    env = os.environ.copy()
+    env["_CODECOME_INSIDE_HARNESS"] = "1"
+    result = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=timeout, env=env)
     events: list[dict[str, Any]] = []
     for line in result.stdout.splitlines():
         line = line.strip()
@@ -285,6 +316,32 @@ def normalize_event(ev: dict[str, Any]) -> dict[str, Any] | None:
     if ev_type in _SERVE_ONLY_TYPES:
         return None
     out = dict(ev)
+
+    # Normalize session.error to "error" type to match run path output.
+    # Run emits: {"type": "error", error: {...}}
+    # Serve emits: {"type": "session.error", properties: {sessionID, error: {...}}}
+    if ev_type == "session.error":
+        props = out.pop("properties", {})
+        out["type"] = "error"
+        out["error"] = props.get("error")
+        out.pop("timestamp", None)
+        return out
+
+    # Normalize session.status to a flat structure for comparison.
+    # Both paths emit the same session.status event structure when
+    # _CODECOME_INSIDE_HARNESS=1 is set (status-forwarder plugin active).
+    if ev_type == "session.status":
+        props = out.pop("properties", {})
+        status = props.get("status", {})
+        out["status_type"] = status.get("type")
+        out["status_attempt"] = status.get("attempt")
+        out["status_message"] = status.get("message")
+        out["status_next"] = status.get("next")
+        out.pop("timestamp", None)
+        out.pop("sessionID", None)
+        out.pop("id", None)
+        return out
+
     out.pop("timestamp", None)
     out.pop("sessionID", None)
     out.pop("id", None)
@@ -359,6 +416,8 @@ def main() -> int:
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--agent", default=DEFAULT_AGENT)
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_S)
+    parser.add_argument("--429-after", type=int, default=-1, help="Make mock server return 429 after this many requests (-1 = disabled)")
+    parser.add_argument("--500-after", type=int, default=-1, help="Make mock server return 500 after this many requests (-1 = disabled)")
     parser.add_argument(
         "--out-dir",
         type=Path,
@@ -387,7 +446,7 @@ def main() -> int:
 
     try:
         # --- Start mock server and rewrite provider URL -------------------
-        mock_info = start_mock_server(args.script)
+        mock_info = start_mock_server(args.script, after_429=args.__dict__.get("429_after", -1), after_500=args.__dict__.get("500_after", -1))
         config["provider"]["test"]["options"]["baseURL"] = f"http://{MOCK_HOST}:{mock_info.port}/v1"
         config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 

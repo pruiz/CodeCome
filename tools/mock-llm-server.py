@@ -86,6 +86,9 @@ class MockLLMHandler(BaseHTTPRequestHandler):
     script: list[dict] = []
     turns: list[list[dict]] = []
     server_version = "MockLLM/1.0"
+    request_count: int = 0
+    after_429: int = -1
+    after_500: int = -1
 
     def log_message(self, format: str, *args: object) -> None:
         pass
@@ -132,11 +135,21 @@ class MockLLMHandler(BaseHTTPRequestHandler):
             except Exception:
                 payload = {}
 
+            cls = self.__class__
+            cls.request_count += 1
+
+            if cls.after_429 >= 0 and cls.request_count > cls.after_429:
+                self._send_json({"error": {"type": "rate_limit", "message": "Too Many Requests"}}, status=429)
+                return
+            if cls.after_500 >= 0 and cls.request_count > cls.after_500:
+                self._send_json({"error": {"type": "internal_error", "message": "Internal error"}}, status=500)
+                return
+
             # Determine which turn to serve based on conversation history.
             # Each assistant message in the history corresponds to a completed turn.
             messages = payload.get("messages", [])
             assistant_count = sum(1 for m in messages if m.get("role") == "assistant")
-            turns = self.__class__.turns
+            turns = cls.turns
             turn_index = assistant_count
             if turn_index >= len(turns):
                 turn_index = len(turns) - 1 if turns else 0
@@ -334,6 +347,8 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=0, help="Port (0 = ephemeral)")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--script", type=Path, required=True)
+    parser.add_argument("--429-after", type=int, default=-1, help="Return 429 after this many requests (-1 = disabled)")
+    parser.add_argument("--500-after", type=int, default=-1, help="Return 500 after this many requests (-1 = disabled)")
     args = parser.parse_args()
 
     if not args.script.exists():
@@ -345,6 +360,9 @@ def main() -> int:
 
     MockLLMHandler.script = script
     MockLLMHandler.turns = _parse_script_into_turns(script)
+    MockLLMHandler.after_429 = args.__dict__.get("429_after", -1)
+    MockLLMHandler.after_500 = args.__dict__.get("500_after", -1)
+    MockLLMHandler.request_count = 0
 
     with socketserver.ThreadingTCPServer((args.host, args.port), MockLLMHandler) as httpd:
         actual_port = httpd.server_address[1]

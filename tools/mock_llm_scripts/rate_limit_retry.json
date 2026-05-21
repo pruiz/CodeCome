@@ -1,0 +1,7 @@
+[
+  {"type": "text", "content": "I'll try that."},
+  {"type": "done"},
+  {"type": "text", "content": "Actually let me look that up."},
+  {"type": "tool_call", "id": "call_1", "name": "grep", "arguments": {"pattern": "main", "path": "src"}},
+  {"type": "done"}
+]
