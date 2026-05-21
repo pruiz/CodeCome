@@ -1,0 +1,6 @@
+[
+  {"type": "text", "content": "Reading secret file."},
+  {"type": "tool_call", "id": "call_1", "name": "read", "arguments": {"filePath": "secret.env"}},
+  {"type": "text", "content": "Permission denied, moving on."},
+  {"type": "done"}
+]

@@ -16,5 +16,23 @@
       "sandbox/.env": "allow",
       "*/sandbox/.env": "allow"
     }
+  },
+  "provider": {
+    "test": {
+      "type": "openai",
+      "options": {
+        "baseURL": "http://127.0.0.1:61167/v1",
+        "apiKey": "sk-test"
+      },
+      "models": {
+        "mockmodel": {}
+      }
+    }
+  },
+  "agent": {
+    "test": {
+      "temperature": 0,
+      "top_p": 1
+    }
   }
 }

@@ -471,9 +471,9 @@ CodeCome ships reusable phase prompts under `prompts/`:
 ### Wrapper environment variables
 
     CODECOME_USE_WRAPPER=0              # bypass the styled wrapper
-    CODECOME_THINKING=1                 # force --thinking on
-    CODECOME_THINKING=0                 # force --thinking off
-    CODECOME_RENDER_REASONING=0         # suppress on-screen Thinking panels
+    CODECOME_THINKING=1                 # show model reasoning/thinking blocks in output
+    CODECOME_THINKING=0                 # hide model reasoning/thinking blocks
+    CODECOME_RENDER_REASONING=0         # suppress on-screen Thinking panels (independent override)
     CODECOME_REASONING_MAX_CHARS=4000   # truncate long reasoning blocks
     CODECOME_SANDBOX_RENDER=0           # disable structured Sandbox panel
     CODECOME_SANDBOX_VALIDATE_STDERR_LINES=20
@@ -482,11 +482,11 @@ CodeCome ships reusable phase prompts under `prompts/`:
     CODECOME_BOOTSTRAP_DRY_RUN=1        # force --dry-run on sandbox apply/regenerate
     CODECOME_BASH_SHIM_RENDER=0         # disable rtk/cat/head/tail/rg/ls/find/tree routing
     CODECOME_BASH_SHIM_LS_STRIP_LONG_FORMAT=0
-    OPENCODE_ARGS='...'                 # extra flags forwarded to opencode run
+    OPENCODE_ARGS='...'                 # extra flags for opencode run (forwarded directly when CODECOME_USE_WRAPPER=0; in wrapper mode only --model, --variant and --thinking are used)
     CODECOME_MODEL=<id>                 # pin model per phase, e.g. anthropic/claude-opus-4-7
     CODECOME_MODEL_VARIANT=<v>          # pin model variant, e.g. high, max
 
-### Model resolution and the `--thinking` flag
+### Model resolution and thinking display
 
 The wrapper resolves the effective model in this order:
 
@@ -496,15 +496,15 @@ The wrapper resolves the effective model in this order:
 4. the model used in your most recent OpenCode session for this project (best-effort, read from OpenCode's local DB)
 5. unknown
 
-The chosen value is shown in the phase header banner along with its source. When the value comes from env or YAML, the wrapper appends `--model` / `--variant` to `opencode run` so the banner is the truth. Discovered defaults (the last-session lookup) are display-only and are not enforced.
+The chosen value is shown in the phase header banner along with its source.
 
-Per-provider `--thinking` defaults:
+Per-provider thinking-display defaults:
 
 - `anthropic/*` → off. Claude already interleaves thinking with normal `text` blocks via OpenCode's interleaved-thinking beta header, so `Assistant` panels already show the model's working.
-- `openai/*`, `xai/*`, `github-copilot/*`, `groq/*`, `cerebras/*`, `google/*`, `google-vertex/*` → on. These providers hide reasoning unless `--thinking` is passed; without it the wrapper would only see one or zero `text` events per phase.
+- `openai/*`, `xai/*`, `github-copilot/*`, `groq/*`, `cerebras/*`, `google/*`, `google-vertex/*` → on.
 - Anything else (unknown / future provider) → on. Cheaper to over-surface than under-surface in vulnerability research.
 
-Override precedence: `--thinking` already in `OPENCODE_ARGS` > `CODECOME_THINKING` env > per-provider default. Some providers bill reasoning tokens; set `CODECOME_THINKING=0` per phase to opt out without losing the styled wrapper.
+Override precedence: `CODECOME_THINKING` env > per-provider default. `CODECOME_RENDER_REASONING=0` acts as an independent escape hatch that suppresses rendering even when thinking is enabled. Some providers bill reasoning tokens; set `CODECOME_THINKING=0` per phase to opt out without losing the styled wrapper.
 
 Print the full resolution table for any agent without launching a phase:
 

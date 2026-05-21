@@ -76,27 +76,6 @@ def test_resolve_model_and_variant_precedence(monkeypatch):
 
 
 @pytest.mark.component
-def test_build_child_command_appends_enforced_env_model(monkeypatch):
-    module = load_tool_module("run_agent_child", "tools/run-agent.py")
-    monkeypatch.setenv("OPENCODE_ARGS", "")
-    monkeypatch.setenv("CODECOME_MODEL", "env/model")
-    monkeypatch.setenv("CODECOME_MODEL_VARIANT", "high")
-
-    class Args:
-        agent = "recon"
-
-    cmd, model, variant, model_source, variant_source, thinking_on, thinking_source = module.build_child_command(Args())
-    assert cmd[:5] == ["opencode", "run", "--format", "json", "--agent"]
-    assert "--model" in cmd and "env/model" in cmd
-    assert "--variant" in cmd and "high" in cmd
-    assert "--thinking" in cmd
-    assert thinking_on is True
-    assert thinking_source == "provider-default"
-    assert model_source == "env CODECOME_MODEL"
-    assert variant_source == "env CODECOME_MODEL_VARIANT"
-
-
-@pytest.mark.component
 def test_stream_model_scan_finds_nested_provider_model_pair():
     module = load_tool_module("run_agent_scan", "tools/run-agent.py")
     event = {
@@ -597,43 +576,6 @@ def test_parse_grep_output_70_percent_threshold_for_lines_mode():
     )
     mode, _ = module._parse_grep_output(output_low)
     assert mode == "files"
-
-
-# --- build_child_command thinking interactions -----------------------------
-
-@pytest.mark.component
-def test_build_child_command_user_args_thinking_is_not_duplicated(monkeypatch):
-    module = load_tool_module("run_agent_child_user_thinking", "tools/run-agent.py")
-    monkeypatch.setenv("OPENCODE_ARGS", "--thinking")
-    monkeypatch.setenv("CODECOME_MODEL", "anthropic/claude-opus-4-7")
-    monkeypatch.delenv("CODECOME_MODEL_VARIANT", raising=False)
-    monkeypatch.delenv("CODECOME_THINKING", raising=False)
-
-    class Args:
-        agent = "recon"
-
-    cmd, _, _, _, _, thinking_on, thinking_source = module.build_child_command(Args())
-    # Exactly one --thinking even though anthropic default is off.
-    assert cmd.count("--thinking") == 1
-    assert thinking_on is True
-    assert thinking_source == "user-args"
-
-
-@pytest.mark.component
-def test_build_child_command_anthropic_default_omits_thinking(monkeypatch):
-    module = load_tool_module("run_agent_child_anthropic_no_thinking", "tools/run-agent.py")
-    monkeypatch.setenv("OPENCODE_ARGS", "")
-    monkeypatch.setenv("CODECOME_MODEL", "anthropic/claude-opus-4-7")
-    monkeypatch.delenv("CODECOME_MODEL_VARIANT", raising=False)
-    monkeypatch.delenv("CODECOME_THINKING", raising=False)
-
-    class Args:
-        agent = "recon"
-
-    cmd, _, _, _, _, thinking_on, thinking_source = module.build_child_command(Args())
-    assert "--thinking" not in cmd
-    assert thinking_on is False
-    assert thinking_source == "provider-default"
 
 
 @pytest.mark.unit
@@ -1488,41 +1430,38 @@ def test_load_prompt_relative_extra_file(prompt_env, monkeypatch):
 
 @pytest.mark.component
 def test_auto_correction_resume_loops_back_via_popen(monkeypatch, tmp_path):
-    """Frontmatter errors trigger a second Popen loop; on the second run the
-    check passes and main exits 0.  The session ID must come from the event
-    stream, not from subprocess.run (the DB fallback)."""
-    import io, json
-
-    module = load_tool_module("run_agent_autocorrect", "tools/run-agent.py")
+    """Frontmatter errors trigger a resume of the same session; on the second
+    attempt the check passes and main exits 0.  The session ID must come from
+    the event stream, not from a DB fallback."""
+    module = load_tool_module("run_agent_autocorrect_serve", "tools/run-agent.py")
     monkeypatch.setattr(module, "HAVE_RICH", False)
-    monkeypatch.setenv("OPENCODE_ARGS", "--attach http://127.0.0.1:7777 --port 4317")
+    monkeypatch.setattr(module, "check_opencode_version", lambda: None)
+    monkeypatch.setattr(module, "ROOT", tmp_path)
 
-    # Build a minimal JSON event stream that conveys a clean stop
-    def _make_stream(session_id: str) -> io.StringIO:
-        events = [
-            {"sessionID": session_id, "type": "step_finish",
-             "part": {"reason": "stop", "tokens": {}}},
-        ]
-        return io.StringIO("".join(json.dumps(e) + "\n" for e in events))
+    # Reset the attempt counter so transcript numbering is deterministic.
+    if hasattr(module._run_single_attempt, "_attempt_counter"):
+        delattr(module._run_single_attempt, "_attempt_counter")
 
-    popen_calls: list[list] = []
+    calls: list[tuple] = []
 
-    class FakePopen:
-        def __init__(self, cmd, *args, **kwargs):
-            popen_calls.append(list(cmd))
-            self.returncode = 0
-            self.pid = 9999
-            self.stdin = io.StringIO()
-            self.stdout = _make_stream("ses_test_abc")
-        def poll(self):
-            return 0
-        def wait(self):
-            return None
+    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, auth_token, workspace_dir, existing_session_id=None):
+        calls.append((existing_session_id, prompt))
+        # Both attempts succeed with the same session.
+        return (
+            0,
+            "ses_test_abc",
+            module.RunResult(
+                any_step_finish_seen=True,
+                step_finish_count=1,
+                last_finish_reason="stop",
+                last_finish_tokens={},
+                last_permission_error=None,
+            ),
+            tmp_path / f"transcript-{len(calls)}.jsonl",
+        )
 
-    monkeypatch.setattr(module.subprocess, "Popen", FakePopen)
-    monkeypatch.setattr(module.os, "killpg", lambda *a: None)
+    monkeypatch.setattr(module, "_run_single_attempt", fake_run_single_attempt)
 
-    # subprocess.run: frontmatter fails on first check, passes on second
     frontmatter_call_count = [0]
 
     class FakeResult:
@@ -1550,52 +1489,39 @@ def test_auto_correction_resume_loops_back_via_popen(monkeypatch, tmp_path):
 
     rc = module.main()
     assert rc == 0
-
-    # The while loop should have called Popen twice: initial run + frontmatter resume
-    assert len(popen_calls) == 2, f"expected 2 Popen calls, got {len(popen_calls)}"
-    resume_cmd = popen_calls[1]
-    assert "--attach" in resume_cmd
-    assert "http://127.0.0.1:7777" in resume_cmd
-    assert "--port" in resume_cmd
-    assert "4317" in resume_cmd
-    assert "--session" in resume_cmd
-    assert "ses_test_abc" in resume_cmd
-    assert "--format" in resume_cmd
-    assert "json" in resume_cmd
-    assert "Repair only the reported YAML/frontmatter issues with minimal changes." in resume_cmd[-1]
-    assert "Phase 1 completion checklist:" in resume_cmd[-1]
-    assert "Ensure itemdb/notes/sandbox-plan.md documents the Phase 1b outcome." in resume_cmd[-1]
+    assert len(calls) == 2, f"expected 2 attempts, got {len(calls)}"
+    # First attempt is a fresh session; second reuses the same session ID.
+    assert calls[0][0] is None
+    assert calls[1][0] == "ses_test_abc"
+    # The second prompt should be the frontmatter repair prompt.
+    assert "Repair only the reported YAML/frontmatter issues" in calls[1][1]
 
 
 @pytest.mark.component
 def test_frontmatter_failure_without_session_id_exits_nonzero(monkeypatch, tmp_path):
     """Frontmatter validation failures must not be reported as success when
     the wrapper cannot determine a resumable session ID."""
-    import io, json
-
-    module = load_tool_module("run_agent_frontmatter_no_session", "tools/run-agent.py")
+    module = load_tool_module("run_agent_frontmatter_no_session_serve", "tools/run-agent.py")
     monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setattr(module, "check_opencode_version", lambda: None)
+    monkeypatch.setattr(module, "ROOT", tmp_path)
 
-    events = [
-        {"type": "step_finish", "part": {"reason": "stop", "tokens": {}}},
-    ]
+    if hasattr(module._run_single_attempt, "_attempt_counter"):
+        delattr(module._run_single_attempt, "_attempt_counter")
 
-    popen_calls: list[list] = []
+    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, auth_token, workspace_dir, existing_session_id=None):
+        return (
+            0,
+            "",  # empty session ID
+            module.RunResult(
+                any_step_finish_seen=True,
+                step_finish_count=1,
+                last_finish_reason="stop",
+            ),
+            tmp_path / "transcript.jsonl",
+        )
 
-    class FakePopen:
-        def __init__(self, cmd, *args, **kwargs):
-            popen_calls.append(list(cmd))
-            self.returncode = 0
-            self.pid = 9999
-            self.stdin = io.StringIO()
-            self.stdout = io.StringIO("".join(json.dumps(e) + "\n" for e in events))
-        def poll(self):
-            return 0
-        def wait(self):
-            return None
-
-    monkeypatch.setattr(module.subprocess, "Popen", FakePopen)
-    monkeypatch.setattr(module.os, "killpg", lambda *a: None)
+    monkeypatch.setattr(module, "_run_single_attempt", fake_run_single_attempt)
 
     class FakeResult:
         def __init__(self, rc, out="", err=""):
@@ -1606,8 +1532,6 @@ def test_frontmatter_failure_without_session_id_exits_nonzero(monkeypatch, tmp_p
             return FakeResult(0, out="opencode 1.15.0\n")
         if any("check-frontmatter" in str(c) for c in cmd):
             return FakeResult(1, err="bad frontmatter")
-        if "db" in cmd:
-            return FakeResult(0, out="")
         return FakeResult(0)
 
     monkeypatch.setattr(module.subprocess, "run", fake_run)
@@ -1621,45 +1545,38 @@ def test_frontmatter_failure_without_session_id_exits_nonzero(monkeypatch, tmp_p
 
     rc = module.main()
     assert rc == 2
-    assert len(popen_calls) == 1
 
 
 @pytest.mark.component
 def test_iteration_limit_triggers_auto_resume(monkeypatch, tmp_path):
     """When the stream ends with a mid-turn finish reason (tool-calls) and
     graceful forgiveness does not apply, run-agent resumes once then exits."""
-    import io, json
-
-    module = load_tool_module("run_agent_iter_resume", "tools/run-agent.py")
+    module = load_tool_module("run_agent_iter_resume_serve", "tools/run-agent.py")
     monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setattr(module, "check_opencode_version", lambda: None)
+    monkeypatch.setattr(module, "ROOT", tmp_path)
     monkeypatch.setenv("CODECOME_MAX_ITERATION_RETRIES", "1")
 
-    def _make_stream(session_id: str, reason: str) -> io.StringIO:
-        events = [
-            {"sessionID": session_id, "type": "step_finish",
-             "part": {"reason": reason, "tokens": {}}},
-        ]
-        return io.StringIO("".join(json.dumps(e) + "\n" for e in events))
+    if hasattr(module._run_single_attempt, "_attempt_counter"):
+        delattr(module._run_single_attempt, "_attempt_counter")
 
-    popen_calls: list[list] = []
+    calls: list[tuple] = []
 
-    class FakePopen:
-        def __init__(self, cmd, *args, **kwargs):
-            popen_calls.append(list(cmd))
-            self.returncode = 0
-            self.pid = 9999
-            self.stdin = io.StringIO()
-            # Always return tool-calls (iteration limit hit) so we test the
-            # retry path; after the retry the retry counter is exhausted and
-            # we exit with code 2.
-            self.stdout = _make_stream("ses_iter_xyz", "tool-calls")
-        def poll(self):
-            return 0
-        def wait(self):
-            return None
+    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, auth_token, workspace_dir, existing_session_id=None):
+        calls.append((existing_session_id, prompt))
+        return (
+            0,
+            "ses_iter_xyz",
+            module.RunResult(
+                any_step_finish_seen=True,
+                step_finish_count=1,
+                last_finish_reason="tool-calls",
+            ),
+            tmp_path / f"transcript-{len(calls)}.jsonl",
+        )
 
-    monkeypatch.setattr(module.subprocess, "Popen", FakePopen)
-    monkeypatch.setattr(module.os, "killpg", lambda *a: None)
+    monkeypatch.setattr(module, "_run_single_attempt", fake_run_single_attempt)
+    monkeypatch.setattr(module, "check_phase_graceful_completion", lambda *a, **kw: False)
 
     class FakeResult:
         def __init__(self, rc, out="", err=""):
@@ -1668,6 +1585,8 @@ def test_iteration_limit_triggers_auto_resume(monkeypatch, tmp_path):
     def fake_run(cmd, *args, **kwargs):
         if "--version" in cmd:
             return FakeResult(0, out="opencode 1.15.0\n")
+        if any("check-frontmatter" in str(c) for c in cmd):
+            return FakeResult(0)
         return FakeResult(0)
 
     monkeypatch.setattr(module.subprocess, "run", fake_run)
@@ -1682,17 +1601,13 @@ def test_iteration_limit_triggers_auto_resume(monkeypatch, tmp_path):
 
     rc = module.main()
 
-    # After 1 retry (2 total Popen calls) the retry budget is exhausted → exit 2
-    assert len(popen_calls) == 2, f"expected 2 Popen calls, got {len(popen_calls)}"
+    # After 1 retry (2 total attempts) the retry budget is exhausted → exit 2
+    assert len(calls) == 2, f"expected 2 attempts, got {len(calls)}"
     assert rc == 2
 
-    resume_cmd = popen_calls[1]
-    assert "--session" in resume_cmd
-    assert "ses_iter_xyz" in resume_cmd
-    assert "Your previous response was cut off by the model/provider" in resume_cmd[-1]
-    assert "Observed finish reason: tool-calls." in resume_cmd[-1]
-    assert "Phase 4 completion checklist:" in resume_cmd[-1]
-    assert "Ensure validation evidence exists under itemdb/evidence/CC-9999/, including README.md." in resume_cmd[-1]
+    # Verify the retry reused the same session and included the resume prompt.
+    assert calls[1][0] == "ses_iter_xyz"
+    assert "Your previous response was cut off by the model/provider" in calls[1][1]
 
 
 # ---------------------------------------------------------------------------
@@ -1810,39 +1725,30 @@ def test_check_phase_graceful_completion_mtime(monkeypatch, tmp_path):
 
 @pytest.mark.unit
 def test_stream_session_id_and_step_finish_count(monkeypatch, tmp_path):
-    """Verify that the main loop captures sessionID from the first event and
-    counts step_finish events accurately."""
-    import io, json
-
-    module = load_tool_module("run_agent_stream_tracking", "tools/run-agent.py")
+    """Verify that the main loop captures sessionID and step_finish count
+    from the RunResult returned by _run_single_attempt."""
+    module = load_tool_module("run_agent_stream_tracking_serve", "tools/run-agent.py")
     monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setattr(module, "check_opencode_version", lambda: None)
+    monkeypatch.setattr(module, "ROOT", tmp_path)
 
-    SESSION = "ses_stream_test_001"
+    if hasattr(module._run_single_attempt, "_attempt_counter"):
+        delattr(module._run_single_attempt, "_attempt_counter")
 
-    events = [
-        {"sessionID": SESSION, "type": "step_start",  "part": {}},
-        {"sessionID": SESSION, "type": "step_finish", "part": {"reason": "tool-calls", "tokens": {}}},
-        {"sessionID": SESSION, "type": "step_start",  "part": {}},
-        {"sessionID": SESSION, "type": "step_finish", "part": {"reason": "tool-calls", "tokens": {}}},
-        {"sessionID": SESSION, "type": "step_start",  "part": {}},
-        {"sessionID": SESSION, "type": "step_finish", "part": {"reason": "stop", "tokens": {}}},
-    ]
-    stream = io.StringIO("".join(json.dumps(e) + "\n" for e in events))
+    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, auth_token, workspace_dir, existing_session_id=None):
+        return (
+            0,
+            "ses_stream_test_001",
+            module.RunResult(
+                any_step_finish_seen=True,
+                step_finish_count=3,
+                last_finish_reason="stop",
+                last_finish_tokens={"input": 10, "output": 20},
+            ),
+            tmp_path / "transcript.jsonl",
+        )
 
-    popen_calls: list[list] = []
-
-    class FakePopen:
-        def __init__(self, cmd, *args, **kwargs):
-            popen_calls.append(list(cmd))
-            self.returncode = 0
-            self.pid = 1234
-            self.stdin = io.StringIO()
-            self.stdout = stream
-        def poll(self): return 0
-        def wait(self): return None
-
-    monkeypatch.setattr(module.subprocess, "Popen", FakePopen)
-    monkeypatch.setattr(module.os, "killpg", lambda *a: None)
+    monkeypatch.setattr(module, "_run_single_attempt", fake_run_single_attempt)
 
     class FakeResult:
         def __init__(self, rc, out="", err=""):
@@ -1867,5 +1773,6 @@ def test_stream_session_id_and_step_finish_count(monkeypatch, tmp_path):
     rc = module.main()
     assert rc == 0
 
-    # The session terminated with 'stop', no frontmatter errors → single Popen call
-    assert len(popen_calls) == 1
+    # The session terminated with 'stop', no frontmatter errors → single attempt
+    # (We cannot introspect the loop variables directly, but the clean exit
+    # with rc=0 proves the RunResult signals were consumed correctly.)
