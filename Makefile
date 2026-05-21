@@ -12,6 +12,11 @@ export PATH := $(CURDIR)/.venv/bin:$(PATH)
 export PROMPT_EXTRA
 export PROMPT_EXTRA_FILE
 
+CHAT ?= 0
+ifeq ($(CHAT),1)
+WRAPPER_ARGS += --chat
+endif
+
 # Pass --thinking to raw opencode run when CODECOME_THINKING=1
 OPENCODE_THINKING_FLAG := $(if $(filter 1,$(CODECOME_THINKING)),--thinking,)
 
@@ -137,7 +142,7 @@ phase-1: venv-check
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
 		opencode run --agent recon $(OPENCODE_THINKING_FLAG) "$$(cat prompts/phase-1-recon.md)"; \
 	else \
-		$(PYTHON) tools/run-agent.py --phase 1 --label "Target Reconnaissance + Sandbox Bootstrap" --agent recon --prompt-file prompts/phase-1-recon.md; \
+		$(PYTHON) tools/run-agent.py $(WRAPPER_ARGS) --phase 1 --label "Target Reconnaissance + Sandbox Bootstrap" --agent recon --prompt-file prompts/phase-1-recon.md; \
 	fi
 
 phase-2: venv-check
@@ -150,7 +155,7 @@ phase-2: venv-check
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
 		opencode run --agent auditor $(OPENCODE_THINKING_FLAG) "$$(cat prompts/phase-2-audit.md)"; \
 	else \
-		$(PYTHON) tools/run-agent.py --phase 2 --label "Hypothesis Generation" --agent auditor --prompt-file prompts/phase-2-audit.md; \
+		$(PYTHON) tools/run-agent.py $(WRAPPER_ARGS) --phase 2 --label "Hypothesis Generation" --agent auditor --prompt-file prompts/phase-2-audit.md; \
 	fi
 
 phase-3: venv-check
@@ -158,7 +163,7 @@ phase-3: venv-check
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
 		opencode run --agent reviewer $(OPENCODE_THINKING_FLAG) "$$(cat prompts/phase-3-review.md)"; \
 	else \
-		$(PYTHON) tools/run-agent.py --phase 3 --label "Counter-analysis" --agent reviewer --prompt-file prompts/phase-3-review.md; \
+		$(PYTHON) tools/run-agent.py $(WRAPPER_ARGS) --phase 3 --label "Counter-analysis" --agent reviewer --prompt-file prompts/phase-3-review.md; \
 	fi
 
 phase-4: venv-check
@@ -167,7 +172,7 @@ phase-4: venv-check
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
 		opencode run --agent validator $(OPENCODE_THINKING_FLAG) "$$(sed 's#FINDING_PATH_OR_ID#$(FINDING)#g' prompts/phase-4-validate.md)"; \
 	else \
-		$(PYTHON) tools/run-agent.py --phase 4 --label "Validation" --agent validator --prompt-file prompts/phase-4-validate.md --finding "$(FINDING)"; \
+		$(PYTHON) tools/run-agent.py $(WRAPPER_ARGS) --phase 4 --label "Validation" --agent validator --prompt-file prompts/phase-4-validate.md --finding "$(FINDING)"; \
 	fi
 
 phase-5: venv-check
@@ -176,7 +181,7 @@ phase-5: venv-check
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
 		opencode run --agent exploiter $(OPENCODE_THINKING_FLAG) "$$(sed 's#FINDING_PATH_OR_ID#$(FINDING)#g' prompts/phase-5-exploit.md)"; \
 	else \
-		$(PYTHON) tools/run-agent.py --phase 5 --label "Exploit Development" --agent exploiter --prompt-file prompts/phase-5-exploit.md --finding "$(FINDING)"; \
+		$(PYTHON) tools/run-agent.py $(WRAPPER_ARGS) --phase 5 --label "Exploit Development" --agent exploiter --prompt-file prompts/phase-5-exploit.md --finding "$(FINDING)"; \
 	fi
 
 phase-6: venv-check
@@ -184,8 +189,11 @@ phase-6: venv-check
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
 		opencode run --agent reporter $(OPENCODE_THINKING_FLAG) "$$(cat prompts/phase-6-report.md)"; \
 	else \
-		$(PYTHON) tools/run-agent.py --phase 6 --label "Reporting" --agent reporter --prompt-file prompts/phase-6-report.md; \
+		$(PYTHON) tools/run-agent.py $(WRAPPER_ARGS) --phase 6 --label "Reporting" --agent reporter --prompt-file prompts/phase-6-report.md; \
 	fi
+
+chat: venv-check
+	@$(PYTHON) tools/run-agent.py --chat --label "Interactive Chat" --agent $(or $(AGENT),auditor) --prompt "Please introduce yourself and wait for my instructions."
 
 list-risk-files: venv-check
 	@$(PYTHON) tools/list-risk-files.py

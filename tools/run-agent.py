@@ -4106,10 +4106,12 @@ def render_subagent_status(console: Console, event: dict[str, Any]) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run a CodeCome phase with structured output.")
-    parser.add_argument("--phase", help="Phase number (required unless --show-model).")
+    parser.add_argument("--phase", help="Phase number (required unless --show-model or --chat).")
     parser.add_argument("--label", help="Human-readable phase label (required unless --show-model).")
     parser.add_argument("--agent", help="OpenCode agent name.")
-    parser.add_argument("--prompt-file", help="Prompt file path relative to repo root (required unless --show-model).")
+    parser.add_argument("--prompt-file", help="Prompt file path relative to repo root (required unless --show-model or --chat).")
+    parser.add_argument("--prompt", help="Direct prompt text (used by --chat mode).")
+    parser.add_argument("--chat", action="store_true", help="Launch interactive textual chat harness.")
     parser.add_argument("--finding", help="Finding id for prompt substitution.")
     parser.add_argument("--color", choices=["auto", "always", "never"], default="auto")
     parser.add_argument("--debug", action="store_true", help="Mirror raw JSON events to stderr.")
@@ -4692,6 +4694,350 @@ def _emit_fatal_error(console: Any, title: str, message: str) -> None:
     print(formatted, file=sys.stderr)
 
 
+# ---------------------------------------------------------------------------
+# Chat mode: Textual TUI + multi-turn event loop
+# ---------------------------------------------------------------------------
+
+class TextualConsoleProxy:
+    """Bridge Rich Console.print() calls to a Textual RichLog widget."""
+
+    def __init__(self, rich_log):
+        self.rich_log = rich_log
+        self.encoding = "utf-8"
+
+    def print(self, *args, **kwargs):
+        if not args:
+            from rich.text import Text
+            self.rich_log.write(Text())
+            return
+        if len(args) == 1:
+            self.rich_log.write(args[0])
+        else:
+            from rich.console import Group
+            self.rich_log.write(Group(*args))
+
+
+ChatApp: Any = None
+QuitScreen: Any = None
+
+try:
+    from textual.app import App, ComposeResult
+    from textual.widgets import RichLog, Input, Footer, Button, Label
+    from textual.binding import Binding
+    from textual.containers import Grid
+    from textual.screen import ModalScreen
+
+    class _QuitScreen(ModalScreen[bool]):
+        CSS = """
+        _QuitScreen {
+            align: center middle;
+        }
+        #quit-dialog {
+            grid-size: 2;
+            grid-gutter: 1 2;
+            grid-rows: 1fr 3;
+            padding: 0 1;
+            width: 60;
+            height: 11;
+            border: thick $background 80%;
+            background: $surface;
+        }
+        #quit-question {
+            column-span: 2;
+            height: 1fr;
+            width: 1fr;
+            content-align: center middle;
+        }
+        Button {
+            width: 100%;
+        }
+        """
+
+        def compose(self) -> ComposeResult:
+            yield Grid(
+                Label("Are you sure you want to quit?", id="quit-question"),
+                Button("Quit", id="quit-confirm", variant="error"),
+                Button("Cancel", id="quit-cancel", variant="primary"),
+                id="quit-dialog",
+            )
+
+        def on_button_pressed(self, event: Button.Pressed) -> None:
+            self.dismiss(event.button.id == "quit-confirm")
+
+    class _ChatApp(App):
+        CSS = """
+        RichLog {
+            height: 1fr;
+            border-bottom: solid green;
+        }
+        """
+
+        BINDINGS = [Binding("ctrl+c", "request_quit", "Quit")]
+
+        def __init__(
+            self,
+            server_info,
+            session_id,
+            initial_prompt,
+            args,
+            console,
+            model,
+            variant,
+            thinking_on,
+        ):
+            super().__init__()
+            self.server_info = server_info
+            self.session_id = session_id
+            self.initial_prompt = initial_prompt
+            self.args = args
+            self.console = console
+            self.model = model
+            self.variant = variant
+            self.thinking_on = thinking_on
+            self.chat_loop = None
+            self.console_proxy = None
+            self.rich_log = None
+            self.chat_input = None
+            self._pending_prompt: str | None = None
+
+        def compose(self) -> ComposeResult:
+            yield RichLog(id="log", markup=False, auto_scroll=True)
+            yield Input(id="chat_input", placeholder="Waiting for session...")
+            yield Footer()
+
+        async def on_mount(self) -> None:
+            import asyncio
+
+            self.rich_log = self.query_one(RichLog)
+            self.chat_input = self.query_one(Input)
+            self.console_proxy = TextualConsoleProxy(self.rich_log)
+
+            # Print banner
+            if HAVE_RICH:
+                from rich.rule import Rule
+                self.rich_log.write(Rule(title="Chat: Interactive Harness", style="bold cyan"))
+                model_label = self.model or "(unknown)"
+                variant_label = self.variant or "(unknown)"
+                parts = [f"agent={self.args.agent}", f"model={model_label}"]
+                if self.variant is not None:
+                    parts.append(f"variant={variant_label}")
+                parts.append(f"thinking={'on' if self.thinking_on else 'off'}")
+                self.rich_log.write(Text("  ".join(parts), style="dim"))
+
+            # Start the chat event loop
+            from events.chat_loop import ChatEventLoop, ChatState
+
+            self.chat_loop = ChatEventLoop(
+                base_url=self.server_info.base_url,
+                session_id=self.session_id,
+                console=self.console_proxy,
+                auth_token=self.server_info.password,
+                workspace_dir=str(ROOT),
+            )
+            self.chat_loop.start_consumer(self._render_and_log)
+
+            # Send initial prompt if provided
+            if self.initial_prompt:
+                await asyncio.to_thread(
+                    self.chat_loop.send_prompt,
+                    self.initial_prompt,
+                    self.args.agent,
+                    self.model,
+                    self.variant,
+                )
+
+            # Start the state watcher
+            asyncio.create_task(self._watch_chat_state())
+
+        async def _watch_chat_state(self) -> None:
+            """Watch the chat state queue and update UI accordingly."""
+            import asyncio
+            from events.chat_loop import ChatState
+
+            while True:
+                try:
+                    state, detail = await asyncio.to_thread(self.chat_loop.get_state, timeout=1.0)
+                except Exception:
+                    continue
+
+                if state == ChatState.IDLE:
+                    self.call_from_thread(self._on_idle)
+                elif state == ChatState.BUSY:
+                    self.call_from_thread(self._on_busy)
+                elif state == ChatState.ERROR:
+                    self.call_from_thread(self._on_error, detail)
+                elif state == ChatState.STOPPED:
+                    break
+
+        def _on_idle(self) -> None:
+            if self.chat_input:
+                self.chat_input.disabled = False
+                self.chat_input.placeholder = "Type a message..."
+                self.chat_input.focus()
+
+        def _on_busy(self) -> None:
+            if self.chat_input:
+                self.chat_input.disabled = True
+                self.chat_input.placeholder = "Thinking..."
+
+        def _on_error(self, detail: str | None) -> None:
+            if self.console_proxy:
+                from rich.panel import Panel
+                msg = detail or "Unknown error"
+                self.console_proxy.print(
+                    Panel(Text(msg, style="bold red"), title="Chat Error", border_style="red")
+                )
+
+        def _render_and_log(self, console: Any, phase: str, label: str, event: dict[str, Any]) -> None:
+            """Render event and optionally log to transcript."""
+            if self.args.debug:
+                import json as _json
+                import sys
+                sys.stderr.write(_json.dumps(event) + "\n")
+                sys.stderr.flush()
+            if not self.thinking_on and event.get("type") == "reasoning":
+                return
+            render_event(console, phase, label, event)
+
+        def action_request_quit(self) -> None:
+            def finish_quit(confirmed: bool | None) -> None:
+                if confirmed:
+                    self.exit()
+            self.push_screen(_QuitScreen(), finish_quit)
+
+        async def on_input_submitted(self, message: Input.Submitted) -> None:
+            text = message.value.strip()
+            if not text:
+                return
+
+            self.chat_input.value = ""
+            self.rich_log.write("")
+            self.rich_log.write(Text(f"User: {text}", style="bold cyan"))
+
+            # Disable input while processing
+            self.chat_input.disabled = True
+            self.chat_input.placeholder = "Sending..."
+
+            # Send the prompt
+            import asyncio
+            await asyncio.to_thread(
+                self.chat_loop.send_prompt,
+                text,
+                self.args.agent,
+                self.model,
+                self.variant,
+            )
+
+    ChatApp = _ChatApp
+    QuitScreen = _QuitScreen
+except ImportError:
+    pass
+
+
+def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
+    """Launch the interactive chat harness."""
+    if args.chat:
+        missing = [n for n in ("label", "agent") if getattr(args, n) is None]
+        if missing:
+            parser.error(
+                "the following arguments are required for --chat: "
+                + ", ".join("--" + n.replace("_", "-") for n in missing)
+            )
+    else:
+        missing = [n for n in ("phase", "label", "agent", "prompt_file") if getattr(args, n) is None]
+        if missing:
+            parser.error(
+                "the following arguments are required: "
+                + ", ".join("--" + n.replace("_", "-") for n in missing)
+            )
+
+    check_opencode_version()
+
+    color_mode = resolve_color_mode(args.color)
+    console = build_console(color_mode)
+
+    # Resolve prompt
+    if args.prompt_file:
+        prompt_file = ROOT / args.prompt_file
+        prompt = load_prompt(prompt_file, args.finding, phase=args.phase)
+    elif args.prompt:
+        prompt = args.prompt
+    else:
+        prompt = ""
+
+    # Model resolution
+    extra_args = shlex.split(os.environ.get("OPENCODE_ARGS", ""))
+    model, variant, model_source, variant_source = resolve_model_and_variant(
+        args.agent, extra_args
+    )
+    thinking_on, thinking_source = _resolve_thinking_decision(model, extra_args)
+
+    # Check textual is available
+    if ChatApp is None:
+        _emit_fatal_error(
+            console,
+            "Missing Dependency",
+            "The --chat flag requires the 'textual' package. Run 'make venv' to install it.",
+        )
+        return 1
+
+    # Start server
+    runner = ServerRunner()
+    try:
+        server_info = runner.start(hostname="127.0.0.1", log_level="WARN")
+    except ServerRunnerError as exc:
+        _emit_fatal_error(console, "Server Error", str(exc))
+        return 1
+
+    # Create session
+    try:
+        session_id = _create_session(
+            server_info.base_url,
+            "chat",
+            args.agent,
+            model,
+            server_info.password,
+            str(ROOT),
+        )
+    except Exception as exc:
+        _emit_fatal_error(console, "Session Error", str(exc))
+        runner.stop()
+        return 1
+
+    # Forward signals
+    def _forward_signal(signum: int, _frame: Any) -> None:
+        info = runner.info
+        if info is not None:
+            try:
+                os.killpg(info.pid, signum)
+            except ProcessLookupError:
+                pass
+        signal.signal(signum, signal.SIG_DFL)
+        os.kill(os.getpid(), signum)
+
+    previous_sigint = signal.signal(signal.SIGINT, _forward_signal)
+    previous_sigterm = signal.signal(signal.SIGTERM, _forward_signal)
+
+    try:
+        app = ChatApp(
+            server_info=server_info,
+            session_id=session_id,
+            initial_prompt=prompt,
+            args=args,
+            console=console,
+            model=model,
+            variant=variant,
+            thinking_on=thinking_on,
+        )
+        app.run()
+    finally:
+        signal.signal(signal.SIGINT, previous_sigint)
+        signal.signal(signal.SIGTERM, previous_sigterm)
+        runner.stop()
+
+    return 0
+
+
 def main() -> int:
     RUN_START_TIME = time.time()
     iteration_retry_count = 0
@@ -4706,11 +5052,15 @@ def main() -> int:
         agent_name = args.agent or "recon"
         return show_model_table(agent_name)
 
+    # Chat mode has its own validation path.
+    if args.chat:
+        return _run_chat_mode(parser, args)
+
     # The phase-launching mode requires the usual arguments.
     missing = [n for n in ("phase", "label", "agent", "prompt_file") if getattr(args, n) is None]
     if missing:
         parser.error(
-            "the following arguments are required when not using --show-model: "
+            "the following arguments are required when not using --show-model or --chat: "
             + ", ".join("--" + n.replace("_", "-") for n in missing)
         )
 
