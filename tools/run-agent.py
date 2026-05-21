@@ -4520,6 +4520,37 @@ def _create_session(base_url: str, phase: str, agent: str, model: str | None, au
     return sid
 
 
+def _create_chat_session(base_url: str, agent: str, model: str | None, auth_token: str | None, workspace_dir: str | None) -> str:
+    """Create a session for interactive chat mode with permission rules."""
+    payload: dict[str, Any] = {
+        "title": "CodeCome Chat",
+        "agent": agent,
+        "permission": [
+            {"permission": "question", "action": "deny", "pattern": "*"},
+            {"permission": "plan_enter", "action": "deny", "pattern": "*"},
+            {"permission": "plan_exit", "action": "deny", "pattern": "*"},
+        ],
+    }
+    if model:
+        parts = model.split("/", 1)
+        if len(parts) == 2:
+            payload["model"] = {"providerID": parts[0], "id": parts[1]}
+        else:
+            payload["model"] = {"id": model}
+    req = urllib.request.Request(
+        f"{base_url}/session",
+        data=json.dumps(payload).encode("utf-8"),
+        headers=_get_headers(auth_token, workspace_dir),
+        method="POST",
+    )
+    resp = urllib.request.urlopen(req, timeout=10.0)
+    data = json.loads(resp.read().decode("utf-8"))
+    sid = str(data.get("id", ""))
+    if not sid:
+        raise RuntimeError("Server returned empty session ID")
+    return sid
+
+
 def _consume_events(
     base_url: str,
     session_id: str,
@@ -4770,6 +4801,9 @@ try:
             height: 1fr;
             border-bottom: solid green;
         }
+        Input {
+            height: 3;
+        }
         """
 
         BINDINGS = [Binding("ctrl+c", "request_quit", "Quit")]
@@ -4836,18 +4870,26 @@ try:
             )
             self.chat_loop.start_consumer(self._render_and_log)
 
-            # Send initial prompt if provided
+            # Send initial prompt if provided (non-blocking)
             if self.initial_prompt:
+                asyncio.create_task(self._send_initial_prompt(self.initial_prompt))
+
+            # Start the state watcher
+            asyncio.create_task(self._watch_chat_state())
+
+        async def _send_initial_prompt(self, text: str) -> None:
+            """Send the initial prompt in a background thread."""
+            import asyncio
+            try:
                 await asyncio.to_thread(
                     self.chat_loop.send_prompt,
-                    self.initial_prompt,
+                    text,
                     self.args.agent,
                     self.model,
                     self.variant,
                 )
-
-            # Start the state watcher
-            asyncio.create_task(self._watch_chat_state())
+            except Exception as exc:
+                self.call_from_thread(self._on_error, f"Failed to send initial prompt: {exc}")
 
         async def _watch_chat_state(self) -> None:
             """Watch the chat state queue and update UI accordingly."""
@@ -4920,13 +4962,16 @@ try:
 
             # Send the prompt
             import asyncio
-            await asyncio.to_thread(
-                self.chat_loop.send_prompt,
-                text,
-                self.args.agent,
-                self.model,
-                self.variant,
-            )
+            try:
+                await asyncio.to_thread(
+                    self.chat_loop.send_prompt,
+                    text,
+                    self.args.agent,
+                    self.model,
+                    self.variant,
+                )
+            except Exception as exc:
+                self._on_error(f"Failed to send message: {exc}")
 
     ChatApp = _ChatApp
     QuitScreen = _QuitScreen
@@ -4991,9 +5036,8 @@ def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
 
     # Create session
     try:
-        session_id = _create_session(
+        session_id = _create_chat_session(
             server_info.base_url,
-            "chat",
             args.agent,
             model,
             server_info.password,
