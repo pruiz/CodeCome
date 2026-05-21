@@ -46,7 +46,7 @@ jobs:
       
           echo "Installing opencode latest: $version"
           curl -fsSL https://opencode.ai/install | bash -s -- --version "$version"
-          opencode --version
+          "$HOME/.opencode/bin/opencode" --version
           
       - name: Install dependencies
         run: |
