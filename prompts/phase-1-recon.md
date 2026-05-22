@@ -65,6 +65,10 @@ Recursively scan `src/` for high-signal documentation such as `README*`, `SECURI
 
 If the repository has dozens of changelog/history/news files, do not process them exhaustively. Summarize the pattern, prioritize files near the primary target or security-relevant components, and record that scope decision.
 
+Review external public context for prior security advisories, CVE references, historical security fixes, release notes, and recurring bug classes affecting this project or closely related upstream components. Prefer project advisories, GitHub Security Advisories, NVD/CVE entries, issue trackers, release notes, and distribution advisories.
+
+Use external context only as reconnaissance input: distill affected components, historical bug patterns, trust boundaries, and fixed attack surfaces into the notes. Do not treat external claims as proof that the current source tree is affected; verify everything against `src/` before creating findings.
+
 Distill declared threat model, past CVEs, trust boundaries, and third-party components into the relevant notes; treat author claims as input to verify, not facts.
 
 ### File risk index
