@@ -58,6 +58,7 @@ REQUIRED_FIELDS = [
     "title",
     "status",
     "severity",
+    "cvss_v4",
     "confidence",
     "category",
     "cwe",
@@ -74,6 +75,12 @@ REQUIRED_FIELDS = [
     "exploitation",
     "created_at",
     "updated_at",
+]
+
+REQUIRED_CVSS_V4_FIELDS = [
+    "vector",
+    "score",
+    "justification",
 ]
 
 REQUIRED_VALIDATION_FIELDS = [
@@ -97,6 +104,7 @@ FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 FINDING_ID_RE = re.compile(r"^CC-\d{4,}$")
 FINDING_FILENAME_RE = re.compile(r"^CC-\d{4}-[a-z0-9]+[-_a-z0-9]*\.md$", re.IGNORECASE)
 SECTION_RE = re.compile(r"^# (?P<title>.+?)\n(?P<body>.*?)(?=^# |\Z)", re.MULTILINE | re.DOTALL)
+CVSS_V4_VECTOR_RE = re.compile(r"^CVSS:4\.0/")
 
 REQUIRED_EXPLOITED_SECTIONS = [
     "Root cause analysis",
@@ -151,6 +159,64 @@ def has_remediation_code(value: str) -> bool:
     return "```diff" in value or "```patch" in value or "```c" in value or "```" in value
 
 
+def severity_from_cvss_v4_score(score: float) -> str:
+    if score == 0.0:
+        return "INFO"
+    if 0.1 <= score <= 3.9:
+        return "LOW"
+    if 4.0 <= score <= 6.9:
+        return "MEDIUM"
+    if 7.0 <= score <= 8.9:
+        return "HIGH"
+    if 9.0 <= score <= 10.0:
+        return "CRITICAL"
+    return ""
+
+
+def validate_cvss_v4(data: Dict[str, object], status: object, severity: object) -> List[str]:
+    errors: List[str] = []
+    cvss_v4 = data.get("cvss_v4")
+
+    if not isinstance(cvss_v4, dict):
+        return ["cvss_v4 must be an object"]
+
+    for field in REQUIRED_CVSS_V4_FIELDS:
+        if field not in cvss_v4:
+            errors.append(f"missing cvss_v4 field: cvss_v4.{field}")
+
+    vector = cvss_v4.get("vector")
+    score = cvss_v4.get("score")
+    justification = cvss_v4.get("justification")
+
+    if vector is not None and not isinstance(vector, str):
+        errors.append("cvss_v4.vector must be a string")
+    if justification is not None and not isinstance(justification, str):
+        errors.append("cvss_v4.justification must be a string")
+    if score is not None and not isinstance(score, (int, float)):
+        errors.append("cvss_v4.score must be a number")
+
+    if status in ("CONFIRMED", "EXPLOITED"):
+        if not isinstance(vector, str) or is_placeholder(vector):
+            errors.append(f"{status} status requires populated cvss_v4.vector")
+        elif not CVSS_V4_VECTOR_RE.match(vector):
+            errors.append("cvss_v4.vector must start with 'CVSS:4.0/'")
+
+        if not isinstance(justification, str) or is_placeholder(justification):
+            errors.append(f"{status} status requires populated cvss_v4.justification")
+
+        if isinstance(score, (int, float)):
+            expected_severity = severity_from_cvss_v4_score(float(score))
+            if not expected_severity:
+                errors.append("cvss_v4.score must be between 0.0 and 10.0")
+            elif severity in SEVERITIES and severity != expected_severity:
+                errors.append(
+                    f"severity {severity!r} does not match cvss_v4.score {score!r} "
+                    f"(expected {expected_severity!r})"
+                )
+
+    return errors
+
+
 def validate_finding(path: Path) -> List[str]:
     errors: List[str] = []
 
@@ -184,6 +250,8 @@ def validate_finding(path: Path) -> List[str]:
     severity = data.get("severity")
     if severity not in SEVERITIES:
         errors.append(f"invalid severity: {severity!r}")
+
+    errors.extend(validate_cvss_v4(data, status, severity))
 
     confidence = data.get("confidence")
     if confidence not in CONFIDENCES:
