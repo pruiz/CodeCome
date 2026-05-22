@@ -59,6 +59,47 @@ except ImportError:  # pragma: no cover
 ROOT = Path(__file__).resolve().parents[1]
 MINIMUM_OPENCODE_VERSION = "1.14.50"
 
+# ---------------------------------------------------------------------------
+# Chat debug logging (--debug with --chat writes to tmp/chat-debug-<pid>.log)
+# ---------------------------------------------------------------------------
+
+_CHAT_DEBUG_FP: Any = None
+
+
+def _chat_debug(msg: str) -> None:
+    """Write a debug message if chat debug logging is active."""
+    global _CHAT_DEBUG_FP
+    if _CHAT_DEBUG_FP is None:
+        return
+    import threading as _threading
+    _elapsed = time.time() - _CHAT_DEBUG_FP.start_time  # type: ignore[attr-defined]
+    _thread = _threading.current_thread().name
+    _line = f"[{_elapsed:07.3f}s] [{_thread}] {msg}\n"
+    _CHAT_DEBUG_FP.write(_line)  # type: ignore[union-attr]
+    _CHAT_DEBUG_FP.flush()  # type: ignore[union-attr]
+
+
+def _setup_chat_debug() -> None:
+    """Open tmp/chat-debug-<pid>-<ts>.log for chat diagnostic logging."""
+    global _CHAT_DEBUG_FP
+    _stamp = time.strftime("%Y%m%d-%H%M%S")
+    log_dir = ROOT / "tmp"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"chat-debug-{os.getpid()}-{_stamp}.log"
+    _CHAT_DEBUG_FP = log_path.open("a", buffering=1)
+    _CHAT_DEBUG_FP.start_time = time.time()  # type: ignore[attr-defined]
+    _chat_debug(f"debug log opened: {log_path}")
+    print(f"[chat-debug] writing diagnostics to {log_path}", file=sys.stderr)
+
+
+def _close_chat_debug() -> None:
+    """Close the chat debug log if open."""
+    global _CHAT_DEBUG_FP
+    if _CHAT_DEBUG_FP is not None:
+        _chat_debug("debug log closing")
+        _CHAT_DEBUG_FP.close()
+        _CHAT_DEBUG_FP = None
+
 
 def check_opencode_version() -> None:
     try:
@@ -3918,12 +3959,76 @@ def render_session_diff(console: Console, event: dict[str, Any]) -> None:
 
 
 def render_message_updated(console: Console, event: dict[str, Any]) -> None:
-    info = event.get("info", {}) if isinstance(event.get("info"), dict) else {}
-    agent = str(info.get("agent", "assistant"))
-    model_id = str(info.get("modelID", info.get("model", "")))
-    message = f"> {agent} · {model_id}" if model_id else f"> {agent}"
+    # Extract info from either event.info (sync-synthesized) or
+    # event.properties.info (raw SSE stream).
+    info = event.get("info")
+    if not isinstance(info, dict):
+        props = event.get("properties", {})
+        info = props.get("info", {}) if isinstance(props, dict) else {}
+    if not isinstance(info, dict):
+        info = {}
+
+    role = str(info.get("role", ""))
+    tokens = info.get("tokens", {}) if isinstance(info.get("tokens"), dict) else {}
+    has_tokens = isinstance(tokens, dict) and (
+        tokens.get("input", 0) or tokens.get("output", 0) or tokens.get("reasoning", 0)
+    )
+
+    # Suppress in-progress messages — only render "complete" ones that
+    # carry a summary, a finish reason, or non-zero tokens.  This keeps
+    # the RichLog clean and avoids the flood of intermediate lifecycle
+    # events the SSE stream emits for every message state change.
+    has_summary = "summary" in info or "finish" in info
+    if not has_summary and not has_tokens:
+        return
+
+    cache = tokens.get("cache", {}) if isinstance(tokens, dict) else {}
+    cost = info.get("cost", 0) or 0
+
+    # Extract model identifier from whichever field shape is present.
+    model_id = str(info.get("modelID", "")).strip()
+    provider_id = str(info.get("providerID", "")).strip()
+    if not model_id:
+        mdl = info.get("model", {})
+        if isinstance(mdl, dict):
+            model_id = str(mdl.get("modelID", "")).strip()
+            provider_id = str(mdl.get("providerID", "")).strip()
+    model_label = f"{provider_id}/{model_id}" if provider_id and model_id else model_id
+
+    if role == "user":
+        # User prompt acknowledged — short, dim, no model spam.
+        message = "> User"
+        style = "dim"
+    elif role == "assistant":
+        if has_tokens:
+            # Complete message — show model and token-count summary.
+            _in = tokens.get("input", 0)
+            _out = tokens.get("output", 0)
+            _reasoning = tokens.get("reasoning", 0)
+            _cache_read = cache.get("read", 0) if isinstance(cache, dict) else 0
+            token_parts = [f"↑{_in} ↓{_out}"]
+            if _reasoning:
+                token_parts.append(f"R{_reasoning}")
+            if _cache_read:
+                token_parts.append(f"cache read {_cache_read}")
+            token_str = ", ".join(token_parts)
+            cost_str = f", ${cost:.4f}" if cost else ""
+            message = f"> Assistant · {model_label} ({token_str}{cost_str})"
+            style = "bold blue"
+        else:
+            # Complete message without token info (shouldn't normally
+            # happen after the has_summary check above, but kept as
+            # a safe fallback).
+            message = f"> Assistant · {model_label}" if model_label else "> Assistant"
+            style = "bold blue"
+    else:
+        # Fallback — unrecognised role, show what we have.
+        agent = str(info.get("agent", "assistant"))
+        message = f"> {agent} · {model_label}" if model_label else f"> {agent}"
+        style = "bold blue"
+
     if HAVE_RICH:
-        console.print(Text(message, style="bold blue"))
+        console.print(Text(message, style=style))
     else:
         print(C.header(message))
 
@@ -4730,32 +4835,50 @@ def _emit_fatal_error(console: Any, title: str, message: str) -> None:
 # ---------------------------------------------------------------------------
 
 class TextualConsoleProxy:
-    """Bridge Rich Console.print() calls to a Textual RichLog widget."""
+    """Bridge Rich Console.print() calls to a Textual RichLog widget.
 
-    def __init__(self, rich_log):
+    Thread-safe: main-thread calls write directly to RichLog; background-
+    thread calls post a RenderMessage which is dispatched on the main
+    thread by the @on(RenderMessage) handler.  This is the pattern from
+    Textual docs (post_message is thread-safe).
+    """
+
+    def __init__(self, rich_log, app):
         self.rich_log = rich_log
+        self.app = app
         self.encoding = "utf-8"
 
     def print(self, *args, **kwargs):
         if not args:
             from rich.text import Text
-            self.rich_log.write(Text())
+            self._write(Text())
             return
         if len(args) == 1:
-            self.rich_log.write(args[0])
+            self._write(args[0])
         else:
             from rich.console import Group
-            self.rich_log.write(Group(*args))
+            self._write(Group(*args))
+
+    def _write(self, renderable):
+        import threading
+        if threading.current_thread() is threading.main_thread():
+            _chat_debug("TextualConsoleProxy._write: main thread, direct write")
+            self.rich_log.write(renderable)
+        else:
+            _chat_debug("TextualConsoleProxy._write: bg thread, post_message(RenderMessage)")
+            self.app.post_message(self.app.RenderMessage(renderable))
 
 
 ChatApp: Any = None
 QuitScreen: Any = None
 
 try:
+    from textual import on, work
     from textual.app import App, ComposeResult
-    from textual.widgets import RichLog, Input, Footer, Button, Label
+    from textual.message import Message
+    from textual.widgets import RichLog, Input, Footer, Static, Button, Label
     from textual.binding import Binding
-    from textual.containers import Grid
+    from textual.containers import Grid, Horizontal
     from textual.screen import ModalScreen
 
     class _QuitScreen(ModalScreen[bool]):
@@ -4796,182 +4919,461 @@ try:
             self.dismiss(event.button.id == "quit-confirm")
 
     class _ChatApp(App):
+        """Interactive chat harness — final design (post-bisection).
+
+        Design follows Textual docs (https://textual.textualize.io/guide/workers):
+
+          * The SSE consumer runs in a raw daemon thread (started via
+            chat_loop.start_consumer).  Textual's @work(thread=True) is
+            reserved for short-lived blocking tasks (the docs' weather-
+            app pattern); using it for an infinite consumer loop froze
+            the main event loop in our environment (Textual 8.2.6 /
+            Python 3.14).
+
+          * All UI updates from background threads (renderables AND
+            state markers AND errors) go through ONE one-argument
+            Message subclass (RenderMessage(renderable)) and ONE @on
+            handler that just calls rich_log.write.  post_message is
+            documented as thread-safe.  Bisection found that any
+            departure from this exact shape (adding a second Message
+            subclass, renaming it, adding optional fields, or even
+            adding a second set_interval callback) silently freezes
+            Textual's message dispatch on this version, even though
+            the same patterns work in isolated repros.  We don't
+            understand the root cause; staying inside this working
+            envelope is the pragmatic path forward.
+
+          * _render_and_log mirrors phase mode's behaviour exactly
+            (parity with non-interactive runs).  Per-event side effects:
+            persist to the transcript jsonl, mirror raw JSON to the
+            chat-debug log when --debug is set, suppress 'reasoning'
+            when thinking is off, then delegate to the SAME
+            render_event() dispatcher non-chat uses.  No chat-specific
+            filters or markers — `render_session_status` already
+            prints `session status: busy/idle` and that's the only
+            state cue we surface.  We do NOT toggle the Input widget's
+            enabled/placeholder state, because doing that required a
+            second set_interval poller which broke dispatch in our
+            bisection.  The Input stays enabled at all times.
+
+          * Errors from @work workers post a red Panel renderable via
+            _post_error_renderable() — same RenderMessage path.
+
+          * Short-lived HTTP calls (initial prompt, user prompt send)
+            run as @work(thread=True) workers — the canonical docs
+            pattern (matches the weather-app example).
+
+          * The transcript jsonl is opened in _run_chat_mode and the
+            file handle is passed in via the `transcript_fp` constructor
+            argument; _render_and_log writes one JSON line per SSE
+            event to it (parity with phase mode).
+
+          * A set_interval(1.0) heartbeat continuously logs a debug
+            tick from the main thread and also updates the bottom-bar
+            status line (modeline) with live token usage and an
+            activity pulse.  The modeline data is fed by
+            _render_and_log on every message.updated event.
+        """
+
         CSS = """
         RichLog {
             height: 1fr;
             border-bottom: solid green;
+            background: black;
         }
         Input {
             height: 3;
         }
+        #bottom-bar {
+            dock: bottom;
+            height: 1;
+            background: $footer-background;
+        }
+        #status-left {
+            width: auto;
+            min-width: 26;
+            height: 1;
+            padding: 0 1;
+            color: $footer-foreground;
+            background: $footer-background;
+        }
+        #footer-right {
+            width: 1fr;
+            height: 1;
+        }
+        Footer {
+            dock: none;
+        }
         """
 
-        BINDINGS = [Binding("ctrl+c", "request_quit", "Quit")]
+        # Ctrl+S toggles Textual's mouse capture so the user can use the
+        # terminal's native mouse selection (which produces system-clipboard
+        # copy via the terminal emulator).  RichLog has no in-app selection
+        # support upstream, so terminal-native selection is the supported
+        # path.  See .project/chat-mode-textual-postmortem.md §4 / §12.
+        BINDINGS = [
+            Binding("ctrl+c", "request_quit", "Quit"),
+            Binding("ctrl+s", "toggle_mouse_for_select", "Select mode"),
+        ]
 
-        def __init__(
-            self,
-            server_info,
-            session_id,
-            initial_prompt,
-            args,
-            console,
-            model,
-            variant,
-            thinking_on,
-        ):
+        class RenderMessage(Message):
+            """Single thread-safe message type — carries a Rich renderable
+            to be written to the RichLog on the main thread.
+
+            Bisection showed that extending this class with optional
+            fields (`state`, `detail`) silently breaks Textual's message
+            dispatch on this version (Textual 8.2.6 / Python 3.14), even
+            though the same pattern works in isolation.  Whatever the
+            root cause, we keep this class strictly one-argument
+            (positional, `renderable`) and use a thread-safe pending-state
+            slot + main-thread polling timer for idle/busy/error
+            transitions instead.
+            """
+
+            def __init__(self, renderable):
+                super().__init__()
+                self.renderable = renderable
+
+        def __init__(self, server_info=None, session_id=None, initial_prompt="", args=None, rich_console=None, model=None, variant=None, thinking_on=None, transcript_fp=None):
             super().__init__()
             self.server_info = server_info
             self.session_id = session_id
             self.initial_prompt = initial_prompt
             self.args = args
-            self.console = console
+            self.rich_console = rich_console
             self.model = model
             self.variant = variant
             self.thinking_on = thinking_on
+            self.transcript_fp = transcript_fp
             self.chat_loop = None
             self.console_proxy = None
             self.rich_log = None
             self.chat_input = None
-            self._pending_prompt: str | None = None
+            self.modeline = None
+            self._heartbeat_count = 0
+            # Updated by _render_and_log (consumer thread) on every
+            # message.updated event.  Read by _heartbeat (main thread)
+            # to drive the status-line in the bottom bar.
+            self._modeline_info = ""
+            # Tracks Ctrl+S terminal-select mode.  When True, Textual mouse
+            # handling is disabled so the terminal emulator's native mouse
+            # selection works (which copies to the system clipboard via the
+            # terminal itself).  Default off (Textual mouse handling on).
+            self._terminal_select_mode = False
 
         def compose(self) -> ComposeResult:
             yield RichLog(id="log", markup=False, auto_scroll=True)
-            yield Input(id="chat_input", placeholder="Waiting for session...")
-            yield Footer()
+            yield Input(id="chat_input", placeholder="Type a message and press Enter...")
+            with Horizontal(id="bottom-bar"):
+                yield Static("ready", id="status-left")
+                yield Footer(id="footer-right")
 
-        async def on_mount(self) -> None:
-            import asyncio
-
+        def on_mount(self) -> None:
+            _chat_debug("on_mount: entering")
             self.rich_log = self.query_one(RichLog)
             self.chat_input = self.query_one(Input)
-            self.console_proxy = TextualConsoleProxy(self.rich_log)
+            self.modeline = self.query_one("#status-left", Static)
+            self.console_proxy = TextualConsoleProxy(self.rich_log, self)
+            _chat_debug("on_mount: proxy created")
 
-            # Print banner
+            # Set initial modeline with model/agent info.
+            provider = (self.model or "").split("/", 1)[0] if self.model else ""
+            _model_id = (self.model or "").split("/", 1)[1] if self.model and "/" in self.model else (self.model or "…")
+            model_label = f"{provider}/{_model_id}" if provider else _model_id
+            self.modeline.update(f"● | {model_label} | ready")
+
+            # Heartbeat canary — fires every 1s on the main thread.  Helpful
+            # in the debug log to confirm the event loop is alive.
+            self.set_interval(1.0, self._heartbeat)
+            _chat_debug("on_mount: heartbeat installed")
+
+            # Write banner (main thread, direct write).
             if HAVE_RICH:
                 from rich.rule import Rule
-                self.rich_log.write(Rule(title="Chat: Interactive Harness", style="bold cyan"))
+                self.rich_log.write(Rule(title="Chat: Interactive Harness", style="bold cyan"), expand=True)
                 model_label = self.model or "(unknown)"
                 variant_label = self.variant or "(unknown)"
-                parts = [f"agent={self.args.agent}", f"model={model_label}"]
+                parts = [f"agent={self.args.agent if self.args else '?'}", f"model={model_label}"]
                 if self.variant is not None:
                     parts.append(f"variant={variant_label}")
                 parts.append(f"thinking={'on' if self.thinking_on else 'off'}")
-                self.rich_log.write(Text("  ".join(parts), style="dim"))
+                self.rich_log.write(Text("  ".join(parts), style="dim"), expand=True)
+                # Hint about selection: RichLog doesn't support in-app
+                # mouse selection upstream; document the terminal-native
+                # path so users can copy output.
+                self.rich_log.write(
+                    Text(
+                        "Tip: hold Option/Alt (macOS) or Shift (most terminals) "
+                        "while dragging to select text, or press Ctrl+S to toggle "
+                        "terminal-select mode (disables Textual mouse).",
+                        style="dim italic",
+                    ),
+                    expand=True,
+                )
+            _chat_debug("on_mount: banner written")
 
-            # Start the chat event loop
-            from events.chat_loop import ChatEventLoop, ChatState
-
+            # Construct the chat event loop.
+            from events.chat_loop import ChatEventLoop
+            _chat_debug("on_mount: creating ChatEventLoop")
             self.chat_loop = ChatEventLoop(
                 base_url=self.server_info.base_url,
                 session_id=self.session_id,
                 console=self.console_proxy,
                 auth_token=self.server_info.password,
                 workspace_dir=str(ROOT),
+                debug=_chat_debug if self.args and self.args.debug else None,
             )
+
+            # Raw daemon thread — the SSE consumer.
+            _chat_debug("on_mount: starting SSE consumer (raw daemon thread)")
             self.chat_loop.start_consumer(self._render_and_log)
+            _chat_debug("on_mount: consumer thread started")
 
-            # Send initial prompt if provided (non-blocking)
+            # Initial prompt: send via worker but don't echo the full text.
+            # The prompt comes from prompts/chat-initial.md (bootstrap
+            # instructions for the agent, not something the user typed).
+            # The SSE stream will emit a dim `> User` summary line once the
+            # daemon acknowledges the message, matching subsequent prompts.
             if self.initial_prompt:
-                asyncio.create_task(self._send_initial_prompt(self.initial_prompt))
+                self.rich_log.write(Text("(initializing session\u2026)", style="bold cyan"), expand=True)
+                _chat_debug(f"on_mount: spawning initial-prompt worker ({len(self.initial_prompt)} chars)")
+                self._send_initial_prompt(self.initial_prompt)
 
-            # Start the state watcher
-            asyncio.create_task(self._watch_chat_state())
+            _chat_debug("on_mount: done")
 
-        async def _send_initial_prompt(self, text: str) -> None:
-            """Send the initial prompt in a background thread."""
-            import asyncio
+        # --- Main-thread heartbeat canary ---
+
+        def _heartbeat(self) -> None:
+            self._heartbeat_count += 1
+            _chat_debug(f"_heartbeat: tick #{self._heartbeat_count} (main loop alive)")
+
+            # Update the bottom-bar status line (modeline) with live
+            # token usage and an activity pulse.  _modeline_info is
+            # written by _render_and_log on the consumer thread on
+            # every message.updated event; we read it here atomically.
+            pulse = "●" if self._heartbeat_count % 2 else "◌"
+            sel_tag = " [SEL]" if self._terminal_select_mode else ""
+            info = self._modeline_info or ""
+            if info:
+                text = f"{pulse}{sel_tag} | {info}"
+            else:
+                provider = (self.model or "").split("/", 1)[0] if self.model else ""
+                _model_id = (self.model or "").split("/", 1)[1] if self.model and "/" in self.model else (self.model or "…")
+                model_label = f"{provider}/{_model_id}" if provider else _model_id
+                text = f"{pulse}{sel_tag} | {model_label} | idle"
+            self.modeline.update(text)
+
+        # --- Textual workers (@work(thread=True)) — short-lived only ---
+
+        @work(thread=True)
+        def _send_initial_prompt(self, text) -> None:
+            """Send the initial prompt in a Textual-managed thread."""
+            _chat_debug("_send_initial_prompt: worker started")
             try:
-                await asyncio.to_thread(
-                    self.chat_loop.send_prompt,
+                self.chat_loop.send_prompt(
                     text,
-                    self.args.agent,
+                    self.args.agent if self.args else "auditor",
                     self.model,
                     self.variant,
                 )
+                _chat_debug("_send_initial_prompt: sent")
             except Exception as exc:
-                self.call_from_thread(self._on_error, f"Failed to send initial prompt: {exc}")
+                _chat_debug(f"_send_initial_prompt: error: {exc}")
+                self._post_error_renderable(f"Failed to send initial prompt: {exc}")
 
-        async def _watch_chat_state(self) -> None:
-            """Watch the chat state queue and update UI accordingly."""
-            import asyncio
-            from events.chat_loop import ChatState
-
-            while True:
-                try:
-                    state, detail = await asyncio.to_thread(self.chat_loop.get_state, timeout=1.0)
-                except Exception:
-                    continue
-
-                if state == ChatState.IDLE:
-                    self.call_from_thread(self._on_idle)
-                elif state == ChatState.BUSY:
-                    self.call_from_thread(self._on_busy)
-                elif state == ChatState.ERROR:
-                    self.call_from_thread(self._on_error, detail)
-                elif state == ChatState.STOPPED:
-                    break
-
-        def _on_idle(self) -> None:
-            if self.chat_input:
-                self.chat_input.disabled = False
-                self.chat_input.placeholder = "Type a message..."
-                self.chat_input.focus()
-
-        def _on_busy(self) -> None:
-            if self.chat_input:
-                self.chat_input.disabled = True
-                self.chat_input.placeholder = "Thinking..."
-
-        def _on_error(self, detail: str | None) -> None:
-            if self.console_proxy:
-                from rich.panel import Panel
-                msg = detail or "Unknown error"
-                self.console_proxy.print(
-                    Panel(Text(msg, style="bold red"), title="Chat Error", border_style="red")
+        @work(thread=True)
+        def _send_prompt(self, text) -> None:
+            """Send a user prompt in a Textual-managed thread."""
+            _chat_debug(f"_send_prompt: worker posting text len={len(text)}")
+            try:
+                self.chat_loop.send_prompt(
+                    text,
+                    self.args.agent if self.args else "auditor",
+                    self.model,
+                    self.variant,
                 )
+                _chat_debug("_send_prompt: sent")
+            except Exception as exc:
+                _chat_debug(f"_send_prompt: error: {exc}")
+                self._post_error_renderable(f"Failed to send: {exc}")
 
-        def _render_and_log(self, console: Any, phase: str, label: str, event: dict[str, Any]) -> None:
-            """Render event and optionally log to transcript."""
-            if self.args.debug:
-                import json as _json
-                import sys
-                sys.stderr.write(_json.dumps(event) + "\n")
-                sys.stderr.flush()
+        def _post_error_renderable(self, detail: str) -> None:
+            """Helper callable from any thread.  Posts a RenderMessage
+            carrying a red error panel — sent through the same single
+            RenderMessage(renderable) path as everything else."""
+            from rich.panel import Panel
+            panel = Panel(Text(detail, style="bold red"), title="Chat Error", border_style="red")
+            self.post_message(self.RenderMessage(panel))
+
+        # --- Message handler (run on main thread).  Single handler,
+        # single Message subclass — see RenderMessage docstring.
+
+        @on(RenderMessage)
+        def _on_render_message(self, message: RenderMessage) -> None:
+            if self.rich_log is not None:
+                self.rich_log.write(message.renderable, expand=True)
+
+        # --- Consumer-thread callback ---
+
+        def _render_and_log(self, console, phase, label, event):
+            """Called from the SSE consumer thread.  Mirrors phase mode's
+            _render_and_log exactly (parity with non-interactive runs):
+
+              1. Persist the raw event to the transcript jsonl.
+              2. When --debug, mirror the raw event JSON to the
+                 chat-debug log file (phase mode mirrors to stderr;
+                 in chat mode stderr would corrupt Textual's
+                 alternate-screen output, so we route to the debug
+                 file instead).
+              3. Suppress 'reasoning' events when thinking is off.
+              4. Delegate to render_event() — the SAME dispatcher
+                 used by non-interactive runs.
+
+            Also updates _modeline_info from every message.updated
+            event (even in-progress ones) so the bottom-bar status
+            line stays live.
+
+            The render_event() call ends up posting RenderMessage(s)
+            through the console_proxy, which the @on(RenderMessage)
+            handler writes to the RichLog on the main thread."""
+            # (1) Transcript jsonl — parity with phase mode.
+            if self.transcript_fp is not None:
+                try:
+                    self.transcript_fp.write(json.dumps(event) + "\n")
+                except OSError:
+                    pass
+            # (2) Raw-event mirror — to the chat-debug file rather than
+            #     stderr (Textual owns the TTY in chat mode).
+            if self.args is not None and getattr(self.args, "debug", False):
+                _chat_debug(f"_render_and_log: raw event: {json.dumps(event)}")
+            else:
+                _chat_debug(f"_render_and_log: event type={event.get('type')}")
+
+            # Update the bottom-bar modeline on every message.updated
+            # so token/cost/liveness info refreshes live.
+            if event.get("type") == "message.updated":
+                self._update_modeline_info(event)
+
+            # (3) Suppress reasoning when thinking is off.
             if not self.thinking_on and event.get("type") == "reasoning":
                 return
+            # (4) Render via the same dispatcher non-chat uses.  No
+            #     chat-specific markers or filters — full parity.
             render_event(console, phase, label, event)
 
+        def _update_modeline_info(self, event: dict[str, Any]) -> None:
+            """Extract model/tokens from a message.updated event and store
+            for the heartbeat to surface in the bottom bar."""
+            info = event.get("info")
+            if not isinstance(info, dict):
+                props = event.get("properties", {})
+                info = props.get("info", {}) if isinstance(props, dict) else {}
+            if not isinstance(info, dict):
+                return
+            # Only use assistant messages for the modeline; user
+            # messages carry no new token data.
+            if info.get("role") != "assistant":
+                return
+            model_id = str(info.get("modelID", "")).strip()
+            provider_id = str(info.get("providerID", "")).strip()
+            if not model_id:
+                mdl = info.get("model", {})
+                if isinstance(mdl, dict):
+                    model_id = str(mdl.get("modelID", "")).strip()
+                    provider_id = str(mdl.get("providerID", "")).strip()
+            model_label = f"{provider_id}/{model_id}" if provider_id and model_id else (model_id or "…")
+
+            tokens = info.get("tokens", {})
+            if isinstance(tokens, dict):
+                _in = tokens.get("input", 0)
+                _out = tokens.get("output", 0)
+                total = tokens.get("total", _in + _out)
+                token_str = f"↑{_in} ↓{_out}"
+            else:
+                total = 0
+                token_str = ""
+
+            cost = info.get("cost", 0) or 0
+            cost_str = f" ${cost:.4f}" if cost else ""
+
+            self._modeline_info = f"{model_label} | {token_str}{cost_str}"
+
+        # --- UI actions ---
+
         def action_request_quit(self) -> None:
-            def finish_quit(confirmed: bool | None) -> None:
+            def finish_quit(confirmed):
                 if confirmed:
                     self.exit()
             self.push_screen(_QuitScreen(), finish_quit)
 
+        def action_toggle_mouse_for_select(self) -> None:
+            """Toggle terminal-native mouse selection mode (Ctrl+S).
+
+            RichLog has no upstream support for in-app mouse text
+            selection.  As a pragmatic alternative, this action toggles
+            Textual's mouse reporting off so the terminal emulator's
+            native mouse selection takes over (which copies to the
+            system clipboard via the terminal itself).
+
+            When off (default): Textual handles mouse, terminal-native
+            drag is intercepted.  Hold Option/Alt (macOS) or Shift
+            (most terminals) while dragging to bypass Textual without
+            toggling.
+
+            When on: mouse reporting is disabled at the terminal level.
+            User can click-drag to select, and Cmd+C / Ctrl+Shift+C in
+            the terminal copies to the clipboard.  Textual mouse
+            interactions (scrolling, clicking widgets) won't work until
+            toggled back.
+            """
+            driver = self._driver
+            if driver is None:
+                return
+            if not self._terminal_select_mode:
+                # Enter terminal-select mode: turn off Textual mouse.
+                try:
+                    driver._disable_mouse_support()
+                except Exception:
+                    return
+                self._terminal_select_mode = True
+                hint = Text(
+                    "[select mode ON] Textual mouse disabled. "
+                    "Click-drag to select; copy via terminal "
+                    "(Cmd+C on macOS / Ctrl+Shift+C on Linux). "
+                    "Press Ctrl+S again to exit.",
+                    style="bold yellow",
+                )
+                self.rich_log.write(hint, expand=True)
+            else:
+                # Exit terminal-select mode: turn Textual mouse back on.
+                try:
+                    driver._enable_mouse_support()
+                except Exception:
+                    return
+                self._terminal_select_mode = False
+                hint = Text(
+                    "[select mode OFF] Textual mouse re-enabled.",
+                    style="bold yellow",
+                )
+                self.rich_log.write(hint, expand=True)
+
         async def on_input_submitted(self, message: Input.Submitted) -> None:
+            """Handle Enter on the chat Input — send the typed prompt
+            through the @work(thread=True) _send_prompt worker.
+
+            The Input is NOT disabled while sending — bisection found
+            that toggling the Input's disabled/placeholder state from
+            outside this handler (via a poller) broke Textual dispatch
+            on this version.  Keeping the input always-enabled is fine
+            in practice; the user just sees their next input echoed
+            after the previous response."""
             text = message.value.strip()
             if not text:
                 return
-
             self.chat_input.value = ""
-            self.rich_log.write("")
-            self.rich_log.write(Text(f"User: {text}", style="bold cyan"))
-
-            # Disable input while processing
-            self.chat_input.disabled = True
-            self.chat_input.placeholder = "Sending..."
-
-            # Send the prompt
-            import asyncio
-            try:
-                await asyncio.to_thread(
-                    self.chat_loop.send_prompt,
-                    text,
-                    self.args.agent,
-                    self.model,
-                    self.variant,
-                )
-            except Exception as exc:
-                self._on_error(f"Failed to send message: {exc}")
+            self.rich_log.write("", expand=True)
+            self.rich_log.write(Text(f"User: {text}", style="bold cyan"), expand=True)
+            self._send_prompt(text)
 
     ChatApp = _ChatApp
     QuitScreen = _QuitScreen
@@ -4981,20 +5383,16 @@ except ImportError:
 
 def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
     """Launch the interactive chat harness."""
-    if args.chat:
-        missing = [n for n in ("label", "agent") if getattr(args, n) is None]
-        if missing:
-            parser.error(
-                "the following arguments are required for --chat: "
-                + ", ".join("--" + n.replace("_", "-") for n in missing)
-            )
-    else:
-        missing = [n for n in ("phase", "label", "agent", "prompt_file") if getattr(args, n) is None]
-        if missing:
-            parser.error(
-                "the following arguments are required: "
-                + ", ".join("--" + n.replace("_", "-") for n in missing)
-            )
+    if args.debug:
+        _setup_chat_debug()
+        _chat_debug("_run_chat_mode: entering (debug enabled)")
+
+    missing = [n for n in ("label", "agent") if getattr(args, n) is None]
+    if missing:
+        parser.error(
+            "the following arguments are required for --chat: "
+            + ", ".join("--" + n.replace("_", "-") for n in missing)
+        )
 
     check_opencode_version()
 
@@ -5017,68 +5415,99 @@ def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
     )
     thinking_on, thinking_source = _resolve_thinking_decision(model, extra_args)
 
-    # Check textual is available
+    _chat_debug(f"_run_chat_mode: agent={args.agent} model={model} variant={variant} thinking={thinking_on}")
+
     if ChatApp is None:
-        _emit_fatal_error(
-            console,
-            "Missing Dependency",
-            "The --chat flag requires the 'textual' package. Run 'make venv' to install it.",
-        )
+        _emit_fatal_error(console, "Missing Dependency",
+                          "The --chat flag requires the 'textual' package. Run 'make venv' to install it.")
         return 1
 
     # Start server
+    _chat_debug("_run_chat_mode: starting opencode serve")
     runner = ServerRunner()
     try:
         server_info = runner.start(hostname="127.0.0.1", log_level="WARN")
+        _chat_debug(f"_run_chat_mode: server started pid={server_info.pid} url={server_info.base_url}")
     except ServerRunnerError as exc:
+        _chat_debug(f"_run_chat_mode: server start failed: {exc}")
         _emit_fatal_error(console, "Server Error", str(exc))
+        _close_chat_debug()
         return 1
 
     # Create session
+    _chat_debug("_run_chat_mode: creating session")
     try:
         session_id = _create_chat_session(
-            server_info.base_url,
-            args.agent,
-            model,
-            server_info.password,
-            str(ROOT),
+            server_info.base_url, args.agent, model, server_info.password, str(ROOT),
         )
+        _chat_debug(f"_run_chat_mode: session created id={session_id}")
     except Exception as exc:
+        _chat_debug(f"_run_chat_mode: session creation failed: {exc}")
         _emit_fatal_error(console, "Session Error", str(exc))
         runner.stop()
+        _close_chat_debug()
         return 1
 
-    # Forward signals
-    def _forward_signal(signum: int, _frame: Any) -> None:
-        info = runner.info
-        if info is not None:
-            try:
-                os.killpg(info.pid, signum)
-            except ProcessLookupError:
-                pass
-        signal.signal(signum, signal.SIG_DFL)
-        os.kill(os.getpid(), signum)
+    # Open the chat transcript (parity with phase mode, which writes
+    # tmp/last-phase-<phase>-<finding>-attempt-N.jsonl).  We use a
+    # filename that includes both a timestamp and the PID so successive
+    # runs (or several runs from different shells) don't clobber each
+    # other.  Open line-buffered so the file is durable across crashes.
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    transcript_dir = ROOT / "tmp"
+    transcript_dir.mkdir(parents=True, exist_ok=True)
+    transcript_path = transcript_dir / f"last-chat-{stamp}-pid{os.getpid()}.jsonl"
+    transcript_fp = None
+    try:
+        transcript_fp = transcript_path.open("w", encoding="utf-8", buffering=1)
+        _chat_debug(f"_run_chat_mode: opened transcript {transcript_path}")
+    except OSError as exc:
+        _chat_debug(f"_run_chat_mode: could not open transcript {transcript_path}: {exc}")
 
-    previous_sigint = signal.signal(signal.SIGINT, _forward_signal)
-    previous_sigterm = signal.signal(signal.SIGTERM, _forward_signal)
-
+    _chat_debug("_run_chat_mode: creating ChatApp")
+    app = None
     try:
         app = ChatApp(
             server_info=server_info,
             session_id=session_id,
             initial_prompt=prompt,
             args=args,
-            console=console,
             model=model,
             variant=variant,
             thinking_on=thinking_on,
+            transcript_fp=transcript_fp,
         )
+        _chat_debug("_run_chat_mode: calling app.run()")
         app.run()
+        _chat_debug("_run_chat_mode: app.run() returned")
     finally:
-        signal.signal(signal.SIGINT, previous_sigint)
-        signal.signal(signal.SIGTERM, previous_sigterm)
+        _chat_debug("_run_chat_mode: cleaning up")
+        if app is not None and getattr(app, "chat_loop", None) is not None:
+            _chat_debug("_run_chat_mode: stopping chat loop")
+            app.chat_loop.stop()
         runner.stop()
+        if transcript_fp is not None:
+            try:
+                transcript_fp.flush()
+                transcript_fp.close()
+            except OSError:
+                pass
 
+    # Final summary banner on the restored terminal.  Mirrors phase
+    # mode's success-path summary.
+    try:
+        rel_path = transcript_path.relative_to(ROOT)
+    except ValueError:
+        rel_path = transcript_path
+    if HAVE_RICH:
+        console.print(Rule(style="green"))
+        console.print(Text(f"{C.SYM_OK} Chat session ended", style="green"))
+        console.print(Text(f"  transcript: {rel_path}", style="dim"))
+    else:
+        print(C.ok("Chat session ended"))
+        print(f"  transcript: {rel_path}")
+
+    _close_chat_debug()
     return 0
 
 

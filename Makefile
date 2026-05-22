@@ -193,7 +193,7 @@ phase-6: venv-check
 	fi
 
 chat: venv-check
-	@$(PYTHON) tools/run-agent.py --chat --label "Interactive Chat" --agent $(or $(AGENT),auditor) --prompt "Please introduce yourself and wait for my instructions."
+	@$(PYTHON) tools/run-agent.py --chat --label "Interactive Chat" --agent $(or $(AGENT),chat) --prompt-file prompts/chat-initial.md $(if $(DEBUG),--debug,)
 
 list-risk-files: venv-check
 	@$(PYTHON) tools/list-risk-files.py
