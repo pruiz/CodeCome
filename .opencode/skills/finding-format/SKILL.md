@@ -55,16 +55,26 @@ Rules:
 - Use four digits for the numeric id.
 - Use lowercase slugs.
 - Use hyphens instead of spaces.
-- Keep the slug short but meaningful.
+- Derive the slug from a short vulnerability-style title.
+- Do not necessarily derive it directly from the raw finding description.
+- Keep the slug concise: favor 8 words or fewer.
+- Include the product surface when it helps locate the finding mentally.
+- Avoid code terms, function names, endpoint internals, and long causal chains.
 - Do not reuse ids.
 - Do not change ids after creation.
 
-Examples:
+Good examples:
 
     CC-0001-missing-owner-check.md
     CC-0002-stack-buffer-overflow-in-parser.md
     CC-0003-unsafe-yaml-deserialization.md
     CC-0004-command-injection-via-backup-name.md
+    CC-0005-path-traversal-in-admin-export.md
+
+Bad examples:
+
+- `CC-0020-username-comparison-in-uh-auth-check-uses-non-constant-time-strcmp-leaking-realm-usernames-via-timing.md`
+- `CC-0021-unbounded-crypt-3-invocations-on-every-basic-auth-attempt-enable-single-threaded-daemon-dos.md`
 
 ## Required frontmatter
 
@@ -77,6 +87,10 @@ Minimum fields:
     title: "Short vulnerability title"
     status: "PENDING"
     severity: "MEDIUM"
+    cvss_v4:
+      vector: ""
+      score: 0.0
+      justification: ""
     confidence: "LOW"
     category: "Unclassified"
     cwe: []
@@ -148,7 +162,14 @@ Use only:
 - `LOW`
 - `INFO`
 
-Severity should reflect realistic impact, not just theoretical bug class.
+Severity must reflect realistic impact, not just theoretical bug class.
+When `cvss_v4.score` is populated, `severity` must match the score band
+defined by the exploit-development skill.
+
+`cvss_v4.vector`, `cvss_v4.score`, and `cvss_v4.justification` are
+required frontmatter fields. They may stay empty or zero for early
+`PENDING` findings, but must be populated when status is `CONFIRMED` or
+`EXPLOITED`.
 
 ## Confidence values
 

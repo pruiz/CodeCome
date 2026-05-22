@@ -250,8 +250,6 @@ Use these severity levels:
 - `LOW`
 - `INFO`
 
-Do not over-focus on CVSS in the PoC. Prefer clear technical impact.
-
 ## Status values
 
 Use only these status values:
