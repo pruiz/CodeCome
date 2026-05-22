@@ -250,8 +250,6 @@ Use these severity levels:
 - `LOW`
 - `INFO`
 
-Derive severity from a CVSSv4 vector. Record the vector and score in the finding's `cvss_v4` frontmatter block; map the score band to the label above. See `.opencode/skills/finding-format/SKILL.md` for the band table.
-
 ## Status values
 
 Use only these status values:
