@@ -55,21 +55,26 @@ Rules:
 - Use four digits for the numeric id.
 - Use lowercase slugs.
 - Use hyphens instead of spaces.
-- Generate the slug from a short vulnerability-style title, not from the raw finding description; max 8 words, avoid code terms, function names, endpoint internals, causal chains.
+- Derive the slug from a short vulnerability-style title.
+- Do not necessarily derive it directly from the raw finding description.
+- Keep the slug concise: favor 8 words or fewer.
+- Include the product surface when it helps locate the finding mentally.
+- Avoid code terms, function names, endpoint internals, and long causal chains.
 - Do not reuse ids.
 - Do not change ids after creation.
 
-Good Examples:
+Good examples:
 
     CC-0001-missing-owner-check.md
+    CC-0002-stack-buffer-overflow-in-parser.md
+    CC-0003-unsafe-yaml-deserialization.md
     CC-0004-command-injection-via-backup-name.md
+    CC-0005-path-traversal-in-admin-export.md
 
 Bad examples:
 
 - `CC-0020-username-comparison-in-uh-auth-check-uses-non-constant-time-strcmp-leaking-realm-usernames-via-timing.md`
 - `CC-0021-unbounded-crypt-3-invocations-on-every-basic-auth-attempt-enable-single-threaded-daemon-dos.md`
-
-
 
 ## Required frontmatter
 
@@ -157,19 +162,14 @@ Use only:
 - `LOW`
 - `INFO`
 
-Derive `severity` from a CVSSv4 vector that reflects realistic impact, not just theoretical bug class. Record the full vector string, the computed score, and a one-line justification in the `cvss_v4` frontmatter block. The label MUST match the score band below.
+Severity must reflect realistic impact, not just theoretical bug class.
+When `cvss_v4.score` is populated, `severity` must match the score band
+defined by the exploit-development skill.
 
-Score-to-label bands:
-
-| CVSSv4 base+threat score | Label    |
-|--------------------------|----------|
-| 9.0 – 10.0               | CRITICAL |
-| 7.0 – 8.9                | HIGH     |
-| 4.0 – 6.9                | MEDIUM   |
-| 0.1 – 3.9                | LOW      |
-| 0.0                      | INFO     |
-
-`cvss_v4.vector` is **required** when status is `CONFIRMED` or `EXPLOITED`. For `PENDING` findings, populate it with the best base-metric estimate available; threat/environmental metrics may be refined during validation and exploitation.
+`cvss_v4.vector`, `cvss_v4.score`, and `cvss_v4.justification` are
+required frontmatter fields. They may stay empty or zero for early
+`PENDING` findings, but must be populated when status is `CONFIRMED` or
+`EXPLOITED`.
 
 ## Confidence values
 
