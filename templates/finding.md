@@ -3,6 +3,10 @@ id: "CC-0000"
 title: "Short vulnerability title"
 status: "PENDING"
 severity: "MEDIUM"
+cvss_v4:
+  vector: ""
+  score: 0.0
+  justification: ""
 confidence: "LOW"
 category: "Unclassified"
 cwe: []

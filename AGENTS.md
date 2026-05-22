@@ -250,7 +250,7 @@ Use these severity levels:
 - `LOW`
 - `INFO`
 
-Do not over-focus on CVSS in the PoC. Prefer clear technical impact.
+Derive severity from a CVSSv4 vector. Record the vector and score in the finding's `cvss_v4` frontmatter block; map the score band to the label above. See `.opencode/skills/finding-format/SKILL.md` for the band table.
 
 ## Status values
 

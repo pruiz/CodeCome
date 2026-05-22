@@ -61,6 +61,9 @@ Document:
 - interesting files for Phase 2,
 - validation strategy.
 
+Scan for documentation like `src/README*`, `src/CHANGELOG*`, `src/HISTORY*`, `src/NEWS*`, `src/SECURITY*`, `src/THREAT_MODEL*`, `src/CONTRIBUTING*`, `src/docs/` and similar.
+Distill declared threat model, past CVEs, trust boundaries, and third-party components into the relevant notes; treat author claims as input to verify, not facts.
+
 ### File risk index
 
 Create `itemdb/notes/file-risk-index.yml` using the schema in `templates/file-risk-index.yml`.
