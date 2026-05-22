@@ -61,7 +61,10 @@ Document:
 - interesting files for Phase 2,
 - validation strategy.
 
-Scan for documentation like `src/README*`, `src/CHANGELOG*`, `src/HISTORY*`, `src/NEWS*`, `src/SECURITY*`, `src/THREAT_MODEL*`, `src/CONTRIBUTING*`, `src/docs/` and similar.
+Recursively scan `src/` for high-signal documentation such as `README*`, `SECURITY*`, `THREAT_MODEL*`, `CONTRIBUTING*`, `docs/`, and similar. Also inspect `CHANGELOG*`, `HISTORY*`, and `NEWS*`, but prefer top-level or component-relevant files.
+
+If the repository has dozens of changelog/history/news files, do not process them exhaustively. Summarize the pattern, prioritize files near the primary target or security-relevant components, and record that scope decision.
+
 Distill declared threat model, past CVEs, trust boundaries, and third-party components into the relevant notes; treat author claims as input to verify, not facts.
 
 ### File risk index
