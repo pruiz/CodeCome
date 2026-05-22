@@ -8,6 +8,10 @@ id: "CC-0001"
 title: "Valid finding"
 status: "PENDING"
 severity: "MEDIUM"
+cvss_v4:
+  vector: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N"
+  score: 5.0
+  justification: "Unit-test fixture with medium impact."
 confidence: "LOW"
 category: "Test"
 cwe: []
@@ -68,6 +72,10 @@ id: "CC-0001"
 title: "Exploited finding"
 status: "EXPLOITED"
 severity: "HIGH"
+cvss_v4:
+  vector: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:L/VA:N/SC:N/SI:N/SA:N/E:A"
+  score: 8.0
+  justification: "Unit-test fixture with demonstrated high impact."
 confidence: "CONFIRMED"
 category: "Test"
 cwe: {cwe}
