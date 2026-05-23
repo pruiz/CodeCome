@@ -27,6 +27,7 @@ This plan keeps the useful inventory from the original draft but changes the exe
 7. Introduce `PhaseEventLoop` and `ChatEventLoop`, sharing common SSE/session/dedup/permission logic through a base event loop.
 8. Preserve compatibility through thin wrappers at historical script paths.
 9. Add `tools/AGENTS.md` to document the architecture rules for future changes.
+10. Add explicit unit, fixture, smoke, and acceptance gates so each migration step is verifiable.
 
 The goal is not only to move code out of `run-agent.py`, but to make future changes safer and easier to review.
 
@@ -158,6 +159,10 @@ The current bash rendering path has special cases for CodeCome commands and shel
 ### P8: Finding scripts duplicate frontmatter/path helpers
 
 Finding/itemdb CLI scripts should keep their stable entrypoints, but reusable logic belongs in a shared package.
+
+### P9: Current tests are too broad for a safe structural refactor
+
+A single `make tests` gate is not enough for this migration. Rendering, event-loop behavior, command interceptors, wrapper compatibility, and finding helper behavior need focused tests and acceptance checks.
 
 ---
 
@@ -823,74 +828,265 @@ Why not extract renderers first?
 
 ## 10. Testing Strategy
 
-### Pre-migration baseline
+The refactor must be validated with focused tests, not only by running the broad test suite. Each phase should add or update tests around the component being moved.
+
+### 10.1 Pre-migration baseline
+
+Before implementation starts, capture a known-good baseline:
 
 ```bash
 make tests
+python tools/run-agent.py --help
 python tools/run-agent.py --show-model --agent recon
 ```
 
-If practical, also run a small/mock phase target or an existing recorded/mock OpenCode flow.
+If practical, also run a small/mock phase target or an existing recorded/mock OpenCode flow and keep representative `tmp/last-phase-*.jsonl` snippets as fixtures.
 
-### Per-phase checks
+### 10.2 Unit tests to add
 
-After each phase:
+#### Rendering
+
+Suggested layout:
+
+```text
+tests/rendering/
+├── test_snapshot_cache.py
+├── test_registry.py
+├── test_sinks.py
+├── test_read_renderer.py
+├── test_write_renderer.py
+├── test_apply_patch_renderer.py
+├── test_grep_renderer.py
+├── test_command_renderer.py
+└── test_command_interceptors.py
+```
+
+Required coverage:
+
+| Component | Required tests |
+|---|---|
+| `SnapshotCache` | `set/get`, stale invalidation, reread existing file, reread missing file, capacity/LRU if implemented |
+| `RendererRegistry` | dispatch by generic event type, dispatch by `tool_use` tool name, fallback for unknown event/tool |
+| `PlainSink` | works without Rich, writes plain strings, does not require ANSI support |
+| `RichConsoleSink` | accepts arbitrary Rich renderables such as `Text`, `Panel`, `Table`, `Group`, `Syntax` |
+| `TextualRichLogSink` | delegates to a fake RichLog/proxy and preserves `expand` |
+| `ReadRenderer` | file/directory framing, internal read suppression, cache population |
+| `WriteRenderer` | new-file output, diff output with cached previous content, cache update |
+| `EditRenderer` | old/new diff rendering and cache reread behavior |
+| `ApplyPatchRenderer` | `*** Begin Patch` envelope, unified diff fallback, JSON patch list variant |
+| `GlobRenderer` / `GrepRenderer` | file-list vs `path:line:text` mode, result caps, no-match output |
+| `CommandRenderer` | interceptor ordering, fallback generic command rendering |
+| `CommandExecutionInterceptor` | sandbox-bootstrap JSON, `rtk read`, `rtk grep`, `ls/find/tree` recognition |
+
+Renderer tests should not require a real terminal. Use fake/recording sinks, for example:
+
+```python
+class RecordingSink:
+    mode = "rich"
+
+    def __init__(self):
+        self.items = []
+
+    def write(self, renderable, *, expand=True):
+        self.items.append((renderable, expand))
+
+    def write_text(self, text):
+        self.items.append((text, True))
+```
+
+#### Events
+
+Suggested layout:
+
+```text
+tests/events/
+├── test_state_tracker.py
+├── test_base_event_loop.py
+├── test_phase_event_loop.py
+└── test_chat_event_loop.py
+```
+
+Required coverage:
+
+| Component | Required tests |
+|---|---|
+| `StateTracker` | accumulate deltas, emit finalized text only on `time.end`, emit tool only on `completed`/`error`, ignore in-progress parts |
+| `BaseEventLoop` | session filtering, idle detection, auth/workspace headers, permission auto-reject with mocked HTTP |
+| Session sync | `GET /session/{id}/message` synthesizes unseen finalized events |
+| Dedup | no double-rendering after sync/reconnect for the same `part.id`/message |
+| `PhaseEventLoop` | consumes fixture stream until idle and returns expected `RunResult` |
+| `ChatEventLoop` | supports long-lived multi-turn consumption and `stop()` semantics |
+
+Mock `SseClient.events()` with deterministic event generators. Do not require a live OpenCode server for unit tests.
+
+#### CodeCome core
+
+Suggested layout:
+
+```text
+tests/codecome/
+├── test_config.py
+├── test_session.py
+├── test_graceful.py
+├── test_transcript.py
+└── test_cli_smoke.py
+```
+
+Required coverage:
+
+| Component | Required tests |
+|---|---|
+| `config.py` | model precedence: `OPENCODE_ARGS` > env > `codecome.yml` > discovery |
+| Prompt loading | finding placeholder replacement, extra prompts from yml/file/env, error when placeholder is required but missing |
+| Thinking decision | Anthropic provider default, non-Anthropic default, env override, `--thinking` override |
+| `session.py` | create-session payloads, prompt payloads, model provider/modelID split, variant handling, auth/workspace headers |
+| `graceful.py` | phase 1 artifacts, phase 2 pending finding, phase 4 evidence, phase 5 exploited/not-feasible paths |
+| `transcript.py` | stable naming, attempt counters, JSONL writing, no collision in normal use |
+
+#### Findings
+
+For Epic B:
+
+```text
+tests/findings/
+├── test_frontmatter.py
+├── test_finding_lookup.py
+├── test_create.py
+├── test_move.py
+├── test_listing.py
+└── test_package.py
+```
+
+Required coverage:
+
+| Component | Required tests |
+|---|---|
+| `load_frontmatter` | valid YAML, missing frontmatter, invalid YAML |
+| finding lookup | by `CC-0001`, by filename, across status directories |
+| next ID | ignores `.gitkeep`, computes next ID from existing findings |
+| move | moves status directory and updates frontmatter status |
+| wrappers | historical scripts still run `--help` successfully |
+
+### 10.3 Golden / fixture tests for rendering
+
+Add representative event fixtures so renderer behavior is checked directly:
+
+```text
+tests/fixtures/rendering/
+├── read_file_event.json
+├── write_file_event.json
+├── apply_patch_event.json
+├── grep_lines_event.json
+├── sandbox_validate_bash_event.json
+├── task_event.json
+├── reasoning_event.json
+└── expected/
+    ├── read_file.plain.txt
+    ├── write_file.plain.txt
+    ├── apply_patch.plain.txt
+    └── ...
+```
+
+For plain mode, compare stable text output.
+
+For Rich/Textual, avoid fragile ANSI snapshots. Prefer one of:
+
+1. `RecordingSink` checks for renderable types and important text fragments.
+2. `rich.console.Console(record=True, width=120)` with color disabled and stable exported text.
+3. Key-string assertions: title, path, diff summary, status, error text, etc.
+
+Acceptance goal:
+
+```text
+- plain mode output contains the same key information as before;
+- rich mode emits structured Rich renderables instead of falling back to raw JSON;
+- textual mode uses the same Rich rendering path as rich console, with a different sink.
+```
+
+### 10.4 CLI and wrapper compatibility tests
+
+Historical paths must keep working:
 
 ```bash
-python -m py_compile $(find tools -name '*.py' -not -path '*/.venv/*')
-make tests
+python tools/run-agent.py --help
 python tools/run-agent.py --show-model --agent recon
+python tools/create-finding.py --help
+python tools/list-findings.py --help
+python tools/move-finding.py --help
+python tools/render-report.py --help
+python tools/render-index.py --help
 ```
 
-Additional phase-specific checks:
+After `run-agent.py` becomes a wrapper, explicitly verify:
 
-```bash
-# After rendering changes
-python tools/run-agent.py --show-model --agent recon --color never
-python tools/run-agent.py --show-model --agent recon --color always
-
-# After chat extraction
-# Run a chat smoke test if Textual is installed and a lightweight manual check is acceptable.
-
-# After events changes
-# Run both phase mode and chat mode smoke tests.
-
-# After findings changes
-tools/create-finding.py "Test finding"
-tools/list-findings.py
-tools/move-finding.py CC-XXXX REJECTED
-tools/render-index.py
-tools/render-report.py
+```text
+- `python tools/run-agent.py ...` works;
+- `python -m codecome.cli ...` works if supported;
+- Makefile targets still invoke a valid path;
+- `tools/run-sweep.py` still works without modification or is updated in the same PR.
 ```
-
-### Tests to add
-
-- `SnapshotCache`: set/get/invalidate/reread behavior.
-- `RendererRegistry`: dispatch by event type and tool name.
-- `CommandExecutionInterceptor`: command matching and fallback ordering.
-- `RenderSink`: plain/rich/textual sink smoke behavior.
-- `BaseEventLoop`: session filtering, idle detection, permission handling, dedup.
-- `findings/frontmatter.py`: frontmatter parsing and finding lookup.
 
 ---
 
-## 11. Risk Assessment
+## 11. Acceptance Gates
+
+Each phase must define automated checks, smoke/manual checks, and acceptance criteria. A phase is not complete merely because `make tests` passes.
+
+| Phase | Required automated checks | Smoke/manual checks | Acceptance criteria |
+|---|---|---|---|
+| A1 core helpers | `py_compile`, `make tests`, `test_config.py`, `test_session.py`, `test_graceful.py` | `python tools/run-agent.py --show-model --agent recon` | CLI behavior unchanged; model/prompt/session payload logic covered; no runner logic in `config.py` |
+| A2 rendering foundation | `py_compile`, `make tests`, `test_sinks.py`, `test_registry.py`, `test_snapshot_cache.py` | import `rendering.*` modules | `RenderContext`, sinks, registry, settings, and cache exist and are tested; no renderer migration required yet |
+| A3 renderer migration | renderer unit tests plus fixture/golden tests for each migrated family | `--color never` and `--color always` smoke runs | migrated renderers handle known fixture events; fallback still works; plain/rich/textual destinations remain supported |
+| A4 chat extraction | `py_compile`, `make tests`, sink/proxy tests | manual `make chat` or equivalent Textual smoke test | chat imports cleanly; RichLog output path works; known Textual threading pattern preserved |
+| A5 runner/CLI extraction | `py_compile`, `make tests`, CLI smoke tests | run key Makefile target or mock phase flow | `tools/run-agent.py` is a thin wrapper; exit codes, transcript naming, auto-resume, and frontmatter repair behavior remain compatible |
+| A6 events refactor | `test_base_event_loop.py`, `test_phase_event_loop.py`, `test_chat_event_loop.py` | phase and chat smoke tests | shared logic lives in `BaseEventLoop`; phase loop returns correct `RunResult`; chat loop remains multi-turn and long-lived |
+| A7 `tools/AGENTS.md` | docs lint if available | manual review | architecture rules documented: wrappers, config boundary, renderers, sinks, snapshot cache, event loops, command interceptors, findings |
+| B1 findings helpers | `test_frontmatter.py`, `test_finding_lookup.py` | run helper imports | shared helpers cover parsing, lookup, status dirs, next ID, slug/replacement helpers |
+| B2 findings wrappers | tests for migrated commands | wrapper `--help` smoke tests | old script paths still work; implementations live under `tools/findings/`; no duplicated frontmatter parser remains in migrated scripts |
+| B3 references | `make tests`, docs/link checks if available | Makefile/manual command checks | Makefile/docs references are updated only where needed; stable CLI paths preserved |
+
+### Global acceptance after Epic A
+
+```text
+- `tools/run-agent.py` has no substantial logic; it delegates to `codecome.cli`.
+- Phase mode supports plain terminal and Rich terminal rendering.
+- Chat mode uses Textual/RichLog and shares renderer classes where applicable.
+- Event loops are separated as `PhaseEventLoop` and `ChatEventLoop`.
+- Shared SSE/session/dedup/permission logic lives in `BaseEventLoop`.
+- CodeCome-specific command rendering is represented as `CommandExecutionInterceptor` implementations.
+- Snapshot/diff state is isolated in `SnapshotCache`.
+- Existing Makefile targets and script paths still work.
+```
+
+### Global acceptance after Epic B
+
+```text
+- Finding/itemdb helpers are shared under `tools/findings/`.
+- Historical scripts remain as wrappers.
+- No duplicated frontmatter parser remains in migrated scripts.
+- Reports and indexes are generated as before.
+```
+
+---
+
+## 12. Risk Assessment
 
 | Risk | Probability | Impact | Mitigation |
 |---|---:|---:|---|
 | Import cycles during extraction | Medium | High | Small PRs, py_compile after each phase, keep wrappers |
-| Renderer behavior regression | Medium | Medium | Migrate renderer families incrementally, keep input dict contract |
-| Rich/Textual behavior divergence | Medium | Medium | Use shared Rich render path with different sinks |
-| Plain output degradation | Medium | Medium | PlainSink and explicit plain branches remain supported |
+| Renderer behavior regression | Medium | Medium | Migrate renderer families incrementally, keep input dict contract, add fixture tests |
+| Rich/Textual behavior divergence | Medium | Medium | Use shared Rich render path with different sinks; test sinks with fake outputs |
+| Plain output degradation | Medium | Medium | PlainSink and explicit plain branches remain supported; plain golden tests |
 | Snapshot diff bugs | Medium | Medium | Isolate in SnapshotCache and add unit tests |
-| Event loop regression | Medium | High | Delay BaseEventLoop until after runner/render split; add tests first where possible |
-| Chat TUI freeze/regression | Medium | High | Preserve known Textual threading pattern, isolate sink/proxy changes carefully |
-| Makefile/script path breakage | Low | High | Keep thin wrappers permanently |
-| Findings migration affects reports | Medium | Medium | Move findings tools as separate epic with wrappers |
+| Event loop regression | Medium | High | Delay BaseEventLoop until after runner/render split; add deterministic event-loop tests |
+| Chat TUI freeze/regression | Medium | High | Preserve known Textual threading pattern, isolate sink/proxy changes carefully, manual smoke test |
+| Makefile/script path breakage | Low | High | Keep thin wrappers permanently, add wrapper smoke tests |
+| Findings migration affects reports | Medium | Medium | Move findings tools as separate epic with wrappers and itemdb fixture tests |
+| False confidence from broad tests only | Medium | High | Require acceptance gates and focused tests per phase |
 
 ---
 
-## 12. Open Questions
+## 13. Open Questions
 
 1. **Should the renderer classes be instantiated once per run or recreated per event?**
    Recommendation: instantiate once at startup with a shared `RenderContext`.
@@ -909,7 +1105,7 @@ tools/render-report.py
 
 ---
 
-## 13. References
+## 14. References
 
 - [tool-renderers-plan.md](tool-renderers-plan.md) — original renderer design
 - [chat-mode-plan.md](chat-mode-plan.md) — chat TUI architecture
