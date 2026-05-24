@@ -66,7 +66,7 @@ class TestRegistryEventDispatch:
         out = capsys.readouterr().out
         assert "unknown event type" in out.lower()
 
-    def test_fallback_on_non_handling_renderer(self, registry):
+    def test_fallback_on_non_handling_renderer(self, registry, capsys):
         class NonHandler(EventRenderer):
             event_types = ("baz",)
             def render(self, event):
@@ -74,6 +74,9 @@ class TestRegistryEventDispatch:
 
         registry.register_event(NonHandler(registry.context))
         registry.dispatch_event({"type": "baz"})
+        # Should fall through to UnknownEventRenderer
+        out = capsys.readouterr().out
+        assert "unknown event type" in out.lower()
 
 
 class TestRegistryToolDispatch:
@@ -108,7 +111,7 @@ class TestRegistryToolDispatch:
         out = capsys.readouterr().out
         assert "unknown_tool" in out
 
-    def test_fallback_on_non_handling_tool_renderer(self, registry):
+    def test_fallback_on_non_handling_tool_renderer(self, registry, capsys):
         class NonHandler(ToolRenderer):
             tool_names = ("grep",)
             def render(self, tool_name, state):
@@ -116,3 +119,6 @@ class TestRegistryToolDispatch:
 
         registry.register_tool(NonHandler(registry.context))
         registry.dispatch_tool("grep", {"status": "completed"})
+        # Should fall through to FallbackToolRenderer
+        out = capsys.readouterr().out
+        assert "grep" in out.lower()

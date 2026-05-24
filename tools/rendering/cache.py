@@ -30,23 +30,25 @@ class SnapshotCache:
     # Public API
     # ------------------------------------------------------------------
 
-    def set(self, path: str, content: str) -> None:
+    def set(self, path: str | os.PathLike[str], content: str) -> None:
         """Cache *content* for *path*, recording its current mtime."""
         if not self._enabled:
             return
-        mtime = self._current_mtime(path)
+        p = os.fspath(path)
+        mtime = self._current_mtime(p)
         if mtime is None:
             return
-        self._entries[path] = (content, mtime)
-        self._entries.move_to_end(path)
+        self._entries[p] = (content, mtime)
+        self._entries.move_to_end(p)
         while len(self._entries) > self._max:
             self._entries.popitem(last=False)
 
-    def get(self, path: str) -> str | None:
+    def get(self, path: str | os.PathLike[str]) -> str | None:
         """Return cached content for *path*, or None."""
         if not self._enabled:
             return None
-        entry = self._entries.get(path)
+        p = os.fspath(path)
+        entry = self._entries.get(p)
         if entry is None:
             return None
         return entry[0]
@@ -63,15 +65,16 @@ class SnapshotCache:
         for p in stale:
             del self._entries[p]
 
-    def reread(self, path: str) -> None:
+    def reread(self, path: str | os.PathLike[str]) -> None:
         """Invalidate and re-read *path* from disk."""
         if not self._enabled:
             return
-        if path in self._entries:
-            del self._entries[path]
+        p = os.fspath(path)
+        if p in self._entries:
+            del self._entries[p]
         try:
-            content = Path(path).read_text(encoding="utf-8", errors="replace")
-            self.set(path, content)
+            content = Path(p).read_text(encoding="utf-8", errors="replace")
+            self.set(p, content)
         except OSError:
             pass
 

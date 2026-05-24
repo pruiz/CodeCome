@@ -38,7 +38,7 @@ class RenderSink(Protocol):
         """Write a Rich renderable or plain string."""
         ...
 
-    def write_text(self, text: str) -> None:
+    def write_text(self, text: str, *, end: str = "\n") -> None:
         """Write a plain string (always safe, any mode)."""
         ...
 
@@ -56,10 +56,11 @@ class PlainSink:
             # Minimal fallback: str() the renderable.
             self.write_text(str(renderable))
 
-    def write_text(self, text: str) -> None:
+    def write_text(self, text: str, *, end: str = "\n") -> None:
         import sys
         sys.stdout.write(text)
-        sys.stdout.write("\n")
+        sys.stdout.write(end)
+        sys.stdout.flush()
 
 
 class RichConsoleSink:
@@ -77,7 +78,7 @@ class RichConsoleSink:
     def write(self, renderable: Any, *, expand: bool = True) -> None:
         self._console.print(renderable, overflow="ignore", crop=False)
 
-    def write_text(self, text: str) -> None:
+    def write_text(self, text: str, *, end: str = "\n") -> None:
         self._console.print(text, overflow="ignore", crop=False)
 
 
@@ -99,7 +100,12 @@ class TextualRichLogSink:
 
     def write(self, renderable: Any, *, expand: bool = True) -> None:
         # The proxy's .write() is thread-safe (post_message in Textual).
-        self._target.write(renderable, expand=expand)  # type: ignore[call-arg]
+        # Some targets (e.g. the legacy TextualConsoleProxy) do not accept
+        # an expand keyword; fall back gracefully.
+        try:
+            self._target.write(renderable, expand=expand)  # type: ignore[call-arg]
+        except TypeError:
+            self._target.write(renderable)
 
-    def write_text(self, text: str) -> None:
+    def write_text(self, text: str, *, end: str = "\n") -> None:
         self.write(text)

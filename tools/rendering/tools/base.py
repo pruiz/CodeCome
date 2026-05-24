@@ -13,10 +13,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from rendering.context import RenderContext
+from rendering.base import BaseRenderer
 
 
-class ToolRenderer:
+class ToolRenderer(BaseRenderer):
     """Base class for per-tool renderers.
 
     Subclasses declare which tool names they handle via ``tool_names``
@@ -24,9 +24,6 @@ class ToolRenderer:
     """
 
     tool_names: tuple[str, ...] = ()
-
-    def __init__(self, context: RenderContext) -> None:
-        self.context = context
 
     def render(self, tool_name: str, state: dict[str, Any]) -> bool:
         """Render a tool call.  Return True if handled, False to fall through."""
@@ -49,7 +46,7 @@ class FallbackToolRenderer(ToolRenderer):
         input_data = state.get("input")
         output_data = state.get("output")
 
-        if self.context.sink.mode in ("rich", "textual"):
+        if self.rich:
             from rich.console import Group
             from rich.json import JSON
             from rich.panel import Panel
@@ -80,11 +77,15 @@ class FallbackToolRenderer(ToolRenderer):
             self.context.sink.write(Panel(body, title=title, border_style=border, expand=True))
         else:
             import _colors as C
-            print(C.header(f"Tool: {tool_name} [{status}]"))
+            self.context.sink.write_text(C.header(f"Tool: {tool_name} [{status}]"))
             if input_data is not None:
-                print(C.info("Input"))
-                print(json.dumps(input_data, indent=2) if isinstance(input_data, (dict, list)) else str(input_data))
+                self.context.sink.write_text(C.info("Input"))
+                self.context.sink.write_text(
+                    json.dumps(input_data, indent=2) if isinstance(input_data, (dict, list)) else str(input_data)
+                )
             if output_data is not None:
-                print(C.info("Output"))
-                print(json.dumps(output_data, indent=2) if isinstance(output_data, (dict, list)) else str(output_data))
+                self.context.sink.write_text(C.info("Output"))
+                self.context.sink.write_text(
+                    json.dumps(output_data, indent=2) if isinstance(output_data, (dict, list)) else str(output_data)
+                )
         return True
