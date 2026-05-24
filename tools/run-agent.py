@@ -36,6 +36,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _colors as C
 from opencode.serve import ServerRunner, ServerRunnerError
 from events import EventLoop, RunResult
+from codecome.version import check_opencode_version, MINIMUM_OPENCODE_VERSION as _MINIMUM_OPENCODE_VERSION
+from codecome.config import (
+    truthy_env, resolve_color_mode, load_prompt,
+    resolve_model_and_variant, resolve_runtime_model_for_banner,
+    resolve_thinking_decision, show_model_table,
+)
+from codecome.session import create_session, create_chat_session, send_prompt_to_session
+from codecome.graceful import (
+    check_phase_graceful_completion,
+    phase_checklist_lines, build_phase_resume_prompt,
+    build_frontmatter_resume_prompt, build_resume_command,
+)
+from codecome.transcript import open_phase_transcript, open_chat_transcript, close_transcript
 
 try:
     from rich.console import Console, Group
@@ -57,7 +70,6 @@ except ImportError:  # pragma: no cover
     HAVE_RICH = False
 
 ROOT = Path(__file__).resolve().parents[1]
-MINIMUM_OPENCODE_VERSION = "1.14.50"
 
 # ---------------------------------------------------------------------------
 # Chat debug logging (--debug with --chat writes to tmp/chat-debug-<pid>.log)
@@ -101,353 +113,6 @@ def _close_chat_debug() -> None:
         _CHAT_DEBUG_FP = None
 
 
-def check_opencode_version() -> None:
-    try:
-        result = subprocess.run(["opencode", "--version"], capture_output=True, text=True)
-    except FileNotFoundError:
-        print(C.fail("OpenCode is not installed or not in PATH."), file=sys.stderr)
-        sys.exit(1)
-
-    if result.returncode != 0:
-        print(C.fail(f"Failed to check OpenCode version (exit code {result.returncode})."), file=sys.stderr)
-        sys.exit(1)
-
-    version_str = result.stdout.strip().split()[-1]
-
-    def parse_ver(v: str) -> tuple[int, ...]:
-        match = re.search(r"^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?", v)
-        if match:
-            return tuple(int(x) for x in match.groups() if x is not None)
-        return (0,)
-
-    actual = parse_ver(version_str)
-    required = parse_ver(MINIMUM_OPENCODE_VERSION)
-
-    if actual < required:
-        print(C.fail(f"OpenCode version is too old: found {version_str}, require >= {MINIMUM_OPENCODE_VERSION}"), file=sys.stderr)
-        sys.exit(1)
-
-
-def truthy_env(name: str) -> bool:
-    value = os.environ.get(name)
-    return value is not None and value not in {"", "0", "false", "False", "no", "No"}
-
-
-# --- Stream-based late model discovery ---------------------------------------
-
-_MODEL_BEARING_KEYS = ("modelID", "providerID", "model")
-
-
-def _scan_event_for_model(payload: Any) -> Optional[str]:
-    """Recursively walk an event payload looking for a model identity.
-
-    Returns a 'providerID/modelID' string if both are found in the
-    same dict, else just the value of the first useful key found, or
-    None.
-    """
-    if isinstance(payload, dict):
-        # Same-dict providerID + modelID combo wins.
-        pid = payload.get("providerID")
-        model_field = payload.get("model")
-        mid = payload.get("modelID") or (model_field if isinstance(model_field, str) else None)
-        if isinstance(model_field, dict):
-            inner_pid = model_field.get("providerID")
-            inner_id = model_field.get("id") or model_field.get("modelID")
-            if inner_pid and inner_id:
-                return f"{inner_pid}/{inner_id}"
-            if inner_id:
-                return str(inner_id)
-        if pid and mid and isinstance(mid, str):
-            return f"{pid}/{mid}"
-        if isinstance(mid, str) and mid:
-            return mid
-
-        for v in payload.values():
-            found = _scan_event_for_model(v)
-            if found:
-                return found
-        return None
-    if isinstance(payload, list):
-        for item in payload:
-            found = _scan_event_for_model(item)
-            if found:
-                return found
-    return None
-
-
-# --- Model resolution ---------------------------------------------------------
-
-_MODEL_FLAG_NAMES = ("--model", "-m")
-_VARIANT_FLAG_NAMES = ("--variant",)
-
-
-def _extract_flag_value(tokens: list[str], flag_names: tuple[str, ...]) -> Optional[str]:
-    """Return the value of the first matching flag in tokens, or None.
-
-    Supports both `--flag value` and `--flag=value` forms.
-    """
-    for i, tok in enumerate(tokens):
-        for flag in flag_names:
-            if tok == flag and i + 1 < len(tokens):
-                return tokens[i + 1]
-            prefix = flag + "="
-            if tok.startswith(prefix):
-                return tok[len(prefix):]
-    return None
-
-
-_DISCOVERY_TIMEOUT_S = float(os.environ.get("CODECOME_MODEL_DISCOVERY_TIMEOUT", "1.0"))
-_MODEL_PROBE_TIMEOUT_S = float(os.environ.get("CODECOME_MODEL_PROBE_TIMEOUT", "20.0"))
-
-
-def _discover_opencode_default_model() -> Optional[str]:
-    """Best-effort: return the model used in the most recent opencode
-    session for this project's worktree, or None.
-
-    Implementation: query the opencode SQLite DB via `opencode db`,
-    asking for the latest session.model JSON for this worktree;
-    fall back to the latest session globally.
-
-    Honors a 1-second timeout. Errors are silently ignored.
-    """
-    worktree = str(ROOT)
-
-    queries = [
-        # Project-scoped first.
-        (
-            "SELECT s.model FROM session s "
-            "JOIN project p ON s.project_id = p.id "
-            f"WHERE p.worktree = '{worktree}' AND s.model IS NOT NULL "
-            "ORDER BY s.time_updated DESC LIMIT 1"
-        ),
-        # Global fallback.
-        (
-            "SELECT s.model FROM session s "
-            "WHERE s.model IS NOT NULL "
-            "ORDER BY s.time_updated DESC LIMIT 1"
-        ),
-    ]
-
-    for query in queries:
-        try:
-            result = subprocess.run(
-                ["opencode", "db", query, "--format", "tsv"],
-                capture_output=True,
-                text=True,
-                timeout=_DISCOVERY_TIMEOUT_S,
-            )
-        except (FileNotFoundError, subprocess.SubprocessError, OSError):
-            return None
-        if result.returncode != 0:
-            continue
-
-        # Output looks like:
-        #   model
-        #   {"id":"gpt-5.4","providerID":"github-copilot"}
-        lines = [ln for ln in (result.stdout or "").splitlines() if ln.strip()]
-        if len(lines) < 2:
-            continue
-        raw = lines[-1]
-        try:
-            obj = json.loads(raw)
-        except json.JSONDecodeError:
-            # Some opencode versions may print bare strings.
-            return raw if raw and raw != "model" else None
-
-        if isinstance(obj, dict):
-            mid = obj.get("id") or obj.get("modelID")
-            pid = obj.get("providerID")
-            if pid and mid:
-                return f"{pid}/{mid}"
-            if mid:
-                return str(mid)
-
-    return None
-
-
-def _extract_model_from_export(export_text: str) -> Optional[str]:
-    try:
-        payload = json.loads(export_text)
-    except json.JSONDecodeError:
-        return None
-
-    if isinstance(payload, dict):
-        found = _scan_event_for_model(payload)
-        if found:
-            return found
-    return None
-
-
-def _strip_probe_unsafe_flags(command: list[str]) -> list[str]:
-    """Remove flags that would make a probe reuse or mutate a real session."""
-    stripped: list[str] = []
-    skip_next = False
-    value_flags = {"--session", "-s", "--title", "--attach", "--port", "-p"}
-    standalone_flags = {"--continue", "-c", "--fork", "--share"}
-
-    for token in command:
-        if skip_next:
-            skip_next = False
-            continue
-
-        name = token.split("=", 1)[0]
-        if name in standalone_flags:
-            continue
-        if name in value_flags:
-            if "=" not in token:
-                skip_next = True
-            continue
-
-        stripped.append(token)
-
-    return stripped
-
-
-@lru_cache(maxsize=32)
-def _probe_effective_model(probe_key: tuple[str, ...]) -> Optional[str]:
-    """Run a tiny throwaway session and read the actual chosen model.
-
-    This is only used when the wrapper would otherwise have to guess from
-    session history or show unknown. The probe session is deleted after the
-    export succeeds.
-    """
-    command = list(probe_key)
-    session_id: str | None = None
-    try:
-        result = subprocess.run(
-            command + ["Reply with exactly OK."],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            timeout=_MODEL_PROBE_TIMEOUT_S,
-        )
-        if result.returncode != 0:
-            return None
-
-        lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-        if not lines:
-            return None
-
-        first = json.loads(lines[0])
-        if not isinstance(first, dict):
-            return None
-        session_id = first.get("sessionID")
-        if not isinstance(session_id, str) or not session_id:
-            return None
-
-        exported = subprocess.run(
-            ["opencode", "export", session_id],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            timeout=_MODEL_PROBE_TIMEOUT_S,
-        )
-        if exported.returncode != 0:
-            return None
-        return _extract_model_from_export(exported.stdout)
-    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
-        return None
-    finally:
-        if session_id:
-            try:
-                subprocess.run(
-                    ["opencode", "session", "delete", session_id],
-                    cwd=ROOT,
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-            except (OSError, subprocess.SubprocessError):
-                pass
-
-
-def _read_codecome_yml_agent(agent_name: str) -> tuple[Optional[str], Optional[str]]:
-    """Return (model, variant) from codecome.yml agents.<name>, or (None, None)."""
-    config_path = ROOT / "codecome.yml"
-    if not config_path.exists():
-        return None, None
-    try:
-        import yaml  # type: ignore
-    except ImportError:
-        return None, None
-    try:
-        with config_path.open("r", encoding="utf-8") as fh:
-            data = yaml.safe_load(fh) or {}
-    except Exception:  # noqa: BLE001
-        return None, None
-    if not isinstance(data, dict):
-        return None, None
-    agents = data.get("agents")
-    if not isinstance(agents, dict):
-        return None, None
-    entry = agents.get(agent_name)
-    if not isinstance(entry, dict):
-        return None, None
-    model = entry.get("model")
-    variant = entry.get("variant")
-    return (str(model) if model else None, str(variant) if variant else None)
-
-
-def resolve_model_and_variant(
-    agent_name: str,
-    opencode_args_tokens: list[str],
-    *,
-    discover_default: bool = True,
-) -> tuple[Optional[str], Optional[str], str, str]:
-    """Resolve effective model and variant with source labels.
-
-    Returns (model, variant, model_source, variant_source).
-    Source values: 'OPENCODE_ARGS', 'env CODECOME_MODEL',
-    'env CODECOME_MODEL_VARIANT', 'codecome.yml',
-    'opencode session history', or '(unknown)'.
-
-    `discover_default=True` enables the (slow-ish) opencode db probe
-    when none of the configured sources resolved a model.
-    """
-    model_from_args = _extract_flag_value(opencode_args_tokens, _MODEL_FLAG_NAMES)
-    variant_from_args = _extract_flag_value(opencode_args_tokens, _VARIANT_FLAG_NAMES)
-
-    env_model = (os.environ.get("CODECOME_MODEL") or "").strip() or None
-    env_variant = (os.environ.get("CODECOME_MODEL_VARIANT") or "").strip() or None
-
-    yaml_model, yaml_variant = _read_codecome_yml_agent(agent_name)
-
-    if model_from_args:
-        model, model_source = model_from_args, "OPENCODE_ARGS"
-    elif env_model:
-        model, model_source = env_model, "env CODECOME_MODEL"
-    elif yaml_model:
-        model, model_source = yaml_model, "codecome.yml"
-    else:
-        discovered = _discover_opencode_default_model() if discover_default else None
-        if discovered:
-            model, model_source = discovered, "opencode session history"
-        else:
-            model, model_source = None, "(unknown)"
-
-    if variant_from_args:
-        variant, variant_source = variant_from_args, "OPENCODE_ARGS"
-    elif env_variant:
-        variant, variant_source = env_variant, "env CODECOME_MODEL_VARIANT"
-    elif yaml_variant:
-        variant, variant_source = yaml_variant, "codecome.yml"
-    else:
-        # Discovery doesn't carry variant (no DB column).
-        variant, variant_source = None, "(unknown)"
-
-    return model, variant, model_source, variant_source
-
-
-def resolve_color_mode(flag: str) -> str:
-    if flag != "auto":
-        return flag
-    if truthy_env("CLICOLOR_FORCE"):
-        return "always"
-    if os.environ.get("NO_COLOR") is not None or os.environ.get("TERM") == "dumb":
-        return "never"
-    return "auto"
-
-
 def build_console(color_mode: str) -> Console:
     if not HAVE_RICH:
         return None  # type: ignore[return-value]
@@ -456,68 +121,6 @@ def build_console(color_mode: str) -> Console:
     if color_mode == "never":
         return Console(force_terminal=False, no_color=True, highlight=False)
     return Console(highlight=False)
-
-
-_PHASE_NAMES = {
-    "1": "reconnaissance",
-    "2": "hypothesis_generation",
-    "3": "counter_analysis",
-    "4": "validation",
-    "5": "exploit_development",
-    "6": "reporting",
-}
-
-
-def load_prompt(prompt_file: Path, finding: str | None, phase: str | None = None) -> str:
-    prompt = prompt_file.read_text(encoding="utf-8")
-    if finding is not None:
-        placeholder = "FINDING_PATH_OR_ID"
-        if placeholder not in prompt:
-            raise ValueError(f"Prompt placeholder {placeholder!r} not found in {prompt_file}")
-        prompt = prompt.replace(placeholder, finding)
-
-    # --- Extra prompt sources (additive, appended in order) ---------------
-    extra_sections: list[tuple[str, str]] = []
-
-    # Source 1: codecome.yml  audit.extra_prompts.<phase_name>
-    if phase is not None:
-        phase_name = _PHASE_NAMES.get(str(phase))
-        if phase_name:
-            try:
-                import yaml  # type: ignore
-
-                config_path = ROOT / "codecome.yml"
-                if config_path.exists():
-                    cfg = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-                    ep = cfg.get("audit", {}).get("extra_prompts", {})
-                    yml_extra = ep.get(phase_name, "").strip() if isinstance(ep, dict) else ""
-                    if yml_extra:
-                        extra_sections.append(("From codecome.yml", yml_extra))
-            except Exception:
-                pass  # Non-fatal; skip if yaml missing or config is broken.
-
-    # Source 2: PROMPT_EXTRA_FILE env var
-    extra_file = os.environ.get("PROMPT_EXTRA_FILE", "").strip()
-    if extra_file:
-        extra_path = Path(extra_file)
-        if not extra_path.is_absolute():
-            extra_path = ROOT / extra_path
-        if extra_path.is_file():
-            file_text = extra_path.read_text(encoding="utf-8").strip()
-            if file_text:
-                extra_sections.append((f"From {extra_file}", file_text))
-
-    # Source 3: PROMPT_EXTRA env var
-    extra_inline = os.environ.get("PROMPT_EXTRA", "").strip()
-    if extra_inline:
-        extra_sections.append(("Additional instructions", extra_inline))
-
-    if extra_sections:
-        prompt += "\n\n## Additional instructions\n"
-        for heading, body in extra_sections:
-            prompt += f"\n### {heading}\n\n{body}\n"
-
-    return prompt
 
 
 def format_tokens(tokens: dict[str, Any]) -> str:
@@ -1024,6 +627,10 @@ def _cache_invalidate_stale() -> None:
     stale = []
     for path, (_, recorded_mtime) in _SNAPSHOT_CACHE.items():
         actual = _current_mtime(path)
+        # If the file no longer exists (actual is None), remove from cache
+        # to prevent stale diffs on re-creation.
+        # If the file was modified since we cached it, remove from cache
+        # so the next diff uses current disk state.
         if actual is None or actual != recorded_mtime:
             stale.append(path)
     for path in stale:
@@ -4232,430 +3839,6 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _thinking_default_for_provider(provider_id: Optional[str]) -> bool:
-    """Return True if --thinking should default to ON for this provider.
-
-    Anthropic interleaves thinking with text blocks via the
-    interleaved-thinking beta header (set by OpenCode by default), so
-    the wrapper already shows multiple Assistant panels per turn. Adding
-    --thinking on top would double the panels for no extra information.
-
-    All other known reasoning-capable providers hide their reasoning
-    unless --thinking is on. Default ON for those, and ON for unknown
-    future providers (cheaper to over-surface than under-surface in a
-    research workflow).
-    """
-    if not provider_id:
-        return True
-    pid = provider_id.lower()
-    if pid.startswith("anthropic"):
-        return False
-    return True
-
-
-def _resolve_thinking_decision(
-    model: Optional[str],
-    extra_args: list[str],
-) -> tuple[bool, str]:
-    """Decide whether to enable --thinking for the child opencode run.
-
-    Precedence:
-      1. --thinking explicitly present in OPENCODE_ARGS -> on (user-args).
-      2. CODECOME_THINKING env var -> on/off (env).
-      3. Per-provider default based on the model's provider prefix.
-
-    Returns (enabled, source).
-    """
-    if "--thinking" in extra_args:
-        return True, "user-args"
-
-    raw = os.environ.get("CODECOME_THINKING")
-    if raw is not None:
-        if raw.strip() in ("0", "false", "False", "no", ""):
-            return False, "env"
-        return True, "env"
-
-    provider_id = None
-    if model and "/" in model:
-        provider_id = model.split("/", 1)[0]
-    enabled = _thinking_default_for_provider(provider_id)
-    return enabled, "provider-default"
-
-
-def resolve_runtime_model_for_banner(
-    args: argparse.Namespace,
-    command: list[str],
-    model: Optional[str],
-    variant: Optional[str],
-    model_source: str,
-    variant_source: str,
-) -> tuple[Optional[str], Optional[str], str, str]:
-    """Prefer the actual runtime model over a historical guess.
-
-    Env/YAML/CLI-pinned values remain authoritative. When the wrapper would
-    otherwise show a best-effort historical value or unknown, run a tiny probe
-    with the same launch configuration and use the exported session metadata.
-    """
-    if model_source in {"OPENCODE_ARGS", "env CODECOME_MODEL", "codecome.yml"}:
-        return model, variant, model_source, variant_source
-
-    probe_command = _strip_probe_unsafe_flags(command)
-    probed = _probe_effective_model(tuple(probe_command))
-    if probed:
-        return probed, variant, "runtime probe", variant_source
-
-    return model, variant, model_source, variant_source
-
-
-_PHASE1_REQUIRED_ARTIFACT_NAMES = [
-    "target-profile.md",
-    "attack-surface.md",
-    "build-model.md",
-    "execution-model.md",
-    "trust-boundaries.md",
-    "data-flow.md",
-    "validation-model.md",
-    "interesting-files.md",
-    "file-risk-index.yml",
-    "security-assumptions.md",
-    "sandbox-plan.md",
-]
-
-
-def _phase1_required_artifacts() -> list[Path]:
-    notes_dir = ROOT / "itemdb" / "notes"
-    return [notes_dir / name for name in _PHASE1_REQUIRED_ARTIFACT_NAMES]
-
-
-def _path_is_fresh(path: Path, run_start_time: float) -> bool:
-    return path.exists() and path.stat().st_mtime >= run_start_time
-
-
-def _iter_files(root: Path) -> Iterator[Path]:
-    if not root.exists():
-        return
-    for path in root.rglob("*"):
-        if path.is_file():
-            yield path
-
-
-def _phase_checklist_lines(phase: str, finding: str | None) -> list[str]:
-    if str(phase) == "1":
-        return [
-            "Ensure all required Phase 1 notes exist under itemdb/notes/.",
-            "Ensure itemdb/notes/file-risk-index.yml is present and consistent with interesting-files.md.",
-            "Ensure itemdb/notes/sandbox-plan.md documents the Phase 1b outcome.",
-            "If sandbox bootstrap succeeded, ensure sandbox/CODECOME-GENERATED.md exists; otherwise document the halt clearly in sandbox-plan.md.",
-        ]
-    if str(phase) in ("2", "sweep"):
-        return [
-            "Create or update precise findings under itemdb/findings/PENDING/.",
-            "Each finding must identify affected code, trust-boundary/source-to-sink reasoning, attackability, impact, validation plan, and counter-analysis placeholder.",
-            "Do not stop until the new or updated findings are durable on disk.",
-        ]
-    if str(phase) == "3":
-        return [
-            "Review all candidate findings under itemdb/findings/PENDING/.",
-            "Move clearly invalid findings to REJECTED and duplicates to DUPLICATE.",
-            "Leave surviving findings reviewable, deduplicated, and updated with counter-analysis.",
-        ]
-    if str(phase) == "4":
-        finding_ref = finding or "<finding-id>"
-        return [
-            f"Ensure validation evidence exists under itemdb/evidence/{finding_ref}/, including README.md.",
-            "Update the finding with validation results and move it to the correct status directory if needed.",
-            "Do not stop until the evidence and finding status are consistent.",
-        ]
-    if str(phase) == "5":
-        finding_ref = finding or "<finding-id>"
-        return [
-            f"If exploitation succeeds, ensure itemdb/evidence/{finding_ref}/exploits/ contains the exploit artifacts and exploits/README.md.",
-            "If exploitation is not feasible, keep the finding in CONFIRMED and update its exploitation.status to NOT_FEASIBLE with a clear explanation.",
-            "Do not stop until the exploit artifacts or the NOT_FEASIBLE documentation are durable and consistent.",
-        ]
-    if str(phase) == "6":
-        return [
-            "Ensure the report output under itemdb/reports/ is written and reviewable.",
-            "Include the required summary sections and evidence references for exploited and confirmed findings.",
-            "Do not stop until the report artifacts are durable on disk.",
-        ]
-    return ["Finish the remaining required work for the current phase before ending."]
-
-
-def _build_phase_resume_prompt(
-    phase: str,
-    finding: str | None,
-    reason: str,
-    step_finish_count: int,
-) -> str:
-    checklist = "\n".join(f"- {line}" for line in _phase_checklist_lines(phase, finding))
-    return (
-        "Your previous response was cut off by the model/provider before you produced a final completion signal.\n\n"
-        f"Observed finish reason: {reason}.\n"
-        f"Completed loops before cutoff: {step_finish_count}.\n\n"
-        "Treat your prior work as partial. First, briefly reassess what remains unfinished for this phase. "
-        "Then complete only the remaining required work. Do not restart from scratch unless necessary.\n\n"
-        f"Phase {phase} completion checklist:\n"
-        f"{checklist}\n\n"
-        "Before ending, verify that the required durable artifacts for this phase exist, are updated, and are internally consistent."
-    )
-
-
-def _build_frontmatter_resume_prompt(phase: str, finding: str | None, validation_output: str) -> str:
-    checklist = "\n".join(f"- {line}" for line in _phase_checklist_lines(phase, finding))
-    return (
-        "Your previous run produced files that failed local validation.\n\n"
-        "Validation errors:\n"
-        f"{validation_output}\n\n"
-        "Repair only the reported YAML/frontmatter issues with minimal changes. Do not redo unrelated analysis.\n\n"
-        f"Phase {phase} completion checklist:\n"
-        f"{checklist}\n\n"
-        "After fixing the validation errors, ensure the affected files remain in the correct status/location and are internally consistent."
-    )
-
-
-def _build_resume_command(initial_command: list[str], session_id: str, prompt: str) -> list[str]:
-    """Preserve connection/runtime flags needed to reach the original session."""
-    resume = ["opencode", "run"]
-    pending_passthrough_value = False
-    passthrough_value_flags = {"--attach", "--port", "-p"}
-    passthrough_standalone_flags = {"--thinking"}
-    drop_value_flags = {"--agent", "--model", "-m", "--variant", "--session", "-s", "--format"}
-    drop_standalone_flags = {"--continue", "-c", "--fork"}
-
-    for token in initial_command[2:]:
-        if pending_passthrough_value:
-            resume.append(token)
-            pending_passthrough_value = False
-            continue
-
-        name, has_equals, _ = token.partition("=")
-        if name in drop_standalone_flags:
-            continue
-        if name in drop_value_flags:
-            if not has_equals:
-                pending_passthrough_value = False
-            continue
-        if name in passthrough_standalone_flags:
-            resume.append(token)
-            continue
-        if name in passthrough_value_flags:
-            resume.append(token)
-            if not has_equals:
-                pending_passthrough_value = True
-            continue
-
-    resume.extend(["--session", session_id, "--format", "json", prompt])
-    return resume
-
-
-
-_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
-
-
-def _load_finding_frontmatter(path: Path) -> dict[str, Any] | None:
-    """Return the YAML frontmatter dict from a finding file, or None."""
-    try:
-        content = path.read_text(encoding="utf-8")
-    except OSError:
-        return None
-    m = _FRONTMATTER_RE.match(content)
-    if not m:
-        return None
-    try:
-        import yaml  # type: ignore
-        data = yaml.safe_load(m.group(1))
-    except Exception:
-        return None
-    return data if isinstance(data, dict) else None
-
-
-def _exploitation_status_looks_real(frontmatter: dict[str, Any] | None) -> bool:
-    """Return True when the exploitation block has a non-placeholder status."""
-    if not isinstance(frontmatter, dict):
-        return False
-    exploitation = frontmatter.get("exploitation")
-    if not isinstance(exploitation, dict):
-        return False
-    status = str(exploitation.get("status", "")).strip().lower()
-    return bool(status and status not in ("", "pending.", "todo.", "tbd."))
-
-
-def check_phase_graceful_completion(phase: str, finding: str | None, run_start_time: float) -> bool:
-    """Check if the phase produced its primary artifacts, allowing us to forgive mid-turn cutoffs."""
-    try:
-        if str(phase) == "1":
-            required_artifacts = _phase1_required_artifacts()
-            if all(path.exists() for path in required_artifacts):
-                fresh_required = any(_path_is_fresh(path, run_start_time) for path in required_artifacts)
-                sandbox_generated = ROOT / "sandbox" / "CODECOME-GENERATED.md"
-                sandbox_state_recorded = _path_is_fresh(sandbox_generated, run_start_time) or _path_is_fresh(
-                    ROOT / "itemdb" / "notes" / "sandbox-plan.md", run_start_time
-                )
-                return fresh_required and sandbox_state_recorded
-            return False
-        elif str(phase) in ("2", "sweep"):
-            pending_dir = ROOT / "itemdb" / "findings" / "PENDING"
-            if pending_dir.exists():
-                return any(f.name.endswith(".md") and f.name != ".gitkeep" and f.stat().st_mtime >= run_start_time for f in pending_dir.iterdir())
-            return False
-        elif str(phase) == "3":
-            findings_dir = ROOT / "itemdb" / "findings"
-            return any(
-                path.suffix == ".md" and path.name != ".gitkeep" and path.stat().st_mtime >= run_start_time
-                for path in _iter_files(findings_dir)
-            )
-        elif str(phase) == "4" and finding:
-            evidence_dir = ROOT / "itemdb" / "evidence" / finding
-            return any(path.stat().st_mtime >= run_start_time for path in _iter_files(evidence_dir))
-        elif str(phase) == "5" and finding:
-            # Path A: finding promoted to EXPLOITED with real frontmatter + exploit artifacts.
-            exploited_file = ROOT / "itemdb" / "findings" / "EXPLOITED" / f"{finding}.md"
-            if (
-                exploited_file.exists()
-                and exploited_file.stat().st_mtime >= run_start_time
-            ):
-                fm = _load_finding_frontmatter(exploited_file)
-                if (
-                    isinstance(fm, dict)
-                    and fm.get("status") == "EXPLOITED"
-                    and _exploitation_status_looks_real(fm)
-                ):
-                    exploits_dir = ROOT / "itemdb" / "evidence" / finding / "exploits"
-                    if any(
-                        path.stat().st_mtime >= run_start_time
-                        for path in _iter_files(exploits_dir)
-                    ):
-                        return True
-
-            # Path B: CONFIRMED finding documented as NOT_FEASIBLE.
-            confirmed_file = ROOT / "itemdb" / "findings" / "CONFIRMED" / f"{finding}.md"
-            if (
-                confirmed_file.exists()
-                and confirmed_file.stat().st_mtime >= run_start_time
-            ):
-                fm = _load_finding_frontmatter(confirmed_file)
-                if (
-                    isinstance(fm, dict)
-                    and fm.get("status") == "CONFIRMED"
-                    and isinstance(fm.get("exploitation"), dict)
-                    and str(fm["exploitation"].get("status", "")).upper()
-                    == "NOT_FEASIBLE"
-                ):
-                    return True
-
-            return False
-        elif str(phase) == "6":
-            reports_dir = ROOT / "itemdb" / "reports"
-            if reports_dir.exists():
-                return any(f.name.endswith(".md") and f.name != ".gitkeep" and f.stat().st_mtime >= run_start_time for f in reports_dir.iterdir())
-            return False
-    except Exception:
-        pass
-    return False
-
-def _get_headers(auth_token: str | None, workspace_dir: str | None) -> dict[str, str]:
-    headers = {"Content-Type": "application/json"}
-    if auth_token:
-        import base64
-        encoded = base64.b64encode(f"opencode:{auth_token}".encode("utf-8")).decode("utf-8")
-        headers["Authorization"] = f"Basic {encoded}"
-    if workspace_dir:
-        headers["x-opencode-directory"] = workspace_dir
-    return headers
-
-def _send_prompt_to_session(
-    base_url: str,
-    session_id: str,
-    prompt: str,
-    agent: str,
-    model: str | None,
-    variant: str | None,
-    auth_token: str | None,
-    workspace_dir: str | None,
-) -> None:
-    """Send a prompt text to a session via POST /session/{id}/prompt_async."""
-    url = f"{base_url}/session/{session_id}/prompt_async"
-    payload: dict[str, Any] = {
-        "parts": [{"type": "text", "text": prompt}],
-        "agent": agent,
-    }
-    if model:
-        parts = model.split("/", 1)
-        if len(parts) == 2:
-            payload["model"] = {"providerID": parts[0], "modelID": parts[1]}
-        else:
-            payload["model"] = {"modelID": model}
-    if variant:
-        payload["variant"] = variant
-    data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        url,
-        data=data,
-        headers=_get_headers(auth_token, workspace_dir),
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30.0) as resp:
-            pass  # 204 expected
-    except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"Failed to send prompt: HTTP {exc.code}") from exc
-
-
-def _create_session(base_url: str, phase: str, agent: str, model: str | None, auth_token: str | None, workspace_dir: str | None) -> str:
-    """Create a session via POST /session and return its ID."""
-    payload: dict[str, Any] = {"title": f"CodeCome Phase {phase}", "agent": agent}
-    if model:
-        parts = model.split("/", 1)
-        if len(parts) == 2:
-            payload["model"] = {"providerID": parts[0], "id": parts[1]}
-        else:
-            payload["model"] = {"id": model}
-    req = urllib.request.Request(
-        f"{base_url}/session",
-        data=json.dumps(payload).encode("utf-8"),
-        headers=_get_headers(auth_token, workspace_dir),
-        method="POST",
-    )
-    resp = urllib.request.urlopen(req, timeout=10.0)
-    data = json.loads(resp.read().decode("utf-8"))
-    sid = str(data.get("id", ""))
-    if not sid:
-        raise RuntimeError("Server returned empty session ID")
-    return sid
-
-
-def _create_chat_session(base_url: str, agent: str, model: str | None, auth_token: str | None, workspace_dir: str | None) -> str:
-    """Create a session for interactive chat mode with permission rules."""
-    payload: dict[str, Any] = {
-        "title": "CodeCome Chat",
-        "agent": agent,
-        "permission": [
-            {"permission": "question", "action": "deny", "pattern": "*"},
-            {"permission": "plan_enter", "action": "deny", "pattern": "*"},
-            {"permission": "plan_exit", "action": "deny", "pattern": "*"},
-        ],
-    }
-    if model:
-        parts = model.split("/", 1)
-        if len(parts) == 2:
-            payload["model"] = {"providerID": parts[0], "id": parts[1]}
-        else:
-            payload["model"] = {"id": model}
-    req = urllib.request.Request(
-        f"{base_url}/session",
-        data=json.dumps(payload).encode("utf-8"),
-        headers=_get_headers(auth_token, workspace_dir),
-        method="POST",
-    )
-    resp = urllib.request.urlopen(req, timeout=10.0)
-    data = json.loads(resp.read().decode("utf-8"))
-    sid = str(data.get("id", ""))
-    if not sid:
-        raise RuntimeError("Server returned empty session ID")
-    return sid
-
-
 def _consume_events(
     base_url: str,
     session_id: str,
@@ -4714,29 +3897,18 @@ def _run_single_attempt(
 
     Returns (returncode, session_id, run_result, transcript_path).
     """
-    finding_tag = (args.finding or "no-finding").replace("/", "_")
-    transcript_dir = ROOT / "tmp"
-    transcript_dir.mkdir(parents=True, exist_ok=True)
-
-    # Use a module-level counter for attempt numbers across resume attempts.
-    counter = getattr(_run_single_attempt, "_attempt_counter", 1)
-    transcript_path = transcript_dir / f"last-phase-{args.phase}-{finding_tag}-attempt-{counter}.jsonl"
-    setattr(_run_single_attempt, "_attempt_counter", counter + 1)
-
-    transcript_fp = None
-    try:
-        transcript_fp = transcript_path.open("w", encoding="utf-8")
-    except OSError as exc:
+    transcript_path, transcript_fp = open_phase_transcript(str(args.phase), args.finding)
+    if transcript_fp is None:
         if HAVE_RICH:
-            console.print(Text(f"warning: could not open transcript {transcript_path}: {exc}", style="yellow"))
+            console.print(Text(f"warning: could not open transcript {transcript_path}", style="yellow"))
         else:
-            print(C.warn(f"warning: could not open transcript {transcript_path}: {exc}"))
+            print(C.warn(f"warning: could not open transcript {transcript_path}"))
 
     try:
         if existing_session_id:
             session_id = existing_session_id
         else:
-            session_id = _create_session(base_url, str(args.phase), args.agent, model, auth_token, workspace_dir)
+            session_id = create_session(base_url, str(args.phase), args.agent, model, auth_token, workspace_dir)
 
         run_result_box: dict[str, Any] = {}
         consume_error_box: dict[str, Exception] = {}
@@ -4761,7 +3933,7 @@ def _run_single_attempt(
         consumer = threading.Thread(target=_consume, name=f"codecome-events-{session_id}", daemon=True)
         consumer.start()
 
-        _send_prompt_to_session(base_url, session_id, prompt, args.agent, model, variant, auth_token, workspace_dir)
+        send_prompt_to_session(base_url, session_id, prompt, args.agent, model, variant, auth_token, workspace_dir)
         consumer.join()
 
         if "error" in consume_error_box:
@@ -4773,53 +3945,9 @@ def _run_single_attempt(
         _emit_fatal_error(console, "Server Error", str(exc))
         return 1, existing_session_id or "", RunResult(), transcript_path
     finally:
-        if transcript_fp is not None:
-            try:
-                transcript_fp.flush()
-                transcript_fp.close()
-            except OSError:
-                pass
+        close_transcript(transcript_fp)
 
     return 0, session_id, run_result, transcript_path
-
-
-def show_model_table(agent_name: str) -> int:
-    """Print the model-resolution table for an agent and exit."""
-    extra_args = shlex.split(os.environ.get("OPENCODE_ARGS", ""))
-
-    args_model = _extract_flag_value(extra_args, _MODEL_FLAG_NAMES)
-    args_variant = _extract_flag_value(extra_args, _VARIANT_FLAG_NAMES)
-    env_model = (os.environ.get("CODECOME_MODEL") or "").strip() or None
-    env_variant = (os.environ.get("CODECOME_MODEL_VARIANT") or "").strip() or None
-    yaml_model, yaml_variant = _read_codecome_yml_agent(agent_name)
-    discovered = _discover_opencode_default_model()
-
-    model, variant, model_source, variant_source = resolve_model_and_variant(
-        agent_name, extra_args
-    )
-
-    def fmt(v: Optional[str]) -> str:
-        return v if v else "(not set)"
-
-    print(C.header(f"Model resolution for agent {agent_name}:"))
-    print()
-    print(f"  {C.DIM}OPENCODE_ARGS{C.RESET}                 model={fmt(args_model)}  variant={fmt(args_variant)}")
-    print(f"  {C.DIM}env CODECOME_MODEL{C.RESET}            model={fmt(env_model)}")
-    print(f"  {C.DIM}env CODECOME_MODEL_VARIANT{C.RESET}    variant={fmt(env_variant)}")
-    print(f"  {C.DIM}codecome.yml{C.RESET}                  model={fmt(yaml_model)}  variant={fmt(yaml_variant)}")
-    print(f"  {C.DIM}opencode session history{C.RESET}      model={fmt(discovered)}")
-    print(f"  {C.DIM}runtime probe{C.RESET}                 not run by show-model")
-    print()
-    effective_model = model or "(unknown)"
-    effective_variant = variant or "(unknown)"
-    thinking_on, thinking_source = _resolve_thinking_decision(model, extra_args)
-    print(f"  {C.BOLD}effective{C.RESET}                     "
-          f"model={effective_model}  variant={effective_variant}  "
-          f"thinking={'on' if thinking_on else 'off'}")
-    print(f"  {C.DIM}sources{C.RESET}                       "
-          f"model: {model_source}  variant: {variant_source}  "
-          f"thinking: {thinking_source}")
-    return 0
 
 
 def _emit_fatal_error(console: Any, title: str, message: str) -> None:
@@ -4871,6 +3999,62 @@ class TextualConsoleProxy:
 
 ChatApp: Any = None
 QuitScreen: Any = None
+
+
+# Standalone chat-app methods — available even when Textual is not
+# installed, so that tests can exercise _render_and_log parity without
+# launching a real TUI.
+
+def _chat_render_and_log(self, console, phase, label, event):
+    """Standalone version of _ChatApp._render_and_log.  See the docstring
+    on the class for the full contract."""
+    if getattr(self, "transcript_fp", None) is not None:
+        try:
+            self.transcript_fp.write(json.dumps(event) + "\n")
+        except OSError:
+            pass
+    if getattr(self, "args", None) is not None and getattr(self.args, "debug", False):
+        _chat_debug(f"_render_and_log: raw event: {json.dumps(event)}")
+    if event.get("type") == "message.updated":
+        _chat_update_modeline_info(self, event)
+    if not getattr(self, "thinking_on", True) and event.get("type") == "reasoning":
+        return
+    render_event(console, phase, label, event)
+
+
+def _chat_update_modeline_info(self, event: dict[str, Any]) -> None:
+    """Standalone version of _ChatApp._update_modeline_info."""
+    info = event.get("info")
+    if not isinstance(info, dict):
+        props = event.get("properties", {})
+        info = props.get("info", {}) if isinstance(props, dict) else {}
+    if not isinstance(info, dict):
+        return
+    if info.get("role") != "assistant":
+        return
+    model_id = str(info.get("modelID", "")).strip()
+    provider_id = str(info.get("providerID", "")).strip()
+    if not model_id:
+        mdl = info.get("model", {})
+        if isinstance(mdl, dict):
+            model_id = str(mdl.get("modelID", "")).strip()
+            provider_id = str(mdl.get("providerID", "")).strip()
+    model_label = f"{provider_id}/{model_id}" if provider_id and model_id else (model_id or "…")
+    tokens = info.get("tokens", {})
+    if isinstance(tokens, dict):
+        _in = tokens.get("input", 0)
+        _out = tokens.get("output", 0)
+        token_str = f"↑{_in} ↓{_out}"
+    else:
+        token_str = ""
+    cost = info.get("cost", 0) or 0
+    cost_str = f" ${cost:.4f}" if cost else ""
+    getattr(self, "_modeline_info", "")
+    try:
+        self._modeline_info = f"{model_label} | {token_str}{cost_str}"
+    except AttributeError:
+        pass
+
 
 try:
     from textual import on, work
@@ -5216,87 +4400,10 @@ try:
         # --- Consumer-thread callback ---
 
         def _render_and_log(self, console, phase, label, event):
-            """Called from the SSE consumer thread.  Mirrors phase mode's
-            _render_and_log exactly (parity with non-interactive runs):
-
-              1. Persist the raw event to the transcript jsonl.
-              2. When --debug, mirror the raw event JSON to the
-                 chat-debug log file (phase mode mirrors to stderr;
-                 in chat mode stderr would corrupt Textual's
-                 alternate-screen output, so we route to the debug
-                 file instead).
-              3. Suppress 'reasoning' events when thinking is off.
-              4. Delegate to render_event() — the SAME dispatcher
-                 used by non-interactive runs.
-
-            Also updates _modeline_info from every message.updated
-            event (even in-progress ones) so the bottom-bar status
-            line stays live.
-
-            The render_event() call ends up posting RenderMessage(s)
-            through the console_proxy, which the @on(RenderMessage)
-            handler writes to the RichLog on the main thread."""
-            # (1) Transcript jsonl — parity with phase mode.
-            if self.transcript_fp is not None:
-                try:
-                    self.transcript_fp.write(json.dumps(event) + "\n")
-                except OSError:
-                    pass
-            # (2) Raw-event mirror — to the chat-debug file rather than
-            #     stderr (Textual owns the TTY in chat mode).
-            if self.args is not None and getattr(self.args, "debug", False):
-                _chat_debug(f"_render_and_log: raw event: {json.dumps(event)}")
-            else:
-                _chat_debug(f"_render_and_log: event type={event.get('type')}")
-
-            # Update the bottom-bar modeline on every message.updated
-            # so token/cost/liveness info refreshes live.
-            if event.get("type") == "message.updated":
-                self._update_modeline_info(event)
-
-            # (3) Suppress reasoning when thinking is off.
-            if not self.thinking_on and event.get("type") == "reasoning":
-                return
-            # (4) Render via the same dispatcher non-chat uses.  No
-            #     chat-specific markers or filters — full parity.
-            render_event(console, phase, label, event)
+            _chat_render_and_log(self, console, phase, label, event)
 
         def _update_modeline_info(self, event: dict[str, Any]) -> None:
-            """Extract model/tokens from a message.updated event and store
-            for the heartbeat to surface in the bottom bar."""
-            info = event.get("info")
-            if not isinstance(info, dict):
-                props = event.get("properties", {})
-                info = props.get("info", {}) if isinstance(props, dict) else {}
-            if not isinstance(info, dict):
-                return
-            # Only use assistant messages for the modeline; user
-            # messages carry no new token data.
-            if info.get("role") != "assistant":
-                return
-            model_id = str(info.get("modelID", "")).strip()
-            provider_id = str(info.get("providerID", "")).strip()
-            if not model_id:
-                mdl = info.get("model", {})
-                if isinstance(mdl, dict):
-                    model_id = str(mdl.get("modelID", "")).strip()
-                    provider_id = str(mdl.get("providerID", "")).strip()
-            model_label = f"{provider_id}/{model_id}" if provider_id and model_id else (model_id or "…")
-
-            tokens = info.get("tokens", {})
-            if isinstance(tokens, dict):
-                _in = tokens.get("input", 0)
-                _out = tokens.get("output", 0)
-                total = tokens.get("total", _in + _out)
-                token_str = f"↑{_in} ↓{_out}"
-            else:
-                total = 0
-                token_str = ""
-
-            cost = info.get("cost", 0) or 0
-            cost_str = f" ${cost:.4f}" if cost else ""
-
-            self._modeline_info = f"{model_label} | {token_str}{cost_str}"
+            _chat_update_modeline_info(self, event)
 
         # --- UI actions ---
 
@@ -5413,7 +4520,7 @@ def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
     model, variant, model_source, variant_source = resolve_model_and_variant(
         args.agent, extra_args
     )
-    thinking_on, thinking_source = _resolve_thinking_decision(model, extra_args)
+    thinking_on, thinking_source = resolve_thinking_decision(model, extra_args)
 
     _chat_debug(f"_run_chat_mode: agent={args.agent} model={model} variant={variant} thinking={thinking_on}")
 
@@ -5437,7 +4544,7 @@ def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
     # Create session
     _chat_debug("_run_chat_mode: creating session")
     try:
-        session_id = _create_chat_session(
+        session_id = create_chat_session(
             server_info.base_url, args.agent, model, server_info.password, str(ROOT),
         )
         _chat_debug(f"_run_chat_mode: session created id={session_id}")
@@ -5448,21 +4555,8 @@ def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
         _close_chat_debug()
         return 1
 
-    # Open the chat transcript (parity with phase mode, which writes
-    # tmp/last-phase-<phase>-<finding>-attempt-N.jsonl).  We use a
-    # filename that includes both a timestamp and the PID so successive
-    # runs (or several runs from different shells) don't clobber each
-    # other.  Open line-buffered so the file is durable across crashes.
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    transcript_dir = ROOT / "tmp"
-    transcript_dir.mkdir(parents=True, exist_ok=True)
-    transcript_path = transcript_dir / f"last-chat-{stamp}-pid{os.getpid()}.jsonl"
-    transcript_fp = None
-    try:
-        transcript_fp = transcript_path.open("w", encoding="utf-8", buffering=1)
-        _chat_debug(f"_run_chat_mode: opened transcript {transcript_path}")
-    except OSError as exc:
-        _chat_debug(f"_run_chat_mode: could not open transcript {transcript_path}: {exc}")
+    # Open the chat transcript (parity with phase mode).
+    transcript_path, transcript_fp = open_chat_transcript()
 
     _chat_debug("_run_chat_mode: creating ChatApp")
     app = None
@@ -5486,12 +4580,7 @@ def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
             _chat_debug("_run_chat_mode: stopping chat loop")
             app.chat_loop.stop()
         runner.stop()
-        if transcript_fp is not None:
-            try:
-                transcript_fp.flush()
-                transcript_fp.close()
-            except OSError:
-                pass
+        close_transcript(transcript_fp)
 
     # Final summary banner on the restored terminal.  Mirrors phase
     # mode's success-path summary.
@@ -5557,7 +4646,7 @@ def main() -> int:
     model, variant, model_source, variant_source = resolve_model_and_variant(
         args.agent, extra_args
     )
-    thinking_on, thinking_source = _resolve_thinking_decision(model, extra_args)
+    thinking_on, thinking_source = resolve_thinking_decision(model, extra_args)
 
     model_label = model or "(unknown)"
     variant_label = variant or "(unknown)"
@@ -5735,7 +4824,7 @@ def main() -> int:
                         else:
                             print(C.warn(msg))
                         if last_session_id and last_session_id != "id":
-                            prompt = _build_frontmatter_resume_prompt(args.phase, args.finding, validation_output)
+                            prompt = build_frontmatter_resume_prompt(args.phase, args.finding, validation_output)
                             continue
                         else:
                             returncode = 2
@@ -5773,7 +4862,7 @@ def main() -> int:
                     else:
                         print(C.warn(msg))
                     if last_session_id and last_session_id != "id":
-                        prompt = _build_phase_resume_prompt(
+                        prompt = build_phase_resume_prompt(
                             args.phase, args.finding, last_finish_reason, step_finish_count
                         )
                         continue
