@@ -3306,18 +3306,6 @@ def _dispatch_tool_renderer(console: Console, tool: str, state: dict[str, Any]) 
         return GrepRenderer(_get_rendering_ctx(console)).render(tool_lower, state)
     elif tool_lower == "bash":
         _cache_invalidate_stale()
-        # Try the sandbox-bootstrap sub-renderer first; it handles bash
-        # invocations of `tools/sandbox-bootstrap.py --format json …` and
-        # `make sandbox-* BOOTSTRAP_ARGS='--format json'` with structured
-        # styling. Falls through to the generic bash renderer otherwise.
-        if _maybe_render_sandbox_bootstrap(console if HAVE_RICH else None, state):
-            return True
-        # Then try the bash-shim sub-renderer: detects `rtk read`,
-        # `rtk grep`, `rg`, `rtk ls` / `ls`, `cat`, `head`, `tail`,
-        # `find`, `tree` and routes them through the Read / Grep /
-        # Glob renderers as if the agent had used the native tool.
-        if _maybe_render_bash_shim(console if HAVE_RICH else None, state):
-            return True
         from rendering.tools.command import CommandRenderer
         return CommandRenderer(_get_rendering_ctx(console)).render(tool_lower, state)
     elif tool_lower == "skill":

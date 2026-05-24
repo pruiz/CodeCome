@@ -19,18 +19,43 @@ from rendering.utils import is_likely_error
 class CommandRenderer(ToolRenderer):
     tool_names = ("bash",)
 
+    def __init__(self, context):
+        super().__init__(context)
+        self._interceptors = None
+
+    @property
+    def interceptors(self):
+        if self._interceptors is None:
+            from rendering.tools.interceptors.sandbox_bootstrap import SandboxBootstrapInterceptor
+            from rendering.tools.interceptors.rtk_read import RtkReadInterceptor
+            from rendering.tools.interceptors.rtk_grep import RtkGrepInterceptor
+            from rendering.tools.interceptors.shell_listing import ShellListingInterceptor
+            self._interceptors = [
+                SandboxBootstrapInterceptor(),
+                RtkReadInterceptor(),
+                RtkGrepInterceptor(),
+                ShellListingInterceptor(),
+            ]
+        return self._interceptors
+
     def render(self, tool_name: str, state: dict[str, Any]) -> bool:
         inp = state.get("input")
         if not isinstance(inp, dict):
             return False
 
         command = str(inp.get("command", ""))
+        if not command:
+            return False
+
+        # Try interceptors first (sandbox-bootstrap, rtk, rg, ls, find, tree).
+        for interceptor in self.interceptors:
+            if interceptor.try_render(command, state, self):
+                return True
+
+        # Fall through to generic bash rendering.
         description = inp.get("description", "")
         output = state.get("output")
         output_str = str(output) if output is not None else ""
-
-        if not command:
-            return False
 
         if self.rich:
             return self._render_rich(command, str(description), output_str, state)
