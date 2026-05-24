@@ -8,16 +8,22 @@ Tool renderer classes — one per OpenCode tool family.
 from __future__ import annotations
 
 from rendering.tools.base import FallbackToolRenderer, ToolRenderer
+from rendering.tools.edit import EditRenderer
 from rendering.tools.permissions import PermissionErrorRenderer
+from rendering.tools.read import ReadRenderer
 from rendering.tools.skill import SkillRenderer
 from rendering.tools.task import TaskRenderer
 from rendering.tools.todo import TodoRenderer
+from rendering.tools.write import WriteRenderer
 
 __all__ = [
+    "EditRenderer",
     "FallbackToolRenderer",
     "PermissionErrorRenderer",
+    "ReadRenderer",
     "SkillRenderer",
     "TaskRenderer",
     "TodoRenderer",
     "ToolRenderer",
+    "WriteRenderer",
 ]
