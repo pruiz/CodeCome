@@ -6,3 +6,7 @@ Tool renderer classes — one per OpenCode tool family.
 """
 
 from __future__ import annotations
+
+from rendering.tools.base import FallbackToolRenderer, ToolRenderer
+
+__all__ = ["FallbackToolRenderer", "ToolRenderer"]

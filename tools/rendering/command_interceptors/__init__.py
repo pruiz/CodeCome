@@ -7,3 +7,7 @@ CodeCome-aware bash invocations (sandbox-bootstrap, rtk, rg, ls, …).
 """
 
 from __future__ import annotations
+
+from rendering.command_interceptors.base import CommandExecutionInterceptor
+
+__all__ = ["CommandExecutionInterceptor"]

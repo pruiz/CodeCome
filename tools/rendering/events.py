@@ -12,10 +12,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from rendering.context import RenderContext
+from rendering.base import BaseRenderer
 
 
-class EventRenderer:
+class EventRenderer(BaseRenderer):
     """Base class for renderers that handle generic SSE events.
 
     Subclasses declare which event types they handle via ``event_types``.
@@ -23,9 +23,6 @@ class EventRenderer:
     """
 
     event_types: tuple[str, ...] = ()
-
-    def __init__(self, context: RenderContext) -> None:
-        self.context = context
 
     def render(self, event: dict[str, Any]) -> bool:
         """Render *event*.  Return True if handled, False to fall through."""
@@ -42,8 +39,8 @@ class UnknownEventRenderer(EventRenderer):
             message = f"unknown part type: {part_type}"
         else:
             message = f"unknown event type: {event_type}"
-        self.context.sink.write_text(message)
+        self.sink.write_text(message)
         if self.context.settings.debug_unknown_events:
             import json
-            self.context.sink.write_text(json.dumps(event, indent=2, default=str))
+            self.sink.write_text(json.dumps(event, indent=2, default=str))
         return True
