@@ -79,7 +79,7 @@ class RichConsoleSink:
         self._console.print(renderable, overflow="ignore", crop=False)
 
     def write_text(self, text: str, *, end: str = "\n") -> None:
-        self._console.print(text, overflow="ignore", crop=False)
+        self._console.print(text, overflow="ignore", crop=False, end=end)
 
 
 class TextualRichLogSink:
