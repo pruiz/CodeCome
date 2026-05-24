@@ -3284,22 +3284,15 @@ def _dispatch_tool_renderer(console: Console, tool: str, state: dict[str, Any]) 
         from rendering.tools.todo import TodoRenderer
         return TodoRenderer(_get_rendering_ctx(console)).render(tool_lower, state)
     elif tool_lower == "read":
-        # Invalidate stale cache entries before non-write events
         _cache_invalidate_stale()
-        if HAVE_RICH:
-            return render_read_rich(console, state)
-        else:
-            return render_read_plain(state)
+        from rendering.tools.read import ReadRenderer
+        return ReadRenderer(_get_rendering_ctx(console)).render(tool_lower, state)
     elif tool_lower == "write":
-        if HAVE_RICH:
-            return render_write_rich(console, state)
-        else:
-            return render_write_plain(state)
+        from rendering.tools.write import WriteRenderer
+        return WriteRenderer(_get_rendering_ctx(console)).render(tool_lower, state)
     elif tool_lower == "edit":
-        if HAVE_RICH:
-            return render_edit_rich(console, state)
-        else:
-            return render_edit_plain(state)
+        from rendering.tools.edit import EditRenderer
+        return EditRenderer(_get_rendering_ctx(console)).render(tool_lower, state)
     elif tool_lower in ("apply_patch", "applypatch", "apply-patch"):
         if HAVE_RICH:
             return render_apply_patch_rich(console, state)
