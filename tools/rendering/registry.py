@@ -49,19 +49,27 @@ class RendererRegistry:
     # ------------------------------------------------------------------
 
     def dispatch_event(self, event: dict[str, Any]) -> None:
-        """Render a generic event through the matching renderer."""
+        """Render a generic event through the matching renderer.
+
+        Registered renderers must declare explicit ``event_types``;
+        the ``UnknownEventRenderer`` fallback catches everything else.
+        """
         event_type = event.get("type", "")
         for renderer in self._event_renderers:
-            if not renderer.event_types or event_type in renderer.event_types:
+            if event_type in renderer.event_types:
                 if renderer.render(event):
                     return
         self._unknown.render(event)
 
     def dispatch_tool(self, tool_name: str, state: dict[str, Any]) -> None:
-        """Render a tool call through the matching renderer."""
+        """Render a tool call through the matching renderer.
+
+        Registered renderers must declare explicit ``tool_names``;
+        the ``FallbackToolRenderer`` catches everything else.
+        """
         tool_lower = tool_name.strip().lower()
         for renderer in self._tool_renderers:
-            if not renderer.tool_names or tool_lower in renderer.tool_names:
+            if tool_lower in renderer.tool_names:
                 if renderer.render(tool_name, state):
                     return
         self._fallback_tool.render(tool_name, state)
