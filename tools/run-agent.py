@@ -88,6 +88,7 @@ def _get_rendering_ctx(console: Any) -> Any:
         "text": _evts.TextEventRenderer(ctx),
         "reasoning": _evts.ReasoningEventRenderer(ctx),
         "tool_use": _evts.ToolUseEventRenderer(ctx),
+        "step_start": _evts.StepStartRenderer(ctx),
         "step_finish": _evts.StepFinishRenderer(ctx),
         "error": _evts.ErrorEventRenderer(ctx),
         "session.status": _evts.SessionStatusRenderer(ctx),
@@ -3702,8 +3703,14 @@ def render_event(console: Console, phase: str, label: str, event: dict[str, Any]
     renderers = getattr(ctx, "_renderers", {})
 
     if event_type == "step_start":
-        from rendering.events import StepStartRenderer
-        StepStartRenderer(ctx, phase=phase, label=label).render(event)
+        renderer = renderers.get("step_start")
+        if renderer:
+            renderer.phase = phase
+            renderer.label = label
+            renderer.render(event)
+        else:
+            from rendering.events import StepStartRenderer
+            StepStartRenderer(ctx, phase=phase, label=label).render(event)
     elif event_type in renderers:
         renderers[event_type].render(event)
     else:
