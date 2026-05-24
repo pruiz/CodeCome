@@ -3845,123 +3845,6 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _consume_events(
-    base_url: str,
-    session_id: str,
-    console: Any,
-    phase: str,
-    label: str,
-    args: argparse.Namespace,
-    transcript_fp: Any | None,
-    thinking_on: bool,
-    auth_token: str | None,
-    workspace_dir: str | None,
-) -> RunResult:
-    """Create an EventLoop, consume SSE until idle, and return RunResult."""
-    event_loop = EventLoop(
-        base_url=base_url,
-        session_id=session_id,
-        console=console,
-        phase=phase,
-        label=label,
-        auth_token=auth_token,
-        workspace_dir=workspace_dir,
-    )
-
-    def _render_and_log(console_: Any, phase_: str, label_: str, event: dict[str, Any]) -> None:
-        if transcript_fp is not None:
-            try:
-                transcript_fp.write(json.dumps(event) + "\n")
-            except OSError:
-                pass
-        if args.debug:
-            sys.stderr.write(json.dumps(event) + "\n")
-            sys.stderr.flush()
-        if not thinking_on and event.get("type") == "reasoning":
-            return
-        render_event(console_, phase_, label_, event)
-
-    return event_loop.run(_render_and_log)
-
-
-def _run_single_attempt(
-    args: argparse.Namespace,
-    console: Any,
-    prompt: str,
-    model: str | None,
-    variant: str | None,
-    thinking_on: bool,
-    base_url: str,
-    auth_token: str | None,
-    workspace_dir: str | None,
-    existing_session_id: str | None = None,
-) -> tuple[int, str, RunResult, Path]:
-    """Run or resume a single phase attempt via opencode serve.
-
-    If existing_session_id is provided, reuses that session (resume).
-    Otherwise creates a new session.
-
-    Returns (returncode, session_id, run_result, transcript_path).
-    """
-    transcript_fp = None
-    try:
-        transcript_path, transcript_fp = open_phase_transcript(str(args.phase), args.finding)
-    except OSError as exc:
-        # Reconstruct the path the helper would have produced so the
-        # warning still names the right file.
-        finding_tag = (args.finding or "no-finding").replace("/", "_")
-        transcript_path = ROOT / "tmp" / f"last-phase-{args.phase}-{finding_tag}-attempt-N.jsonl"
-        if HAVE_RICH:
-            console.print(Text(f"warning: could not open transcript {transcript_path}: {exc}", style="yellow"))
-        else:
-            print(C.warn(f"warning: could not open transcript {transcript_path}: {exc}"))
-
-    try:
-        if existing_session_id:
-            session_id = existing_session_id
-        else:
-            session_id = create_session(base_url, str(args.phase), args.agent, model, auth_token, workspace_dir)
-
-        run_result_box: dict[str, Any] = {}
-        consume_error_box: dict[str, Exception] = {}
-
-        def _consume() -> None:
-            try:
-                run_result_box["result"] = _consume_events(
-                    base_url,
-                    session_id,
-                    console,
-                    str(args.phase),
-                    str(args.label),
-                    args,
-                    transcript_fp,
-                    thinking_on,
-                    auth_token,
-                    workspace_dir,
-                )
-            except Exception as exc:  # noqa: BLE001
-                consume_error_box["error"] = exc
-
-        consumer = threading.Thread(target=_consume, name=f"codecome-events-{session_id}", daemon=True)
-        consumer.start()
-
-        send_prompt_to_session(base_url, session_id, prompt, args.agent, model, variant, auth_token, workspace_dir)
-        consumer.join()
-
-        if "error" in consume_error_box:
-            raise consume_error_box["error"]
-        run_result = run_result_box.get("result")
-        if not isinstance(run_result, RunResult):
-            raise RuntimeError("Event loop ended without a RunResult")
-    except Exception as exc:
-        _emit_fatal_error(console, "Server Error", str(exc))
-        return 1, existing_session_id or "", RunResult(), transcript_path
-    finally:
-        close_transcript(transcript_fp)
-
-    return 0, session_id, run_result, transcript_path
-
-
 def _emit_fatal_error(console: Any, title: str, message: str) -> None:
     """Show fatal startup/runtime errors in the UI and on stderr."""
     formatted = C.fail(f"{title}: {message}")
@@ -4768,9 +4651,12 @@ def main() -> int:
     try:
         while True:
             attempt_number += 1
+            from codecome.runner import _run_single_attempt
             returncode, session_id, run_result, transcript_path = _run_single_attempt(
                 args, console, prompt, model, variant, thinking_on, base_url,
                 server_info.password, str(ROOT),
+                render_event_fn=render_event,
+                emit_fatal_error_fn=_emit_fatal_error,
                 existing_session_id=last_session_id or None
             )
 
