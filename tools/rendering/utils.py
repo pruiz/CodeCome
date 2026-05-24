@@ -52,8 +52,8 @@ _LEXER_MAP = {
 }
 
 _FINDING_FILENAME_RE = re.compile(r"^(CC-\d{4,})-(.+)\.md$")
-_ROUT_WORKSPACE_DOCS = {"AGENTS.md", "README.md"}
-_ROUT_WORKSPACE_CONFIGS = {"codecome.yml"}
+_ROOT_WORKSPACE_DOCS = {"AGENTS.md", "README.md"}
+_ROOT_WORKSPACE_CONFIGS = {"codecome.yml"}
 
 
 # ---------------------------------------------------------------------------
@@ -179,9 +179,9 @@ def classify_internal_read(rel_path: str) -> str | None:
 
     if len(parts) == 1:
         name = parts[0]
-        if name in _ROUT_WORKSPACE_DOCS:
+        if name in _ROOT_WORKSPACE_DOCS:
             return f"reading workspace doc: {name}"
-        if name in _ROUT_WORKSPACE_CONFIGS:
+        if name in _ROOT_WORKSPACE_CONFIGS:
             return f"reading workspace config: {name}"
         return None
 
