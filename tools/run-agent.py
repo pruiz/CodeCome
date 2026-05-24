@@ -3294,10 +3294,8 @@ def _dispatch_tool_renderer(console: Console, tool: str, state: dict[str, Any]) 
         from rendering.tools.edit import EditRenderer
         return EditRenderer(_get_rendering_ctx(console)).render(tool_lower, state)
     elif tool_lower in ("apply_patch", "applypatch", "apply-patch"):
-        if HAVE_RICH:
-            return render_apply_patch_rich(console, state)
-        else:
-            return render_apply_patch_plain(state)
+        from rendering.tools.apply_patch import ApplyPatchRenderer
+        return ApplyPatchRenderer(_get_rendering_ctx(console)).render(tool_lower, state)
     elif tool_lower == "glob":
         _cache_invalidate_stale()
         if HAVE_RICH:
