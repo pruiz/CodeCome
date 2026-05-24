@@ -86,8 +86,3 @@ class TestSnapshotCache:
         cache = SnapshotCache(enabled=False)
         cache.reread("/x")
         assert len(cache._entries) == 0
-        assert len(cache._entries) == 0
-        assert len(cache._entries) == 0
-        assert len(cache._entries) == 0
-        assert len(cache._entries) == 0
-        assert len(cache._entries) == 0
