@@ -137,6 +137,44 @@ class ToolUseEventRenderer(EventRenderer):
         part = event.get("part", {})
         tool = str(part.get("tool", "unknown"))
         state = part.get("state", {}) if isinstance(part.get("state"), dict) else {}
+        tool_lower = tool.strip().lower()
+
+        # Route through specific tool renderers first.
+        renderer = None
+        if tool_lower == "todowrite":
+            from rendering.tools.todo import TodoRenderer
+            renderer = TodoRenderer(self.context)
+        elif tool_lower == "read":
+            from rendering.tools.read import ReadRenderer
+            renderer = ReadRenderer(self.context)
+        elif tool_lower == "write":
+            from rendering.tools.write import WriteRenderer
+            renderer = WriteRenderer(self.context)
+        elif tool_lower == "edit":
+            from rendering.tools.edit import EditRenderer
+            renderer = EditRenderer(self.context)
+        elif tool_lower in ("apply_patch", "applypatch", "apply-patch"):
+            from rendering.tools.apply_patch import ApplyPatchRenderer
+            renderer = ApplyPatchRenderer(self.context)
+        elif tool_lower == "glob":
+            from rendering.tools.glob import GlobRenderer
+            renderer = GlobRenderer(self.context)
+        elif tool_lower == "grep":
+            from rendering.tools.grep import GrepRenderer
+            renderer = GrepRenderer(self.context)
+        elif tool_lower == "bash":
+            from rendering.tools.command import CommandRenderer
+            renderer = CommandRenderer(self.context)
+        elif tool_lower == "skill":
+            from rendering.tools.skill import SkillRenderer
+            renderer = SkillRenderer(self.context)
+        elif tool_lower == "task":
+            from rendering.tools.task import TaskRenderer
+            renderer = TaskRenderer(self.context)
+
+        if renderer is not None and renderer.render(tool, state):
+            return True
+
         return self._fallback.render(tool, state)
 
 
@@ -416,7 +454,7 @@ class SubagentStatusRenderer(EventRenderer):
             self.sink.write_text(C.ok(f"[subagent] finished: {title}"))
         elif status_type == "heartbeat" and elapsed_ms is not None:
             elapsed_s = elapsed_ms // 1000
-            self.sink.write_text(C.warn(f"\u23f3 Subagent \u00b7 {title} still running ({elapsed_s}s"))
+            self.sink.write_text(C.warn(f"\u23f3 Subagent \u00b7 {title} still running ({elapsed_s}s)"))
         elif status_type == "updated":
             summary_text = self._format_subagent_summary(summary)
             line = f"Subagent \u00b7 {title}"

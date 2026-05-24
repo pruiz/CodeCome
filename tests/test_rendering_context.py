@@ -36,3 +36,23 @@ class TestRenderContext:
             cache=cache,
         )
         assert ctx.cache is cache
+
+    def test_cli_overrides_reach_render_settings(self):
+        """dataclasses.replace() applies CLI tunable overrides correctly."""
+        import dataclasses
+        settings = RenderSettings.from_env()
+        assert settings.read_display_lines == 10
+        assert settings.write_content_lines == 25
+        assert settings.write_diff_limit == 50
+        assert settings.edit_diff_lines == 25
+
+        settings = dataclasses.replace(settings,
+            read_display_lines=42,
+            write_content_lines=7,
+            write_diff_limit=99,
+            edit_diff_lines=3,
+        )
+        assert settings.read_display_lines == 42
+        assert settings.write_content_lines == 7
+        assert settings.write_diff_limit == 99
+        assert settings.edit_diff_lines == 3
