@@ -3681,32 +3681,47 @@ def render_error(console: Console, event: dict[str, Any]) -> None:
 
 def render_event(console: Console, phase: str, label: str, event: dict[str, Any]) -> None:
     event_type = event.get("type")
+    ctx = _get_rendering_ctx(console)
+
     if event_type == "server.connected":
-        render_server_connected(console, event)
+        from rendering.events import ServerConnectedRenderer
+        ServerConnectedRenderer(ctx).render(event)
     elif event_type == "server.heartbeat":
-        render_server_heartbeat(console, event)
+        from rendering.events import ServerHeartbeatRenderer
+        ServerHeartbeatRenderer(ctx).render(event)
     elif event_type == "message.updated":
-        render_message_updated(console, event)
+        from rendering.events import MessageUpdatedRenderer
+        MessageUpdatedRenderer(ctx).render(event)
     elif event_type == "step_start":
-        render_step_start(console, phase, label, event)
+        from rendering.events import StepStartRenderer
+        StepStartRenderer(ctx, phase=phase, label=label).render(event)
     elif event_type == "text":
-        render_text(console, event)
+        from rendering.events import TextEventRenderer
+        TextEventRenderer(ctx).render(event)
     elif event_type == "reasoning":
-        render_reasoning(console, event)
+        from rendering.events import ReasoningEventRenderer
+        ReasoningEventRenderer(ctx).render(event)
     elif event_type == "tool_use":
-        render_tool_use(console, event)
+        from rendering.events import ToolUseEventRenderer
+        ToolUseEventRenderer(ctx).render(event)
     elif event_type == "step_finish":
-        render_step_finish(console, event)
+        from rendering.events import StepFinishRenderer
+        StepFinishRenderer(ctx).render(event)
     elif event_type == "error":
-        render_error(console, event)
+        from rendering.events import ErrorEventRenderer
+        ErrorEventRenderer(ctx).render(event)
     elif event_type == "session.status":
-        render_session_status(console, event)
+        from rendering.events import SessionStatusRenderer
+        SessionStatusRenderer(ctx).render(event)
     elif event_type == "session.diff":
-        render_session_diff(console, event)
+        from rendering.events import SessionDiffRenderer
+        SessionDiffRenderer(ctx).render(event)
     elif event_type == "subagent.status":
-        render_subagent_status(console, event)
+        from rendering.events import SubagentStatusRenderer
+        SubagentStatusRenderer(ctx).render(event)
     else:
-        render_unknown(console, event)
+        from rendering.events import UnknownEventRenderer
+        UnknownEventRenderer(ctx).render(event)
 
 
 def render_session_status(console: Console, event: dict[str, Any]) -> None:

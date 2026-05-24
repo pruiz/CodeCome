@@ -393,14 +393,19 @@ def test_render_subagent_status_rich_created_renders_panel(monkeypatch):
 
 @pytest.mark.unit
 def test_render_event_dispatches_subagent_status(monkeypatch):
+    """render_event dispatches subagent.status through SubagentStatusRenderer."""
+    import rendering.events as _evts
     module = load_tool_module("run_agent_dispatch_subagent", "tools/run-agent.py")
     calls = []
 
-    def _fake_subagent_status(_console, _event):
-        calls.append("subagent.status")
+    class _FakeRenderer:
+        def __init__(self, ctx):
+            pass
+        def render(self, event):
+            calls.append("subagent.status")
+            return True
 
-    monkeypatch.setattr(module, "render_subagent_status", _fake_subagent_status)
-
+    monkeypatch.setattr(_evts, "SubagentStatusRenderer", _FakeRenderer)
     module.render_event(None, "2", "x", {"type": "subagent.status", "properties": {}})
     assert calls == ["subagent.status"]
 
