@@ -29,6 +29,11 @@ _FINISH_FAILURE = {"content-filter", "content_filter", "length", "max_tokens", "
 _SUBAGENT_LAST_STATE: dict[str, tuple[dict[str, Any], float]] = {}
 
 
+def _reset_subagent_state() -> None:
+    """Clear per-session dedup state.  Call between tests or runs."""
+    _SUBAGENT_LAST_STATE.clear()
+
+
 # ---------------------------------------------------------------------------
 # EventRenderer base
 # ---------------------------------------------------------------------------
@@ -123,12 +128,16 @@ class ReasoningEventRenderer(EventRenderer):
 class ToolUseEventRenderer(EventRenderer):
     event_types = ("tool_use",)
 
+    def __init__(self, context):
+        super().__init__(context)
+        from rendering.tools.base import FallbackToolRenderer
+        self._fallback = FallbackToolRenderer(context)
+
     def render(self, event: dict[str, Any]) -> bool:
         part = event.get("part", {})
         tool = str(part.get("tool", "unknown"))
         state = part.get("state", {}) if isinstance(part.get("state"), dict) else {}
-        from rendering.tools.base import FallbackToolRenderer
-        return FallbackToolRenderer(self.context).render(tool, state)
+        return self._fallback.render(tool, state)
 
 
 class StepFinishRenderer(EventRenderer):
