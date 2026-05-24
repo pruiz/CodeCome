@@ -80,7 +80,14 @@ class TestSnapshotCache:
     def test_disabled_invalidate_is_noop(self):
         cache = SnapshotCache(enabled=False)
         cache.invalidate_stale()
+        assert len(cache._entries) == 0
 
     def test_disabled_reread_is_noop(self):
         cache = SnapshotCache(enabled=False)
         cache.reread("/x")
+        assert len(cache._entries) == 0
+        assert len(cache._entries) == 0
+        assert len(cache._entries) == 0
+        assert len(cache._entries) == 0
+        assert len(cache._entries) == 0
+        assert len(cache._entries) == 0

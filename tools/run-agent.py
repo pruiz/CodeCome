@@ -3897,12 +3897,18 @@ def _run_single_attempt(
 
     Returns (returncode, session_id, run_result, transcript_path).
     """
-    transcript_path, transcript_fp = open_phase_transcript(str(args.phase), args.finding)
-    if transcript_fp is None:
+    transcript_fp = None
+    try:
+        transcript_path, transcript_fp = open_phase_transcript(str(args.phase), args.finding)
+    except OSError as exc:
+        # Reconstruct the path the helper would have produced so the
+        # warning still names the right file.
+        finding_tag = (args.finding or "no-finding").replace("/", "_")
+        transcript_path = ROOT / "tmp" / f"last-phase-{args.phase}-{finding_tag}-attempt-N.jsonl"
         if HAVE_RICH:
-            console.print(Text(f"warning: could not open transcript {transcript_path}", style="yellow"))
+            console.print(Text(f"warning: could not open transcript {transcript_path}: {exc}", style="yellow"))
         else:
-            print(C.warn(f"warning: could not open transcript {transcript_path}"))
+            print(C.warn(f"warning: could not open transcript {transcript_path}: {exc}"))
 
     try:
         if existing_session_id:
@@ -4556,7 +4562,13 @@ def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
         return 1
 
     # Open the chat transcript (parity with phase mode).
-    transcript_path, transcript_fp = open_chat_transcript()
+    transcript_path: Path = Path()
+    transcript_fp = None
+    try:
+        transcript_path, transcript_fp = open_chat_transcript()
+        _chat_debug(f"_run_chat_mode: opened transcript {transcript_path}")
+    except OSError as exc:
+        _chat_debug(f"_run_chat_mode: could not open transcript: {exc}")
 
     _chat_debug("_run_chat_mode: creating ChatApp")
     app = None

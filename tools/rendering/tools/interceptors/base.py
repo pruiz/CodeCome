@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-from rendering.tools.base import ToolRenderer
+from rendering.tools.base import ToolRenderer  # noqa: E402
 
 
 @runtime_checkable

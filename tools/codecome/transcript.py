@@ -25,7 +25,7 @@ def _transcript_dir() -> Path:
     return d
 
 
-def open_phase_transcript(phase: str, finding: str | None) -> tuple[Path, IO[str] | None]:
+def open_phase_transcript(phase: str, finding: str | None) -> tuple[Path, IO[str]]:
     finding_tag = (finding or "no-finding").replace("/", "_")
     key = f"{phase}-{finding_tag}"
 
@@ -34,19 +34,13 @@ def open_phase_transcript(phase: str, finding: str | None) -> tuple[Path, IO[str
         _ATTEMPT_COUNTER[key] = counter + 1
 
     path = _transcript_dir() / f"last-phase-{phase}-{finding_tag}-attempt-{counter}.jsonl"
-    try:
-        return path, path.open("w", encoding="utf-8")
-    except OSError:
-        return path, None
+    return path, path.open("w", encoding="utf-8")
 
 
-def open_chat_transcript() -> tuple[Path, IO[str] | None]:
+def open_chat_transcript() -> tuple[Path, IO[str]]:
     stamp = time.strftime("%Y%m%d-%H%M%S")
     path = _transcript_dir() / f"last-chat-{stamp}-pid{os.getpid()}.jsonl"
-    try:
-        return path, path.open("w", encoding="utf-8", buffering=1)
-    except OSError:
-        return path, None
+    return path, path.open("w", encoding="utf-8", buffering=1)
 
 
 def close_transcript(fp: IO[str] | None) -> None:

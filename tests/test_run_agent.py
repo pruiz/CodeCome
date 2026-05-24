@@ -71,14 +71,13 @@ def test_strip_probe_unsafe_flags_removes_session_and_continue_flags():
 
 @pytest.mark.unit
 def test_resolve_model_and_variant_precedence(monkeypatch):
-    config_module = _load_config_module()
-    module = load_tool_module("run_agent_resolve", "tools/run-agent.py")
+    import codecome.config as _cfg
     monkeypatch.setenv("CODECOME_MODEL", "env/model")
     monkeypatch.setenv("CODECOME_MODEL_VARIANT", "max")
-    monkeypatch.setattr(config_module, "_read_codecome_yml_agent", lambda _agent: ("yaml/model", "yamlvar"))
-    monkeypatch.setattr(config_module, "_discover_opencode_default_model", lambda: "history/model")
+    monkeypatch.setattr(_cfg, "_read_codecome_yml_agent", lambda _agent: ("yaml/model", "yamlvar"))
+    monkeypatch.setattr(_cfg, "_discover_opencode_default_model", lambda: "history/model")
 
-    model, variant, model_source, variant_source = module.resolve_model_and_variant(
+    model, variant, model_source, variant_source = _cfg.resolve_model_and_variant(
         "auditor", ["--model", "args/model", "--variant=high"]
     )
     assert (model, variant) == ("args/model", "high")
@@ -132,14 +131,14 @@ def test_resolve_thinking_decision_precedence(monkeypatch):
 @pytest.mark.unit
 def test_show_model_table_prints_resolution_sources(monkeypatch, capsys):
     """show_model_table should emit a table with all resolution sources."""
-    config_module = _load_config_module()
+    import codecome.config as _cfg
     monkeypatch.setenv("OPENCODE_ARGS", "--model openai/gpt-5 --variant high")
     monkeypatch.setenv("CODECOME_MODEL", "env/model")
     monkeypatch.setenv("CODECOME_MODEL_VARIANT", "envvar")
-    monkeypatch.setattr(config_module, "_read_codecome_yml_agent", lambda _agent: ("yaml/model", "yamlvar"))
-    monkeypatch.setattr(config_module, "_discover_opencode_default_model", lambda: "history/model")
+    monkeypatch.setattr(_cfg, "_read_codecome_yml_agent", lambda _agent: ("yaml/model", "yamlvar"))
+    monkeypatch.setattr(_cfg, "_discover_opencode_default_model", lambda: "history/model")
 
-    rc = config_module.show_model_table("auditor")
+    rc = _cfg.show_model_table("auditor")
     assert rc == 0
 
     out = capsys.readouterr().out
