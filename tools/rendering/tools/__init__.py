@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from rendering.tools.apply_patch import ApplyPatchRenderer
 from rendering.tools.base import FallbackToolRenderer, ToolRenderer
+from rendering.tools.command import CommandRenderer
 from rendering.tools.edit import EditRenderer
+from rendering.tools.glob import GlobRenderer
+from rendering.tools.grep import GrepRenderer
 from rendering.tools.permissions import PermissionErrorRenderer
 from rendering.tools.read import ReadRenderer
 from rendering.tools.skill import SkillRenderer
@@ -19,8 +22,11 @@ from rendering.tools.write import WriteRenderer
 
 __all__ = [
     "ApplyPatchRenderer",
+    "CommandRenderer",
     "EditRenderer",
     "FallbackToolRenderer",
+    "GlobRenderer",
+    "GrepRenderer",
     "PermissionErrorRenderer",
     "ReadRenderer",
     "SkillRenderer",
