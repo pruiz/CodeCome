@@ -21,7 +21,7 @@
     "test": {
       "type": "openai",
       "options": {
-        "baseURL": "http://127.0.0.1:61167/v1",
+        "baseURL": "http://127.0.0.1:50400/v1",
         "apiKey": "sk-test"
       },
       "models": {

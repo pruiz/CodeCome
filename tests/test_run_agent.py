@@ -71,6 +71,8 @@ def test_strip_probe_unsafe_flags_removes_session_and_continue_flags():
 
 @pytest.mark.unit
 def test_resolve_model_and_variant_precedence(monkeypatch):
+    import sys
+    sys.path.insert(0, str(ROOT / "tools"))
     import codecome.config as _cfg
     monkeypatch.setenv("CODECOME_MODEL", "env/model")
     monkeypatch.setenv("CODECOME_MODEL_VARIANT", "max")
@@ -1509,13 +1511,20 @@ def test_auto_correction_resume_loops_back_via_popen(monkeypatch, tmp_path):
     monkeypatch.setattr(module, "check_opencode_version", lambda: None)
     monkeypatch.setattr(module, "ROOT", tmp_path)
 
+    import sys
+    sys.path.insert(0, str(ROOT / "tools"))
+    if "codecome" in sys.modules and not hasattr(sys.modules["codecome"], "__path__"):
+        del sys.modules["codecome"]
+    import codecome.runner as _runner
+
     # Reset the attempt counter so transcript numbering is deterministic.
-    if hasattr(module._run_single_attempt, "_attempt_counter"):
-        delattr(module._run_single_attempt, "_attempt_counter")
+    if hasattr(_runner._run_single_attempt, "_attempt_counter"):
+        delattr(_runner._run_single_attempt, "_attempt_counter")
 
     calls: list[tuple] = []
 
-    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, auth_token, workspace_dir, existing_session_id=None):
+    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, auth_token, workspace_dir, **kwargs):
+        existing_session_id = kwargs.get("existing_session_id")
         calls.append((existing_session_id, prompt))
         # Both attempts succeed with the same session.
         return (
@@ -1531,7 +1540,7 @@ def test_auto_correction_resume_loops_back_via_popen(monkeypatch, tmp_path):
             tmp_path / f"transcript-{len(calls)}.jsonl",
         )
 
-    monkeypatch.setattr(module, "_run_single_attempt", fake_run_single_attempt)
+    monkeypatch.setattr(_runner, "_run_single_attempt", fake_run_single_attempt)
 
     frontmatter_call_count = [0]
 
@@ -1577,10 +1586,16 @@ def test_frontmatter_failure_without_session_id_exits_nonzero(monkeypatch, tmp_p
     monkeypatch.setattr(module, "check_opencode_version", lambda: None)
     monkeypatch.setattr(module, "ROOT", tmp_path)
 
-    if hasattr(module._run_single_attempt, "_attempt_counter"):
-        delattr(module._run_single_attempt, "_attempt_counter")
+    import sys
+    sys.path.insert(0, str(ROOT / "tools"))
+    if "codecome" in sys.modules and not hasattr(sys.modules["codecome"], "__path__"):
+        del sys.modules["codecome"]
+    import codecome.runner as _runner
 
-    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, auth_token, workspace_dir, existing_session_id=None):
+    if hasattr(_runner._run_single_attempt, "_attempt_counter"):
+        delattr(_runner._run_single_attempt, "_attempt_counter")
+
+    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, auth_token, workspace_dir, **kwargs):
         return (
             0,
             "",  # empty session ID
@@ -1592,7 +1607,7 @@ def test_frontmatter_failure_without_session_id_exits_nonzero(monkeypatch, tmp_p
             tmp_path / "transcript.jsonl",
         )
 
-    monkeypatch.setattr(module, "_run_single_attempt", fake_run_single_attempt)
+    monkeypatch.setattr(_runner, "_run_single_attempt", fake_run_single_attempt)
 
     class FakeResult:
         def __init__(self, rc, out="", err=""):
@@ -1628,12 +1643,19 @@ def test_iteration_limit_triggers_auto_resume(monkeypatch, tmp_path):
     monkeypatch.setattr(module, "ROOT", tmp_path)
     monkeypatch.setenv("CODECOME_MAX_ITERATION_RETRIES", "1")
 
-    if hasattr(module._run_single_attempt, "_attempt_counter"):
-        delattr(module._run_single_attempt, "_attempt_counter")
+    import sys
+    sys.path.insert(0, str(ROOT / "tools"))
+    if "codecome" in sys.modules and not hasattr(sys.modules["codecome"], "__path__"):
+        del sys.modules["codecome"]
+    import codecome.runner as _runner
+
+    if hasattr(_runner._run_single_attempt, "_attempt_counter"):
+        delattr(_runner._run_single_attempt, "_attempt_counter")
 
     calls: list[tuple] = []
 
-    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, auth_token, workspace_dir, existing_session_id=None):
+    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, auth_token, workspace_dir, **kwargs):
+        existing_session_id = kwargs.get("existing_session_id")
         calls.append((existing_session_id, prompt))
         return (
             0,
@@ -1646,7 +1668,7 @@ def test_iteration_limit_triggers_auto_resume(monkeypatch, tmp_path):
             tmp_path / f"transcript-{len(calls)}.jsonl",
         )
 
-    monkeypatch.setattr(module, "_run_single_attempt", fake_run_single_attempt)
+    monkeypatch.setattr(_runner, "_run_single_attempt", fake_run_single_attempt)
     monkeypatch.setattr(module, "check_phase_graceful_completion", lambda *a, **kw: False)
 
     class FakeResult:
@@ -1803,10 +1825,16 @@ def test_stream_session_id_and_step_finish_count(monkeypatch, tmp_path):
     monkeypatch.setattr(module, "check_opencode_version", lambda: None)
     monkeypatch.setattr(module, "ROOT", tmp_path)
 
-    if hasattr(module._run_single_attempt, "_attempt_counter"):
-        delattr(module._run_single_attempt, "_attempt_counter")
+    import sys
+    sys.path.insert(0, str(ROOT / "tools"))
+    if "codecome" in sys.modules and not hasattr(sys.modules["codecome"], "__path__"):
+        del sys.modules["codecome"]
+    import codecome.runner as _runner
 
-    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, auth_token, workspace_dir, existing_session_id=None):
+    if hasattr(_runner._run_single_attempt, "_attempt_counter"):
+        delattr(_runner._run_single_attempt, "_attempt_counter")
+
+    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, auth_token, workspace_dir, **kwargs):
         return (
             0,
             "ses_stream_test_001",
@@ -1819,7 +1847,7 @@ def test_stream_session_id_and_step_finish_count(monkeypatch, tmp_path):
             tmp_path / "transcript.jsonl",
         )
 
-    monkeypatch.setattr(module, "_run_single_attempt", fake_run_single_attempt)
+    monkeypatch.setattr(_runner, "_run_single_attempt", fake_run_single_attempt)
 
     class FakeResult:
         def __init__(self, rc, out="", err=""):
