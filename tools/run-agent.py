@@ -3298,16 +3298,12 @@ def _dispatch_tool_renderer(console: Console, tool: str, state: dict[str, Any]) 
         return ApplyPatchRenderer(_get_rendering_ctx(console)).render(tool_lower, state)
     elif tool_lower == "glob":
         _cache_invalidate_stale()
-        if HAVE_RICH:
-            return render_glob_rich(console, state)
-        else:
-            return render_glob_plain(state)
+        from rendering.tools.glob import GlobRenderer
+        return GlobRenderer(_get_rendering_ctx(console)).render(tool_lower, state)
     elif tool_lower == "grep":
         _cache_invalidate_stale()
-        if HAVE_RICH:
-            return render_grep_rich(console, state)
-        else:
-            return render_grep_plain(state)
+        from rendering.tools.grep import GrepRenderer
+        return GrepRenderer(_get_rendering_ctx(console)).render(tool_lower, state)
     elif tool_lower == "bash":
         _cache_invalidate_stale()
         # Try the sandbox-bootstrap sub-renderer first; it handles bash
@@ -3322,10 +3318,8 @@ def _dispatch_tool_renderer(console: Console, tool: str, state: dict[str, Any]) 
         # Glob renderers as if the agent had used the native tool.
         if _maybe_render_bash_shim(console if HAVE_RICH else None, state):
             return True
-        if HAVE_RICH:
-            return render_bash_rich(console, state)
-        else:
-            return render_bash_plain(state)
+        from rendering.tools.command import CommandRenderer
+        return CommandRenderer(_get_rendering_ctx(console)).render(tool_lower, state)
     elif tool_lower == "skill":
         _cache_invalidate_stale()
         from rendering.tools.skill import SkillRenderer
