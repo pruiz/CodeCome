@@ -50,6 +50,33 @@ from codecome.graceful import (
 )
 from codecome.transcript import open_phase_transcript, open_chat_transcript, close_transcript
 
+# Lazy rendering context — built once and reused by the new renderer
+# classes.  Old-style render_* functions still receive console directly
+# and are unaffected.
+_RENDERING_CTX: Any = None
+
+
+def _get_rendering_ctx(console: Any) -> Any:
+    global _RENDERING_CTX
+    if _RENDERING_CTX is not None:
+        return _RENDERING_CTX
+    from rendering.cache import SnapshotCache
+    from rendering.context import RenderContext
+    from rendering.settings import RenderSettings
+    from rendering.sink import PlainSink, RichConsoleSink
+
+    if HAVE_RICH and console is not None:
+        sink = RichConsoleSink(console)
+    else:
+        sink = PlainSink()
+    _RENDERING_CTX = RenderContext(
+        root=ROOT,
+        sink=sink,
+        settings=RenderSettings.from_env(),
+        cache=SnapshotCache(),
+    )
+    return _RENDERING_CTX
+
 try:
     from rich.console import Console, Group
     from rich.json import JSON
@@ -3254,10 +3281,8 @@ def _dispatch_tool_renderer(console: Console, tool: str, state: dict[str, Any]) 
     """Try tool-specific rendering. Returns True if handled."""
     tool_lower = tool.strip().lower()
     if tool_lower == "todowrite":
-        if HAVE_RICH:
-            return render_todowrite_rich(console, state)
-        else:
-            return render_todowrite_plain(state)
+        from rendering.tools.todo import TodoRenderer
+        return TodoRenderer(_get_rendering_ctx(console)).render(tool_lower, state)
     elif tool_lower == "read":
         # Invalidate stale cache entries before non-write events
         _cache_invalidate_stale()
@@ -3312,16 +3337,12 @@ def _dispatch_tool_renderer(console: Console, tool: str, state: dict[str, Any]) 
             return render_bash_plain(state)
     elif tool_lower == "skill":
         _cache_invalidate_stale()
-        if HAVE_RICH:
-            return render_skill_rich(console, state)
-        else:
-            return render_skill_plain(state)
+        from rendering.tools.skill import SkillRenderer
+        return SkillRenderer(_get_rendering_ctx(console)).render(tool_lower, state)
     elif tool_lower == "task":
         _cache_invalidate_stale()
-        if HAVE_RICH:
-            return render_task_rich(console, state)
-        else:
-            return render_task_plain(state)
+        from rendering.tools.task import TaskRenderer
+        return TaskRenderer(_get_rendering_ctx(console)).render(tool_lower, state)
     else:
         _cache_invalidate_stale()
     return False
