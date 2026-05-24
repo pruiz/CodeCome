@@ -407,31 +407,28 @@ def test_render_event_dispatches_subagent_status(monkeypatch):
 
 @pytest.mark.unit
 def test_dispatch_tool_renderer_routes_task_to_task_renderer(monkeypatch):
+    """_dispatch_tool_renderer delegates 'task' to rendering.tools.task.TaskRenderer."""
+    import rendering.tools.task as _task_mod
     module = load_tool_module("run_agent_dispatch_task", "tools/run-agent.py")
 
     task_calls = []
 
-    def fake_task_rich(_console, _state):
-        task_calls.append("rich")
-        return True
+    class _FakeRenderer:
+        def render(self, tool_name, state):
+            task_calls.append(tool_name)
+            return True
 
-    def fake_task_plain(_state):
-        task_calls.append("plain")
-        return True
-
-    monkeypatch.setattr(module, "render_task_rich", fake_task_rich)
-    monkeypatch.setattr(module, "render_task_plain", fake_task_plain)
+    monkeypatch.setattr(_task_mod, "TaskRenderer", lambda ctx: _FakeRenderer())
 
     # With rich
     monkeypatch.setattr(module, "HAVE_RICH", True)
     assert module._dispatch_tool_renderer(None, "task", {}) is True
-    assert task_calls == ["rich"]
+    assert task_calls == ["task"]
 
-    # With plain
-    monkeypatch.setattr(module, "HAVE_RICH", False)
     task_calls.clear()
+    monkeypatch.setattr(module, "HAVE_RICH", False)
     assert module._dispatch_tool_renderer(None, "task", {}) is True
-    assert task_calls == ["plain"]
+    assert task_calls == ["task"]
 
 
 # --- reasoning / error rendering edge cases --------------------------------
