@@ -33,15 +33,15 @@ class WriteRenderer(ToolRenderer):
             return False
 
         if self.rich:
-            return self._render_rich(file_path, new_content, output_str, output)
+            return self._render_rich(file_path, new_content, output_str, output, state)
         else:
-            return self._render_plain(file_path, new_content, output_str, output)
+            return self._render_plain(file_path, new_content, output_str, output, state)
 
     # ------------------------------------------------------------------
     # Rich
     # ------------------------------------------------------------------
 
-    def _render_rich(self, file_path: str, new_content: str, output_str: str, output) -> bool:
+    def _render_rich(self, file_path: str, new_content: str, output_str: str, output, state) -> bool:
         from rich.console import Group
         from rich.panel import Panel
         from rich.syntax import Syntax
@@ -91,7 +91,8 @@ class WriteRenderer(ToolRenderer):
         sections.append(Text())
         sections.append(Text(status_text, style="green"))
         self.sink.write(Panel(Group(*sections), title="Write", border_style=border, expand=True))
-        cache.set(file_path, new_content)
+        if state.get("status") == "completed" and not is_error:
+            cache.set(file_path, new_content)
         return True
 
     def _render_body_rich(self, sections: list[Any], body: str, cap: int, lexer: str) -> None:
@@ -114,7 +115,7 @@ class WriteRenderer(ToolRenderer):
     # Plain
     # ------------------------------------------------------------------
 
-    def _render_plain(self, file_path: str, new_content: str, output_str: str, output) -> bool:
+    def _render_plain(self, file_path: str, new_content: str, output_str: str, output, state) -> bool:
         import _colors as C
 
         settings = self.context.settings
@@ -149,7 +150,8 @@ class WriteRenderer(ToolRenderer):
             self._render_body_plain(new_content, settings.write_content_lines)
 
         self.sink.write_text(f"  {output_str.strip()}")
-        cache.set(file_path, new_content)
+        if state.get("status") == "completed" and not is_error:
+            cache.set(file_path, new_content)
         return True
 
     def _render_body_plain(self, body: str, cap: int) -> None:

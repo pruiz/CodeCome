@@ -50,32 +50,36 @@ from codecome.graceful import (
 )
 from codecome.transcript import open_phase_transcript, open_chat_transcript, close_transcript
 
-# Lazy rendering context — built once and reused by the new renderer
-# classes.  Old-style render_* functions still receive console directly
-# and are unaffected.
-_RENDERING_CTX: Any = None
+# Lazy rendering contexts — built once per sink mode and reused by the
+# new renderer classes.  Old-style render_* functions still receive
+# console directly and are unaffected.  Keyed by mode so a rich-console
+# call and a plain-text call in the same process don't share a sink.
+_RENDERING_CTX_CACHE: dict[str, Any] = {}
 
 
 def _get_rendering_ctx(console: Any) -> Any:
-    global _RENDERING_CTX
-    if _RENDERING_CTX is not None:
-        return _RENDERING_CTX
+    mode = "rich" if (HAVE_RICH and console is not None) else "plain"
+    if mode in _RENDERING_CTX_CACHE:
+        ctx = _RENDERING_CTX_CACHE[mode]
+        ctx.cache.invalidate_stale()
+        return ctx
     from rendering.cache import SnapshotCache
     from rendering.context import RenderContext
     from rendering.settings import RenderSettings
     from rendering.sink import PlainSink, RichConsoleSink
 
-    if HAVE_RICH and console is not None:
+    if mode == "rich":
         sink = RichConsoleSink(console)
     else:
         sink = PlainSink()
-    _RENDERING_CTX = RenderContext(
+    ctx = RenderContext(
         root=ROOT,
         sink=sink,
         settings=RenderSettings.from_env(),
         cache=SnapshotCache(),
     )
-    return _RENDERING_CTX
+    _RENDERING_CTX_CACHE[mode] = ctx
+    return ctx
 
 try:
     from rich.console import Console, Group
@@ -4645,6 +4649,24 @@ def main() -> int:
 
     color_mode = resolve_color_mode(args.color)
     console = build_console(color_mode)
+
+    # Eagerly build the rendering context so CLI tunable overrides
+    # (--read-display-lines, --write-content-lines, etc.) are baked
+    # into RenderSettings before any renderer uses them.
+    _rendering_ctx = _get_rendering_ctx(console)
+    import dataclasses as _dc
+    _overrides: dict[str, Any] = {}
+    if args.read_display_lines is not None:
+        _overrides["read_display_lines"] = args.read_display_lines
+    if args.write_content_lines is not None:
+        _overrides["write_content_lines"] = args.write_content_lines
+    if args.write_diff_limit is not None:
+        _overrides["write_diff_limit"] = args.write_diff_limit
+    if args.edit_diff_lines is not None:
+        _overrides["edit_diff_lines"] = args.edit_diff_lines
+    if _overrides:
+        _rendering_ctx.settings = _dc.replace(_rendering_ctx.settings, **_overrides)
+
     prompt_file = ROOT / args.prompt_file
     prompt = load_prompt(prompt_file, args.finding, phase=args.phase)
     # Model resolution is still needed for banner display.
