@@ -439,7 +439,15 @@ class TestChatRenderAndLogParity:
         we can capture dispatcher calls.
         """
         module = _load_run_agent_module()
-        app = module.ChatApp()
+        if module.ChatApp is not None:
+            app = module.ChatApp()
+        else:
+            # Textual not installed — use standalone functions on a
+            # plain object (parity guaranteed by delegation in _ChatApp).
+            app = type("FakeChatApp", (), {})()
+            app._render_and_log = module._chat_render_and_log.__get__(app, type(app))
+            app._update_modeline_info = module._chat_update_modeline_info.__get__(app, type(app))
+            app.post_message = MagicMock()
         return module, app
 
     def _make_args(self, debug=False):
@@ -609,9 +617,14 @@ class TestChatTranscriptPath:
         module = _load_run_agent_module()
 
         # Sandbox the ROOT/tmp directory by redirecting ROOT in the
-        # module.  We use monkeypatch to swap module.ROOT for tmp_path
-        # so the transcript lands inside our pytest tmp_path.
+        # module and in codecome.transcript (open_chat_transcript uses its
+        # own ROOT).  We use monkeypatch to swap both for tmp_path so the
+        # transcript lands inside our pytest tmp_path.
         monkeypatch.setattr(module, "ROOT", tmp_path)
+
+        # open_chat_transcript lives in codecome.transcript with its own ROOT.
+        import codecome.transcript as _transcript_mod
+        monkeypatch.setattr(_transcript_mod, "ROOT", tmp_path)
 
         # Stub everything _run_chat_mode would otherwise call so we
         # exercise ONLY the transcript-path setup and the final summary.
@@ -624,7 +637,7 @@ class TestChatTranscriptPath:
             lambda agent, extra: ("opencode/test", None, "stub", "stub"),
         )
         monkeypatch.setattr(
-            module, "_resolve_thinking_decision", lambda m, e: (False, "stub")
+            module, "resolve_thinking_decision", lambda m, e: (False, "stub")
         )
 
         # Server / session creation: stub to return fake objects.
@@ -634,7 +647,7 @@ class TestChatTranscriptPath:
         fake_runner = MagicMock()
         fake_runner.start.return_value = fake_server
         monkeypatch.setattr(module, "ServerRunner", lambda: fake_runner)
-        monkeypatch.setattr(module, "_create_chat_session",
+        monkeypatch.setattr(module, "create_chat_session",
                             lambda *a, **kw: "ses_abc")
 
         # The Textual app's run() is a no-op for this test (we just

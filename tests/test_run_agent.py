@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+from collections import OrderedDict
+
 import pytest
 from rich.console import Console
 
 from conftest import ROOT, load_tool_module
+
+
+def _load_config_module():
+    return load_tool_module("codecome_config", "tools/codecome/config.py")
+
+
+def _load_graceful_module():
+    return load_tool_module("codecome_graceful", "tools/codecome/graceful.py")
 
 
 FIXTURES = ROOT / "tests" / "fixtures" / "run_agent"
@@ -21,14 +31,14 @@ FIXTURES = ROOT / "tests" / "fixtures" / "run_agent"
     ],
 )
 def test_extract_model_from_export_matrix(fixture_name, expected):
-    module = load_tool_module("run_agent_matrix", "tools/run-agent.py")
+    module = _load_config_module()
     payload = (FIXTURES / fixture_name).read_text(encoding="utf-8")
     assert module._extract_model_from_export(payload) == expected
 
 
 @pytest.mark.unit
 def test_extract_flag_value_supports_both_flag_forms():
-    module = load_tool_module("run_agent_flags", "tools/run-agent.py")
+    module = _load_config_module()
     tokens = ["--model=openai/gpt-5", "--variant", "high"]
     assert module._extract_flag_value(tokens, ("--model", "-m")) == "openai/gpt-5"
     assert module._extract_flag_value(tokens, ("--variant",)) == "high"
@@ -36,7 +46,7 @@ def test_extract_flag_value_supports_both_flag_forms():
 
 @pytest.mark.unit
 def test_strip_probe_unsafe_flags_removes_session_and_continue_flags():
-    module = load_tool_module("run_agent_strip", "tools/run-agent.py")
+    module = _load_config_module()
     command = [
         "opencode",
         "run",
@@ -61,11 +71,12 @@ def test_strip_probe_unsafe_flags_removes_session_and_continue_flags():
 
 @pytest.mark.unit
 def test_resolve_model_and_variant_precedence(monkeypatch):
+    config_module = _load_config_module()
     module = load_tool_module("run_agent_resolve", "tools/run-agent.py")
     monkeypatch.setenv("CODECOME_MODEL", "env/model")
     monkeypatch.setenv("CODECOME_MODEL_VARIANT", "max")
-    monkeypatch.setattr(module, "_read_codecome_yml_agent", lambda _agent: ("yaml/model", "yamlvar"))
-    monkeypatch.setattr(module, "_discover_opencode_default_model", lambda: "history/model")
+    monkeypatch.setattr(config_module, "_read_codecome_yml_agent", lambda _agent: ("yaml/model", "yamlvar"))
+    monkeypatch.setattr(config_module, "_discover_opencode_default_model", lambda: "history/model")
 
     model, variant, model_source, variant_source = module.resolve_model_and_variant(
         "auditor", ["--model", "args/model", "--variant=high"]
@@ -77,7 +88,7 @@ def test_resolve_model_and_variant_precedence(monkeypatch):
 
 @pytest.mark.component
 def test_stream_model_scan_finds_nested_provider_model_pair():
-    module = load_tool_module("run_agent_scan", "tools/run-agent.py")
+    module = _load_config_module()
     event = {
         "type": "tool_result",
         "part": {
@@ -95,7 +106,7 @@ def test_stream_model_scan_finds_nested_provider_model_pair():
 
 @pytest.mark.unit
 def test_thinking_default_is_disabled_for_anthropic_only():
-    module = load_tool_module("run_agent_thinking_default", "tools/run-agent.py")
+    module = _load_config_module()
     assert module._thinking_default_for_provider("anthropic") is False
     assert module._thinking_default_for_provider("anthropic-foo") is False
     assert module._thinking_default_for_provider("openai") is True
@@ -106,16 +117,41 @@ def test_thinking_default_is_disabled_for_anthropic_only():
 def test_resolve_thinking_decision_precedence(monkeypatch):
     module = load_tool_module("run_agent_thinking_precedence", "tools/run-agent.py")
 
-    on, source = module._resolve_thinking_decision("anthropic/claude-opus-4-7", ["--thinking"])
+    on, source = module.resolve_thinking_decision("anthropic/claude-opus-4-7", ["--thinking"])
     assert (on, source) == (True, "user-args")
 
     monkeypatch.setenv("CODECOME_THINKING", "0")
-    on, source = module._resolve_thinking_decision("openai/gpt-5", [])
+    on, source = module.resolve_thinking_decision("openai/gpt-5", [])
     assert (on, source) == (False, "env")
 
     monkeypatch.setenv("CODECOME_THINKING", "1")
-    on, source = module._resolve_thinking_decision("anthropic/claude-opus-4-7", [])
+    on, source = module.resolve_thinking_decision("anthropic/claude-opus-4-7", [])
     assert (on, source) == (True, "env")
+
+
+@pytest.mark.unit
+def test_show_model_table_prints_resolution_sources(monkeypatch, capsys):
+    """show_model_table should emit a table with all resolution sources."""
+    config_module = _load_config_module()
+    monkeypatch.setenv("OPENCODE_ARGS", "--model openai/gpt-5 --variant high")
+    monkeypatch.setenv("CODECOME_MODEL", "env/model")
+    monkeypatch.setenv("CODECOME_MODEL_VARIANT", "envvar")
+    monkeypatch.setattr(config_module, "_read_codecome_yml_agent", lambda _agent: ("yaml/model", "yamlvar"))
+    monkeypatch.setattr(config_module, "_discover_opencode_default_model", lambda: "history/model")
+
+    rc = config_module.show_model_table("auditor")
+    assert rc == 0
+
+    out = capsys.readouterr().out
+    assert "Model resolution for agent auditor" in out
+    assert "OPENCODE_ARGS" in out
+    assert "env CODECOME_MODEL" in out
+    assert "codecome.yml" in out
+    assert "opencode session history" in out
+    assert "effective" in out
+    assert "openai/gpt-5" in out  # args win
+    assert "high" in out
+    assert "thinking=" in out
 
 
 @pytest.mark.unit
@@ -576,6 +612,40 @@ def test_parse_grep_output_70_percent_threshold_for_lines_mode():
     )
     mode, _ = module._parse_grep_output(output_low)
     assert mode == "files"
+
+
+@pytest.mark.unit
+def test_cache_invalidate_stale_removes_missing_and_modified(monkeypatch, tmp_path):
+    """_cache_invalidate_stale should remove entries for deleted files
+    and for files whose mtime changed since caching."""
+    module = load_tool_module("run_agent_cache_stale", "tools/run-agent.py")
+    monkeypatch.setattr(module, "_WRITE_CACHE_ENABLED", True)
+
+    # _SNAPSHOT_CACHE is an module-level OrderedDict; monkeypatch it per-test.
+    fake_cache = OrderedDict()
+    monkeypatch.setattr(module, "_SNAPSHOT_CACHE", fake_cache)
+
+    existing = tmp_path / "existing.txt"
+    existing.write_text("old", encoding="utf-8")
+    deleted = tmp_path / "deleted.txt"
+    deleted.write_text("gone", encoding="utf-8")
+
+    module._cache_set(str(existing), "old")
+    module._cache_set(str(deleted), "gone")
+
+    assert str(existing) in fake_cache
+    assert str(deleted) in fake_cache
+
+    # Simulate file deletion
+    deleted.unlink()
+    # Simulate modification of existing file
+    existing.write_text("new", encoding="utf-8")
+
+    module._cache_invalidate_stale()
+
+    # Deleted and modified entries are both removed
+    assert str(deleted) not in fake_cache
+    assert str(existing) not in fake_cache
 
 
 @pytest.mark.unit
@@ -1294,20 +1364,20 @@ def test_parse_find_tree_tree_verb_no_name():
 @pytest.fixture()
 def prompt_env(tmp_path, monkeypatch):
     """Set up an isolated environment for load_prompt tests."""
-    module = load_tool_module("run_agent_prompt", "tools/run-agent.py")
+    config_module = _load_config_module()
 
     # Create a minimal prompt file.
     prompt_file = tmp_path / "prompt.md"
     prompt_file.write_text("# Phase prompt\n\nBase content.", encoding="utf-8")
 
     # Point ROOT at tmp_path so codecome.yml is found there.
-    monkeypatch.setattr(module, "ROOT", tmp_path)
+    monkeypatch.setattr(config_module, "ROOT", tmp_path)
 
     # Clear env vars by default.
     monkeypatch.delenv("PROMPT_EXTRA", raising=False)
     monkeypatch.delenv("PROMPT_EXTRA_FILE", raising=False)
 
-    return module, prompt_file, tmp_path
+    return config_module, prompt_file, tmp_path
 
 
 @pytest.mark.unit
@@ -1620,7 +1690,7 @@ def test_check_phase_graceful_completion_mtime(monkeypatch, tmp_path):
     the current run (st_mtime >= run_start_time)."""
     import os
 
-    module = load_tool_module("run_agent_graceful_mtime", "tools/run-agent.py")
+    module = _load_graceful_module()
     monkeypatch.setattr(module, "ROOT", tmp_path)
 
     start = 1_000_000.0
