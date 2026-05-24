@@ -31,16 +31,16 @@ class EditRenderer(ToolRenderer):
             return False
 
         if self.rich:
-            return self._render_rich(file_path, str(old_string), str(new_string), replace_all, output)
+            return self._render_rich(file_path, str(old_string), str(new_string), replace_all, output, state)
         else:
-            return self._render_plain(file_path, str(old_string), str(new_string), replace_all, output)
+            return self._render_plain(file_path, str(old_string), str(new_string), replace_all, output, state)
 
     # ------------------------------------------------------------------
     # Rich
     # ------------------------------------------------------------------
 
     def _render_rich(self, file_path: str, old_string: str, new_string: str,
-                     replace_all: bool, output) -> bool:
+                     replace_all: bool, output, state: dict[str, Any]) -> bool:
         from rich.console import Group
         from rich.panel import Panel
         from rich.syntax import Syntax
@@ -83,8 +83,8 @@ class EditRenderer(ToolRenderer):
 
         self.sink.write(Panel(Group(*sections), title="Edit", border_style=border, expand=True))
 
-        # Re-read cache after edit so subsequent writes show correct diffs.
-        cache.reread(file_path)
+        if state.get("status") == "completed" and not is_error:
+            cache.reread(file_path)
         return True
 
     # ------------------------------------------------------------------
@@ -92,7 +92,7 @@ class EditRenderer(ToolRenderer):
     # ------------------------------------------------------------------
 
     def _render_plain(self, file_path: str, old_string: str, new_string: str,
-                      replace_all: bool, output) -> bool:
+                      replace_all: bool, output, state: dict[str, Any]) -> bool:
         import _colors as C
 
         settings = self.context.settings
@@ -119,5 +119,6 @@ class EditRenderer(ToolRenderer):
 
         self.sink.write_text(f"  {output_str.strip()}")
 
-        cache.reread(file_path)
+        if state.get("status") == "completed" and not is_likely_error(output_str):
+            cache.reread(file_path)
         return True

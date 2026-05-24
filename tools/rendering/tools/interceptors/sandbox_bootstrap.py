@@ -821,8 +821,7 @@ class SandboxBootstrapInterceptor:
         if not isinstance(inp, dict):
             return False
 
-        command_str = str(inp.get("command", ""))
-        subcommand = _is_sandbox_bootstrap_json_call(command_str)
+        subcommand = _is_sandbox_bootstrap_json_call(command)
         if subcommand is None:
             return False
 
@@ -856,8 +855,8 @@ class SandboxBootstrapInterceptor:
 
         if renderer.rich:
             return _render_sandbox_rich(
-                renderer, subcommand, payload, command_str, description, status
+                renderer, subcommand, payload, command, description, status
             )
         return _render_sandbox_plain(
-            renderer, subcommand, payload, command_str, description, status
+            renderer, subcommand, payload, command, description, status
         )

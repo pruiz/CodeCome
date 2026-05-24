@@ -325,8 +325,7 @@ class RtkReadInterceptor:
         if not isinstance(inp, dict):
             return False
 
-        command_str = str(inp.get("command", ""))
-        shim = _is_bash_shim_call(command_str)
+        shim = _is_bash_shim_call(command)
         if shim is None:
             return False
 

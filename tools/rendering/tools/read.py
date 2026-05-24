@@ -88,7 +88,7 @@ class ReadRenderer(ToolRenderer):
                 sections.append(Text("(empty file)", style="dim"))
             else:
                 lexer = detect_lexer(file_path)
-                self._render_truncated_body(sections, raw_body, settings.read_display_lines, lexer, footer)
+                self._render_truncated_body(sections, raw_body, settings.read_display_lines, lexer, footer, settings.read_highlight_limit)
 
         elif kind == "directory":
             entries = payload if isinstance(payload, list) else []
@@ -104,7 +104,8 @@ class ReadRenderer(ToolRenderer):
         return True
 
     @staticmethod
-    def _render_truncated_body(sections: list[Any], body: str, cap: int, lexer: str, footer: str | None) -> None:
+    def _render_truncated_body(sections: list[Any], body: str, cap: int, lexer: str, footer: str | None,
+                                highlight_limit: int = 200 * 1024) -> None:
         from rich.syntax import Syntax
         from rich.text import Text
 
@@ -114,7 +115,7 @@ class ReadRenderer(ToolRenderer):
         leftover = max(0, total - cap)
 
         visible = "\n".join(visible_lines)
-        if len(visible.encode("utf-8", errors="replace")) > 200 * 1024:
+        if len(visible.encode("utf-8", errors="replace")) > highlight_limit:
             sections.append(Text(visible))
         else:
             sections.append(Syntax(visible, lexer, theme="monokai", line_numbers=True, word_wrap=True))

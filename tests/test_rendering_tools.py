@@ -728,7 +728,7 @@ class TestSandboxBootstrapInterceptor:
             "output": '[{"id": "py", "display_name": "Python"}]',
             "status": "completed",
         }
-        assert interceptor.try_render("bash", state, renderer) is True
+        assert interceptor.try_render(state["input"]["command"], state, renderer) is True
         out = capsys.readouterr().out
         assert "Sandbox" in out
         assert "Python" in out
@@ -741,7 +741,7 @@ class TestSandboxBootstrapInterceptor:
             "output": "hello",
             "status": "completed",
         }
-        assert interceptor.try_render("bash", state, renderer) is False
+        assert interceptor.try_render(state["input"]["command"], state, renderer) is False
 
     def test_try_render_skips_when_disabled(self):
         ctx = _ctx("plain")
@@ -753,19 +753,20 @@ class TestSandboxBootstrapInterceptor:
             "output": "[]",
             "status": "completed",
         }
-        assert interceptor.try_render("bash", state, renderer) is False
+        assert interceptor.try_render(state["input"]["command"], state, renderer) is False
 
 
 class TestRtkReadInterceptor:
     def test_try_render_routes_cat_command(self, capsys):
         interceptor = RtkReadInterceptor()
         renderer = CommandRenderer(_ctx("plain"))
+        command = "cat /fake/file.txt"
         state = {
-            "input": {"command": "cat /fake/file.txt"},
+            "input": {"command": command},
             "output": "hello world",
             "status": "completed",
         }
-        assert interceptor.try_render("bash", state, renderer) is True
+        assert interceptor.try_render(command, state, renderer) is True
         out = capsys.readouterr().out
         assert "file.txt" in out
         assert "hello world" in out
@@ -778,7 +779,7 @@ class TestRtkReadInterceptor:
             "output": "hello",
             "status": "completed",
         }
-        assert interceptor.try_render("bash", state, renderer) is False
+        assert interceptor.try_render(state["input"]["command"], state, renderer) is False
 
     def test_try_render_skips_when_disabled(self):
         ctx = _ctx("plain")
@@ -790,7 +791,7 @@ class TestRtkReadInterceptor:
             "output": "hello",
             "status": "completed",
         }
-        assert interceptor.try_render("bash", state, renderer) is False
+        assert interceptor.try_render(state["input"]["command"], state, renderer) is False
 
 
 class TestRtkGrepInterceptor:
@@ -802,7 +803,7 @@ class TestRtkGrepInterceptor:
             "output": "src/main.py:1:foo = 1",
             "status": "completed",
         }
-        assert interceptor.try_render("bash", state, renderer) is True
+        assert interceptor.try_render(state["input"]["command"], state, renderer) is True
         out = capsys.readouterr().out
         assert "foo" in out
         assert "main.py" in out
@@ -815,7 +816,7 @@ class TestRtkGrepInterceptor:
             "output": "hello",
             "status": "completed",
         }
-        assert interceptor.try_render("bash", state, renderer) is False
+        assert interceptor.try_render(state["input"]["command"], state, renderer) is False
 
     def test_try_render_skips_when_disabled(self):
         ctx = _ctx("plain")
@@ -827,7 +828,7 @@ class TestRtkGrepInterceptor:
             "output": "hello",
             "status": "completed",
         }
-        assert interceptor.try_render("bash", state, renderer) is False
+        assert interceptor.try_render(state["input"]["command"], state, renderer) is False
 
 
 class TestShellListingInterceptor:
@@ -839,7 +840,7 @@ class TestShellListingInterceptor:
             "output": "main.py\nutils.py",
             "status": "completed",
         }
-        assert interceptor.try_render("bash", state, renderer) is True
+        assert interceptor.try_render(state["input"]["command"], state, renderer) is True
         out = capsys.readouterr().out
         assert "main.py" in out
         assert "utils.py" in out
@@ -852,7 +853,7 @@ class TestShellListingInterceptor:
             "output": "src/main.py\nsrc/utils.py",
             "status": "completed",
         }
-        assert interceptor.try_render("bash", state, renderer) is True
+        assert interceptor.try_render(state["input"]["command"], state, renderer) is True
         out = capsys.readouterr().out
         assert "main.py" in out
 
@@ -864,7 +865,7 @@ class TestShellListingInterceptor:
             "output": "hello",
             "status": "completed",
         }
-        assert interceptor.try_render("bash", state, renderer) is False
+        assert interceptor.try_render(state["input"]["command"], state, renderer) is False
 
     def test_try_render_skips_when_disabled(self):
         ctx = _ctx("plain")
@@ -876,4 +877,4 @@ class TestShellListingInterceptor:
             "output": "hello",
             "status": "completed",
         }
-        assert interceptor.try_render("bash", state, renderer) is False
+        assert interceptor.try_render(state["input"]["command"], state, renderer) is False
