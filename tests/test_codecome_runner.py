@@ -9,7 +9,7 @@ import json
 from unittest.mock import MagicMock
 
 from codecome import runner
-from events import RunResult
+from events.phase_loop import RunResult
 
 @pytest.fixture
 def mock_args():
@@ -26,7 +26,7 @@ def mock_console():
     return MagicMock()
 
 def test_consume_events_renders_and_logs(mock_args, mock_console, monkeypatch):
-    class FakeEventLoop:
+    class FakePhaseEventLoop:
         def __init__(self, **kwargs):
             pass
         def run(self, render_and_log_fn):
@@ -34,7 +34,7 @@ def test_consume_events_renders_and_logs(mock_args, mock_console, monkeypatch):
             render_and_log_fn(mock_console, "1", "Recon", event)
             return RunResult()
             
-    monkeypatch.setattr(runner, "EventLoop", FakeEventLoop)
+    monkeypatch.setattr(runner, "PhaseEventLoop", FakePhaseEventLoop)
     
     rendered_events = []
     def fake_render(console, phase, label, event):
@@ -44,7 +44,7 @@ def test_consume_events_renders_and_logs(mock_args, mock_console, monkeypatch):
     
     res = runner._consume_events(
         "http://base", "session_123", mock_console, "1", "Recon", mock_args,
-        fake_transcript, True, "token", "dir", fake_render
+        fake_transcript, True, "auth", "dir", fake_render
     )
     
     assert isinstance(res, RunResult)
@@ -72,7 +72,7 @@ def test_run_single_attempt_success(mock_args, mock_console, monkeypatch):
     
     code, session_id, res, path = runner._run_single_attempt(
         mock_args, mock_console, "do work", "model", "var", True,
-        "http://base", "token", "dir", lambda *a: None
+        "http://base", "auth", "dir", lambda *a: None
     )
     
     assert code == 0
@@ -98,7 +98,7 @@ def test_run_single_attempt_consumer_exception(mock_args, mock_console, monkeypa
         
     code, session_id, res, path = runner._run_single_attempt(
         mock_args, mock_console, "do work", "model", "var", True,
-        "http://base", "token", "dir", lambda *a: None,
+        "http://base", "auth", "dir", lambda *a: None,
         emit_fatal_error_fn=fake_fatal
     )
     
@@ -117,7 +117,7 @@ def test_run_single_attempt_existing_session(mock_args, mock_console, monkeypatc
     
     code, session_id, res, path = runner._run_single_attempt(
         mock_args, mock_console, "do work", "model", "var", True,
-        "http://base", "token", "dir", lambda *a: None,
+        "http://base", "auth", "dir", lambda *a: None,
         existing_session_id="existing_123"
     )
     
