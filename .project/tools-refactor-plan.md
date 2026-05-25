@@ -66,7 +66,7 @@ tools/
 ├── script-to-asciinema.py        76
 ├── mock-llm-server.py           180
 ├── mock-llm-parity.py           162
-└── mock_llm_scripts/             6 JSON files
+└── mock-llm-scripts/             6 JSON files
 ```
 
 ### 2.2 `run-agent.py` responsibilities
@@ -200,17 +200,17 @@ tools/
 │   │   ├── apply_patch.py              # ApplyPatchRenderer
 │   │   ├── glob.py                     # GlobRenderer
 │   │   ├── grep.py                     # GrepRenderer
-│   │   ├── command.py                  # CommandRenderer for bash/tool command execution
-│   │   ├── sandbox.py                  # sandbox rendering helpers/interceptor support
 │   │   ├── task.py                     # TaskRenderer
-│   │   └── skill.py                    # SkillRenderer
-│   └── command_interceptors/
-│       ├── __init__.py
-│       ├── base.py                     # CommandExecutionInterceptor protocol/base
-│       ├── sandbox_bootstrap.py        # sandbox-bootstrap / make sandbox-* renderer
-│       ├── rtk_read.py                 # rtk read / cat/head/tail equivalent rendering
-│       ├── rtk_grep.py                 # rtk grep / rg equivalent rendering
-│       └── shell_listing.py            # ls/find/tree listing rendering
+│   │   ├── skill.py                    # SkillRenderer
+│   │   └── command/                    # CommandRenderer + interceptors
+│   │       ├── __init__.py             #   CommandRenderer for bash/tool command execution
+│   │       └── interceptors/
+│   │           ├── __init__.py
+│   │           ├── base.py             #   CommandExecutionInterceptor protocol/base
+│   │           ├── sandbox_bootstrap.py #  sandbox-bootstrap / make sandbox-* renderer
+│   │           ├── rtk_read.py         #   rtk read / cat/head/tail equivalent rendering
+│   │           ├── rtk_grep.py         #   rtk grep / rg equivalent rendering
+│   │           └── shell_listing.py    #   ls/find/tree listing rendering
 │
 ├── chat/                               # Chat TUI package
 │   ├── __init__.py
@@ -257,13 +257,13 @@ tools/
 ├── gate-check.py                       # unchanged initially
 ├── sandbox-bootstrap.py                # unchanged initially
 ├── run-sweep.py                        # unchanged initially, may keep calling wrapper
-├── codecome.py                         # unchanged initially
+├── codecome.py                         # unchanged initially; unification with run-agent.py deferred to Phase 2
 ├── check-frontmatter.py                # unchanged initially
 ├── list-risk-files.py                  # unchanged initially
 ├── script-to-asciinema.py              # unchanged
 ├── mock-llm-server.py                  # unchanged
 ├── mock-llm-parity.py                  # unchanged
-└── mock_llm_scripts/                   # unchanged
+└── mock-llm-scripts/                   # unchanged
 ```
 
 ---

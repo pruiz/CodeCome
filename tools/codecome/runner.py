@@ -17,10 +17,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import _colors as C
 from events.phase_loop import PhaseEventLoop, RunResult
+from codecome.config import ROOT
 from codecome.session import create_session, send_prompt_to_session
 from codecome.transcript import open_phase_transcript, close_transcript
-
-ROOT = Path(__file__).resolve().parents[2]
 
 
 def _consume_events(

@@ -10,9 +10,6 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[2]
 
 MINIMUM_OPENCODE_VERSION = "1.14.50"
 
@@ -44,14 +41,9 @@ def check_opencode_version() -> None:
         sys.exit(1)
 
 
-# Minimal inline color helpers to avoid importing _colors (which lives in
-# the parent tools/ directory, not here).
 def _fail(message: str) -> str:
-    if sys.stdout.isatty() and not _no_color():
+    import os
+    no_color = os.environ.get("NO_COLOR") is not None
+    if sys.stdout.isatty() and not no_color:
         return f"\033[31m\u2718\033[0m {message}"
     return f"[FAIL] {message}"
-
-
-def _no_color() -> bool:
-    import os
-    return os.environ.get("NO_COLOR") is not None

@@ -52,7 +52,7 @@ Build a deterministic mock LLM **provider** (not replacing OpenCode) that:
 ### 3.1 Mock LLM Server
 
 **Approach:** Small custom stdlib-only OpenAI-compatible mock server (`tools/mock-llm-server.py`).
-- Reads a JSON script file at startup (e.g., `--script tools/mock_llm_scripts/basic.json`).
+- Reads a JSON script file at startup (e.g., `--script tools/mock-llm-scripts/basic.json`).
 - Serves standard OpenAI-compatible endpoints:
   - `POST /v1/chat/completions` — streaming SSE with deterministic deltas.
   - `GET /v1/models` — returns `[{"id":"mockmodel"}]`.
@@ -141,7 +141,7 @@ Add a new test class `TestMockLLMParity` that:
 ## 6. Acceptance Criteria
 
 - [x] `tools/mock-llm-server.py` exists and serves deterministic OpenAI-compatible SSE streams from JSON script files.
-- [x] `tools/mock_llm_scripts/` contains `basic.json`, `with_tool.json`, and `with_permission.json`.
+- [x] `tools/mock-llm-scripts/` contains `basic.json`, `with_tool.json`, and `with_permission.json`.
 - [x] `opencode.json` contains `provider.test` block.
 - [x] `tools/mock-llm-parity.py` exists and can be invoked manually.
 - [x] `tests/test_mock_llm_parity.py` exists and passes in CI.

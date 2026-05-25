@@ -23,28 +23,7 @@ from typing import Any, Optional
 
 ROOT = Path(__file__).resolve().parents[2]
 
-
-# Minimal inline color helpers to avoid importing _colors (which lives in the
-# parent tools/ directory, not here).  Only the attributes used by this module
-# are replicated.
-_COLOR_ENABLED = (
-    sys.stdout.isatty()
-    and os.environ.get("NO_COLOR") is None
-    and os.environ.get("TERM") != "dumb"
-)
-
-if _COLOR_ENABLED:
-    _RESET = "\033[0m"
-    _BOLD = "\033[1m"
-    _DIM = "\033[2m"
-else:
-    _RESET = ""
-    _BOLD = ""
-    _DIM = ""
-
-
-def _header(message: str) -> str:
-    return f"{_BOLD}{message}{_RESET}"
+import _colors as C  # noqa: E402  — tools/ is on sys.path at runtime
 
 
 def truthy_env(name: str) -> bool:
@@ -480,22 +459,22 @@ def show_model_table(agent_name: str) -> int:
     def fmt(v: Optional[str]) -> str:
         return v if v else "(not set)"
 
-    print(_header(f"Model resolution for agent {agent_name}:"))
+    print(C.header(f"Model resolution for agent {agent_name}:"))
     print()
-    print(f"  {_DIM}OPENCODE_ARGS{_RESET}                 model={fmt(args_model)}  variant={fmt(args_variant)}")
-    print(f"  {_DIM}env CODECOME_MODEL{_RESET}            model={fmt(env_model)}")
-    print(f"  {_DIM}env CODECOME_MODEL_VARIANT{_RESET}    variant={fmt(env_variant)}")
-    print(f"  {_DIM}codecome.yml{_RESET}                  model={fmt(yaml_model)}  variant={fmt(yaml_variant)}")
-    print(f"  {_DIM}opencode session history{_RESET}      model={fmt(discovered)}")
-    print(f"  {_DIM}runtime probe{_RESET}                 not run by show-model")
+    print(f"  {C.DIM}OPENCODE_ARGS{C.RESET}                 model={fmt(args_model)}  variant={fmt(args_variant)}")
+    print(f"  {C.DIM}env CODECOME_MODEL{C.RESET}            model={fmt(env_model)}")
+    print(f"  {C.DIM}env CODECOME_MODEL_VARIANT{C.RESET}    variant={fmt(env_variant)}")
+    print(f"  {C.DIM}codecome.yml{C.RESET}                  model={fmt(yaml_model)}  variant={fmt(yaml_variant)}")
+    print(f"  {C.DIM}opencode session history{C.RESET}      model={fmt(discovered)}")
+    print(f"  {C.DIM}runtime probe{C.RESET}                 not run by show-model")
     print()
     effective_model = model or "(unknown)"
     effective_variant = variant or "(unknown)"
     thinking_on, thinking_source = resolve_thinking_decision(model, extra_args)
-    print(f"  {_BOLD}effective{_RESET}                     "
+    print(f"  {C.BOLD}effective{C.RESET}                     "
           f"model={effective_model}  variant={effective_variant}  "
           f"thinking={'on' if thinking_on else 'off'}")
-    print(f"  {_DIM}sources{_RESET}                       "
+    print(f"  {C.DIM}sources{C.RESET}                       "
           f"model: {model_source}  variant: {variant_source}  "
           f"thinking: {thinking_source}")
     return 0

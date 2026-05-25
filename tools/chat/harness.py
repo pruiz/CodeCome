@@ -23,8 +23,8 @@ from chat.debug import _setup_chat_debug, _chat_debug, _close_chat_debug  # noqa
 from chat.app import ChatApp, HAVE_RICH  # noqa: E402
 from codecome.cli_render import build_console, _emit_fatal_error  # noqa: E402
 from opencode.serve import ServerRunner, ServerRunnerError  # noqa: E402
-from codecome.version import check_opencode_version  # noqa: E402
 from codecome.config import (  # noqa: E402
+    ROOT,
     resolve_color_mode,
     load_prompt,
     resolve_model_and_variant,
@@ -47,13 +47,10 @@ def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
             + ", ".join("--" + n.replace("_", "-") for n in missing)
         )
 
-    check_opencode_version()
-
     color_mode = resolve_color_mode(args.color)
     console = build_console(color_mode)
 
     # Resolve prompt
-    ROOT = Path(__file__).resolve().parents[2]
     if args.prompt_file:
         prompt_file = ROOT / args.prompt_file
         prompt = load_prompt(prompt_file, args.finding, phase=args.phase)
