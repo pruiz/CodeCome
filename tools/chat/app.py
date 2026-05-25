@@ -28,7 +28,7 @@ import importlib as _importlib  # noqa: E402
 # TODO(phase-a6): Break this circular dependency. chat.app should not
 # dynamically import run-agent; render_event should be injected as a
 # constructor dependency once the events/renderer refactor lands.
-_run_agent = _importlib.import_module("run-agent")
+_run_agent = _importlib.import_module("codecome.cli_render")
 render_event = _run_agent.render_event
 
 # ---------------------------------------------------------------------------
