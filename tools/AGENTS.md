@@ -64,7 +64,20 @@ tools/
 ├── opencode/                     # opencode serve lifecycle
 │   └── serve.py                  #   ServerRunner (start, stop, health check)
 │
-├── findings/                     # Finding / itemdb tooling (future consolidated package)
+├── findings/                     # Finding / itemdb tooling
+│   ├── __init__.py               #   Package re-exports, _colors exposure
+│   ├── constants.py              #   ROOT, FINDINGS_ROOT, FindingsContext, regexes
+│   ├── frontmatter.py            #   YAML frontmatter parsing and replacement
+│   ├── ids.py                    #   Finding ID generation, lookup, iteration
+│   ├── create.py                 #   create_finding() implementation
+│   ├── move.py                   #   move_finding() implementation
+│   ├── listing.py                #   load_findings(), filter_eligible_for_exploit()
+│   ├── evidence.py               #   create_evidence() implementation
+│   ├── package.py                #   discover_files(), create_bundle()
+│   ├── render_report.py          #   render_report() implementation
+│   ├── render_index.py           #   render_index() implementation
+│   ├── checks.py                 #   Frontmatter validation logic
+│   └── checks_entry.py           #   check-frontmatter CLI entrypoint
 │
 ├── _colors.py                    # Shared ANSI color and symbol utilities
 ├── gate-check.py                 # Phase readiness gates
@@ -130,9 +143,67 @@ Specialised rendering for bash invocations (sandbox-bootstrap JSON, rtk read/gre
 
 ### 8. Finding/itemdb helpers live under `tools/findings/`
 
-Frontmatter parsing, finding ID lookup, status directory constants, slug helpers, and finding file iteration belong in `tools/findings/frontmatter.py` or sibling modules. Do not duplicate these in standalone scripts.
+Frontmatter parsing, finding ID lookup, status directory constants, slug helpers, and finding file iteration belong in `tools/findings/` sibling modules. Do not duplicate these in standalone scripts.
 
-### 9. Dependency direction
+#### `FindingsContext` — dependency injection for filesystem paths
+
+Implementation functions in `findings/` that need filesystem paths accept a `FindingsContext` (or individual keyword arguments with defaults from `findings.constants`). The context is constructed by the **wrapper script** from its module-level constants and passed explicitly.
+
+```python
+# In findings/constants.py
+@dataclass(frozen=True)
+class FindingsContext:
+    root: Path
+    findings_root: Path
+    evidence_root: Path
+    ...
+    @classmethod
+    def default(cls) -> FindingsContext: ...
+
+# In findings/create.py (implementation)
+def create_finding(args, *, ctx: Optional[FindingsContext] = None) -> Path:
+    ctx = ctx if ctx is not None else FindingsContext.default()
+    ...
+    finding_id = args.id or next_finding_id(findings_root=ctx.findings_root)
+
+# In create-finding.py (wrapper)
+ROOT = Path(__file__).resolve().parents[1]
+FINDINGS_ROOT = ROOT / "itemdb" / "findings"
+TEMPLATE_PATH = ROOT / "templates" / "finding.md"
+
+def create_finding(args):
+    ctx = FindingsContext(root=ROOT, findings_root=FINDINGS_ROOT, template_path=TEMPLATE_PATH, ...)
+    return _create_finding(args, ctx=ctx)
+```
+
+This pattern keeps implementation code **test-agnostic**: it never inspects `sys.modules`, never scans for wrapper modules, and never knows about test patching. Wrappers own the responsibility of wiring constants to implementations.
+
+### 9. No test-awareness in implementation code
+
+Implementation modules under `tools/findings/` (and all other packages) must **never**:
+- Scan `sys.modules` to find wrapper modules or patched constants.
+- Use `__import__()` to dynamically resolve a wrapper by name.
+- Inspect `__file__` attributes of other modules to identify callers.
+- Contain any logic whose sole purpose is to accommodate test monkeypatching.
+
+If a function needs a configurable path or constant, accept it as a parameter with a sensible default from `findings.constants`. The wrapper script is responsible for passing the correct value.
+
+**Anti-pattern** (never do this):
+```python
+def _get_wrapper():
+    for mod in sys.modules.values():
+        if getattr(mod, "__file__", "").endswith("create-finding.py"):
+            return mod
+```
+
+**Correct pattern**:
+```python
+def create_finding(args, *, ctx=None):
+    ctx = ctx or FindingsContext.default()
+    # use ctx.findings_root, ctx.template_path, etc.
+```
+
+### 10. Dependency direction
 
 Packages should depend downward, not sideways:
 ```
@@ -150,7 +221,7 @@ chat/       →  codecome/, events/
 
 Avoid circular imports. When two packages need each other, prefer callable injection (as done with `render_event_fn` in the runner) or lazy imports inside function bodies.
 
-### 10. Testing
+### 11. Testing
 
 - New renderers need focused unit tests with fixture inputs and recording sinks.
 - Event loops are tested with deterministic event generators — not live OpenCode servers.
