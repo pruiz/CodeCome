@@ -24,10 +24,10 @@ from rendering.tools.apply_patch import ApplyPatchRenderer
 from rendering.tools.glob import GlobRenderer
 from rendering.tools.grep import GrepRenderer
 from rendering.tools.command import CommandRenderer
-from rendering.tools.interceptors.sandbox_bootstrap import SandboxBootstrapInterceptor
-from rendering.tools.interceptors.rtk_read import RtkReadInterceptor
-from rendering.tools.interceptors.rtk_grep import RtkGrepInterceptor
-from rendering.tools.interceptors.shell_listing import ShellListingInterceptor
+from rendering.tools.command.interceptors.sandbox_bootstrap import SandboxBootstrapInterceptor
+from rendering.tools.command.interceptors.rtk_read import RtkReadInterceptor
+from rendering.tools.command.interceptors.rtk_grep import RtkGrepInterceptor
+from rendering.tools.command.interceptors.shell_listing import ShellListingInterceptor
 
 
 def _ctx(sink_mode="plain"):
