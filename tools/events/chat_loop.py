@@ -19,14 +19,12 @@ from __future__ import annotations
 import json
 import queue
 import threading
-import time
 import urllib.error
 import urllib.request
 from typing import Any, Callable
 
 from events.base import BaseEventLoop
 from events.sse_client import SseClient, SseClientError
-from events.state_tracker import StateTracker
 from events.emitters import emit_event
 
 
@@ -64,6 +62,7 @@ class ChatEventLoop(BaseEventLoop):
         # Coordination with TUI
         self._state_queue: queue.Queue[tuple[str, Any | None]] = queue.Queue()
         self._consumer_thread: threading.Thread | None = None
+        self._pending_recovery_sync = False
 
     # ------------------------------------------------------------------
     # Public API
@@ -182,9 +181,16 @@ class ChatEventLoop(BaseEventLoop):
                     self._handle_permission(event)
                     continue
 
+                if self._pending_recovery_sync:
+                    self._pending_recovery_sync = False
+                    for synced_event in self._sync_session_messages():
+                        self._emit_finalized_event(render_fn, synced_event)
+
                 if self._is_session_idle(event):
                     if self.debug:
                         self.debug("_consumer_worker: session idle detected")
+                    for synced_event in self._sync_session_messages():
+                        self._emit_finalized_event(render_fn, synced_event)
                     self._emit_event(render_fn, event)
                     self._state_queue.put((ChatState.IDLE, None))
                     continue
@@ -194,11 +200,7 @@ class ChatEventLoop(BaseEventLoop):
 
                 finalized_events = self._tracker.ingest(event)
                 for fe in finalized_events:
-                    sig = (fe.get("type", ""), fe.get("part", {}).get("id", ""))
-                    if sig[1] and sig in self._emitted_signatures:
-                        continue
-                    self._emitted_signatures.add(sig)
-                    self._emit_event(render_fn, fe)
+                    self._emit_finalized_event(render_fn, fe)
 
         except SseClientError as exc:
             msg = f"SSE connection lost: {exc}"
@@ -228,10 +230,21 @@ class ChatEventLoop(BaseEventLoop):
             return status.get("type") == "busy"
         return False
 
+    def _emit_finalized_event(
+        self,
+        render_fn: Callable[[Any, str, str, dict[str, Any]], None],
+        event: dict[str, Any],
+    ) -> None:
+        sig = (event.get("type", ""), event.get("part", {}).get("id", ""))
+        if sig[1] and sig in self._emitted_signatures:
+            return
+        self._emitted_signatures.add(sig)
+        self._emit_event(render_fn, event)
+
     def _emit_event(self, render_fn: Callable[[Any, str, str, dict[str, Any]], None], event: dict[str, Any]) -> None:
         """Emit a single event through the render pipeline."""
         emit_event(render_fn, self.console, "Chat", "Interactive Chat", event)
 
     def _trigger_recovery_sync(self) -> None:
         """Called by SseClient after reconnection."""
-        pass
+        self._pending_recovery_sync = True
