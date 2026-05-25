@@ -21,11 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import _colors as C  # noqa: E402
 from chat.debug import _setup_chat_debug, _chat_debug, _close_chat_debug  # noqa: E402
 from chat.app import ChatApp, HAVE_RICH  # noqa: E402
-import importlib as _importlib  # noqa: E402
-_run_agent = _importlib.import_module("run-agent")
-build_console = _run_agent.build_console
-_emit_fatal_error = _run_agent._emit_fatal_error
-
+from codecome.cli_render import build_console, _emit_fatal_error  # noqa: E402
 from opencode.serve import ServerRunner, ServerRunnerError  # noqa: E402
 from codecome.version import check_opencode_version  # noqa: E402
 from codecome.config import (  # noqa: E402
