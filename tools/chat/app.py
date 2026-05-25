@@ -24,12 +24,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from chat.debug import _chat_debug  # noqa: E402
-import importlib as _importlib  # noqa: E402
-# TODO(phase-a6): Break this circular dependency. chat.app should not
-# dynamically import run-agent; render_event should be injected as a
-# constructor dependency once the events/renderer refactor lands.
-_run_agent = _importlib.import_module("codecome.cli_render")
-render_event = _run_agent.render_event
+from codecome.cli_render import render_event  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Rich imports — same fallback pattern as run-agent.py
