@@ -122,8 +122,11 @@ def render_event(console: Console, phase: str, label: str, event: dict[str, Any]
     elif event_type in renderers:
         renderers[event_type].render(event)
     else:
-        from rendering.events import UnknownEventRenderer
-        renderers.get("unknown", UnknownEventRenderer(ctx)).render(event)
+        unknown = renderers.get("unknown")
+        if unknown is None:
+            from rendering.events import UnknownEventRenderer
+            unknown = UnknownEventRenderer(ctx)
+        unknown.render(event)
 
 
 # ---------------------------------------------------------------------------
