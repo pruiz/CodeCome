@@ -55,7 +55,7 @@ def test_phase_event_loop_returns_result_on_idle(monkeypatch):
         def stop(self):
             pass
 
-    monkeypatch.setattr("events.phase_loop.SseClient", FakeSseClient)
+    monkeypatch.setattr("events.SseClient", FakeSseClient)
     loop = PhaseEventLoop("http://server", "session-1", console=None, phase="1", label="Recon")
     monkeypatch.setattr(loop, "_sync_session_messages", lambda: [])
 
