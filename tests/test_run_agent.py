@@ -1510,8 +1510,9 @@ def test_auto_correction_resume_loops_back_via_popen(monkeypatch, tmp_path):
     monkeypatch.setattr(module, "HAVE_RICH", False)
     monkeypatch.setattr(module, "check_opencode_version", lambda: None)
     monkeypatch.setattr(module, "ROOT", tmp_path)
-
     import sys
+    monkeypatch.setattr(sys.modules["codecome.cli_render"], "ROOT", tmp_path)
+
     sys.path.insert(0, str(ROOT / "tools"))
     if "codecome" in sys.modules and not hasattr(sys.modules["codecome"], "__path__"):
         del sys.modules["codecome"]
@@ -1585,8 +1586,9 @@ def test_frontmatter_failure_without_session_id_exits_nonzero(monkeypatch, tmp_p
     monkeypatch.setattr(module, "HAVE_RICH", False)
     monkeypatch.setattr(module, "check_opencode_version", lambda: None)
     monkeypatch.setattr(module, "ROOT", tmp_path)
-
     import sys
+    monkeypatch.setattr(sys.modules["codecome.cli_render"], "ROOT", tmp_path)
+
     sys.path.insert(0, str(ROOT / "tools"))
     if "codecome" in sys.modules and not hasattr(sys.modules["codecome"], "__path__"):
         del sys.modules["codecome"]
@@ -1641,6 +1643,8 @@ def test_iteration_limit_triggers_auto_resume(monkeypatch, tmp_path):
     monkeypatch.setattr(module, "HAVE_RICH", False)
     monkeypatch.setattr(module, "check_opencode_version", lambda: None)
     monkeypatch.setattr(module, "ROOT", tmp_path)
+    import sys
+    monkeypatch.setattr(sys.modules["codecome.cli_render"], "ROOT", tmp_path)
     monkeypatch.setenv("CODECOME_MAX_ITERATION_RETRIES", "1")
 
     import sys
@@ -1824,8 +1828,9 @@ def test_stream_session_id_and_step_finish_count(monkeypatch, tmp_path):
     monkeypatch.setattr(module, "HAVE_RICH", False)
     monkeypatch.setattr(module, "check_opencode_version", lambda: None)
     monkeypatch.setattr(module, "ROOT", tmp_path)
-
     import sys
+    monkeypatch.setattr(sys.modules["codecome.cli_render"], "ROOT", tmp_path)
+
     sys.path.insert(0, str(ROOT / "tools"))
     if "codecome" in sys.modules and not hasattr(sys.modules["codecome"], "__path__"):
         del sys.modules["codecome"]
@@ -1904,8 +1909,9 @@ def test_first_attempt_failure_prints_finish_warning(monkeypatch, tmp_path):
     monkeypatch.setattr(module, "HAVE_RICH", False)
     monkeypatch.setattr(module, "check_opencode_version", lambda: None)
     monkeypatch.setattr(module, "ROOT", tmp_path)
-
     import sys
+    monkeypatch.setattr(sys.modules["codecome.cli_render"], "ROOT", tmp_path)
+
     sys.path.insert(0, str(ROOT / "tools"))
     if "codecome" in sys.modules and not hasattr(sys.modules["codecome"], "__path__"):
         del sys.modules["codecome"]
