@@ -26,7 +26,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
-from events import EventLoop  # noqa: E402
+from events.phase_loop import PhaseEventLoop  # noqa: E402
 from opencode.serve import ServerRunner  # noqa: E402
 
 DEFAULT_PROMPT = "Say hello and then stop."
@@ -42,7 +42,7 @@ MOCK_HOST = "127.0.0.1"
 _SERVE_ONLY_TYPES = {"server.connected", "server.heartbeat", "session.idle", "message.updated", "message.part.updated", "file.edited", "file.watcher.updated", "todo.updated"}
 
 
-def _step_sort_key(ev: dict[str, Any]) -> tuple[int, str]:
+def _step_sort_key(ev: dict[str, Any]) -> tuple[int | float, str]:
     """Return a sort key that orders events within a single step deterministically."""
     t = ev.get("type", "")
     if t == "step_start":
@@ -272,7 +272,7 @@ def run_serve(prompt: str, model: str, agent: str, timeout: float) -> list[dict[
         if not session_id:
             raise RuntimeError("session.create returned empty id")
 
-        loop = EventLoop(base_url, session_id, None, "1", "recon", auth_token=info.password, workspace_dir=str(ROOT))
+        loop = PhaseEventLoop(base_url, session_id, None, "1", "recon", auth_token=info.password, workspace_dir=str(ROOT))
 
         # Start event consumer BEFORE sending prompt to avoid losing early SSE events.
         import threading
