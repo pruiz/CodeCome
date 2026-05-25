@@ -1,20 +1,16 @@
 # Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later OR AGPL-3.0-or-later
 
-"""
-Events package public exports.
+"""Events package public exports.
 
-PhaseEventLoop lives in events.phase_loop. EventLoop remains as a
-backward-compatible alias for older imports. SseClient is also re-exported
-for older tests and integrations that monkeypatch events.SseClient.
+Phase-specific imports should use events.phase_loop directly. EventLoop is
+kept only as the public phase-loop alias used by the current runner.
 """
 
 from __future__ import annotations
 
-from events.sse_client import SseClient, SseClientError
 from events.phase_loop import PhaseEventLoop, RunResult
 
-# Backward-compatibility alias.
 EventLoop = PhaseEventLoop
 
-__all__ = ["EventLoop", "PhaseEventLoop", "RunResult", "SseClient", "SseClientError"]
+__all__ = ["EventLoop", "PhaseEventLoop", "RunResult"]
