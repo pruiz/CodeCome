@@ -14,7 +14,7 @@ from __future__ import annotations
 import dataclasses
 from typing import Any, Callable
 
-from events.sse_client import SseClient, SseClientError
+from events.sse_client import SseClientError
 from events.base import BaseEventLoop
 from events.emitters import emit_event
 
@@ -66,7 +66,12 @@ class PhaseEventLoop(BaseEventLoop):
         _last_finish_tokens: dict[str, Any] = {}
         _last_permission_error: str | None = None
 
-        self._client = SseClient(
+        # Resolve through the package export so legacy tests/integrations
+        # that monkeypatch events.SseClient keep working after the
+        # PhaseEventLoop move to events.phase_loop.
+        import events as _events_pkg
+
+        self._client = _events_pkg.SseClient(
             self.base_url,
             auth_token=self.auth_token,
             workspace_dir=self.workspace_dir,
