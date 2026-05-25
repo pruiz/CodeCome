@@ -551,10 +551,10 @@ try:
                 return
             if not self._terminal_select_mode:
                 # Enter terminal-select mode: turn off Textual mouse.
-            try:
-                # TODO(phase-a4): These are private Textual APIs; they may break
-                # on future releases. Replace with public API once available.
-                driver._disable_mouse_support()
+                try:
+                    # TODO(phase-a4): These are private Textual APIs; they may break
+                    # on future releases. Replace with public API once available.
+                    driver._disable_mouse_support()
                 except Exception:
                     return
                 self._terminal_select_mode = True
@@ -568,10 +568,10 @@ try:
                 self.rich_log.write(hint, expand=True)
             else:
                 # Exit terminal-select mode: turn Textual mouse back on.
-            try:
-                # TODO(phase-a4): These are private Textual APIs; they may break
-                # on future releases. Replace with public API once available.
-                driver._enable_mouse_support()
+                try:
+                    # TODO(phase-a4): These are private Textual APIs; they may break
+                    # on future releases. Replace with public API once available.
+                    driver._enable_mouse_support()
                 except Exception:
                     return
                 self._terminal_select_mode = False

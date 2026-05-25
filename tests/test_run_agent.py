@@ -1875,3 +1875,78 @@ def test_stream_session_id_and_step_finish_count(monkeypatch, tmp_path):
     # The session terminated with 'stop', no frontmatter errors → single attempt
     # (We cannot introspect the loop variables directly, but the clean exit
     # with rc=0 proves the RunResult signals were consumed correctly.)
+
+
+@pytest.mark.unit
+def test_render_event_fallback_to_unknown_renderer(monkeypatch):
+    """render_event falls back to UnknownEventRenderer for unregistered event types
+    without raising NameError."""
+    module = load_tool_module("run_agent_unknown_fallback", "tools/run-agent.py")
+    ctx = module._get_rendering_ctx(None)
+    renderers = getattr(ctx, "_renderers", {})
+
+    # Ensure the "unknown" key is absent so the fallback path is triggered.
+    renderers.pop("unknown", None)
+    renderers.pop("some.unregistered.event", None)
+
+    # Should not raise NameError.
+    module.render_event(
+        None, "2", "x",
+        {"type": "some.unregistered.event", "properties": {"foo": "bar"}}
+    )
+
+
+@pytest.mark.component
+def test_first_attempt_failure_prints_finish_warning(monkeypatch, tmp_path):
+    """When _run_single_attempt returns non-zero on the very first iteration,
+    main() should not raise UnboundLocalError for finish_warning."""
+    module = load_tool_module("run_agent_first_fail", "tools/run-agent.py")
+    monkeypatch.setattr(module, "HAVE_RICH", False)
+    monkeypatch.setattr(module, "check_opencode_version", lambda: None)
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+
+    import sys
+    sys.path.insert(0, str(ROOT / "tools"))
+    if "codecome" in sys.modules and not hasattr(sys.modules["codecome"], "__path__"):
+        del sys.modules["codecome"]
+    import codecome.runner as _runner
+
+    if hasattr(_runner._run_single_attempt, "_attempt_counter"):
+        delattr(_runner._run_single_attempt, "_attempt_counter")
+
+    def fake_run_single_attempt(args, console, prompt, model, variant, thinking_on, base_url, auth_token, workspace_dir, **kwargs):
+        return (
+            1,  # non-zero return code on first attempt
+            "",
+            module.RunResult(
+                any_step_finish_seen=False,
+                step_finish_count=0,
+                last_finish_reason=None,
+                last_finish_tokens={},
+                last_permission_error=None,
+            ),
+            tmp_path / "transcript.jsonl",
+        )
+
+    monkeypatch.setattr(_runner, "_run_single_attempt", fake_run_single_attempt)
+
+    class FakeResult:
+        def __init__(self, rc, out="", err=""):
+            self.returncode, self.stdout, self.stderr = rc, out, err
+
+    def fake_run(cmd, *args, **kwargs):
+        if "--version" in cmd:
+            return FakeResult(0, out="opencode 1.15.0\n")
+        return FakeResult(0)
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    prompt_file = tmp_path / "phase.md"
+    prompt_file.write_text("run recon", encoding="utf-8")
+    monkeypatch.setattr(module.sys, "argv", [
+        "run-agent.py", "--phase", "1", "--label", "test",
+        "--agent", "recon", "--prompt-file", str(prompt_file),
+    ])
+
+    rc = module.main()
+    assert rc == 1
