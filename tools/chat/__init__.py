@@ -4,24 +4,15 @@
 """
 Chat package: Textual-based interactive chat TUI for CodeCome.
 
-Provides:
-  - chat.debug:  chat-specific debug logging helpers.
-  - chat.app:    Textual UI classes (ChatApp, QuitScreen, TextualConsoleProxy).
-  - chat.harness: chat-mode entry point (_run_chat_mode).
+Submodules:
+  - chat.debug:   chat-specific debug logging helpers.
+  - chat.app:     Textual UI classes and render/log helpers.
+  - chat.harness: chat-mode entry point.
+
+Keep this package initializer lightweight. Importing `chat` should not
+pull in Textual-adjacent modules or the chat harness eagerly.
 """
 
 from __future__ import annotations
 
-from chat.debug import _setup_chat_debug, _chat_debug, _close_chat_debug
-from chat.app import ChatApp, QuitScreen, TextualConsoleProxy
-from chat.harness import _run_chat_mode
-
-__all__ = [
-    "_setup_chat_debug",
-    "_chat_debug",
-    "_close_chat_debug",
-    "ChatApp",
-    "QuitScreen",
-    "TextualConsoleProxy",
-    "_run_chat_mode",
-]
+__all__ = []
