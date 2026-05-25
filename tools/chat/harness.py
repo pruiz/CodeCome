@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import shlex
 import sys
 from pathlib import Path
 
@@ -27,8 +26,7 @@ from codecome.config import (  # noqa: E402
     ROOT,
     resolve_color_mode,
     load_prompt,
-    resolve_model_and_variant,
-    resolve_thinking_decision,
+    resolve_runtime_config,
 )
 from codecome.session import create_chat_session  # noqa: E402
 from codecome.transcript import open_chat_transcript, close_transcript  # noqa: E402
@@ -60,11 +58,10 @@ def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
         prompt = ""
 
     # Model resolution
-    extra_args = shlex.split(os.environ.get("OPENCODE_ARGS", ""))
-    model, variant, model_source, variant_source = resolve_model_and_variant(
-        args.agent, extra_args
-    )
-    thinking_on, thinking_source = resolve_thinking_decision(model, extra_args)
+    rc = resolve_runtime_config(args.agent)
+    model = rc.model
+    variant = rc.variant
+    thinking_on = rc.thinking_on
 
     _chat_debug(f"_run_chat_mode: agent={args.agent} model={model} variant={variant} thinking={thinking_on}")
 
@@ -77,7 +74,7 @@ def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
     _chat_debug("_run_chat_mode: starting opencode serve")
     runner = ServerRunner()
     try:
-        server_info = runner.start(hostname="127.0.0.1", log_level="WARN")
+        server_info = runner.start(hostname="127.0.0.1", log_level=getattr(args, "log_level", "WARN"))
         _chat_debug(f"_run_chat_mode: server started pid={server_info.pid} url={server_info.base_url}")
     except ServerRunnerError as exc:
         _chat_debug(f"_run_chat_mode: server start failed: {exc}")

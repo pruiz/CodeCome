@@ -8,7 +8,6 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import os
-import shlex
 import signal
 import subprocess
 import sys
@@ -30,9 +29,9 @@ import codecome.cli_render as _clr
 from codecome.version import check_opencode_version
 from codecome.config import (
     truthy_env, resolve_color_mode, load_prompt,
-    resolve_model_and_variant, resolve_thinking_decision, show_model_table,
+    resolve_runtime_config, show_model_table,
 )
-from codecome.graceful import (
+from phases.completion import (
     check_phase_graceful_completion,
     build_phase_resume_prompt, build_frontmatter_resume_prompt,
 )
@@ -57,6 +56,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--write-content-lines", type=int, help="Max lines shown for new-file write content (default: 25, env: CODECOME_WRITE_CONTENT_LINES).")
     parser.add_argument("--write-diff-limit", type=int, help="Max diff lines shown for write (default: 50, env: CODECOME_WRITE_DIFF_LIMIT).")
     parser.add_argument("--edit-diff-lines", type=int, help="Max diff lines shown for edit (default: 25, env: CODECOME_EDIT_DIFF_LINES).")
+    parser.add_argument(
+        "--log-level",
+        default=os.environ.get("OPENCODE_LOG_LEVEL", "WARN"),
+        help="Log level for opencode serve (default: WARN, env: OPENCODE_LOG_LEVEL).",
+    )
     parser.add_argument(
         "--show-model",
         action="store_true",
@@ -111,11 +115,10 @@ def main() -> int:
 
     prompt_file = _clr.ROOT / args.prompt_file
     prompt = load_prompt(prompt_file, args.finding, phase=args.phase)
-    extra_args = shlex.split(os.environ.get("OPENCODE_ARGS", ""))
-    model, variant, model_source, variant_source = resolve_model_and_variant(
-        args.agent, extra_args
-    )
-    thinking_on, thinking_source = resolve_thinking_decision(model, extra_args)
+    rc = resolve_runtime_config(args.agent)
+    model = rc.model
+    variant = rc.variant
+    thinking_on = rc.thinking_on
 
     model_label = model or "(unknown)"
     variant_label = variant or "(unknown)"
@@ -128,11 +131,11 @@ def main() -> int:
 
     if variant is not None:
         sources_tail = (
-            f"(model source: {model_source}, variant source: {variant_source}, "
-            f"thinking source: {thinking_source})"
+            f"(model source: {rc.model_source}, variant source: {rc.variant_source}, "
+            f"thinking source: {rc.thinking_source})"
         )
     else:
-        sources_tail = f"(model source: {model_source}, thinking source: {thinking_source})"
+        sources_tail = f"(model source: {rc.model_source}, thinking source: {rc.thinking_source})"
 
     main_line = "  ".join(parts) + "  " + sources_tail
 
@@ -172,7 +175,7 @@ def main() -> int:
     runner = ServerRunner()
     server_info: Any = None
     try:
-        server_info = runner.start(hostname="127.0.0.1", log_level="WARN")
+        server_info = runner.start(hostname="127.0.0.1", log_level=args.log_level)
     except ServerRunnerError as exc:
         _emit_fatal_error(console, "Server Error", str(exc))
         return 1

@@ -436,6 +436,47 @@ def resolve_thinking_decision(
 
 
 # ---------------------------------------------------------------------------
+# Unified runtime config resolution
+# ---------------------------------------------------------------------------
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class RuntimeConfig:
+    """Resolved runtime configuration shared by phase and chat modes."""
+    model: Optional[str]
+    variant: Optional[str]
+    model_source: str
+    variant_source: str
+    thinking_on: bool
+    thinking_source: str
+
+
+def resolve_runtime_config(agent: str) -> RuntimeConfig:
+    """Resolve model, variant, and thinking from agent + env in one call.
+
+    Both phase and chat paths should call this instead of separately
+    calling resolve_model_and_variant + resolve_thinking_decision.
+    """
+    import shlex
+
+    extra_args = shlex.split(os.environ.get("OPENCODE_ARGS", ""))
+    model, variant, model_source, variant_source = resolve_model_and_variant(
+        agent, extra_args
+    )
+    thinking_on, thinking_source = resolve_thinking_decision(model, extra_args)
+    return RuntimeConfig(
+        model=model,
+        variant=variant,
+        model_source=model_source,
+        variant_source=variant_source,
+        thinking_on=thinking_on,
+        thinking_source=thinking_source,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Model resolution display (--show-model)
 # ---------------------------------------------------------------------------
 
