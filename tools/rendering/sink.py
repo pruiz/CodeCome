@@ -108,4 +108,5 @@ class TextualRichLogSink:
             self._target.write(renderable)
 
     def write_text(self, text: str, *, end: str = "\n") -> None:
-        self.write(text)
+        # RichLog.write() has no end parameter; concatenate manually.
+        self.write((text + end) if end else text)

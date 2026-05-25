@@ -43,6 +43,10 @@ def send_prompt_to_session(
     if model:
         parts = model.split("/", 1)
         if len(parts) == 2:
+            # NOTE: prompt_async expects "modelID", not "id".
+            # Session creation (POST /session) uses "id" instead.
+            # See _create_model_payload() in mock-llm-parity.py for the
+            # authoritative reference.
             payload["model"] = {"providerID": parts[0], "modelID": parts[1]}
         else:
             payload["model"] = {"modelID": model}
@@ -74,6 +78,10 @@ def create_session(
     if model:
         parts = model.split("/", 1)
         if len(parts) == 2:
+            # NOTE: session creation (POST /session) expects "id", not "modelID".
+            # Prompt submission (prompt_async) uses "modelID" instead.
+            # See _create_model_payload() in mock-llm-parity.py for the
+            # authoritative reference.
             payload["model"] = {"providerID": parts[0], "id": parts[1]}
         else:
             payload["model"] = {"id": model}
@@ -110,6 +118,7 @@ def create_chat_session(
     if model:
         parts = model.split("/", 1)
         if len(parts) == 2:
+            # Session creation uses "id" (see create_session above).
             payload["model"] = {"providerID": parts[0], "id": parts[1]}
         else:
             payload["model"] = {"id": model}
