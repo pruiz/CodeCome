@@ -5,14 +5,16 @@
 Events package public exports.
 
 PhaseEventLoop lives in events.phase_loop. EventLoop remains as a
-backward-compatible alias for older imports.
+backward-compatible alias for older imports. SseClient is also re-exported
+for older tests and integrations that monkeypatch events.SseClient.
 """
 
 from __future__ import annotations
 
+from events.sse_client import SseClient, SseClientError
 from events.phase_loop import PhaseEventLoop, RunResult
 
 # Backward-compatibility alias.
 EventLoop = PhaseEventLoop
 
-__all__ = ["EventLoop", "PhaseEventLoop", "RunResult"]
+__all__ = ["EventLoop", "PhaseEventLoop", "RunResult", "SseClient", "SseClientError"]
