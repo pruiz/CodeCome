@@ -1,7 +1,7 @@
 # Plan: Refactor `tools/` Directory Structure
 
-**Status:** Draft, revised after architecture review
-**Date:** 2026-05-23
+**Status:** Implemented — see [tools-refactor-a8-plan.md](tools-refactor-a8-plan.md) for A8 details and [tools/AGENTS.md](../tools/AGENTS.md) for the current architecture rules.
+**Date:** 2026-05-23 (original) / 2026-05-25 (final)
 **Target:** `tools/run-agent.py`, `tools/events/`, rendering/chat support, and later finding/itemdb tooling
 **Risk Level:** Medium (large structural refactor, all phase targets affected)
 

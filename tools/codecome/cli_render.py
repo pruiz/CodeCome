@@ -2,11 +2,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later OR AGPL-3.0-or-later
 
 """
-CLI rendering helpers: console construction and fatal error display.
+CLI/UI helpers: console construction and fatal error display.
 
-The rendering dispatcher and context cache live in ``rendering.dispatch``.
-This module re-exports key symbols for backward compatibility with
-existing imports from ``codecome.cli_render``.
+For rendering dispatch (``HAVE_RICH``, ``_get_rendering_ctx``,
+``render_event``) import from ``rendering.dispatch``.
+For finish-reason constants import from ``rendering.events``.
 """
 
 from __future__ import annotations
@@ -14,21 +14,7 @@ from __future__ import annotations
 import sys
 from typing import Any
 
-# Re-exports from rendering.dispatch — used by cli.py, chat/, runner.py
-from rendering.dispatch import (  # noqa: F401 — re-export
-    HAVE_RICH,
-    _get_rendering_ctx,
-    render_event,
-)
-
-from codecome.config import ROOT  # noqa: F401 — re-export
-
-# Re-exports of finish constants (used by cli.py's retry loop)
-from rendering.events import (  # noqa: F401 — re-export
-    _FINISH_TERMINAL_OK,
-    _FINISH_MID_TURN,
-    _FINISH_FAILURE,
-)
+from rendering.dispatch import HAVE_RICH
 
 
 # ---------------------------------------------------------------------------

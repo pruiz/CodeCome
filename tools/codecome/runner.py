@@ -20,6 +20,7 @@ from events.phase_loop import PhaseEventLoop, RunResult
 from codecome.config import ROOT
 from codecome.session import create_session, send_prompt_to_session
 from codecome.transcript import Transcript
+from codecome.event_pipeline import render_and_log_event
 
 
 def _consume_events(
@@ -46,13 +47,11 @@ def _consume_events(
     )
 
     def _render_and_log(console_: Any, phase_: str, label_: str, event: dict[str, Any]) -> None:
-        transcript.write_event(event)
-        if args.debug:
-            sys.stderr.write(json.dumps(event) + "\n")
-            sys.stderr.flush()
-        if not thinking_on and event.get("type") == "reasoning":
-            return
-        render_event_fn(console_, phase_, label_, event)
+        render_and_log_event(
+            console=console_, phase=phase_, label=label_, event=event,
+            transcript=transcript, debug=args.debug, thinking_on=thinking_on,
+            render_event_fn=render_event_fn,
+        )
 
     return event_loop.run(_render_and_log)
 

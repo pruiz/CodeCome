@@ -24,11 +24,9 @@ from typing import Any, Optional
 import _colors as C
 from opencode.serve import ServerRunner, ServerRunnerError
 
-from codecome.cli_render import (
-    HAVE_RICH,
-    build_console, _get_rendering_ctx, render_event, _emit_fatal_error,
-    _FINISH_TERMINAL_OK, _FINISH_MID_TURN, _FINISH_FAILURE,
-)
+from codecome.cli_render import build_console, _emit_fatal_error
+from rendering.dispatch import HAVE_RICH, _get_rendering_ctx, render_event
+from rendering.events import _FINISH_TERMINAL_OK, _FINISH_MID_TURN, _FINISH_FAILURE
 from codecome.config import ROOT, resolve_color_mode, load_prompt, resolve_runtime_config
 from phases.completion import (
     check_phase_graceful_completion,
