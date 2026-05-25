@@ -16,7 +16,7 @@ from typing import Any, Callable
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import _colors as C
-from events import EventLoop, RunResult
+from events.phase_loop import PhaseEventLoop, RunResult
 from codecome.session import create_session, send_prompt_to_session
 from codecome.transcript import open_phase_transcript, close_transcript
 
@@ -36,7 +36,7 @@ def _consume_events(
     workspace_dir: str | None,
     render_event_fn: Callable[..., None],  # CLI/rendering event dispatcher
 ) -> RunResult:
-    event_loop = EventLoop(
+    event_loop = PhaseEventLoop(
         base_url=base_url,
         session_id=session_id,
         console=console,
