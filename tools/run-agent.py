@@ -3719,6 +3719,7 @@ def render_event(console: Console, phase: str, label: str, event: dict[str, Any]
     elif event_type in renderers:
         renderers[event_type].render(event)
     else:
+        from rendering.events import UnknownEventRenderer
         renderers.get("unknown", UnknownEventRenderer(ctx)).render(event)
 
 
@@ -4623,6 +4624,7 @@ def main() -> int:
     any_step_finish_seen = False
     step_finish_count = 0
     transcript_path: Path = Path()
+    finish_warning: Optional[str] = None
 
     # Signal to local opencode plugins (e.g. status-forwarder) that we are
     # running inside the run-agent harness.
@@ -4675,7 +4677,6 @@ def main() -> int:
             any_step_finish_seen = run_result.any_step_finish_seen
             step_finish_count = run_result.step_finish_count
 
-            finish_warning: Optional[str] = None
             if not any_step_finish_seen:
                 finish_warning = (
                     "CodeCome observed no step_finish events in the JSON stream, so the model/provider did not emit a "
