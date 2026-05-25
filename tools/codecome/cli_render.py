@@ -142,11 +142,11 @@ def _emit_fatal_error(console: Any, title: str, message: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# LLM finish reason classification
+# LLM finish reason classification (canonical definitions in rendering.events)
 # ---------------------------------------------------------------------------
 
-_FINISH_TERMINAL_OK = {"stop", "end_turn"}
-_FINISH_MID_TURN = {"tool-calls", "tool_use"}
-_FINISH_FAILURE = {
-    "content-filter", "content_filter", "length", "max_tokens", "error",
-}
+from rendering.events import (
+    _FINISH_TERMINAL_OK,
+    _FINISH_MID_TURN,
+    _FINISH_FAILURE,
+)

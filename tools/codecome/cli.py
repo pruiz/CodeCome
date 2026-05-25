@@ -37,13 +37,6 @@ from codecome.graceful import (
     build_phase_resume_prompt, build_frontmatter_resume_prompt,
 )
 
-# Legacy globals — still referenced by old renderers in run-agent.py.
-# Re-exported for backward compatibility.
-_READ_DISPLAY_LINES = 10
-_WRITE_CONTENT_LINES = 25
-_WRITE_DIFF_LIMIT = 50
-_EDIT_DIFF_LINES = 25
-
 
 # ---------------------------------------------------------------------------
 # Argument parser
@@ -99,17 +92,6 @@ def main() -> int:
             "the following arguments are required when not using --show-model or --chat: "
             + ", ".join("--" + n.replace("_", "-") for n in missing)
         )
-
-    # CLI flags override env var defaults for tunables.
-    global _READ_DISPLAY_LINES, _WRITE_CONTENT_LINES, _WRITE_DIFF_LIMIT, _EDIT_DIFF_LINES
-    if args.read_display_lines is not None:
-        _READ_DISPLAY_LINES = args.read_display_lines
-    if args.write_content_lines is not None:
-        _WRITE_CONTENT_LINES = args.write_content_lines
-    if args.write_diff_limit is not None:
-        _WRITE_DIFF_LIMIT = args.write_diff_limit
-    if args.edit_diff_lines is not None:
-        _EDIT_DIFF_LINES = args.edit_diff_lines
 
     color_mode = resolve_color_mode(args.color)
     console = build_console(color_mode)
@@ -211,9 +193,12 @@ def main() -> int:
     previous_sigterm = signal.signal(signal.SIGTERM, _forward_signal)
 
     from codecome.runner import _run_single_attempt
+    from rendering.events import _reset_subagent_state
     try:
         while True:
             attempt_number += 1
+            # Clear per-session dedup state so retries don't suppress updates.
+            _reset_subagent_state()
             returncode, session_id, run_result, transcript_path = _run_single_attempt(
                 args, console, prompt, model, variant, thinking_on, base_url,
                 server_info.password, str(_clr.ROOT),
