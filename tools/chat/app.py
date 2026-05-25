@@ -25,6 +25,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from chat.debug import _chat_debug  # noqa: E402
 import importlib as _importlib  # noqa: E402
+# TODO(phase-a6): Break this circular dependency. chat.app should not
+# dynamically import run-agent; render_event should be injected as a
+# constructor dependency once the events/renderer refactor lands.
 _run_agent = _importlib.import_module("run-agent")
 render_event = _run_agent.render_event
 
@@ -74,6 +77,9 @@ class TextualConsoleProxy:
         self.encoding = "utf-8"
 
     def print(self, *args, **kwargs):
+        """Bridge to RichLog.write(). **kwargs is accepted for compatibility
+        with rich.console.Console.print() but is intentionally ignored
+        (style/end etc. are not forwarded to RichLog)."""
         if not args:
             from rich.text import Text
 
@@ -105,17 +111,20 @@ class TextualConsoleProxy:
 
 def _chat_render_and_log(self, console, phase, label, event):
     """Standalone version of _ChatApp._render_and_log.  See the docstring
-    on the class for the full contract."""
-    if getattr(self, "transcript_fp", None) is not None:
+    on the class for the full contract.
+
+    When bound via ``__get__`` to a _ChatApp instance, ``self`` is
+    guaranteed to carry the attributes accessed below."""
+    if self.transcript_fp is not None:
         try:
             self.transcript_fp.write(json.dumps(event) + "\n")
         except OSError:
             pass
-    if getattr(self, "args", None) is not None and getattr(self.args, "debug", False):
+    if getattr(self.args, "debug", False):
         _chat_debug(f"_render_and_log: raw event: {json.dumps(event)}")
     if event.get("type") == "message.updated":
         _chat_update_modeline_info(self, event)
-    if not getattr(self, "thinking_on", True) and event.get("type") == "reasoning":
+    if not self.thinking_on and event.get("type") == "reasoning":
         return
     render_event(console, phase, label, event)
 
@@ -147,7 +156,6 @@ def _chat_update_modeline_info(self, event: dict[str, Any]) -> None:
         token_str = ""
     cost = info.get("cost", 0) or 0
     cost_str = f" ${cost:.4f}" if cost else ""
-    getattr(self, "_modeline_info", "")
     try:
         self._modeline_info = f"{model_label} | {token_str}{cost_str}"
     except AttributeError:
@@ -320,13 +328,12 @@ try:
                 super().__init__()
                 self.renderable = renderable
 
-        def __init__(self, server_info=None, session_id=None, initial_prompt="", args=None, rich_console=None, model=None, variant=None, thinking_on=None, transcript_fp=None):
+        def __init__(self, server_info=None, session_id=None, initial_prompt="", args=None, model=None, variant=None, thinking_on=None, transcript_fp=None):
             super().__init__()
             self.server_info = server_info
             self.session_id = session_id
             self.initial_prompt = initial_prompt
             self.args = args
-            self.rich_console = rich_console
             self.model = model
             self.variant = variant
             self.thinking_on = thinking_on
@@ -544,8 +551,10 @@ try:
                 return
             if not self._terminal_select_mode:
                 # Enter terminal-select mode: turn off Textual mouse.
-                try:
-                    driver._disable_mouse_support()
+            try:
+                # TODO(phase-a4): These are private Textual APIs; they may break
+                # on future releases. Replace with public API once available.
+                driver._disable_mouse_support()
                 except Exception:
                     return
                 self._terminal_select_mode = True
@@ -559,8 +568,10 @@ try:
                 self.rich_log.write(hint, expand=True)
             else:
                 # Exit terminal-select mode: turn Textual mouse back on.
-                try:
-                    driver._enable_mouse_support()
+            try:
+                # TODO(phase-a4): These are private Textual APIs; they may break
+                # on future releases. Replace with public API once available.
+                driver._enable_mouse_support()
                 except Exception:
                     return
                 self._terminal_select_mode = False

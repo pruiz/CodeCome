@@ -3949,7 +3949,6 @@ def _chat_update_modeline_info(self, event: dict[str, Any]) -> None:
         token_str = ""
     cost = info.get("cost", 0) or 0
     cost_str = f" ${cost:.4f}" if cost else ""
-    getattr(self, "_modeline_info", "")
     try:
         self._modeline_info = f"{model_label} | {token_str}{cost_str}"
     except AttributeError:
@@ -4118,13 +4117,12 @@ try:
                 super().__init__()
                 self.renderable = renderable
 
-        def __init__(self, server_info=None, session_id=None, initial_prompt="", args=None, rich_console=None, model=None, variant=None, thinking_on=None, transcript_fp=None):
+        def __init__(self, server_info=None, session_id=None, initial_prompt="", args=None, model=None, variant=None, thinking_on=None, transcript_fp=None):
             super().__init__()
             self.server_info = server_info
             self.session_id = session_id
             self.initial_prompt = initial_prompt
             self.args = args
-            self.rich_console = rich_console
             self.model = model
             self.variant = variant
             self.thinking_on = thinking_on
@@ -4462,6 +4460,7 @@ def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
         transcript_path, transcript_fp = open_chat_transcript()
         _chat_debug(f"_run_chat_mode: opened transcript {transcript_path}")
     except OSError as exc:
+        transcript_path = ROOT / "tmp" / "last-chat-unknown.jsonl"
         _chat_debug(f"_run_chat_mode: could not open transcript: {exc}")
 
     _chat_debug("_run_chat_mode: creating ChatApp")
