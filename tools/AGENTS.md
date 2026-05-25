@@ -8,33 +8,45 @@ tools/
 ├── codecome.py                   # Workspace validation CLI (check/status/next-id)
 │
 ├── codecome/                     # Core runner and configuration
-│   ├── cli.py                    #   main(), build_parser() — runtime entry point
-│   ├── cli_render.py             #   HAVE_RICH, build_console, render_event, _get_rendering_ctx
-│   ├── config.py                 #   env, codecome.yml, prompt, model, thinking resolution
+│   ├── cli.py                    #   main(), build_parser() — parse args + dispatch
+│   ├── cli_render.py             #   build_console, _emit_fatal_error (CLI helpers)
+│   ├── harness.py                #   run_phase_mode() — retry/resume loop
+│   ├── config.py                 #   ROOT, env, codecome.yml, prompt, model, thinking
 │   ├── session.py                #   OpenCode HTTP: create session, send prompt
 │   ├── runner.py                 #   _consume_events, _run_single_attempt
-│   ├── graceful.py               #   phase completion checks, resume prompt builders
-│   ├── transcript.py             #   transcript path/open/close helpers
+│   ├── transcript.py             #   Transcript class (open/write_event/close)
 │   └── version.py                #   OpenCode version checks
+│
+├── phases/                       # Phase-specific logic
+│   └── completion.py             #   phase completion checks, resume prompt builders
 │
 ├── rendering/                    # Tool and event rendering
 │   ├── base.py                   #   BaseRenderer (sink, rich, plain properties)
 │   ├── context.py                #   RenderContext (root, sink, settings, cache)
+│   ├── dispatch.py               #   HAVE_RICH, _get_rendering_ctx, render_event
 │   ├── settings.py               #   RenderSettings (20+ tunables from env vars)
 │   ├── cache.py                  #   SnapshotCache (file content snapshots for diffs)
 │   ├── sink.py                   #   RenderSink protocol + Plain/Rich/Textual sinks
 │   ├── registry.py               #   RendererRegistry (dispatch by event type / tool name)
-│   ├── events.py                 #   Event renderer classes (StepStart, Text, Error, …)
 │   ├── utils.py                  #   Shared helpers (path, lexer, diff, read framing)
-│   ├── tools/                    #   Tool renderer classes
-│   │   ├── base.py               #     ToolRenderer, FallbackToolRenderer
-│   │   ├── read.py / write.py / edit.py / glob.py / grep.py
-│   │   ├── command.py            #     CommandRenderer (bash) with interceptor chain
-│   │   ├── apply_patch.py / todo.py / task.py / skill.py / permissions.py
-│   │   └── interceptors/         #     CommandExecutionInterceptor implementations
-│   │       ├── sandbox_bootstrap.py
-│   │       ├── rtk_read.py / rtk_grep.py / shell_listing.py
-│   │       └── base.py           #     Interceptor protocol
+│   ├── events/                   #   Event renderer classes (one per family)
+│   │   ├── base.py               #     EventRenderer base + finish constants
+│   │   ├── step_start.py / step_finish.py / text.py / reasoning.py
+│   │   ├── tool_use.py / error.py / unknown.py
+│   │   ├── session_status.py / session_diff.py / server.py
+│   │   ├── message.py / subagent.py
+│   │   └── __init__.py           #     Re-exports all symbols
+│   └── tools/                    #   Tool renderer classes
+│       ├── base.py               #     ToolRenderer, FallbackToolRenderer
+│       ├── read.py / write.py / edit.py / glob.py / grep.py
+│       ├── apply_patch.py / todo.py / task.py / skill.py / permissions.py
+│       └── command/              #     CommandRenderer + interceptors
+│           ├── __init__.py       #       CommandRenderer (bash) with interceptor chain
+│           └── interceptors/     #       CommandExecutionInterceptor implementations
+│               ├── base.py       #         Interceptor protocol
+│               ├── sandbox_bootstrap.py
+│               ├── rtk_read.py / rtk_grep.py / shell_listing.py
+│               └── __init__.py
 │
 ├── events/                       # SSE event consumption
 │   ├── base.py                   #   BaseEventLoop (shared: filters, permissions, sync, dedup)
@@ -95,7 +107,7 @@ if __name__ == "__main__":
 
 ### 4. Renderers live under `tools/rendering/`
 
-- Event renderers go in `rendering/events.py`, inheriting `EventRenderer`.
+- Event renderers go in `rendering/events/`, one module per renderer family, inheriting `EventRenderer`.
 - Tool renderers go in `rendering/tools/`, inheriting `ToolRenderer`.
 - Renderers receive **normalized dict** events/tool states — do not introduce custom event objects.
 - Rich and Textual renderers may emit arbitrary Rich renderables (Panel, Group, Text, Table, Syntax, Rule, …) through a `RenderSink`. The sink abstracts *where* output goes; it does not restrict *what* renderers can draw.
@@ -114,7 +126,7 @@ File content snapshots used by Write/Edit/ApplyPatch renderers for diff computat
 
 ### 7. Command-specific rendering uses `CommandExecutionInterceptor`
 
-Specialised rendering for bash invocations (sandbox-bootstrap JSON, rtk read/grep, rg, ls, find, tree) is implemented as `CommandExecutionInterceptor` implementations. The `CommandRenderer` has a lazy interceptor chain. New interceptors go in `rendering/tools/interceptors/`.
+Specialised rendering for bash invocations (sandbox-bootstrap JSON, rtk read/grep, rg, ls, find, tree) is implemented as `CommandExecutionInterceptor` implementations. The `CommandRenderer` has a lazy interceptor chain. New interceptors go in `rendering/tools/command/interceptors/`.
 
 ### 8. Finding/itemdb helpers live under `tools/findings/`
 
@@ -129,9 +141,10 @@ run-agent.py → codecome/  →  (none)
             → rendering/  →  codecome/
             → chat/       →  codecome/, events/
 
-codecome/   → events/, rendering/ (lazy imports only in execution paths)
+codecome/   → events/, rendering/, phases/ (lazy imports only in execution paths)
+phases/     →  codecome/ (config only)
 events/     →  (stdlib only, except sse_client ↔ base)
-rendering/  →  codecome/
+rendering/  →  codecome/ (config only), _colors
 chat/       →  codecome/, events/
 ```
 
