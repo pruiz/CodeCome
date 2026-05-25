@@ -29,7 +29,7 @@ from codecome.config import (  # noqa: E402
     resolve_runtime_config,
 )
 from codecome.session import create_chat_session  # noqa: E402
-from codecome.transcript import open_chat_transcript, close_transcript  # noqa: E402
+from codecome.transcript import Transcript  # noqa: E402
 
 
 def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
@@ -97,13 +97,12 @@ def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
         return 1
 
     # Open the chat transcript (parity with phase mode).
-    transcript_path: Path = Path()
-    transcript_fp = None
     try:
-        transcript_path, transcript_fp = open_chat_transcript()
-        _chat_debug(f"_run_chat_mode: opened transcript {transcript_path}")
+        transcript = Transcript.for_chat()
+        _chat_debug(f"_run_chat_mode: opened transcript {transcript.path}")
     except OSError as exc:
-        transcript_path = ROOT / "tmp" / "last-chat-unknown.jsonl"
+        transcript = Transcript.null()
+        transcript.path = ROOT / "tmp" / "last-chat-unknown.jsonl"
         _chat_debug(f"_run_chat_mode: could not open transcript: {exc}")
 
     _chat_debug("_run_chat_mode: creating ChatApp")
@@ -117,7 +116,7 @@ def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
             model=model,
             variant=variant,
             thinking_on=thinking_on,
-            transcript_fp=transcript_fp,
+            transcript=transcript,
         )
         _chat_debug("_run_chat_mode: calling app.run()")
         app.run()
@@ -128,14 +127,13 @@ def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
             _chat_debug("_run_chat_mode: stopping chat loop")
             app.chat_loop.stop()
         runner.stop()
-        close_transcript(transcript_fp)
+        transcript.close()
 
-    # Final summary banner on the restored terminal.  Mirrors phase
-    # mode's success-path summary.
+    # Final summary banner on the restored terminal.
     try:
-        rel_path = transcript_path.relative_to(ROOT)
+        rel_path = transcript.path.relative_to(ROOT)
     except ValueError:
-        rel_path = transcript_path
+        rel_path = transcript.path
     if HAVE_RICH:
         from rich.rule import Rule  # noqa: E402
         from rich.text import Text  # noqa: E402
