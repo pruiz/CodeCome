@@ -158,7 +158,6 @@ class BaseEventLoop:
                     continue
                 part_id = part.get("id")
                 if isinstance(part_id, str) and self._tracker.has_seen(part_id):
-                    self._tracker.mark_seen(part_id)
                     continue
                 synthesized = {
                     "type": "message.part.updated",
