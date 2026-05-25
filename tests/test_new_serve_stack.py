@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import io
 import json
 import subprocess
 import sys
-import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -34,6 +31,10 @@ def load_serve():
     return ServerRunner, ServerInfo, ServerRunnerError
 
 
+def _patch_phase_sse_client(monkeypatch, fake_cls):
+    monkeypatch.setattr("events.phase_loop.SseClient", fake_cls)
+
+
 # ---------------------------------------------------------------------------
 # StateTracker
 # ---------------------------------------------------------------------------
@@ -57,12 +58,11 @@ class TestStateTracker:
             "type": "message.part.delta",
             "properties": {"partID": "abc", "field": "text", "delta": "world"},
         })
-        # Not finalized yet → no events
         assert tracker.ingest({"type": "server.heartbeat"}) == [{"type": "server.heartbeat"}]
         assert tracker._delta_buffers.get("abc") == "Hello world"
 
-    def test_updated_emits_finalized_text(self, tracker):
-        SseClient, SseClientError, StateTracker, emit_event, EventLoop, RunResult = load_events()
+    def test_updated_emits_finalized_text(self):
+        StateTracker = load_events()[2]
         tracker = StateTracker()
         tracker.ingest({
             "type": "message.part.delta",
@@ -108,10 +108,9 @@ class TestStateTracker:
         assert finalized[0]["type"] == "step_finish"
         assert finalized[0]["part"]["reason"] == "stop"
 
-    def test_reasoning_part_requires_time_end(self, tracker):
-        SseClient, SseClientError, StateTracker, emit_event, EventLoop, RunResult = load_events()
+    def test_reasoning_part_requires_time_end(self):
+        StateTracker = load_events()[2]
         tracker = StateTracker()
-        # Without time.end → not finalized
         no_final = tracker.ingest({
             "type": "message.part.updated",
             "properties": {
@@ -120,7 +119,6 @@ class TestStateTracker:
             },
         })
         assert len(no_final) == 0
-        # With time.end → finalized
         finalized = tracker.ingest({
             "type": "message.part.updated",
             "properties": {
@@ -132,30 +130,21 @@ class TestStateTracker:
         assert finalized[0]["type"] == "reasoning"
 
     def test_tool_part_lifecycle(self, tracker):
-        # Should be ignored (not terminal)
         pending = tracker.ingest({"type": "message.part.updated", "properties": {"sessionID": "s1", "part": {"id": "t1", "type": "tool", "state": {"status": "pending"}}}})
         assert len(pending) == 0
 
         running = tracker.ingest({"type": "message.part.updated", "properties": {"sessionID": "s1", "part": {"id": "t1", "type": "tool", "state": {"status": "running"}}}})
         assert len(running) == 0
 
-        # Should be finalized
         completed = tracker.ingest({"type": "message.part.updated", "properties": {"sessionID": "s1", "part": {"id": "t1", "type": "tool", "state": {"status": "completed"}}}})
         assert len(completed) == 1
         assert completed[0]["type"] == "tool_use"
 
     def test_text_accumulation_survives_intermediate_updates(self, tracker):
         tracker.ingest({"type": "message.part.delta", "properties": {"partID": "abc", "field": "text", "delta": "Hello"}})
-        
-        # An update without time.end should NOT clear the buffer
         tracker.ingest({"type": "message.part.updated", "properties": {"sessionID": "s1", "part": {"id": "abc", "type": "text", "text": "Hello"}}})
-        
-        # We should still be able to accumulate
         tracker.ingest({"type": "message.part.delta", "properties": {"partID": "abc", "field": "text", "delta": " world"}})
-        
-        # The final update with time.end should flush the entire combined string
         finalized = tracker.ingest({"type": "message.part.updated", "properties": {"sessionID": "s1", "part": {"id": "abc", "type": "text", "time": {"end": 1}}}})
-        
         assert len(finalized) == 1
         assert finalized[0]["part"]["text"] == "Hello world"
 
@@ -188,48 +177,34 @@ class TestSseClient:
 
     def test_parse_buffer_single_data_line(self, sse_cls):
         client = sse_cls("http://localhost:8080")
-        buf = ["data: {}", ""]
-        ev = client._parse_buffer(buf)  # type: ignore[misc]
-        assert ev == {}
+        assert client._parse_buffer(["data: {}", ""]) == {}
 
     def test_parse_buffer_json_payload(self, sse_cls):
         client = sse_cls("http://localhost:8080")
         payload = {"type": "server.heartbeat"}
-        buf = [f"data: {json.dumps(payload)}"]
-        ev = client._parse_buffer(buf)  # type: ignore[misc]
-        assert ev == payload
+        assert client._parse_buffer([f"data: {json.dumps(payload)}"]) == payload
 
     def test_parse_buffer_multiline_data(self, sse_cls):
         client = sse_cls("http://localhost:8080")
-        buf = ["data: {\"key\": \"line1", "data: line2\"}"]
-        ev = client._parse_buffer(buf)  # type: ignore[misc]
-        assert ev is None  # joined string is not valid JSON; returns None
+        assert client._parse_buffer(["data: {\"key\": \"line1", "data: line2\"}"]) is None
 
     def test_parse_buffer_multiline_valid_json(self, sse_cls):
         client = sse_cls("http://localhost:8080")
         payload = json.dumps({"msg": "hello\nworld"})
         lines = payload.split("\n")
-        buf = [f"data: {ln}" for ln in lines]
-        ev = client._parse_buffer(buf)  # type: ignore[misc]
-        assert ev == {"msg": "hello\nworld"}
+        assert client._parse_buffer([f"data: {ln}" for ln in lines]) == {"msg": "hello\nworld"}
 
     def test_parse_buffer_ignores_comment_lines(self, sse_cls):
         client = sse_cls("http://localhost:8080")
-        buf = [":comment", "data: 42"]
-        ev = client._parse_buffer(buf)  # type: ignore[misc]
-        assert ev == 42
+        assert client._parse_buffer([":comment", "data: 42"]) == 42
 
     def test_parse_buffer_no_data_returns_none(self, sse_cls):
         client = sse_cls("http://localhost:8080")
-        buf = ["event: foo"]
-        ev = client._parse_buffer(buf)  # type: ignore[misc]
-        assert ev is None
+        assert client._parse_buffer(["event: foo"]) is None
 
     def test_parse_buffer_malformed_json_returns_none(self, sse_cls):
         client = sse_cls("http://localhost:8080")
-        buf = ["data: not-json"]
-        ev = client._parse_buffer(buf)  # type: ignore[misc]
-        assert ev is None
+        assert client._parse_buffer(["data: not-json"]) is None
 
 
 # ---------------------------------------------------------------------------
@@ -277,16 +252,17 @@ class TestEventLoop:
         loop = loop_cls("http://localhost:8080", "sess-abc", None, "1", "recon")
         assert loop._belongs_to_session({"properties": {"sessionID": "sess-abc"}})
         assert not loop._belongs_to_session({"properties": {"sessionID": "other"}})
-        # server events without sessionID pass through
         assert loop._belongs_to_session({"type": "server.heartbeat"})
 
     def test_update_result_counts_step_finishes(self, loop_cls):
         loop = loop_cls("http://localhost:8080", "s", None, "1", "recon")
-        event = {
-            "type": "step_finish",
-            "part": {"reason": "tool-calls", "tokens": {"input": 5, "output": 10}},
-        }
-        result = loop._update_result(event, False, 0, None, {})  # type: ignore[misc]
+        result = loop._update_result(
+            {"type": "step_finish", "part": {"reason": "tool-calls", "tokens": {"input": 5, "output": 10}}},
+            False,
+            0,
+            None,
+            {},
+        )
         any_seen, count, reason, tokens = result
         assert any_seen is True
         assert count == 1
@@ -313,14 +289,12 @@ class TestServerRunner:
         return load_serve()
 
     def test_parse_port_from_url_standard(self, classes):
-        """Port parsing removed; verify that known port is passed directly."""
         _, ServerInfo, _ = classes
         log_path = ROOT / "tmp" / "test.log"
         info = ServerInfo(proc=None, pid=1234, base_url="http://127.0.0.1:49152", port=49152, log_path=log_path, password="dummy")  # type: ignore[arg-type]
         assert info.port == 49152
 
     def test_parse_port_from_url_no_port_raises(self, classes):
-        """Port is always known via ephemeral assignment; no parsing needed."""
         _, ServerInfo, _ = classes
         log_path = ROOT / "tmp" / "test.log"
         info = ServerInfo(proc=None, pid=1234, base_url="http://127.0.0.1:8080", port=8080, log_path=log_path, password="dummy")  # type: ignore[arg-type]
@@ -329,7 +303,6 @@ class TestServerRunner:
     def test_server_info_fields(self, classes):
         ServerRunner, ServerInfo, ServerRunnerError = classes
         log_path = ROOT / "tmp" / "test.log"
-        # Construct a minimal ServerInfo with a None proc (not used in tests)
         info = ServerInfo(proc=None, pid=1234, base_url="http://127.0.0.1:8080", port=8080, log_path=log_path, password="dummy")  # type: ignore[arg-type]
         assert info.pid == 1234
         assert info.port == 8080
@@ -343,9 +316,10 @@ class TestServerRunner:
 
     def test_try_fetch_json_timeout_returns_none(self, classes, monkeypatch):
         from opencode.serve import _try_fetch_json
-        # Patch urlopen to always raise
+
         def boom(*a, **kw):
             raise urllib.error.URLError("timeout")
+
         monkeypatch.setattr(urllib.request, "urlopen", boom)
         assert _try_fetch_json("http://localhost:1/health", 0.1) is None
 
@@ -377,15 +351,9 @@ class TestServerRunner:
 
         class FakeProc:
             pid = 1234
-
-            def poll(self):
-                return None
-
-            def terminate(self):
-                return None
-
-            def wait(self, timeout=None):
-                return 0
+            def poll(self): return None
+            def terminate(self): return None
+            def wait(self, timeout=None): return 0
 
         monkeypatch.setattr("opencode.serve._find_free_port", lambda hostname: 54321)
         monkeypatch.setattr("opencode.serve._try_fetch_json", lambda url, timeout, auth_token=None: {"healthy": True, "version": "1.14.50"})
@@ -411,15 +379,10 @@ class TestEventLoopEndToEnd:
         SseClient, SseClientError, StateTracker, emit_event, EventLoop, RunResult = load_events()
         return EventLoop, RunResult, SseClient
 
-    def test_full_run_emits_expected_events(self, event_loop_objects):
+    def test_full_run_emits_expected_events(self, event_loop_objects, monkeypatch):
         EventLoop, RunResult, SseClient = event_loop_objects
-
         emitted: list[dict] = []
 
-        def fake_render(console, phase, label, event):
-            emitted.append(event)
-
-        # Create a fake SSE client that yields a canned sequence.
         class FakeSseClient:
             def __init__(self, *a, **kw):
                 pass
@@ -436,15 +399,9 @@ class TestEventLoopEndToEnd:
             def stop(self):
                 pass
 
-        # Monkey-patch SseClient inside the events module for this test.
-        import events as _events_mod
-        orig = _events_mod.SseClient
-        _events_mod.SseClient = FakeSseClient  # type: ignore[misc]
-        try:
-            loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
-            result = loop.run(fake_render)
-        finally:
-            _events_mod.SseClient = orig
+        _patch_phase_sse_client(monkeypatch, FakeSseClient)
+        loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+        result = loop.run(lambda c, p, l, e: emitted.append(e))
 
         assert result.any_step_finish_seen is True
         assert result.step_finish_count == 1
@@ -452,17 +409,11 @@ class TestEventLoopEndToEnd:
         assert result.last_finish_tokens == {"total": 42}
         assert result.last_session_id == "sess-1"
 
-        # Verify rendered event types in order (includes pass-through events)
-        types = [e["type"] for e in emitted]
-        assert types == ["server.connected", "step_start", "text", "tool_use", "step_finish", "session.idle"]
-
-        # Verify text accumulation
-        text_event = emitted[2]
-        assert text_event["part"]["text"] == "Hello"
+        assert [e["type"] for e in emitted] == ["server.connected", "step_start", "text", "tool_use", "step_finish", "session.idle"]
+        assert emitted[2]["part"]["text"] == "Hello"
 
     def test_permission_auto_rejected(self, event_loop_objects, monkeypatch):
         EventLoop, RunResult, SseClient = event_loop_objects
-
         captured_perms: list[tuple] = []
 
         class FakeSseClient:
@@ -476,141 +427,95 @@ class TestEventLoopEndToEnd:
             def stop(self):
                 pass
 
-        import events as _events_mod
-        orig = _events_mod.SseClient
-        _events_mod.SseClient = FakeSseClient  # type: ignore[misc]
-
-        # Capture permission POSTs
         def fake_urlopen(req, **kw):
             if req.full_url.endswith("/permission/perm-1/reply"):
                 captured_perms.append((req.full_url, req.data))
             return type("R", (), {"read": lambda: b"{}", "__enter__": lambda s: s, "__exit__": lambda *a: None})()
 
+        _patch_phase_sse_client(monkeypatch, FakeSseClient)
         monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
-        try:
-            loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
-            result = loop.run(lambda c, p, l, e: None)
-        finally:
-            _events_mod.SseClient = orig
+        loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+        result = loop.run(lambda c, p, l, e: None)
 
         assert result.last_permission_error == "tool permission rejected: bash"
         assert len(captured_perms) == 1
         assert "permission/perm-1/reply" in captured_perms[0][0]
         assert json.loads(captured_perms[0][1]) == {"reply": "reject", "message": "Auto-rejected by CodeCome configuration"}
 
-    def test_session_idle_stops_consuming(self, event_loop_objects):
+    def test_session_idle_stops_consuming(self, event_loop_objects, monkeypatch):
         EventLoop, RunResult, SseClient = event_loop_objects
-
         emitted: list[dict] = []
 
         class FakeSseClient:
-            def __init__(self, *a, **kw):
-                pass
+            def __init__(self, *a, **kw): pass
             def events(self):
                 return iter([
                     {"type": "session.idle", "properties": {"sessionID": "sess-1"}},
                     {"type": "message.part.updated", "properties": {"sessionID": "sess-1", "part": {"id": "late", "type": "text", "time": {"end": 1}}}},
                 ])
-            def stop(self):
-                pass
+            def stop(self): pass
 
-        import events as _events_mod
-        orig = _events_mod.SseClient
-        _events_mod.SseClient = FakeSseClient  # type: ignore[misc]
-        try:
-            loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
-            loop.run(lambda c, p, l, e: emitted.append(e))
-        finally:
-            _events_mod.SseClient = orig
+        _patch_phase_sse_client(monkeypatch, FakeSseClient)
+        loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+        loop.run(lambda c, p, l, e: emitted.append(e))
 
-        # Events after session.idle should be ignored, but session.idle itself is passed through
         assert len(emitted) == 1
         assert emitted[0]["type"] == "session.idle"
 
-    def test_session_status_idle_stops_consuming(self, event_loop_objects):
+    def test_session_status_idle_stops_consuming(self, event_loop_objects, monkeypatch):
         EventLoop, RunResult, SseClient = event_loop_objects
-
         emitted: list[dict] = []
 
         class FakeSseClient:
-            def __init__(self, *a, **kw):
-                pass
+            def __init__(self, *a, **kw): pass
             def events(self):
                 return iter([
                     {"type": "session.status", "properties": {"sessionID": "sess-1", "status": {"type": "idle"}}},
                     {"type": "message.part.updated", "properties": {"sessionID": "sess-1", "part": {"id": "late", "type": "text", "time": {"end": 1}}}},
                 ])
-            def stop(self):
-                pass
+            def stop(self): pass
 
-        import events as _events_mod
-        orig = _events_mod.SseClient
-        _events_mod.SseClient = FakeSseClient  # type: ignore[misc]
-        try:
-            loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
-            loop.run(lambda c, p, l, e: emitted.append(e))
-        finally:
-            _events_mod.SseClient = orig
+        _patch_phase_sse_client(monkeypatch, FakeSseClient)
+        loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+        loop.run(lambda c, p, l, e: emitted.append(e))
 
-        # Events after session.status idle should be ignored.
         assert len(emitted) == 1
         assert emitted[0]["type"] == "session.status"
 
-    def test_both_idle_events_only_processed_once(self, event_loop_objects):
-        """When both canonical and deprecated idle arrive, run() exits on the first."""
+    def test_both_idle_events_only_processed_once(self, event_loop_objects, monkeypatch):
         EventLoop, RunResult, SseClient = event_loop_objects
-
         emitted: list[dict] = []
 
         class FakeSseClient:
-            def __init__(self, *a, **kw):
-                pass
+            def __init__(self, *a, **kw): pass
             def events(self):
                 return iter([
                     {"type": "session.status", "properties": {"sessionID": "sess-1", "status": {"type": "idle"}}},
                     {"type": "session.idle", "properties": {"sessionID": "sess-1"}},
                     {"type": "message.part.updated", "properties": {"sessionID": "sess-1", "part": {"id": "late", "type": "text", "time": {"end": 1}}}},
                 ])
-            def stop(self):
-                pass
+            def stop(self): pass
 
-        import events as _events_mod
-        orig = _events_mod.SseClient
-        _events_mod.SseClient = FakeSseClient  # type: ignore[misc]
-        try:
-            loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
-            result = loop.run(lambda c, p, l, e: emitted.append(e))
-        finally:
-            _events_mod.SseClient = orig
+        _patch_phase_sse_client(monkeypatch, FakeSseClient)
+        loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+        result = loop.run(lambda c, p, l, e: emitted.append(e))
 
-        # Only the first idle event should be processed; the loop returns immediately.
         assert len(emitted) == 1
         assert emitted[0]["type"] == "session.status"
         assert result.last_session_id == "sess-1"
 
-    def test_empty_stream_no_step_finish(self, event_loop_objects):
+    def test_empty_stream_no_step_finish(self, event_loop_objects, monkeypatch):
         EventLoop, RunResult, SseClient = event_loop_objects
 
         class FakeSseClient:
-            def __init__(self, *a, **kw):
-                pass
-            def events(self):
-                return iter([
-                    {"type": "server.connected"},
-                    {"type": "server.heartbeat"},
-                ])
-            def stop(self):
-                pass
+            def __init__(self, *a, **kw): pass
+            def events(self): return iter([{"type": "server.connected"}, {"type": "server.heartbeat"}])
+            def stop(self): pass
 
-        import events as _events_mod
-        orig = _events_mod.SseClient
-        _events_mod.SseClient = FakeSseClient  # type: ignore[misc]
-        try:
-            loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
-            result = loop.run(lambda c, p, l, e: None)
-        finally:
-            _events_mod.SseClient = orig
+        _patch_phase_sse_client(monkeypatch, FakeSseClient)
+        loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+        result = loop.run(lambda c, p, l, e: None)
 
         assert result.any_step_finish_seen is False
         assert result.step_finish_count == 0
@@ -618,134 +523,87 @@ class TestEventLoopEndToEnd:
 
     def test_session_snapshot_sync_emits_missing_assistant_parts(self, event_loop_objects, monkeypatch):
         EventLoop, RunResult, SseClient = event_loop_objects
-
         emitted: list[dict] = []
 
         class FakeSseClient:
-            def __init__(self, *a, **kw):
-                pass
-
+            def __init__(self, *a, **kw): pass
             def events(self):
                 return iter([
                     {"type": "server.connected", "properties": {}},
                     {"type": "session.status", "properties": {"sessionID": "sess-1", "status": {"type": "busy"}}},
                     {"type": "session.idle", "properties": {"sessionID": "sess-1"}},
                 ])
-
-            def stop(self):
-                pass
+            def stop(self): pass
 
         class FakeResp:
-            def __init__(self, payload):
-                self.payload = payload
+            def __init__(self, payload): self.payload = payload
+            def read(self): return json.dumps(self.payload).encode("utf-8")
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
 
-            def read(self):
-                return json.dumps(self.payload).encode("utf-8")
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *a):
-                pass
-
-        messages_payload = [
-            {
-                "info": {
-                    "id": "msg-1",
-                    "role": "assistant",
-                    "agent": "test",
-                    "modelID": "demo-model",
-                    "sessionID": "sess-1",
-                },
-                "parts": [
-                    {"id": "p1", "type": "step-start", "sessionID": "sess-1"},
-                    {"id": "p2", "type": "text", "sessionID": "sess-1", "text": "HELLO", "time": {"end": 1}},
-                    {"id": "p3", "type": "step-finish", "sessionID": "sess-1", "reason": "stop", "tokens": {"total": 1}},
-                ],
-            }
-        ]
+        messages_payload = [{
+            "info": {"id": "msg-1", "role": "assistant", "agent": "test", "modelID": "demo-model", "sessionID": "sess-1"},
+            "parts": [
+                {"id": "p1", "type": "step-start", "sessionID": "sess-1"},
+                {"id": "p2", "type": "text", "sessionID": "sess-1", "text": "HELLO", "time": {"end": 1}},
+                {"id": "p3", "type": "step-finish", "sessionID": "sess-1", "reason": "stop", "tokens": {"total": 1}},
+            ],
+        }]
 
         def fake_urlopen(req, **kw):
             if req.full_url.endswith("/session/sess-1/message"):
                 return FakeResp(messages_payload)
             raise AssertionError(f"unexpected urlopen call: {req.full_url}")
 
-        import events as _events_mod
-        orig = _events_mod.SseClient
-        _events_mod.SseClient = FakeSseClient  # type: ignore[misc]
+        _patch_phase_sse_client(monkeypatch, FakeSseClient)
         monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
-        try:
-            loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
-            result = loop.run(lambda c, p, l, e: emitted.append(e))
-        finally:
-            _events_mod.SseClient = orig
+        loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+        result = loop.run(lambda c, p, l, e: emitted.append(e))
 
         assert result.any_step_finish_seen is True
         assert result.last_finish_reason == "stop"
-        types = [e["type"] for e in emitted]
-        assert types == ["server.connected", "session.status", "message.updated", "step_start", "text", "step_finish", "session.idle"]
+        assert [e["type"] for e in emitted] == ["server.connected", "session.status", "message.updated", "step_start", "text", "step_finish", "session.idle"]
 
     def test_session_snapshot_sync_emits_tool_use_from_completed_parts(self, event_loop_objects, monkeypatch):
         EventLoop, RunResult, SseClient = event_loop_objects
-
         emitted: list[dict] = []
 
         class FakeSseClient:
-            def __init__(self, *a, **kw):
-                pass
-
+            def __init__(self, *a, **kw): pass
             def events(self):
                 return iter([
                     {"type": "session.status", "properties": {"sessionID": "sess-1", "status": {"type": "busy"}}},
                     {"type": "session.idle", "properties": {"sessionID": "sess-1"}},
                 ])
-
-            def stop(self):
-                pass
+            def stop(self): pass
 
         class FakeResp:
-            def __init__(self, payload):
-                self.payload = payload
+            def __init__(self, payload): self.payload = payload
+            def read(self): return json.dumps(self.payload).encode("utf-8")
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
 
-            def read(self):
-                return json.dumps(self.payload).encode("utf-8")
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *a):
-                pass
-
-        messages_payload = [
-            {
-                "info": {"id": "msg-1", "role": "assistant", "agent": "test", "modelID": "demo-model", "sessionID": "sess-1"},
-                "parts": [
-                    {
-                        "id": "tool-1",
-                        "type": "tool",
-                        "tool": "task",
-                        "sessionID": "sess-1",
-                        "state": {"status": "completed", "output": "OK"},
-                    }
-                ],
-            }
-        ]
+        messages_payload = [{
+            "info": {"id": "msg-1", "role": "assistant", "agent": "test", "modelID": "demo-model", "sessionID": "sess-1"},
+            "parts": [{
+                "id": "tool-1",
+                "type": "tool",
+                "tool": "task",
+                "sessionID": "sess-1",
+                "state": {"status": "completed", "output": "OK"},
+            }],
+        }]
 
         def fake_urlopen(req, **kw):
             if req.full_url.endswith("/session/sess-1/message"):
                 return FakeResp(messages_payload)
             raise AssertionError(f"unexpected urlopen call: {req.full_url}")
 
-        import events as _events_mod
-        orig = _events_mod.SseClient
-        _events_mod.SseClient = FakeSseClient  # type: ignore[misc]
+        _patch_phase_sse_client(monkeypatch, FakeSseClient)
         monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
-        try:
-            loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
-            loop.run(lambda c, p, l, e: emitted.append(e))
-        finally:
-            _events_mod.SseClient = orig
+        loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+        loop.run(lambda c, p, l, e: emitted.append(e))
 
         assert any(e["type"] == "tool_use" for e in emitted)
