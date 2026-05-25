@@ -1,7 +1,5 @@
-import queue
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 
@@ -55,7 +53,7 @@ def test_phase_event_loop_returns_result_on_idle(monkeypatch):
         def stop(self):
             pass
 
-    monkeypatch.setattr("events.SseClient", FakeSseClient)
+    monkeypatch.setattr("events.phase_loop.SseClient", FakeSseClient)
     loop = PhaseEventLoop("http://server", "session-1", console=None, phase="1", label="Recon")
     monkeypatch.setattr(loop, "_sync_session_messages", lambda: [])
 
