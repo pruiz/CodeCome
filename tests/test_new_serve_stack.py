@@ -19,8 +19,8 @@ def load_events():
     from events.sse_client import SseClient, SseClientError
     from events.state_tracker import StateTracker
     from events.emitters import emit_event
-    from events import EventLoop, RunResult
-    return SseClient, SseClientError, StateTracker, emit_event, EventLoop, RunResult
+    from events.phase_loop import PhaseEventLoop, RunResult
+    return SseClient, SseClientError, StateTracker, emit_event, PhaseEventLoop, RunResult
 
 
 def load_serve():
@@ -234,11 +234,11 @@ class TestEmitters:
 
 
 # ---------------------------------------------------------------------------
-# EventLoop termination signals
+# PhaseEventLoop termination signals
 # ---------------------------------------------------------------------------
 
-class TestEventLoop:
-    """Unit tests for events.EventLoop core logic."""
+class TestPhaseEventLoop:
+    """Unit tests for events.phase_loop.PhaseEventLoop core logic."""
 
     @pytest.fixture
     def loop_cls(self):
@@ -368,19 +368,19 @@ class TestServerRunner:
 
 
 # ---------------------------------------------------------------------------
-# End-to-end EventLoop with fake SSE producer
+# End-to-end PhaseEventLoop with fake SSE producer
 # ---------------------------------------------------------------------------
 
-class TestEventLoopEndToEnd:
-    """End-to-end tests for EventLoop consuming a controlled SSE stream."""
+class TestPhaseEventLoopEndToEnd:
+    """End-to-end tests for PhaseEventLoop consuming a controlled SSE stream."""
 
     @pytest.fixture
     def event_loop_objects(self):
-        SseClient, SseClientError, StateTracker, emit_event, EventLoop, RunResult = load_events()
-        return EventLoop, RunResult, SseClient
+        SseClient, SseClientError, StateTracker, emit_event, PhaseEventLoop, RunResult = load_events()
+        return PhaseEventLoop, RunResult, SseClient
 
     def test_full_run_emits_expected_events(self, event_loop_objects, monkeypatch):
-        EventLoop, RunResult, SseClient = event_loop_objects
+        PhaseEventLoop, RunResult, SseClient = event_loop_objects
         emitted: list[dict] = []
 
         class FakeSseClient:
@@ -400,7 +400,7 @@ class TestEventLoopEndToEnd:
                 pass
 
         _patch_phase_sse_client(monkeypatch, FakeSseClient)
-        loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+        loop = PhaseEventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
         result = loop.run(lambda c, p, l, e: emitted.append(e))
 
         assert result.any_step_finish_seen is True
@@ -413,7 +413,7 @@ class TestEventLoopEndToEnd:
         assert emitted[2]["part"]["text"] == "Hello"
 
     def test_permission_auto_rejected(self, event_loop_objects, monkeypatch):
-        EventLoop, RunResult, SseClient = event_loop_objects
+        PhaseEventLoop, RunResult, SseClient = event_loop_objects
         captured_perms: list[tuple] = []
 
         class FakeSseClient:
@@ -435,7 +435,7 @@ class TestEventLoopEndToEnd:
         _patch_phase_sse_client(monkeypatch, FakeSseClient)
         monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
-        loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+        loop = PhaseEventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
         result = loop.run(lambda c, p, l, e: None)
 
         assert result.last_permission_error == "tool permission rejected: bash"
@@ -444,7 +444,7 @@ class TestEventLoopEndToEnd:
         assert json.loads(captured_perms[0][1]) == {"reply": "reject", "message": "Auto-rejected by CodeCome configuration"}
 
     def test_session_idle_stops_consuming(self, event_loop_objects, monkeypatch):
-        EventLoop, RunResult, SseClient = event_loop_objects
+        PhaseEventLoop, RunResult, SseClient = event_loop_objects
         emitted: list[dict] = []
 
         class FakeSseClient:
@@ -457,14 +457,14 @@ class TestEventLoopEndToEnd:
             def stop(self): pass
 
         _patch_phase_sse_client(monkeypatch, FakeSseClient)
-        loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+        loop = PhaseEventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
         loop.run(lambda c, p, l, e: emitted.append(e))
 
         assert len(emitted) == 1
         assert emitted[0]["type"] == "session.idle"
 
     def test_session_status_idle_stops_consuming(self, event_loop_objects, monkeypatch):
-        EventLoop, RunResult, SseClient = event_loop_objects
+        PhaseEventLoop, RunResult, SseClient = event_loop_objects
         emitted: list[dict] = []
 
         class FakeSseClient:
@@ -477,14 +477,14 @@ class TestEventLoopEndToEnd:
             def stop(self): pass
 
         _patch_phase_sse_client(monkeypatch, FakeSseClient)
-        loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+        loop = PhaseEventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
         loop.run(lambda c, p, l, e: emitted.append(e))
 
         assert len(emitted) == 1
         assert emitted[0]["type"] == "session.status"
 
     def test_both_idle_events_only_processed_once(self, event_loop_objects, monkeypatch):
-        EventLoop, RunResult, SseClient = event_loop_objects
+        PhaseEventLoop, RunResult, SseClient = event_loop_objects
         emitted: list[dict] = []
 
         class FakeSseClient:
@@ -498,7 +498,7 @@ class TestEventLoopEndToEnd:
             def stop(self): pass
 
         _patch_phase_sse_client(monkeypatch, FakeSseClient)
-        loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+        loop = PhaseEventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
         result = loop.run(lambda c, p, l, e: emitted.append(e))
 
         assert len(emitted) == 1
@@ -506,7 +506,7 @@ class TestEventLoopEndToEnd:
         assert result.last_session_id == "sess-1"
 
     def test_empty_stream_no_step_finish(self, event_loop_objects, monkeypatch):
-        EventLoop, RunResult, SseClient = event_loop_objects
+        PhaseEventLoop, RunResult, SseClient = event_loop_objects
 
         class FakeSseClient:
             def __init__(self, *a, **kw): pass
@@ -514,7 +514,7 @@ class TestEventLoopEndToEnd:
             def stop(self): pass
 
         _patch_phase_sse_client(monkeypatch, FakeSseClient)
-        loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+        loop = PhaseEventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
         result = loop.run(lambda c, p, l, e: None)
 
         assert result.any_step_finish_seen is False
@@ -522,7 +522,7 @@ class TestEventLoopEndToEnd:
         assert result.last_finish_reason is None
 
     def test_session_snapshot_sync_emits_missing_assistant_parts(self, event_loop_objects, monkeypatch):
-        EventLoop, RunResult, SseClient = event_loop_objects
+        PhaseEventLoop, RunResult, SseClient = event_loop_objects
         emitted: list[dict] = []
 
         class FakeSseClient:
@@ -558,7 +558,7 @@ class TestEventLoopEndToEnd:
         _patch_phase_sse_client(monkeypatch, FakeSseClient)
         monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
-        loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+        loop = PhaseEventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
         result = loop.run(lambda c, p, l, e: emitted.append(e))
 
         assert result.any_step_finish_seen is True
@@ -566,7 +566,7 @@ class TestEventLoopEndToEnd:
         assert [e["type"] for e in emitted] == ["server.connected", "session.status", "message.updated", "step_start", "text", "step_finish", "session.idle"]
 
     def test_session_snapshot_sync_emits_tool_use_from_completed_parts(self, event_loop_objects, monkeypatch):
-        EventLoop, RunResult, SseClient = event_loop_objects
+        PhaseEventLoop, RunResult, SseClient = event_loop_objects
         emitted: list[dict] = []
 
         class FakeSseClient:
@@ -603,7 +603,7 @@ class TestEventLoopEndToEnd:
         _patch_phase_sse_client(monkeypatch, FakeSseClient)
         monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
-        loop = EventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+        loop = PhaseEventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
         loop.run(lambda c, p, l, e: emitted.append(e))
 
         assert any(e["type"] == "tool_use" for e in emitted)
