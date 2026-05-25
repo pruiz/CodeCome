@@ -19,7 +19,7 @@ import sys
 from typing import Any, Optional
 
 from rendering.tools.base import ToolRenderer
-from rendering.tools.interceptors.base import CommandExecutionInterceptor
+from rendering.tools.command.interceptors.base import CommandExecutionInterceptor
 
 # ---------------------------------------------------------------------------
 # Constants
