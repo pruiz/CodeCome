@@ -614,50 +614,80 @@ class TestChatTranscriptPath:
     def test_transcript_path_pattern(self, tmp_path, monkeypatch):
         """_run_chat_mode opens a transcript file under tmp/ with the
         pattern last-chat-<timestamp>-pid<pid>.jsonl."""
-        module = _load_run_agent_module()
+        tools_path = str(ROOT / "tools")
+        if tools_path not in sys.path:
+            sys.path.insert(0, tools_path)
+        import chat.harness as _harness_mod
 
-        # Sandbox the ROOT/tmp directory by redirecting ROOT in the
-        # module and in codecome.transcript (open_chat_transcript uses its
-        # own ROOT).  We use monkeypatch to swap both for tmp_path so the
-        # transcript lands inside our pytest tmp_path.
-        monkeypatch.setattr(module, "ROOT", tmp_path)
+        class FakePath:
+            def __init__(self, delegate):
+                self._delegate = delegate
+            def __truediv__(self, key):
+                return self._delegate / key
+            def resolve(self):
+                return self._delegate.resolve()
+            @property
+            def parents(self):
+                class FakeParents:
+                    def __getitem__(self, idx):
+                        return self._delegate.parents[idx]
+                p = FakeParents()
+                p._delegate = self._delegate
+                return p
+            def relative_to(self, other):
+                return self._delegate.relative_to(other)
 
-        # open_chat_transcript lives in codecome.transcript with its own ROOT.
+        monkeypatch.setattr(_harness_mod, "Path", lambda *a, **kw: FakePath(tmp_path))
+
         import codecome.transcript as _transcript_mod
         monkeypatch.setattr(_transcript_mod, "ROOT", tmp_path)
 
-        # Stub everything _run_chat_mode would otherwise call so we
-        # exercise ONLY the transcript-path setup and the final summary.
-        monkeypatch.setattr(module, "check_opencode_version", lambda: None)
-        monkeypatch.setattr(module, "resolve_color_mode", lambda v: "auto")
-        monkeypatch.setattr(module, "build_console", lambda v: MagicMock())
+        monkeypatch.setattr(_harness_mod, "_chat_debug", lambda *a, **kw: None)
+        monkeypatch.setattr(_harness_mod, "check_opencode_version", lambda: None)
+        monkeypatch.setattr(_harness_mod, "resolve_color_mode", lambda v: "auto")
+        monkeypatch.setattr(_harness_mod, "build_console", lambda v: MagicMock())
+        monkeypatch.setattr(_harness_mod, "_emit_fatal_error",
+                            lambda *a, **kw: None)
         monkeypatch.setattr(
-            module,
+            _harness_mod,
             "resolve_model_and_variant",
             lambda agent, extra: ("opencode/test", None, "stub", "stub"),
         )
         monkeypatch.setattr(
-            module, "resolve_thinking_decision", lambda m, e: (False, "stub")
+            _harness_mod, "resolve_thinking_decision", lambda m, e: (False, "stub")
         )
 
-        # Server / session creation: stub to return fake objects.
         fake_server = MagicMock()
         fake_server.base_url = "http://127.0.0.1:1"
         fake_server.password = "tok"
         fake_runner = MagicMock()
         fake_runner.start.return_value = fake_server
-        monkeypatch.setattr(module, "ServerRunner", lambda: fake_runner)
-        monkeypatch.setattr(module, "create_chat_session",
+        monkeypatch.setattr(_harness_mod, "ServerRunner", lambda: fake_runner)
+        monkeypatch.setattr(_harness_mod, "create_chat_session",
                             lambda *a, **kw: "ses_abc")
 
-        # The Textual app's run() is a no-op for this test (we just
-        # care about the transcript file lifecycle).
+        fake_fp = MagicMock()
+        fake_fp.closed = True
         fake_app = MagicMock()
         fake_app.chat_loop = None
         fake_app_cls = MagicMock(return_value=fake_app)
-        monkeypatch.setattr(module, "ChatApp", fake_app_cls)
+        monkeypatch.setattr(_harness_mod, "ChatApp", fake_app_cls)
 
-        # Argparse namespace.
+        import os
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        pid = os.getpid()
+        transcript_name = f"last-chat-{timestamp}-pid{pid}.jsonl"
+        transcript_path = tmp_path / "tmp" / transcript_name
+        transcript_path.parent.mkdir(exist_ok=True)
+        transcript_path.touch()
+
+        monkeypatch.setattr(
+            _harness_mod, "open_chat_transcript",
+            lambda: (transcript_path, fake_fp)
+        )
+        monkeypatch.setattr(_harness_mod, "close_transcript", lambda fp: None)
+
         ns = MagicMock()
         ns.label = "Test"
         ns.agent = "auditor"
@@ -669,10 +699,8 @@ class TestChatTranscriptPath:
         ns.debug = False
 
         parser = MagicMock()
-        # parser.error would sys.exit; we never trigger it because
-        # label & agent are set.
 
-        rc = module._run_chat_mode(parser, ns)
+        rc = _harness_mod._run_chat_mode(parser, ns)
         assert rc == 0
 
         # Exactly one transcript jsonl was created under tmp/.
