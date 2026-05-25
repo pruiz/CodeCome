@@ -19,7 +19,7 @@ import _colors as C
 from events.phase_loop import PhaseEventLoop, RunResult
 from codecome.config import ROOT
 from codecome.session import create_session, send_prompt_to_session
-from codecome.transcript import open_phase_transcript, close_transcript
+from codecome.transcript import Transcript
 
 
 def _consume_events(
@@ -29,7 +29,7 @@ def _consume_events(
     phase: str,
     label: str,
     args: argparse.Namespace,
-    transcript_fp: Any | None,
+    transcript: Transcript,
     thinking_on: bool,
     auth_token: str | None,
     workspace_dir: str | None,
@@ -46,11 +46,7 @@ def _consume_events(
     )
 
     def _render_and_log(console_: Any, phase_: str, label_: str, event: dict[str, Any]) -> None:
-        if transcript_fp is not None:
-            try:
-                transcript_fp.write(json.dumps(event) + "\n")
-            except OSError:
-                pass
+        transcript.write_event(event)
         if args.debug:
             sys.stderr.write(json.dumps(event) + "\n")
             sys.stderr.flush()
@@ -76,16 +72,17 @@ def _run_single_attempt(
     existing_session_id: str | None = None,
 ) -> tuple[int, str, RunResult, Path]:
 
-    transcript_fp = None
+    transcript: Transcript
     try:
-        transcript_path, transcript_fp = open_phase_transcript(str(args.phase), args.finding)
+        transcript = Transcript.for_phase(str(args.phase), args.finding)
     except OSError as exc:
         finding_tag = (args.finding or "no-finding").replace("/", "_")
-        transcript_path = ROOT / "tmp" / f"last-phase-{args.phase}-{finding_tag}-attempt-N.jsonl"
+        transcript = Transcript.null()
+        transcript.path = ROOT / "tmp" / f"last-phase-{args.phase}-{finding_tag}-attempt-N.jsonl"
         try:
-            console.print("warning: could not open transcript ", transcript_path, ": ", exc)
+            console.print("warning: could not open transcript ", transcript.path, ": ", exc)
         except AttributeError:
-            print(C.warn(f"warning: could not open transcript {transcript_path}: {exc}"))
+            print(C.warn(f"warning: could not open transcript {transcript.path}: {exc}"))
 
     try:
         if existing_session_id:
@@ -101,7 +98,7 @@ def _run_single_attempt(
                 run_result_box["result"] = _consume_events(
                     base_url, session_id, console,
                     str(args.phase), str(args.label), args,
-                    transcript_fp, thinking_on,
+                    transcript, thinking_on,
                     auth_token, workspace_dir,
                     render_event_fn=render_event_fn,
                 )
@@ -127,8 +124,8 @@ def _run_single_attempt(
                 console.print(f"Fatal error: {exc}")
             except Exception:
                 print(C.error(f"Fatal error: {exc}"), file=sys.stderr)
-        return 1, existing_session_id or "", RunResult(), transcript_path
+        return 1, existing_session_id or "", RunResult(), transcript.path
     finally:
-        close_transcript(transcript_fp)
+        transcript.close()
 
-    return 0, session_id, run_result, transcript_path
+    return 0, session_id, run_result, transcript.path

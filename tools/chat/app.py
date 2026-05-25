@@ -110,11 +110,7 @@ def _chat_render_and_log(self, console, phase, label, event):
 
     When bound via ``__get__`` to a _ChatApp instance, ``self`` is
     guaranteed to carry the attributes accessed below."""
-    if self.transcript_fp is not None:
-        try:
-            self.transcript_fp.write(json.dumps(event) + "\n")
-        except OSError:
-            pass
+    self.transcript.write_event(event)
     if getattr(self.args, "debug", False):
         _chat_debug(f"_render_and_log: raw event: {json.dumps(event)}")
     if event.get("type") == "message.updated":
@@ -252,10 +248,11 @@ try:
             run as @work(thread=True) workers — the canonical docs
             pattern (matches the weather-app example).
 
-          * The transcript jsonl is opened in _run_chat_mode and the
-            file handle is passed in via the `transcript_fp` constructor
-            argument; _render_and_log writes one JSON line per SSE
-            event to it (parity with phase mode).
+          * The transcript is opened in _run_chat_mode and the
+            Transcript instance is passed in via the `transcript`
+            constructor argument; _render_and_log calls
+            transcript.write_event() per SSE event (parity with
+            phase mode).
 
           * A set_interval(1.0) heartbeat continuously logs a debug
             tick from the main thread and also updates the bottom-bar
@@ -323,7 +320,7 @@ try:
                 super().__init__()
                 self.renderable = renderable
 
-        def __init__(self, server_info=None, session_id=None, initial_prompt="", args=None, model=None, variant=None, thinking_on=None, transcript_fp=None):
+        def __init__(self, server_info=None, session_id=None, initial_prompt="", args=None, model=None, variant=None, thinking_on=None, transcript=None):
             super().__init__()
             self.server_info = server_info
             self.session_id = session_id
@@ -332,7 +329,8 @@ try:
             self.model = model
             self.variant = variant
             self.thinking_on = thinking_on
-            self.transcript_fp = transcript_fp
+            from codecome.transcript import Transcript
+            self.transcript = transcript if transcript is not None else Transcript.null()
             self.chat_loop = None
             self.console_proxy = None
             self.rich_log = None
