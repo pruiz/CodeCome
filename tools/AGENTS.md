@@ -1,94 +1,145 @@
-# Tools Architecture Guide
+# Architecture Guidelines for `tools/`
 
-This directory contains CodeCome's local tooling: phase runners, rendering, event loops, chat UI, sandbox helpers, and finding/itemdb scripts.
+## Directory layout — what goes where
 
-These rules are intended to keep the tooling modular and prevent new monoliths from forming.
+```
+tools/
+├── run-agent.py                  # Thin wrapper (12 lines) → codecome.cli.main()
+├── codecome.py                   # Workspace validation CLI (check/status/next-id)
+│
+├── codecome/                     # Core runner and configuration
+│   ├── cli.py                    #   main(), build_parser() — runtime entry point
+│   ├── cli_render.py             #   HAVE_RICH, build_console, render_event, _get_rendering_ctx
+│   ├── config.py                 #   env, codecome.yml, prompt, model, thinking resolution
+│   ├── session.py                #   OpenCode HTTP: create session, send prompt
+│   ├── runner.py                 #   _consume_events, _run_single_attempt
+│   ├── graceful.py               #   phase completion checks, resume prompt builders
+│   ├── transcript.py             #   transcript path/open/close helpers
+│   └── version.py                #   OpenCode version checks
+│
+├── rendering/                    # Tool and event rendering
+│   ├── base.py                   #   BaseRenderer (sink, rich, plain properties)
+│   ├── context.py                #   RenderContext (root, sink, settings, cache)
+│   ├── settings.py               #   RenderSettings (20+ tunables from env vars)
+│   ├── cache.py                  #   SnapshotCache (file content snapshots for diffs)
+│   ├── sink.py                   #   RenderSink protocol + Plain/Rich/Textual sinks
+│   ├── registry.py               #   RendererRegistry (dispatch by event type / tool name)
+│   ├── events.py                 #   Event renderer classes (StepStart, Text, Error, …)
+│   ├── utils.py                  #   Shared helpers (path, lexer, diff, read framing)
+│   ├── tools/                    #   Tool renderer classes
+│   │   ├── base.py               #     ToolRenderer, FallbackToolRenderer
+│   │   ├── read.py / write.py / edit.py / glob.py / grep.py
+│   │   ├── command.py            #     CommandRenderer (bash) with interceptor chain
+│   │   ├── apply_patch.py / todo.py / task.py / skill.py / permissions.py
+│   │   └── interceptors/         #     CommandExecutionInterceptor implementations
+│   │       ├── sandbox_bootstrap.py
+│   │       ├── rtk_read.py / rtk_grep.py / shell_listing.py
+│   │       └── base.py           #     Interceptor protocol
+│
+├── events/                       # SSE event consumption
+│   ├── base.py                   #   BaseEventLoop (shared: filters, permissions, sync, dedup)
+│   ├── phase_loop.py             #   PhaseEventLoop (single-session → RunResult)
+│   ├── chat_loop.py              #   ChatEventLoop (multi-turn chat)
+│   ├── sse_client.py             #   SseClient (raw SSE stream + reconnect)
+│   ├── state_tracker.py          #   StateTracker (delta → finalized part)
+│   └── emitters.py               #   emit_event() bridge
+│
+├── chat/                         # Interactive chat TUI (Textual)
+│   ├── app.py                    #   _ChatApp, TextualConsoleProxy, render/log helpers
+│   ├── harness.py                #   _run_chat_mode() entry point
+│   └── debug.py                  #   Chat-specific debug logging
+│
+├── opencode/                     # opencode serve lifecycle
+│   └── serve.py                  #   ServerRunner (start, stop, health check)
+│
+├── findings/                     # Finding / itemdb tooling (future consolidated package)
+│
+├── _colors.py                    # Shared ANSI color and symbol utilities
+├── gate-check.py                 # Phase readiness gates
+├── check-frontmatter.py          # Frontmatter validation
+├── sandbox-bootstrap.py          # Sandbox environment setup
+├── run-sweep.py                  # Batch file sweeps
+├── list-findings.py / create-finding.py / move-finding.py / …   # Script wrappers
+└── mock-llm-*.py / mock_llm_scripts/                             # Test infrastructure
+```
 
-## Entry points
+## Rules
 
-Historical executable scripts should stay thin.
+### 1. Historical scripts are thin wrappers
 
-- `tools/run-agent.py` is only a compatibility entry point. It should delegate to `codecome.cli.main()` and contain no phase, rendering, event-loop, or chat logic.
-- New runner logic belongs under `tools/codecome/`.
-- Do not add new implementation logic to wrapper scripts unless the script is intentionally standalone and out of scope for the core runner.
+Standalone scripts at the `tools/` root (e.g. `create-finding.py`, `list-findings.py`) should be thin wrappers that delegate to their respective packages. Their implementation lives in the package, not the script.
 
-## CodeCome core package
+Example (`tools/run-agent.py`):
+```python
+from codecome.cli import main
+if __name__ == "__main__":
+    raise SystemExit(main())
+```
 
-Use concrete modules rather than broad package re-exports.
+### 2. `codecome/config.py` is configuration only — no execution
 
-- CLI parsing and top-level phase flow: `tools/codecome/cli.py`.
-- Single-attempt phase execution: `tools/codecome/runner.py`.
-- Rendering dispatcher and console construction: `tools/codecome/cli_render.py`.
-- Configuration, prompt, model, variant, thinking, and color resolution: `tools/codecome/config.py`.
-- OpenCode HTTP session/prompt helpers: `tools/codecome/session.py`.
-- Phase completion and resume/repair prompts: `tools/codecome/graceful.py`.
-- Transcript helpers: `tools/codecome/transcript.py`.
-- Version checks: `tools/codecome/version.py`.
+`config.py` resolves env vars, `codecome.yml`, prompt extras, model/variant/thinking, and color modes. It must NOT contain:
+- Server start/stop
+- Session creation
+- Prompt submission
+- Phase loops
+- Retry/resume logic
+- Phase completion checks
 
-`tools/codecome/__init__.py` must stay lightweight. Internal code should import from the concrete module that owns the functionality.
+### 3. Event loops live under `tools/events/`
 
-## Rendering
+- `BaseEventLoop` owns shared SSE/session mechanics (filtering, permissions, sync, dedup, headers).
+- `PhaseEventLoop` (in `phase_loop.py`) extends it for single-session consumption.
+- `ChatEventLoop` (in `chat_loop.py`) extends it for multi-turn chat.
+- Never add new event loop classes outside `tools/events/`.
 
-Rendering code belongs under `tools/rendering/`.
+### 4. Renderers live under `tools/rendering/`
 
-- Runtime rendering state belongs in `RenderContext`.
-- Rendering settings belong in `RenderSettings`.
-- File snapshot/diff state belongs in `SnapshotCache`.
-- Output destinations are represented by sinks (`PlainSink`, `RichConsoleSink`, `TextualRichLogSink`).
-- Generic event renderers live in `tools/rendering/events.py`.
-- Tool renderers live under `tools/rendering/tools/`.
-- Command execution interceptors live under `tools/rendering/tools/interceptors/`.
+- Event renderers go in `rendering/events.py`, inheriting `EventRenderer`.
+- Tool renderers go in `rendering/tools/`, inheriting `ToolRenderer`.
+- Renderers receive **normalized dict** events/tool states — do not introduce custom event objects.
+- Rich and Textual renderers may emit arbitrary Rich renderables (Panel, Group, Text, Table, Syntax, Rule, …) through a `RenderSink`. The sink abstracts *where* output goes; it does not restrict *what* renderers can draw.
 
-Renderers should receive the normalized event/tool-state dictionaries emitted by the event layer. Do not introduce a second event object model unless there is a clear need.
+### 5. Sinks: three destinations, one code path
 
-Rich and Textual output should share renderer logic where possible. The sink decides where renderables are written; renderers may emit arbitrary Rich renderables when the sink supports them.
+- `PlainSink` — plain strings to stdout (no Rich dependency).
+- `RichConsoleSink` — delegates to `rich.console.Console`.
+- `TextualRichLogSink` — delegates to a Textual RichLog or thread-safe proxy.
 
-## Command rendering
+Rich and Textual renderers share the same `render()` code path; only the sink differs. Use `self.rich` / `self.plain` properties from `BaseRenderer` to branch.
 
-CodeCome-specific command rendering is intentional product behavior.
+### 6. Snapshot/diff state belongs in `SnapshotCache`
 
-Special handling for commands such as sandbox bootstrap, `rtk read`, `rtk grep`, `rg`, `ls`, `find`, or `tree` should be implemented as `CommandExecutionInterceptor` classes under `tools/rendering/tools/interceptors/` rather than hidden inside a generic bash renderer.
+File content snapshots used by Write/Edit/ApplyPatch renderers for diff computation must live in `rendering/cache.SnapshotCache`. Do not introduce new module-level globals for caching.
 
-## Event loops
+### 7. Command-specific rendering uses `CommandExecutionInterceptor`
 
-Event consumption code belongs under `tools/events/`.
+Specialised rendering for bash invocations (sandbox-bootstrap JSON, rtk read/grep, rg, ls, find, tree) is implemented as `CommandExecutionInterceptor` implementations. The `CommandRenderer` has a lazy interceptor chain. New interceptors go in `rendering/tools/interceptors/`.
 
-- Shared SSE/session/dedup/permission/sync logic belongs in `BaseEventLoop`.
-- Phase lifecycle logic belongs in `PhaseEventLoop` (`tools/events/phase_loop.py`).
-- Multi-turn chat lifecycle logic belongs in `ChatEventLoop` (`tools/events/chat_loop.py`).
-- `events.__init__` should only expose the public phase-loop alias and basic package exports.
+### 8. Finding/itemdb helpers live under `tools/findings/`
 
-Avoid adding phase-specific behavior to `BaseEventLoop` and avoid duplicating session sync or permission logic in phase/chat subclasses.
+Frontmatter parsing, finding ID lookup, status directory constants, slug helpers, and finding file iteration belong in `tools/findings/frontmatter.py` or sibling modules. Do not duplicate these in standalone scripts.
 
-## Chat
+### 9. Dependency direction
 
-Interactive chat code belongs under `tools/chat/`.
+Packages should depend downward, not sideways:
+```
+run-agent.py → codecome/  →  (none)
+            → events/     →  (none)
+            → rendering/  →  codecome/
+            → chat/       →  codecome/, events/
 
-- Textual UI classes and the RichLog proxy live in `tools/chat/app.py`.
-- Chat startup/wiring lives in `tools/chat/harness.py`.
-- Chat debug helpers live in `tools/chat/debug.py`.
+codecome/   → events/, rendering/ (lazy imports only in execution paths)
+events/     →  (stdlib only, except sse_client ↔ base)
+rendering/  →  codecome/
+chat/       →  codecome/, events/
+```
 
-`chat` modules must not import `tools/run-agent.py`. Use `codecome.cli_render`, `codecome.session`, `codecome.config`, and other concrete modules instead.
+Avoid circular imports. When two packages need each other, prefer callable injection (as done with `render_event_fn` in the runner) or lazy imports inside function bodies.
 
-`tools/chat/__init__.py` must stay lightweight and should not eagerly import Textual-adjacent modules.
+### 10. Testing
 
-## Findings and itemdb
-
-Finding/itemdb consolidation belongs to Epic B.
-
-When that work starts, shared finding helpers should live under `tools/findings/`, and historical scripts such as `create-finding.py`, `move-finding.py`, `list-findings.py`, `render-report.py`, and `render-index.py` should become thin wrappers.
-
-## Testing expectations
-
-Refactors in this directory should include focused tests for the moved component, not only broad smoke checks.
-
-Useful test categories:
-
-- CLI/wrapper smoke tests.
-- Rendering unit tests and fixture/golden-style checks.
-- Event-loop tests with fake SSE streams.
-- Chat tests that import `chat.app` and `chat.harness` directly.
-- Command interceptor tests.
-- Snapshot/cache tests.
-
-Do not rely on tests that patch a stale wrapper module when the implementation has moved to a concrete package module.
+- New renderers need focused unit tests with fixture inputs and recording sinks.
+- Event loops are tested with deterministic event generators — not live OpenCode servers.
+- CLI and wrapper compatibility is verified with `--help` and `--show-model` smoke tests.
+- Thin wrappers must remain thin — their only responsibility is delegation.
