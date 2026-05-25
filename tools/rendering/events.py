@@ -15,6 +15,7 @@ import time as _time
 from typing import Any
 
 from rendering.base import BaseRenderer
+import _colors as C
 
 
 # ---------------------------------------------------------------------------
@@ -63,7 +64,6 @@ class StepStartRenderer(EventRenderer):
             from rich.text import Text
             self.sink.write(Text(f"[{self.phase}] {self.label}: {step_type}", style="cyan"))
         elif self.plain:
-            import _colors as C
             self.sink.write_text(C.info(f"[{self.phase}] {self.label}: {step_type}"))
         return True
 
@@ -81,7 +81,6 @@ class TextEventRenderer(EventRenderer):
             from rich.panel import Panel
             self.sink.write(Panel(Markdown(text), title="Assistant", border_style="blue", expand=True))
         elif self.plain:
-            import _colors as C
             self.sink.write_text(C.header("Assistant"))
             self.sink.write_text(text)
         return True
@@ -117,7 +116,6 @@ class ReasoningEventRenderer(EventRenderer):
                 body = body_md
             self.sink.write(Panel(body, title="Thinking", border_style="blue", expand=True, style="dim"))
         elif self.plain:
-            import _colors as C
             self.sink.write_text(C.header("Thinking"))
             self.sink.write_text(text)
             if truncated_note:
@@ -193,7 +191,6 @@ class StepFinishRenderer(EventRenderer):
             from rich.text import Text
             self.sink.write(Text(f"step finished: {reason}{suffix}", style=style))
         elif self.plain:
-            import _colors as C
             if reason in _FINISH_FAILURE:
                 self.sink.write_text(C.fail(f"step finished: {reason}{suffix}"))
             else:
@@ -237,7 +234,6 @@ class ErrorEventRenderer(EventRenderer):
             from rich.text import Text
             self.sink.write(Panel(Text(text, style="red"), title="Error", border_style="yellow", expand=True))
         elif self.plain:
-            import _colors as C
             self.sink.write_text(C.warn("Error"))
             self.sink.write_text(C.fail(text))
         return True
@@ -258,7 +254,6 @@ class SessionStatusRenderer(EventRenderer):
                 from rich.text import Text
                 self.sink.write(Text(text, style="bold yellow"))
             elif self.plain:
-                import _colors as C
                 self.sink.write_text(C.warn(text))
         elif status_type == "busy":
             text = "session status: busy"
@@ -266,7 +261,6 @@ class SessionStatusRenderer(EventRenderer):
                 from rich.text import Text
                 self.sink.write(Text(text, style="dim"))
             elif self.plain:
-                import _colors as C
                 self.sink.write_text(C.info(text))
         elif status_type == "idle":
             text = "session status: idle"
@@ -274,7 +268,6 @@ class SessionStatusRenderer(EventRenderer):
                 from rich.text import Text
                 self.sink.write(Text(text, style="dim"))
             elif self.plain:
-                import _colors as C
                 self.sink.write_text(C.info(text))
         return True
 
@@ -288,7 +281,6 @@ class ServerConnectedRenderer(EventRenderer):
             from rich.text import Text
             self.sink.write(Text(message, style="dim"))
         elif self.plain:
-            import _colors as C
             self.sink.write_text(C.info(message))
         return True
 
@@ -302,7 +294,6 @@ class ServerHeartbeatRenderer(EventRenderer):
             from rich.text import Text
             self.sink.write(Text(message, style="dim"))
         elif self.plain:
-            import _colors as C
             self.sink.write_text(C.info(message))
         return True
 
@@ -321,7 +312,6 @@ class SessionDiffRenderer(EventRenderer):
             from rich.text import Text
             self.sink.write(Text(message, style="dim"))
         elif self.plain:
-            import _colors as C
             self.sink.write_text(C.info(message))
         return True
 
@@ -388,7 +378,6 @@ class MessageUpdatedRenderer(EventRenderer):
             from rich.text import Text
             self.sink.write(Text(message, style=style))
         elif self.plain:
-            import _colors as C
             self.sink.write_text(C.header(message))
         return True
 
@@ -447,7 +436,6 @@ class SubagentStatusRenderer(EventRenderer):
             self.sink.write(Text(line, style="dim"))
 
     def _render_plain(self, status_type: str, title: str, summary, elapsed_ms) -> None:
-        import _colors as C
         if status_type == "created":
             self.sink.write_text(C.header(f"[subagent] started: {title}"))
         elif status_type == "finished":
