@@ -60,7 +60,7 @@ tools/
 ├── sandbox-bootstrap.py          # Sandbox environment setup
 ├── run-sweep.py                  # Batch file sweeps
 ├── list-findings.py / create-finding.py / move-finding.py / …   # Script wrappers
-└── mock-llm-*.py / mock_llm_scripts/                             # Test infrastructure
+└── mock-llm-*.py / mock-llm-scripts/                             # Test infrastructure
 ```
 
 ## Rules

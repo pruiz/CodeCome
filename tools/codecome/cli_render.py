@@ -11,10 +11,9 @@ session, no phase loop).
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[2]
+from codecome.config import ROOT
 
 # ---------------------------------------------------------------------------
 # Rich availability

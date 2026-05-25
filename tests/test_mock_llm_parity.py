@@ -37,7 +37,7 @@ class TestMockLLMServer:
 
     @pytest.fixture(scope="class")
     def server_proc(self):
-        script = ROOT / "tools" / "mock_llm_scripts" / "basic.json"
+        script = ROOT / "tools" / "mock-llm-scripts" / "basic.json"
         port = _find_free_port()
         proc = subprocess.Popen(
             [sys.executable, str(ROOT / "tools" / "mock-llm-server.py"), "--port", str(port), "--script", str(script)],
@@ -194,11 +194,11 @@ class TestMockLLMParity:
     """End-to-end parity tests (heavy — invoke real opencode CLI)."""
 
     @pytest.mark.parametrize("script", [
-    ROOT / "tools" / "mock_llm_scripts" / "basic.json",
-    ROOT / "tools" / "mock_llm_scripts" / "with_tool.json",
-    ROOT / "tools" / "mock_llm_scripts" / "with_permission.json",
-    ROOT / "tools" / "mock_llm_scripts" / "comprehensive.json",
-    ROOT / "tools" / "mock_llm_scripts" / "with_permission_multi.json",
+    ROOT / "tools" / "mock-llm-scripts" / "basic.json",
+    ROOT / "tools" / "mock-llm-scripts" / "with_tool.json",
+    ROOT / "tools" / "mock-llm-scripts" / "with_permission.json",
+    ROOT / "tools" / "mock-llm-scripts" / "comprehensive.json",
+    ROOT / "tools" / "mock-llm-scripts" / "with_permission_multi.json",
 ])
     def test_parity_script(self, script: Path):
         result = subprocess.run(
@@ -214,8 +214,8 @@ class TestMockLLMParity:
         assert "Parity OK" in result.stdout
 
     @pytest.mark.parametrize("script,error_arg", [
-        (ROOT / "tools" / "mock_llm_scripts" / "rate_limit_retry.json", ["--429-after", "1"]),
-        (ROOT / "tools" / "mock_llm_scripts" / "internal_error.json", ["--500-after", "1"]),
+        (ROOT / "tools" / "mock-llm-scripts" / "rate_limit_retry.json", ["--429-after", "1"]),
+        (ROOT / "tools" / "mock-llm-scripts" / "internal_error.json", ["--500-after", "1"]),
     ])
     def test_parity_script_with_error(self, script: Path, error_arg: list[str]):
         result = subprocess.run(

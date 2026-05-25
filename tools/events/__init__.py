@@ -6,5 +6,6 @@
 from __future__ import annotations
 
 from events.phase_loop import PhaseEventLoop, RunResult
+from events.chat_loop import ChatEventLoop
 
-__all__ = ["PhaseEventLoop", "RunResult"]
+__all__ = ["PhaseEventLoop", "RunResult", "ChatEventLoop"]

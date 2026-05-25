@@ -5,7 +5,7 @@
 """Deterministic parity test between opencode run and opencode serve using a mock LLM.
 
 Usage:
-  python tools/mock-llm-parity.py --script tools/mock_llm_scripts/basic.json
+  python tools/mock-llm-parity.py --script tools/mock-llm-scripts/basic.json
 """
 
 from __future__ import annotations
@@ -412,7 +412,7 @@ def main() -> int:
     parser.add_argument(
         "--script",
         type=Path,
-        default=ROOT / "tools" / "mock_llm_scripts" / "basic.json",
+        default=ROOT / "tools" / "mock-llm-scripts" / "basic.json",
     )
     parser.add_argument("--prompt", default=DEFAULT_PROMPT)
     parser.add_argument("--model", default=DEFAULT_MODEL)
