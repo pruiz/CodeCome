@@ -13,7 +13,6 @@ import signal
 import subprocess
 import sys
 import time
-import traceback
 from pathlib import Path
 from typing import Any, Optional
 
@@ -211,10 +210,10 @@ def main() -> int:
     previous_sigint = signal.signal(signal.SIGINT, _forward_signal)
     previous_sigterm = signal.signal(signal.SIGTERM, _forward_signal)
 
+    from codecome.runner import _run_single_attempt
     try:
         while True:
             attempt_number += 1
-            from codecome.runner import _run_single_attempt
             returncode, session_id, run_result, transcript_path = _run_single_attempt(
                 args, console, prompt, model, variant, thinking_on, base_url,
                 server_info.password, str(_clr.ROOT),
