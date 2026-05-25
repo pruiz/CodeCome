@@ -42,7 +42,7 @@ def test_chat_render_and_log(monkeypatch):
     mock_args.debug = True
     
     class FakeSelf:
-        transcript_fp = mock_transcript
+        transcript = mock_transcript
         args = mock_args
         thinking_on = True
         _modeline_info = ""
@@ -61,7 +61,7 @@ def test_chat_render_and_log(monkeypatch):
     
     assert len(rendered) == 1
     assert "gpt-5" in fake_self._modeline_info
-    mock_transcript.write.assert_called()
+    mock_transcript.write_event.assert_called()
 
 def test_chat_update_modeline_info():
     class FakeSelf:

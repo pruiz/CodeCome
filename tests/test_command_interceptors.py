@@ -8,10 +8,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from rendering.tools.interceptors.sandbox_bootstrap import SandboxBootstrapInterceptor, _is_sandbox_bootstrap_json_call, _sandbox_payload_matches, _sandbox_glyphs
-from rendering.tools.interceptors.rtk_read import _is_bash_shim_call, RtkReadInterceptor, _BashShim
-from rendering.tools.interceptors.rtk_grep import _normalize_rtk_grep_output, RtkGrepInterceptor
-from rendering.tools.interceptors.shell_listing import _strip_ls_long_format_to_filenames, _parse_find_tree, ShellListingInterceptor
+from rendering.tools.command.interceptors.sandbox_bootstrap import SandboxBootstrapInterceptor, _is_sandbox_bootstrap_json_call, _sandbox_payload_matches, _sandbox_glyphs
+from rendering.tools.command.interceptors.rtk_read import _is_bash_shim_call, RtkReadInterceptor, _BashShim
+from rendering.tools.command.interceptors.rtk_grep import _normalize_rtk_grep_output, RtkGrepInterceptor
+from rendering.tools.command.interceptors.shell_listing import _strip_ls_long_format_to_filenames, _parse_find_tree, ShellListingInterceptor
 
 # We must map "module.X" to actual functions or classes
 def dict_to_shim(d):

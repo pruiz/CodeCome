@@ -9,6 +9,7 @@ import json
 from unittest.mock import MagicMock
 
 from codecome import runner
+from codecome.transcript import Transcript
 from events.phase_loop import RunResult
 
 @pytest.fixture
@@ -40,7 +41,7 @@ def test_consume_events_renders_and_logs(mock_args, mock_console, monkeypatch):
     def fake_render(console, phase, label, event):
         rendered_events.append(event)
         
-    fake_transcript = MagicMock()
+    fake_transcript = MagicMock(spec=Transcript)
     
     res = runner._consume_events(
         "http://base", "session_123", mock_console, "1", "Recon", mock_args,
@@ -50,10 +51,7 @@ def test_consume_events_renders_and_logs(mock_args, mock_console, monkeypatch):
     assert isinstance(res, RunResult)
     assert len(rendered_events) == 1
     assert rendered_events[0]["content"] == "hello"
-    fake_transcript.write.assert_called_once()
-    import json
-    written_data = json.loads(fake_transcript.write.call_args[0][0])
-    assert written_data["content"] == "hello"
+    fake_transcript.write_event.assert_called_once()
 
 def test_run_single_attempt_success(mock_args, mock_console, monkeypatch):
     monkeypatch.setattr(runner, "create_session", lambda *a, **kw: "new_session")
@@ -67,8 +65,9 @@ def test_run_single_attempt_success(mock_args, mock_console, monkeypatch):
         return RunResult()
     monkeypatch.setattr(runner, "_consume_events", fake_consume)
     
-    monkeypatch.setattr(runner, "open_phase_transcript", lambda p, f: (Path("fake.jsonl"), MagicMock()))
-    monkeypatch.setattr(runner, "close_transcript", lambda f: None)
+    fake_transcript = MagicMock(spec=Transcript)
+    fake_transcript.path = Path("fake.jsonl")
+    monkeypatch.setattr(Transcript, "for_phase", classmethod(lambda cls, p, f: fake_transcript))
     
     code, session_id, res, path = runner._run_single_attempt(
         mock_args, mock_console, "do work", "model", "var", True,
@@ -89,8 +88,9 @@ def test_run_single_attempt_consumer_exception(mock_args, mock_console, monkeypa
         raise ValueError("consumer failed")
     monkeypatch.setattr(runner, "_consume_events", fake_consume)
     
-    monkeypatch.setattr(runner, "open_phase_transcript", lambda p, f: (Path("fake.jsonl"), MagicMock()))
-    monkeypatch.setattr(runner, "close_transcript", lambda f: None)
+    fake_transcript = MagicMock(spec=Transcript)
+    fake_transcript.path = Path("fake.jsonl")
+    monkeypatch.setattr(Transcript, "for_phase", classmethod(lambda cls, p, f: fake_transcript))
     
     fatal_errors = []
     def fake_fatal(console, title, msg):
@@ -112,8 +112,10 @@ def test_run_single_attempt_existing_session(mock_args, mock_console, monkeypatc
     monkeypatch.setattr(runner, "create_session", lambda *a, **kw: created.append(True))
     monkeypatch.setattr(runner, "send_prompt_to_session", lambda *a, **kw: None)
     monkeypatch.setattr(runner, "_consume_events", lambda *a, **kw: RunResult())
-    monkeypatch.setattr(runner, "open_phase_transcript", lambda p, f: (Path("fake.jsonl"), MagicMock()))
-    monkeypatch.setattr(runner, "close_transcript", lambda f: None)
+    
+    fake_transcript = MagicMock(spec=Transcript)
+    fake_transcript.path = Path("fake.jsonl")
+    monkeypatch.setattr(Transcript, "for_phase", classmethod(lambda cls, p, f: fake_transcript))
     
     code, session_id, res, path = runner._run_single_attempt(
         mock_args, mock_console, "do work", "model", "var", True,
