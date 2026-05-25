@@ -34,7 +34,7 @@ def _consume_events(
     thinking_on: bool,
     auth_token: str | None,
     workspace_dir: str | None,
-    render_event_fn: Callable[..., None],  # run-agent's render_event dispatcher
+    render_event_fn: Callable[..., None],  # CLI/rendering event dispatcher
 ) -> RunResult:
     event_loop = EventLoop(
         base_url=base_url,
@@ -72,7 +72,7 @@ def _run_single_attempt(
     base_url: str,
     auth_token: str | None,
     workspace_dir: str | None,
-    render_event_fn: Callable[..., None],  # run-agent's render_event dispatcher
+    render_event_fn: Callable[..., None],  # CLI/rendering event dispatcher
     emit_fatal_error_fn: Callable[..., None] | None = None,
     existing_session_id: str | None = None,
 ) -> tuple[int, str, RunResult, Path]:
