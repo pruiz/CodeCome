@@ -113,6 +113,7 @@ def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
         transcript_path, transcript_fp = open_chat_transcript()
         _chat_debug(f"_run_chat_mode: opened transcript {transcript_path}")
     except OSError as exc:
+        transcript_path = ROOT / "tmp" / "last-chat-unknown.jsonl"
         _chat_debug(f"_run_chat_mode: could not open transcript: {exc}")
 
     _chat_debug("_run_chat_mode: creating ChatApp")

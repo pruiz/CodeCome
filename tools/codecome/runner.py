@@ -11,7 +11,7 @@ import os
 import sys
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -34,7 +34,7 @@ def _consume_events(
     thinking_on: bool,
     auth_token: str | None,
     workspace_dir: str | None,
-    render_event_fn,  # required: run-agent's render_event dispatcher
+    render_event_fn: Callable[..., None],  # run-agent's render_event dispatcher
 ) -> RunResult:
     event_loop = EventLoop(
         base_url=base_url,
@@ -72,8 +72,8 @@ def _run_single_attempt(
     base_url: str,
     auth_token: str | None,
     workspace_dir: str | None,
-    render_event_fn,  # required: run-agent's render_event dispatcher
-    emit_fatal_error_fn=None,  # type: ignore
+    render_event_fn: Callable[..., None],  # run-agent's render_event dispatcher
+    emit_fatal_error_fn: Callable[..., None] | None = None,
     existing_session_id: str | None = None,
 ) -> tuple[int, str, RunResult, Path]:
 
@@ -123,6 +123,11 @@ def _run_single_attempt(
     except Exception as exc:
         if emit_fatal_error_fn:
             emit_fatal_error_fn(console, "Server Error", str(exc))
+        else:
+            try:
+                console.print(f"Fatal error: {exc}")
+            except Exception:
+                print(C.error(f"Fatal error: {exc}"), file=sys.stderr)
         return 1, existing_session_id or "", RunResult(), transcript_path
     finally:
         close_transcript(transcript_fp)

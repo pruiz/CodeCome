@@ -39,7 +39,7 @@ MOCK_HOST = "127.0.0.1"
 # Note: session.status (retry/busy) is NOT serve-only when _CODECOME_INSIDE_HARNESS=1
 # because the status-forwarder plugin emits them to stdout.
 # session.idle is deprecated and serve-only.
-_SERVE_ONLY_TYPES = {"server.connected", "server.heartbeat", "session.idle", "message.updated", "file.edited", "file.watcher.updated", "todo.updated"}
+_SERVE_ONLY_TYPES = {"server.connected", "server.heartbeat", "session.idle", "message.updated", "message.part.updated", "file.edited", "file.watcher.updated", "todo.updated"}
 
 
 def _step_sort_key(ev: dict[str, Any]) -> tuple[int, str]:
@@ -352,6 +352,7 @@ def normalize_event(ev: dict[str, Any]) -> dict[str, Any] | None:
         part.pop("id", None)
         part.pop("messageID", None)
         part.pop("sessionID", None)
+        part.pop("snapshot", None)  # volatile git HEAD
         # Truncate large tool output/preview to avoid spurious diff noise
         if ev_type == "tool_use":
             state = part.get("state")
@@ -364,6 +365,7 @@ def normalize_event(ev: dict[str, Any]) -> dict[str, Any] | None:
                 metadata = state.get("metadata")
                 if isinstance(metadata, dict):
                     metadata = dict(metadata)
+                    metadata.pop("exists", None)  # hermetic: ignore file-existence state
                     for key in ("preview", "output"):
                         val = metadata.get(key)
                         if isinstance(val, str) and len(val) > 200:
@@ -450,12 +452,16 @@ def main() -> int:
         config["provider"]["test"]["options"]["baseURL"] = f"http://{MOCK_HOST}:{mock_info.port}/v1"
         config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
+        # Pre-clean stale files from previous runs to ensure hermetic tests.
+        for f in ROOT.glob("tmp/parity-*.txt"):
+            f.unlink(missing_ok=True)
+
         run_events = run_reference(args.prompt, args.model, args.agent, args.timeout)
 
         # Clean up files created by run_reference to ensure serve starts with a clean workspace.
         # This prevents 'exists' metadata in write tool from reflecting leftover state.
         for f in ROOT.glob("tmp/parity-*.txt"):
-            f.unlink()
+            f.unlink(missing_ok=True)
 
         serve_events = run_serve(args.prompt, args.model, args.agent, args.timeout)
     finally:
