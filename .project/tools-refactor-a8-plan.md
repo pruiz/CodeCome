@@ -1,6 +1,6 @@
 # Plan: Phase A8 — PR Review Fixes and Architectural Cleanup
 
-**Status:** Active
+**Status:** Implemented (A8 + A8.1 cleanup complete)
 **Date:** 2026-05-25
 **Parent:** [tools-refactor-plan.md](tools-refactor-plan.md)
 **PR:** #21 (`wip/tools-refactor`)

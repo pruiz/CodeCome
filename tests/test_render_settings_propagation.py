@@ -1,59 +1,95 @@
-"""Test that CLI render tunables propagate into RenderSettings.
+"""Integration test: CLI tunable overrides reach RenderSettings via the
+full ``codecome.harness.run_phase_mode`` path."""
 
-Regression test for PR #21 comment: --read-display-lines,
---write-content-lines, --write-diff-limit, --edit-diff-lines must reach
-the rendering context's settings when the phase harness applies overrides.
-"""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 
-import dataclasses
+import argparse
+from unittest.mock import MagicMock
+
 import pytest
 
-from rendering.dispatch import _get_rendering_ctx, _RENDERING_CTX_CACHE
+from codecome import harness as harness_mod
+from codecome import runner as runner_mod
+from rendering.dispatch import _get_rendering_ctx
 
 
-@pytest.fixture(autouse=True)
-def _clear_ctx_cache():
-    """Ensure each test starts with a fresh rendering context cache."""
-    _RENDERING_CTX_CACHE.clear()
-    yield
-    _RENDERING_CTX_CACHE.clear()
+@pytest.mark.unit
+def test_cli_tunables_propagate_to_render_settings(monkeypatch):
+    """Prove that --read-display-lines (etc.) reach RenderSettings
+    when run through the real run_phase_mode() harness."""
+    args = argparse.Namespace()
+    args.phase = "2"
+    args.label = "Hypothesis"
+    args.agent = "auditor"
+    args.prompt_file = "prompts/phase-2.md"
+    args.finding = None
+    args.chat = False
+    args.show_model = False
+    args.debug = False
+    args.color = "never"
+    args.log_level = "WARN"
+    args.read_display_lines = 42
+    args.write_content_lines = 7
+    args.write_diff_limit = 99
+    args.edit_diff_lines = 3
 
+    monkeypatch.setattr(harness_mod, "ServerRunner", lambda: _FakeServerRunner())
+    monkeypatch.setattr(runner_mod, "_run_single_attempt",
+                        lambda *a, **kw: (0, "ses_ok", _FakeRunResult(),
+                                          harness_mod.ROOT / "tmp" / "fake.jsonl"))
+    monkeypatch.setattr(harness_mod, "load_prompt", lambda *a, **kw: "Fake prompt")
+    monkeypatch.setattr(harness_mod, "resolve_runtime_config",
+                        lambda agent: _FakeRuntimeConfig())
+    monkeypatch.setattr(harness_mod, "check_phase_graceful_completion",
+                        lambda *a, **kw: True)
+    import subprocess
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: MagicMock(returncode=0))
 
-def test_cli_overrides_propagate_to_render_settings():
-    """Verify that dataclasses.replace on the context settings
-    correctly overrides the tunables, matching the pattern used
-    by codecome.harness.run_phase_mode."""
-    # Get a plain-mode context (console=None → plain sink)
-    ctx = _get_rendering_ctx(None)
-    assert ctx.settings.read_display_lines == 10  # default
-    assert ctx.settings.write_content_lines == 25  # default
-    assert ctx.settings.write_diff_limit == 50    # default
-    assert ctx.settings.edit_diff_lines == 25     # default
+    returncode = harness_mod.run_phase_mode(args)
+    assert returncode == 0
 
-    # Apply CLI overrides (same pattern as harness.py)
-    overrides = {
-        "read_display_lines": 42,
-        "write_content_lines": 99,
-        "write_diff_limit": 200,
-        "edit_diff_lines": 7,
-    }
-    ctx.settings = dataclasses.replace(ctx.settings, **overrides)
-
+    # run_phase_mode builds console via build_console, so check the same
+    # mode the harness would have used.
+    from codecome.cli_render import build_console
+    console = build_console(args.color)
+    ctx = _get_rendering_ctx(console)
     assert ctx.settings.read_display_lines == 42
-    assert ctx.settings.write_content_lines == 99
-    assert ctx.settings.write_diff_limit == 200
-    assert ctx.settings.edit_diff_lines == 7
+    assert ctx.settings.write_content_lines == 7
+    assert ctx.settings.write_diff_limit == 99
+    assert ctx.settings.edit_diff_lines == 3
 
 
-def test_cached_context_preserves_overrides():
-    """Once overrides are applied, subsequent _get_rendering_ctx calls
-    should return the same context with overrides intact."""
-    ctx = _get_rendering_ctx(None)
-    ctx.settings = dataclasses.replace(ctx.settings, read_display_lines=77)
+# -- Lightweight stubs -------------------------------------------------------
 
-    ctx2 = _get_rendering_ctx(None)
-    assert ctx2 is ctx
-    assert ctx2.settings.read_display_lines == 77
+class _FakeServerRunner:
+    class info:
+        pid = 1
+    def start(self, **kw):
+        return _FakeServerInfo()
+    def stop(self):
+        pass
+
+
+class _FakeServerInfo:
+    base_url = "http://localhost"
+    password = "fake"
+
+
+class _FakeRunResult:
+    any_step_finish_seen = True
+    step_finish_count = 1
+    last_finish_reason = "stop"
+    last_finish_tokens = {}
+    last_permission_error = None
+    last_session_id = "ses_ok"
+
+
+class _FakeRuntimeConfig:
+    model = "op/test"
+    variant = None
+    model_source = "stub"
+    variant_source = "stub"
+    thinking_on = True
+    thinking_source = "stub"

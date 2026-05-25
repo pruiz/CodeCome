@@ -24,7 +24,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from chat.debug import _chat_debug  # noqa: E402
-from codecome.cli_render import render_event  # noqa: E402
+from rendering.dispatch import render_event  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Rich imports — same fallback pattern as run-agent.py
@@ -110,14 +110,18 @@ def _chat_render_and_log(self, console, phase, label, event):
 
     When bound via ``__get__`` to a _ChatApp instance, ``self`` is
     guaranteed to carry the attributes accessed below."""
-    self.transcript.write_event(event)
-    if getattr(self.args, "debug", False):
-        _chat_debug(f"_render_and_log: raw event: {json.dumps(event)}")
+    from codecome.event_pipeline import render_and_log_event
+
+    render_and_log_event(
+        console=console, phase=phase, label=label, event=event,
+        transcript=self.transcript,
+        debug=getattr(self.args, "debug", False),
+        thinking_on=self.thinking_on,
+        render_event_fn=render_event,
+        debug_fn=_chat_debug,
+    )
     if event.get("type") == "message.updated":
         _chat_update_modeline_info(self, event)
-    if not self.thinking_on and event.get("type") == "reasoning":
-        return
-    render_event(console, phase, label, event)
 
 
 def _chat_update_modeline_info(self, event: dict[str, Any]) -> None:
