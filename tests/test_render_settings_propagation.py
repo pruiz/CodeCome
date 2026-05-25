@@ -50,8 +50,8 @@ def test_cli_tunables_propagate_to_render_settings(monkeypatch):
     returncode = harness_mod.run_phase_mode(args)
     assert returncode == 0
 
-    # run_phase_mode builds console via build_console, so check the same
-    # mode the harness would have used.
+    # build_console uses args.color directly, matching what run_phase_mode
+    # passes to the real console builder.
     from codecome.cli_render import build_console
     console = build_console(args.color)
     ctx = _get_rendering_ctx(console)
