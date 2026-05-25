@@ -33,6 +33,11 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+# When this module runs as __main__, alias it so sibling tools can import
+# it as 'run-agent' (the hyphenated filename) without a duplicate load.
+if __name__ == "__main__":
+    sys.modules.setdefault("run-agent", sys.modules["__main__"])
+
 import _colors as C
 from opencode.serve import ServerRunner, ServerRunnerError
 from events import EventLoop, RunResult
@@ -4517,7 +4522,8 @@ def main() -> int:
 
     # Chat mode has its own validation path.
     if args.chat:
-        return _run_chat_mode(parser, args)
+        from chat.harness import _run_chat_mode as _chat_run  # noqa: E402
+        return _chat_run(parser, args)
 
     # The phase-launching mode requires the usual arguments.
     missing = [n for n in ("phase", "label", "agent", "prompt_file") if getattr(args, n) is None]
