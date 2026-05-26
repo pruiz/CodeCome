@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from findings import listing as listing_module
+from findings.constants import FindingsContext
 
 
 def test_filter_eligible_for_exploit_only_returns_supported_statuses():
@@ -60,9 +61,11 @@ Valid.
 
     rows = listing_module.load_findings(
         None,
-        root=tmp_path,
-        findings_root=findings_root,
-        statuses=listing_module.STATUSES,
+        ctx=FindingsContext(
+            root=tmp_path,
+            itemdb_root=tmp_path / "itemdb",
+            findings_root=findings_root,
+        ),
     )
 
     assert [row["id"] for row in rows] == ["CC-9998", "CC-9999"]

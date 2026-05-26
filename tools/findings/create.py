@@ -85,7 +85,7 @@ def create_finding(
 
     output_path.write_text(content, encoding="utf-8")
 
-    evidence_dir = ctx.root / "itemdb" / "evidence" / finding_id
+    evidence_dir = ctx.evidence_root / finding_id
     evidence_dir.mkdir(parents=True, exist_ok=True)
 
     return output_path

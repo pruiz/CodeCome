@@ -3,40 +3,22 @@
 
 from __future__ import annotations
 
-import sys
 from datetime import date
-from pathlib import Path
-from typing import Dict, List
 
 import _colors as C
 
+from findings.constants import FindingsContext
 from findings.frontmatter import load_frontmatter
 from findings.ids import iter_findings, extract_id_from_path
 
 
-_findings_pkg = __import__("findings", fromlist=["ROOT"])
+def load_findings(
+    *,
+    ctx: FindingsContext,
+) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
 
-
-def _wrapper():
-    return __import__("render_index", fromlist=["ROOT", "FINDINGS_ROOT", "STATUSES"])
-
-
-def _get_root() -> Path:
-    return _wrapper().ROOT
-
-
-def _get_findings_root() -> Path:
-    return _wrapper().FINDINGS_ROOT
-
-
-def _get_statuses() -> List[str]:
-    return _wrapper().STATUSES
-
-
-def load_findings() -> List[Dict[str, str]]:
-    rows: List[Dict[str, str]] = []
-
-    for path in iter_findings(None):
+    for path in iter_findings(None, findings_root=ctx.findings_root, statuses=ctx.statuses):
         frontmatter = load_frontmatter(path)
 
         exploitation = frontmatter.get("exploitation")
@@ -58,7 +40,7 @@ def load_findings() -> List[Dict[str, str]]:
                 "exploitation_status": exploitation_status,
                 "validation_status": validation_status,
                 "title": str(frontmatter.get("title", path.stem)),
-                "finding_path": str(path.relative_to(_get_root())),
+                "finding_path": str(path.relative_to(ctx.root)),
             }
         )
 
@@ -66,9 +48,8 @@ def load_findings() -> List[Dict[str, str]]:
     return rows
 
 
-def count_by_status(rows: List[Dict[str, str]]) -> Dict[str, int]:
-    statuses = _get_statuses()
-    counts: Dict[str, int] = {s: 0 for s in statuses}
+def count_by_status(rows: list[dict[str, str]], *, ctx: FindingsContext) -> dict[str, int]:
+    counts: dict[str, int] = {s: 0 for s in ctx.statuses}
     for row in rows:
         s = row["status"]
         if s in counts:
@@ -76,10 +57,10 @@ def count_by_status(rows: List[Dict[str, str]]) -> Dict[str, int]:
     return counts
 
 
-def render_index(rows: List[Dict[str, str]]) -> str:
-    counts = count_by_status(rows)
-    statuses = _get_statuses()
-    lines: List[str] = []
+def render_index(rows: list[dict[str, str]], *, ctx: FindingsContext) -> str:
+    counts = count_by_status(rows, ctx=ctx)
+    statuses = ctx.statuses
+    lines: list[str] = []
     today = date.today().isoformat()
 
     lines.append("# CodeCome Finding Index")
@@ -106,7 +87,7 @@ def render_index(rows: List[Dict[str, str]]) -> str:
     if not rows:
         lines.append("| - | - | - | - |")
     else:
-        status_counts: Dict[str, int] = {}
+        status_counts: dict[str, int] = {}
         for row in rows:
             s = row["status"]
             status_counts[s] = status_counts.get(s, 0) + 1
@@ -143,11 +124,12 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
-    rows = load_findings()
-    output_path = _get_root() / args.output
+    ctx = FindingsContext.default()
+    rows = load_findings(ctx=ctx)
+    output_path = ctx.root / args.output
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    output_path.write_text(render_index(rows), encoding="utf-8")
+    output_path.write_text(render_index(rows, ctx=ctx), encoding="utf-8")
 
-    print(C.ok(f"Rendered {output_path.relative_to(_get_root())}"))
+    print(C.ok(f"Rendered {output_path.relative_to(ctx.root)}"))
     return 0

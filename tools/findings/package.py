@@ -11,37 +11,33 @@ from typing import Optional
 
 import _colors as C
 
-from findings.constants import EVIDENCE_ROOT
-from findings.constants import ROOT, FINDING_ID_STRICT_RE
+from findings.constants import FINDING_ID_STRICT_RE, ROOT, FindingsContext
 
 
 def validate_finding_id(finding_id: str) -> str:
     stripped = finding_id.strip()
     if not FINDING_ID_STRICT_RE.fullmatch(stripped):
-        print(C.fail(f"Invalid finding id format: {finding_id!r} (expected CC-NNNN)"))
-        raise SystemExit(2)
+        raise ValueError(f"Invalid finding id format: {finding_id!r} (expected CC-NNNN)")
     return stripped
 
 
 def discover_files(
     finding_id: str,
     *,
-    itemdb: Optional[Path] = None,
-    evidence_root: Optional[Path] = None,
+    ctx: Optional[FindingsContext] = None,
 ) -> list[Path]:
-    itemdb = itemdb if itemdb is not None else ROOT / "itemdb"
-    evidence_root = evidence_root if evidence_root is not None else EVIDENCE_ROOT
-    zip_path = evidence_root / f"{finding_id}.zip"
+    ctx = ctx if ctx is not None else FindingsContext.default()
+    zip_path = ctx.evidence_root / f"{finding_id}.zip"
 
     matches: list[Path] = []
 
-    if itemdb.exists():
-        for path in itemdb.rglob("*"):
+    if ctx.itemdb_root.exists():
+        for path in ctx.itemdb_root.rglob("*"):
             if not path.is_file():
                 continue
             if path == zip_path:
                 continue
-            if finding_id in str(path.relative_to(itemdb)):
+            if finding_id in str(path.relative_to(ctx.itemdb_root)):
                 matches.append(path)
 
     matches.sort()
@@ -53,27 +49,25 @@ def create_bundle(
     files: list[Path],
     dry_run: bool = False,
     *,
-    evidence_root: Optional[Path] = None,
-    root: Optional[Path] = None,
+    ctx: Optional[FindingsContext] = None,
 ) -> Path:
-    evidence_root = evidence_root if evidence_root is not None else EVIDENCE_ROOT
-    root = root if root is not None else ROOT
-    zip_path = evidence_root / f"{finding_id}.zip"
+    ctx = ctx if ctx is not None else FindingsContext.default()
+    zip_path = ctx.evidence_root / f"{finding_id}.zip"
 
     if dry_run:
         print(C.info(f"Would create {zip_path} from {len(files)} file(s)"))
         for f in files:
-            print(f"  {f.relative_to(root)}")
+            print(f"  {f.relative_to(ctx.root)}")
         return zip_path
 
-    evidence_root.mkdir(parents=True, exist_ok=True)
+    ctx.evidence_root.mkdir(parents=True, exist_ok=True)
 
     if zip_path.exists():
         zip_path.unlink()
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for file_path in files:
-            arcname = str(file_path.relative_to(root))
+            arcname = str(file_path.relative_to(ctx.root))
             zf.write(file_path, arcname)
             print(C.ok(f"  added: {arcname}"))
 
@@ -99,17 +93,23 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    finding_id = validate_finding_id(args.finding)
-    files = discover_files(finding_id)
+    try:
+        finding_id = validate_finding_id(args.finding)
+    except ValueError as exc:
+        print(C.fail(str(exc)))
+        return 2
+
+    ctx = FindingsContext.default()
+    files = discover_files(finding_id, ctx=ctx)
 
     if not files:
         print(C.warn(f"No files found for {finding_id} under itemdb/"), file=sys.stderr)
         return 1
 
     print(C.info(f"Bundling {len(files)} file(s) for {finding_id}..."))
-    zip_path = create_bundle(finding_id, files, dry_run=args.dry_run)
+    zip_path = create_bundle(finding_id, files, dry_run=args.dry_run, ctx=ctx)
 
     if not args.dry_run:
-        print(C.ok(f"Created {zip_path.relative_to(ROOT)}"))
+        print(C.ok(f"Created {zip_path.relative_to(ctx.root)}"))
 
     return 0
