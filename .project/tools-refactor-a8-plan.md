@@ -55,14 +55,14 @@ come first, then structural moves, then the larger splits/extractions.
 | ID | Thread | File | Action |
 |----|--------|------|--------|
 | T16 | events.py:42 | `rendering/events.py` | Split into `rendering/events/` package: `base.py` (EventRenderer + constants + subagent state), then one file per renderer class. `rendering/events/__init__.py` re-exports everything so existing imports continue to work. |
-| T11 | cli_render:1 | `codecome/cli_render.py` | Move rendering-related parts (`HAVE_RICH`, Rich stubs, `_get_rendering_ctx`, `render_event`) into `rendering/dispatch.py`. Keep CLI-only parts (`build_console`, `_emit_fatal_error`) in `codecome/cli_render.py`. Update imports. |
+| T11 | cli_render:1 | `codecome/console.py` | Move rendering-related parts (`HAVE_RICH`, Rich stubs, `_get_rendering_ctx`, `render_event`) into `rendering/dispatch.py`. Keep CLI-only parts (`build_console`, `_emit_fatal_error`) in `codecome/console.py`. Update imports. |
 | T1 | plan:207 | `rendering/tools/` | Restructure: move `command.py` → `command/__init__.py`, move `interceptors/` → `command/interceptors/`. Update all import paths from `rendering.tools.interceptors.*` to `rendering.tools.command.interceptors.*`. Update plan document. |
 
 ### Batch 5 — Phase harness extraction
 
 | ID | Thread | File | Action |
 |----|--------|------|--------|
-| T10 | cli:198 | `codecome/cli.py` | Extract the phase retry/resume loop (lines ~160–395) into `codecome/harness.py` as `run_phase_mode(args, console, ...)`. `cli.py` becomes: parse args → check version → dispatch to `run_phase_mode()` or `_run_chat_mode()`. |
+| T10 | cli:198 | `codecome/cli.py` | Extract the phase retry/resume loop (lines ~160–395) into `codecome/harness.py` as `run_phase_mode(args, console, ...)`. `cli.py` becomes: parse args → check version → dispatch to `run_phase_mode()` or `run_harness()`. |
 
 ### Batch 6 — Testing and PR hygiene
 
@@ -85,7 +85,7 @@ tools/
 │
 ├── codecome/                     # Core runner and configuration
 │   ├── cli.py                    #   main() → parse args → dispatch to harness
-│   ├── cli_render.py             #   build_console, _emit_fatal_error (CLI-only)  ← SLIMMED
+│   ├── console.py                #   build_console, _emit_fatal_error (CLI-only)  ← RENAMED
 │   ├── config.py                 #   ROOT, env, codecome.yml, prompt, model, thinking
 │   ├── session.py                #   OpenCode HTTP: create session, send prompt
 │   ├── runner.py                 #   _consume_events, _run_single_attempt
@@ -102,7 +102,7 @@ tools/
 │   ├── base.py
 │   ├── cache.py
 │   ├── context.py
-│   ├── dispatch.py               #   HAVE_RICH, _get_rendering_ctx, render_event  ← NEW (from cli_render.py)
+│   ├── dispatch.py               #   HAVE_RICH, _get_rendering_ctx, render_event  ← NEW (from console.py)
 │   ├── registry.py
 │   ├── settings.py
 │   ├── sink.py
@@ -164,7 +164,7 @@ events/      → (stdlib only, except sse_client)
 rendering/   → _colors, (no codecome/ dependency)
 ```
 
-Key change: `rendering/dispatch.py` replaces the dependency that `codecome/cli_render.py`
+Key change: `rendering/dispatch.py` replaces the dependency that `codecome/console.py`
 had on `rendering/`. Now `codecome/` imports `rendering.dispatch` instead of the reverse.
 
 ---

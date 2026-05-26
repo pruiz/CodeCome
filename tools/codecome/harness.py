@@ -24,7 +24,7 @@ from typing import Any, Optional
 import _colors as C
 from opencode.serve import ServerRunner, ServerRunnerError
 
-from codecome.cli_render import build_console, _emit_fatal_error
+from codecome.console import build_console, _emit_fatal_error
 from rendering.dispatch import HAVE_RICH, _get_rendering_ctx, render_event
 from rendering.events import _FINISH_TERMINAL_OK, _FINISH_MID_TURN, _FINISH_FAILURE
 from codecome.config import ROOT, resolve_color_mode, load_prompt, resolve_runtime_config
@@ -37,7 +37,7 @@ from phases.completion import (
 def run_phase_mode(args: argparse.Namespace) -> int:
     """Run a single phase with auto-retry/resume.
 
-    This is the phase-mode equivalent of ``chat.harness._run_chat_mode``.
+    This is the phase-mode equivalent of ``chat.harness.run_harness``.
     """
     RUN_START_TIME = time.time()
     iteration_retry_count = 0

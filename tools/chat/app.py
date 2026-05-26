@@ -252,7 +252,7 @@ try:
             run as @work(thread=True) workers — the canonical docs
             pattern (matches the weather-app example).
 
-          * The transcript is opened in _run_chat_mode and the
+          * The transcript is opened in run_harness and the
             Transcript instance is passed in via the `transcript`
             constructor argument; _render_and_log calls
             transcript.write_event() per SSE event (parity with

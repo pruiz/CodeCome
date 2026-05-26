@@ -4,7 +4,7 @@
 """
 Chat mode harness: entry point that wires server, session, and TUI together.
 
-Provides `_run_chat_mode(parser, args) -> int`, the main entry point
+Provides `run_harness(parser, args) -> int`, the main entry point
 for `run-agent.py --chat`.
 """
 
@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import _colors as C  # noqa: E402
 from chat.debug import _setup_chat_debug, _chat_debug, _close_chat_debug  # noqa: E402
 from chat.app import ChatApp, HAVE_RICH  # noqa: E402
-from codecome.cli_render import build_console, _emit_fatal_error  # noqa: E402
+from codecome.console import build_console, _emit_fatal_error  # noqa: E402
 from opencode.serve import ServerRunner, ServerRunnerError  # noqa: E402
 from codecome.config import (  # noqa: E402
     ROOT,
@@ -32,11 +32,11 @@ from codecome.session import create_chat_session  # noqa: E402
 from codecome.transcript import Transcript  # noqa: E402
 
 
-def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
+def run_harness(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
     """Launch the interactive chat harness."""
     if args.debug:
         _setup_chat_debug()
-        _chat_debug("_run_chat_mode: entering (debug enabled)")
+        _chat_debug("run_harness: entering (debug enabled)")
 
     missing = [n for n in ("label", "agent") if getattr(args, n) is None]
     if missing:
@@ -63,7 +63,7 @@ def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
     variant = rc.variant
     thinking_on = rc.thinking_on
 
-    _chat_debug(f"_run_chat_mode: agent={args.agent} model={model} variant={variant} thinking={thinking_on}")
+    _chat_debug(f"run_harness: agent={args.agent} model={model} variant={variant} thinking={thinking_on}")
 
     if ChatApp is None:
         _emit_fatal_error(console, "Missing Dependency",
@@ -71,26 +71,26 @@ def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
         return 1
 
     # Start server
-    _chat_debug("_run_chat_mode: starting opencode serve")
+    _chat_debug("run_harness: starting opencode serve")
     runner = ServerRunner()
     try:
         server_info = runner.start(hostname="127.0.0.1", log_level=getattr(args, "log_level", "WARN"))
-        _chat_debug(f"_run_chat_mode: server started pid={server_info.pid} url={server_info.base_url}")
+        _chat_debug(f"run_harness: server started pid={server_info.pid} url={server_info.base_url}")
     except ServerRunnerError as exc:
-        _chat_debug(f"_run_chat_mode: server start failed: {exc}")
+        _chat_debug(f"run_harness: server start failed: {exc}")
         _emit_fatal_error(console, "Server Error", str(exc))
         _close_chat_debug()
         return 1
 
     # Create session
-    _chat_debug("_run_chat_mode: creating session")
+    _chat_debug("run_harness: creating session")
     try:
         session_id = create_chat_session(
             server_info.base_url, args.agent, model, server_info.password, str(ROOT),
         )
-        _chat_debug(f"_run_chat_mode: session created id={session_id}")
+        _chat_debug(f"run_harness: session created id={session_id}")
     except Exception as exc:
-        _chat_debug(f"_run_chat_mode: session creation failed: {exc}")
+        _chat_debug(f"run_harness: session creation failed: {exc}")
         _emit_fatal_error(console, "Session Error", str(exc))
         runner.stop()
         _close_chat_debug()
@@ -99,13 +99,13 @@ def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
     # Open the chat transcript (parity with phase mode).
     try:
         transcript = Transcript.for_chat()
-        _chat_debug(f"_run_chat_mode: opened transcript {transcript.path}")
+        _chat_debug(f"run_harness: opened transcript {transcript.path}")
     except OSError as exc:
         transcript = Transcript.null()
         transcript.path = ROOT / "tmp" / "last-chat-unknown.jsonl"
-        _chat_debug(f"_run_chat_mode: could not open transcript: {exc}")
+        _chat_debug(f"run_harness: could not open transcript: {exc}")
 
-    _chat_debug("_run_chat_mode: creating ChatApp")
+    _chat_debug("run_harness: creating ChatApp")
     app = None
     try:
         app = ChatApp(
@@ -118,13 +118,13 @@ def _run_chat_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
             thinking_on=thinking_on,
             transcript=transcript,
         )
-        _chat_debug("_run_chat_mode: calling app.run()")
+        _chat_debug("run_harness: calling app.run()")
         app.run()
-        _chat_debug("_run_chat_mode: app.run() returned")
+        _chat_debug("run_harness: app.run() returned")
     finally:
-        _chat_debug("_run_chat_mode: cleaning up")
+        _chat_debug("run_harness: cleaning up")
         if app is not None and getattr(app, "chat_loop", None) is not None:
-            _chat_debug("_run_chat_mode: stopping chat loop")
+            _chat_debug("run_harness: stopping chat loop")
             app.chat_loop.stop()
         runner.stop()
         transcript.close()
