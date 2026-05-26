@@ -675,7 +675,7 @@ Move:
 - quit modal,
 - RichLog proxy,
 - chat debug logging,
-- `_run_chat_mode()`.
+- `run_harness()`.
 
 Chat should use `TextualRichLogSink` or an equivalent proxy-compatible sink.
 

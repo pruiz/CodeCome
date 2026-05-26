@@ -9,7 +9,7 @@ tools/
 │
 ├── codecome/                     # Core runner and configuration
 │   ├── cli.py                    #   main(), build_parser() — parse args + dispatch
-│   ├── cli_render.py             #   build_console, _emit_fatal_error (CLI helpers)
+│   ├── console.py                #   build_console, _emit_fatal_error (CLI helpers)
 │   ├── harness.py                #   run_phase_mode() — retry/resume loop
 │   ├── config.py                 #   ROOT, env, codecome.yml, prompt, model, thinking
 │   ├── session.py                #   OpenCode HTTP: create session, send prompt
@@ -58,7 +58,7 @@ tools/
 │
 ├── chat/                         # Interactive chat TUI (Textual)
 │   ├── app.py                    #   _ChatApp, TextualConsoleProxy, render/log helpers
-│   ├── harness.py                #   _run_chat_mode() entry point
+│   ├── harness.py                #   run_harness() entry point
 │   └── debug.py                  #   Chat-specific debug logging
 │
 ├── opencode/                     # opencode serve lifecycle

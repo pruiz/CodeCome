@@ -52,7 +52,7 @@ def test_cli_tunables_propagate_to_render_settings(monkeypatch):
 
     # build_console uses args.color directly, matching what run_phase_mode
     # passes to the real console builder.
-    from codecome.cli_render import build_console
+    from codecome.console import build_console
     console = build_console(args.color)
     ctx = _get_rendering_ctx(console)
     assert ctx.settings.read_display_lines == 42

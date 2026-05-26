@@ -63,8 +63,8 @@ def main() -> int:
         return show_model_table(agent_name)
 
     if args.chat:
-        from chat.harness import _run_chat_mode
-        return _run_chat_mode(parser, args)
+        from chat.harness import run_harness
+        return run_harness(parser, args)
 
     missing = [n for n in ("phase", "label", "agent", "prompt_file") if getattr(args, n) is None]
     if missing:
