@@ -32,20 +32,13 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
 
-      - name: Install latest opencode
+      - name: Install pinned opencode
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version="$(
-            curl -fsSL \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "Accept: application/vnd.github+json" \
-              https://api.github.com/repos/anomalyco/opencode/releases/latest \
-            | python -c 'import json,sys; print(json.load(sys.stdin)["tag_name"].lstrip("v"))'
-          )"
-      
-          echo "Installing opencode latest: $version"
-          curl -fsSL https://opencode.ai/install | bash -s -- --version "$version"
+          pinned_version="1.15.7"
+          echo "Installing opencode pinned: $pinned_version"
+          curl -fsSL https://opencode.ai/install | bash -s -- --version "$pinned_version"
           "$HOME/.opencode/bin/opencode" --version
           
       - name: Install dependencies
