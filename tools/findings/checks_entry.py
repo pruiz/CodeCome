@@ -8,7 +8,7 @@ from pathlib import Path
 
 import _colors as C
 
-from findings.constants import ROOT
+from findings.constants import FILE_RISK_INDEX_PATH, FILE_RISK_INDEX_REL, ROOT
 from findings.checks import validate_finding, validate_file_risk_index, iter_all_finding_files
 
 
@@ -32,17 +32,15 @@ def main() -> int:
     index_errors = validate_file_risk_index()
     if index_errors:
         total_errors += len(index_errors)
-        print(C.fail("itemdb/notes/file-risk-index.yml"))
+        print(C.fail(str(FILE_RISK_INDEX_REL)))
         for error in index_errors:
             print(f"  {C.SYM_BULLET} {error}")
     else:
-        index_path = ROOT / "itemdb" / "notes" / "file-risk-index.yml"
-        if index_path.exists():
-            print(C.ok("itemdb/notes/file-risk-index.yml"))
+        if FILE_RISK_INDEX_PATH.exists():
+            print(C.ok(str(FILE_RISK_INDEX_REL)))
 
     if not paths:
-        index_path = ROOT / "itemdb" / "notes" / "file-risk-index.yml"
-        if not index_path.exists():
+        if not FILE_RISK_INDEX_PATH.exists():
             print(C.info("No findings or index to validate."))
         return 0 if total_errors == 0 else 1
 
