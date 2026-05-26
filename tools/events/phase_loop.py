@@ -121,7 +121,6 @@ class PhaseEventLoop(BaseEventLoop):
 
                 if self._is_session_idle(event):
                     self._idle_event_to_sync_and_emit = None
-                    self._sync_session_messages()
                     idle_sig = (event.get("type", ""), event.get("properties", {}).get("sessionID", ""))
                     if idle_sig[1] and idle_sig in self._emitted_signatures:
                         pass
