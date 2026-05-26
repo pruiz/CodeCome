@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Iterable, List, Optional
 
-from findings.constants import FINDINGS_ROOT, FINDING_ID_RE, FINDING_ID_STRICT_RE, ROOT
+from findings.constants import FINDINGS_ROOT, FINDING_ID_RE, FINDING_ID_STRICT_RE, ROOT, STATUSES
 
 
 def extract_id_from_path(path: Path) -> str:
@@ -48,7 +48,7 @@ def iter_findings(
 ) -> Iterable[Path]:
     """Iterate by status dir (CC-*.md glob per dir). Used by listing, report, index."""
     findings_root = findings_root if findings_root is not None else FINDINGS_ROOT
-    statuses = statuses if statuses is not None else _C.STATUSES
+    statuses = statuses if statuses is not None else STATUSES
     status_list = [status_filter] if status_filter else statuses
 
     for status in status_list:
