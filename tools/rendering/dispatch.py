@@ -12,6 +12,7 @@ event renderers into a ``RenderContext`` and provides the single
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Any
 
 from codecome.config import ROOT
@@ -85,6 +86,18 @@ def _get_rendering_ctx(console: Any) -> Any:
         "unknown": _evts.UnknownEventRenderer(ctx),
     }
     _RENDERING_CTX_CACHE[mode] = ctx
+    return ctx
+
+
+def configure_rendering(console: Any, **settings_overrides) -> Any:
+    """Apply runtime overrides to the shared rendering context.
+
+    Call this after resolve_runtime_config() has resolved thinking_on,
+    so the decision can flow into RenderSettings before events are rendered.
+    """
+    ctx = _get_rendering_ctx(console)
+    if settings_overrides:
+        ctx.settings = dataclasses.replace(ctx.settings, **settings_overrides)
     return ctx
 
 

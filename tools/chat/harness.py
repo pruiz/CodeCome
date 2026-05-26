@@ -30,6 +30,7 @@ from codecome.config import (  # noqa: E402
 )
 from codecome.session import create_chat_session  # noqa: E402
 from codecome.transcript import Transcript  # noqa: E402
+from rendering import dispatch as rendering_dispatch  # noqa: E402
 
 
 def run_harness(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
@@ -62,6 +63,7 @@ def run_harness(parser: argparse.ArgumentParser, args: argparse.Namespace) -> in
     model = rc.model
     variant = rc.variant
     thinking_on = rc.thinking_on
+    rendering_dispatch.configure_rendering(console, render_reasoning=thinking_on)
 
     _chat_debug(f"run_harness: agent={args.agent} model={model} variant={variant} thinking={thinking_on}")
 
