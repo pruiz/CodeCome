@@ -93,13 +93,15 @@ class SseClient:
         self._last_heartbeat = time.time()
 
         while not self._stopped:
+            notify_reconnect = self._first_connection_done
             try:
                 for event in self._open_stream():
                     if self._stopped:
                         return
                     self._on_event(event)
-                    if self._first_connection_done and self.on_reconnect:
+                    if notify_reconnect and self.on_reconnect:
                         self.on_reconnect()
+                        notify_reconnect = False
                     self._first_connection_done = True
                     yield event
             except SseClientError:
