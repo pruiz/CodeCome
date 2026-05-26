@@ -10,9 +10,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
 from rendering.context import RenderContext
+from rendering.registry import RendererRegistry
 from rendering.sink import PlainSink, RichConsoleSink
 from rendering.settings import RenderSettings
 from rendering.cache import SnapshotCache
+from rendering.tools.base import FallbackToolRenderer
 from rendering.events import (
     StepStartRenderer,
     TextEventRenderer,
@@ -46,19 +48,32 @@ def _ctx(sink_mode="plain", **settings_overrides):
     )
 
 
+def _ctx_with_registry(sink_mode="plain", **settings_overrides):
+    ctx = _ctx(sink_mode, **settings_overrides)
+    ctx.registry = RendererRegistry(ctx)
+    ctx.registry.register_tool(FallbackToolRenderer(ctx))
+    return ctx
+
+
 # ---------------------------------------------------------------------------
 # StepStartRenderer
 # ---------------------------------------------------------------------------
 
 class TestStepStartRenderer:
     def test_renders_step_start_plain(self, capsys):
-        r = StepStartRenderer(_ctx("plain"), phase="1", label="recon")
+        ctx = _ctx("plain")
+        ctx.phase = "1"
+        ctx.label = "recon"
+        r = StepStartRenderer(ctx)
         assert r.render({"part": {"type": "tool_use"}}) is True
         out = capsys.readouterr().out
         assert "[1] recon: tool_use" in out
 
     def test_renders_step_start_rich(self):
-        r = StepStartRenderer(_ctx("rich"), phase="2", label="audit")
+        ctx = _ctx("rich")
+        ctx.phase = "2"
+        ctx.label = "audit"
+        r = StepStartRenderer(ctx)
         assert r.render({"part": {"type": "text"}}) is True
 
     def test_defaults_to_step_start_type(self, capsys):
@@ -132,13 +147,13 @@ class TestReasoningEventRenderer:
 
 class TestToolUseEventRenderer:
     def test_delegates_to_fallback_tool_renderer(self, capsys):
-        r = ToolUseEventRenderer(_ctx("plain"))
+        r = ToolUseEventRenderer(_ctx_with_registry("plain"))
         assert r.render({"part": {"tool": "unknown_tool", "state": {"status": "completed"}}}) is True
         out = capsys.readouterr().out
         assert "unknown_tool" in out
 
     def test_handles_missing_state(self):
-        r = ToolUseEventRenderer(_ctx("plain"))
+        r = ToolUseEventRenderer(_ctx_with_registry("plain"))
         # FallbackToolRenderer should handle empty state
         assert r.render({"part": {"tool": "bash"}}) is True
 

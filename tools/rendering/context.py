@@ -20,11 +20,15 @@ class RenderContext:
     """Shared runtime context for all renderers in a single run.
 
     Created once at startup and passed to every renderer.  Carries the
-    workspace root, the configured sink, display tunables, and the
-    snapshot cache used by write/edit/apply_patch renderers.
+    workspace root, the configured sink, display tunables, the
+    snapshot cache used by write/edit/apply_patch renderers, and the
+    canonical renderer registry.
     """
 
     root: Path
     sink: RenderSink
     settings: RenderSettings
     cache: SnapshotCache
+    phase: str = ""
+    label: str = ""
+    registry: "RendererRegistry | None" = None
