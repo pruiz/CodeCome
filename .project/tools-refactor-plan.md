@@ -2,7 +2,7 @@
 
 **Status:** Implemented — see [tools-refactor-a8-plan.md](tools-refactor-a8-plan.md) for A8 details and [tools/AGENTS.md](../tools/AGENTS.md) for the current architecture rules.
 **Date:** 2026-05-23 (original) / 2026-05-25 (final)
-**Target:** `tools/run-agent.py`, `tools/events/`, rendering/chat support, and later finding/itemdb tooling
+**Target:** `tools/run-agent.py`, `tools/events/`, rendering/chat support, and finding/itemdb tooling
 **Risk Level:** Medium (large structural refactor, all phase targets affected)
 
 ---
@@ -83,7 +83,7 @@ tools/
 | Rendering | all generic event renderers and all tool renderers |
 | Rendering state | global tunables, snapshot cache, path helpers, diff helpers |
 | Command-specific rendering | sandbox-bootstrap JSON rendering, `rtk`/`rg`/`ls`/`find`/`tree` shims |
-| Phase policy | finish reason classification, auto-resume prompts, graceful completion checks |
+| Phase policy | finish reason classification, auto-resume prompts, completion checks |
 | Frontmatter repair | local validation and minimal auto-repair retry loop |
 | Chat TUI | Textual app, RichLog proxy, chat debug logging, modeline |
 
@@ -122,7 +122,7 @@ FINDING_ID_RE = re.compile(r"\bCC-(\d{4,})\b")
 FINDINGS_ROOT = ROOT / "itemdb" / "findings"
 ```
 
-This is real duplication, but it should be addressed as a separate findings/itemdb epic rather than mixed into the runner/rendering refactor.
+This duplication is addressed by Epic B. Finding/itemdb implementation now lives under `tools/findings/`, with historical scripts kept as thin wrappers.
 
 ---
 
@@ -178,7 +178,7 @@ tools/
 │   ├── config.py                       # env, codecome.yml, prompt, model, color/render settings
 │   ├── session.py                      # OpenCode HTTP session/prompt helpers
 │   ├── runner.py                       # phase attempt loop and high-level orchestration
-│   ├── graceful.py                     # phase completion checks and resume prompt builders
+│   ├── harness.py                      # phase retry/resume loop
 │   ├── transcript.py                   # transcript path/open/write helpers
 │   └── version.py                      # OpenCode version checks
 │
@@ -189,7 +189,7 @@ tools/
 │   ├── cache.py                        # SnapshotCache
 │   ├── sink.py                         # PlainSink, RichConsoleSink, TextualRichLogSink
 │   ├── registry.py                     # RendererRegistry
-│   ├── events.py                       # generic event renderer classes
+│   ├── events/                         # generic event renderer classes
 │   ├── tools/
 │   │   ├── __init__.py
 │   │   ├── base.py                     # ToolRenderer base class
@@ -217,10 +217,10 @@ tools/
 │   ├── app.py                          # Textual App and QuitScreen
 │   ├── console_proxy.py                # Textual-safe RichLog proxy/sink support
 │   ├── debug.py                        # chat debug log helpers
-│   └── harness.py                      # run_chat_mode()
+│   └── harness.py                      # run_harness()
 │
 ├── events/                             # Event consumption package
-│   ├── __init__.py                     # compatibility exports
+│   ├── __init__.py                     # public exports
 │   ├── base.py                         # BaseEventLoop shared logic
 │   ├── phase_loop.py                   # PhaseEventLoop
 │   ├── chat_loop.py                    # ChatEventLoop
@@ -232,7 +232,7 @@ tools/
 │   ├── __init__.py
 │   └── serve.py
 │
-├── findings/                           # Later epic: consolidated finding management
+├── findings/                           # Consolidated finding/itemdb management
 │   ├── __init__.py
 │   ├── frontmatter.py
 │   ├── create.py
@@ -257,7 +257,7 @@ tools/
 ├── gate-check.py                       # unchanged initially
 ├── sandbox-bootstrap.py                # unchanged initially
 ├── run-sweep.py                        # unchanged initially, may keep calling wrapper
-├── codecome.py                         # unchanged initially; unification with run-agent.py deferred to Phase 2
+├── codecome.py                         # workspace validation CLI; unification with run-agent.py is future CLI consolidation
 ├── check-frontmatter.py                # unchanged initially
 ├── list-risk-files.py                  # unchanged initially
 ├── script-to-asciinema.py              # unchanged
@@ -508,16 +508,16 @@ events/
 - stop semantics for the TUI,
 - no single-attempt `RunResult` completion contract.
 
-### 6.2 Compatibility alias
+### 6.2 Public exports
 
-Keep import compatibility during migration:
+The event package exports the concrete loop classes directly:
 
 ```python
-# events/__init__.py
-from events.phase_loop import PhaseEventLoop
-
-EventLoop = PhaseEventLoop
+from events.phase_loop import PhaseEventLoop, RunResult
+from events.chat_loop import ChatEventLoop
 ```
+
+No legacy event-loop compatibility alias is kept.
 
 ---
 
@@ -555,7 +555,7 @@ codecome/version.py
 codecome/session.py
   OpenCode HTTP API helpers: headers, create session, create chat session, send prompt.
 
-codecome/graceful.py
+phases/completion.py
   Phase completion checks, required artifact checks, resume prompt builders.
 
 codecome/transcript.py
@@ -588,7 +588,6 @@ tools/codecome/
 ├── config.py
 ├── session.py
 ├── version.py
-├── graceful.py
 └── transcript.py
 ```
 
@@ -600,7 +599,7 @@ Move:
 - model/variant/thinking resolution,
 - color/output mode resolution,
 - OpenCode session and prompt HTTP helpers,
-- graceful phase completion helpers,
+- phase completion helpers,
 - resume prompt builders,
 - transcript path/open/write helpers.
 
@@ -620,11 +619,11 @@ tools/rendering/
 ├── cache.py
 ├── sink.py
 ├── registry.py
-├── events.py
+├── events/
 ├── tools/__init__.py
 ├── tools/base.py
-├── command_interceptors/__init__.py
-└── command_interceptors/base.py
+├── tools/command/interceptors/__init__.py
+└── tools/command/interceptors/base.py
 ```
 
 Add:
@@ -649,7 +648,7 @@ Suggested subphases:
 4. `GlobRenderer` and `GrepRenderer`.
 5. `CommandRenderer` with generic command rendering.
 6. `CommandExecutionInterceptor` implementations for sandbox-bootstrap, `rtk read`, `rtk grep`, and shell listing commands.
-7. Generic event renderers in `rendering/events.py`.
+7. Generic event renderers in `rendering/events/`.
 8. Fallback tool/event renderers.
 
 At each step, `tools/run-agent.py` should still work.
@@ -732,7 +731,7 @@ tools/events/
 ├── __init__.py
 ```
 
-Move shared logic to `BaseEventLoop` and keep compatibility alias `EventLoop = PhaseEventLoop`.
+Move shared logic to `BaseEventLoop` and export `PhaseEventLoop` and `ChatEventLoop` explicitly.
 
 ### Phase A7 — Add tools architecture guide
 
@@ -816,7 +815,7 @@ A6 events base loop
 A7 tools/AGENTS.md
 ```
 
-Epic B is independent and can happen after Epic A or in parallel if done by a separate PR sequence.
+Epic B is part of this PR and is tracked separately from Epic A so the findings/itemdb consolidation remains reviewable.
 
 Why not extract renderers first?
 
@@ -858,7 +857,7 @@ tests/rendering/
 ├── test_apply_patch_renderer.py
 ├── test_grep_renderer.py
 ├── test_command_renderer.py
-└── test_command_interceptors.py
+└── test_command_interceptor_chain.py
 ```
 
 Required coverage:
@@ -927,7 +926,7 @@ Suggested layout:
 tests/codecome/
 ├── test_config.py
 ├── test_session.py
-├── test_graceful.py
+├── test_phases_completion.py
 ├── test_transcript.py
 └── test_cli_smoke.py
 ```
@@ -940,7 +939,7 @@ Required coverage:
 | Prompt loading | finding placeholder replacement, extra prompts from yml/file/env, error when placeholder is required but missing |
 | Thinking decision | Anthropic provider default, non-Anthropic default, env override, `--thinking` override |
 | `session.py` | create-session payloads, prompt payloads, model provider/modelID split, variant handling, auth/workspace headers |
-| `graceful.py` | phase 1 artifacts, phase 2 pending finding, phase 4 evidence, phase 5 exploited/not-feasible paths |
+| `phases/completion.py` | phase 1 artifacts, phase 2 pending finding, phase 4 evidence, phase 5 exploited/not-feasible paths |
 | `transcript.py` | stable naming, attempt counters, JSONL writing, no collision in normal use |
 
 #### Findings
@@ -1034,7 +1033,7 @@ Each phase must define automated checks, smoke/manual checks, and acceptance cri
 
 | Phase | Required automated checks | Smoke/manual checks | Acceptance criteria |
 |---|---|---|---|
-| A1 core helpers | `py_compile`, `make tests`, `test_config.py`, `test_session.py`, `test_graceful.py` | `python tools/run-agent.py --show-model --agent recon` | CLI behavior unchanged; model/prompt/session payload logic covered; no runner logic in `config.py` |
+| A1 core helpers | `py_compile`, `make tests`, `test_config.py`, `test_session.py`, `test_phases_completion.py` | `python tools/run-agent.py --show-model --agent recon` | CLI behavior unchanged; model/prompt/session payload logic covered; no runner logic in `config.py` |
 | A2 rendering foundation | `py_compile`, `make tests`, `test_sinks.py`, `test_registry.py`, `test_snapshot_cache.py` | import `rendering.*` modules | `RenderContext`, sinks, registry, settings, and cache exist and are tested; no renderer migration required yet |
 | A3 renderer migration | renderer unit tests plus fixture/golden tests for each migrated family | `--color never` and `--color always` smoke runs | migrated renderers handle known fixture events; fallback still works; plain/rich/textual destinations remain supported |
 | A4 chat extraction | `py_compile`, `make tests`, sink/proxy tests | manual `make chat` or equivalent Textual smoke test | chat imports cleanly; RichLog output path works; known Textual threading pattern preserved |
@@ -1101,7 +1100,7 @@ Each phase must define automated checks, smoke/manual checks, and acceptance cri
    Recommendation: create it early, ideally with the first implementation PR, so future agents follow the architecture while the migration is underway.
 
 5. **Should findings/itemdb be moved before or after runner/rendering?**
-   Recommendation: treat as independent Epic B. It is useful, but should not block the `run-agent.py` decomposition.
+   Resolution: it is tracked as Epic B in this PR. It is architecturally independent from Epic A, but no longer deferred.
 
 ---
 
