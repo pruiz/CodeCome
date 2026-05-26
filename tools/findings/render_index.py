@@ -31,6 +31,20 @@ def load_findings(
         if isinstance(validation, dict):
             validation_status = str(validation.get("status", ""))
 
+        target_area = ""
+        ta = frontmatter.get("target_area")
+        if isinstance(ta, str):
+            target_area = ta
+
+        evidence_dir = ""
+        if isinstance(validation, dict):
+            ed = validation.get("evidence_dir", "")
+            if isinstance(ed, str) and ed:
+                if ed.startswith("itemdb/"):
+                    evidence_dir = ed[len("itemdb/"):]
+                else:
+                    evidence_dir = ed
+
         rows.append(
             {
                 "id": str(frontmatter.get("id", extract_id_from_path(path))),
@@ -40,7 +54,9 @@ def load_findings(
                 "exploitation_status": exploitation_status,
                 "validation_status": validation_status,
                 "title": str(frontmatter.get("title", path.stem)),
+                "target_area": target_area,
                 "finding_path": str(path.relative_to(ctx.root)),
+                "evidence": evidence_dir,
             }
         )
 
@@ -55,6 +71,12 @@ def count_by_status(rows: list[dict[str, str]], *, ctx: FindingsContext) -> dict
         if s in counts:
             counts[s] += 1
     return counts
+
+
+def _strip_itemdb_prefix(path: str) -> str:
+    if path.startswith("itemdb/"):
+        return path[len("itemdb/"):]
+    return path
 
 
 def render_index(rows: list[dict[str, str]], *, ctx: FindingsContext) -> str:
@@ -97,11 +119,39 @@ def render_index(rows: list[dict[str, str]], *, ctx: FindingsContext) -> str:
             if example:
                 evidence = example.get("evidence", "")
                 evidence_link = f"[evidence]({evidence})" if evidence else "-"
+                finding_link = _strip_itemdb_prefix(example["finding_path"])
                 lines.append(
-                    f"| {status} | {n} | [finding]({example['finding_path']}) | {evidence_link} |"
+                    f"| {status} | {n} | [finding]({finding_link}) | {evidence_link} |"
                 )
             else:
                 lines.append(f"| {status} | 0 | - | - |")
+
+    lines.append("")
+    lines.append("## Findings")
+    lines.append("")
+    lines.append(
+        "| ID | Status | Severity | Confidence | Target area | Title | Finding | Evidence |"
+    )
+    lines.append("|---|---|---|---|---|---|---|---|")
+
+    if not rows:
+        lines.append("| - | - | - | - | - | - | - | - |")
+    else:
+        for row in rows:
+            fid = row["id"]
+            status = row["status"]
+            severity = row["severity"]
+            confidence = row["confidence"]
+            target_area = row.get("target_area", "")
+            title = row["title"]
+            finding_link = _strip_itemdb_prefix(row["finding_path"])
+            evidence = row.get("evidence", "")
+            evidence_link = f"[evidence]({evidence})" if evidence else "-"
+
+            lines.append(
+                f"| {fid} | {status} | {severity} | {confidence} | "
+                f"{target_area} | {title} | [finding]({finding_link}) | {evidence_link} |"
+            )
 
     lines.append("")
     return "\n".join(lines)
