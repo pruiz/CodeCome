@@ -4,19 +4,25 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import FrozenSet, List
 
 ROOT = Path(__file__).resolve().parents[2]
+ITEMDB_ROOT = ROOT / "itemdb"
 
-FINDINGS_ROOT = ROOT / "itemdb" / "findings"
-EVIDENCE_ROOT = ROOT / "itemdb" / "evidence"
-NOTES_ROOT = ROOT / "itemdb" / "notes"
+FINDINGS_ROOT = ITEMDB_ROOT / "findings"
+EVIDENCE_ROOT = ITEMDB_ROOT / "evidence"
+NOTES_ROOT = ITEMDB_ROOT / "notes"
+REPORTS_ROOT = ITEMDB_ROOT / "reports"
+INDEX_PATH = ITEMDB_ROOT / "index.md"
 TEMPLATE_PATH = ROOT / "templates" / "finding.md"
 EVIDENCE_TEMPLATE_PATH = ROOT / "templates" / "evidence-readme.md"
+FILE_RISK_INDEX_REL = Path("itemdb/notes/file-risk-index.yml")
+FILE_RISK_INDEX_PATH = NOTES_ROOT / "file-risk-index.yml"
+SANDBOX_PLAN_PATH = NOTES_ROOT / "sandbox-plan.md"
 DEFAULT_STATUS = "PENDING"
-DEFAULT_OUTPUT = ROOT / "itemdb" / "reports" / "report.md"
+DEFAULT_OUTPUT = REPORTS_ROOT / "report.md"
 
 STATUSES = [
     "PENDING",
@@ -27,9 +33,6 @@ STATUSES = [
 ]
 
 STATUSES_SET = frozenset(STATUSES)
-
-VALID_SEVERITIES = frozenset({"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"})
-VALID_CONFIDENCES = frozenset({"LOW", "MEDIUM", "HIGH", "CONFIRMED"})
 
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
@@ -43,6 +46,9 @@ CVSS_V4_VECTOR_RE = re.compile(r"^CVSS:4\.0/")
 
 SEVERITIES = frozenset({"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"})
 CONFIDENCES = frozenset({"LOW", "MEDIUM", "HIGH", "CONFIRMED"})
+
+VALID_SEVERITIES = SEVERITIES
+VALID_CONFIDENCES = CONFIDENCES
 
 REQUIRED_FIELDS = [
     "id",
@@ -90,51 +96,31 @@ REQUIRED_EXPLOITED_SECTIONS = [
 ]
 
 
-@dataclass(frozen=True)
-class FindingsContext:
-    root: Path
-    findings_root: Path
-    evidence_root: Path
-    notes_root: Path
-    template_path: Path
-    evidence_template_path: Path
-    statuses: List[str]
-    statuses_set: FrozenSet[str]
+def evidence_dir_for(finding_id: str) -> Path:
+    return EVIDENCE_ROOT / finding_id
 
-    @classmethod
-    def default(cls) -> FindingsContext:
-        return cls(
-            root=ROOT,
-            findings_root=FINDINGS_ROOT,
-            evidence_root=EVIDENCE_ROOT,
-            notes_root=NOTES_ROOT,
-            template_path=TEMPLATE_PATH,
-            evidence_template_path=EVIDENCE_TEMPLATE_PATH,
-            statuses=STATUSES,
-            statuses_set=STATUSES_SET,
-        )
+
+def exploits_dir_for(finding_id: str) -> Path:
+    return EVIDENCE_ROOT / finding_id / "exploits"
+
+
+def finding_status_dir(status: str) -> Path:
+    return FINDINGS_ROOT / status
 
 
 @dataclass(frozen=True)
 class FindingsContext:
-    root: Path
-    findings_root: Path
-    evidence_root: Path
-    notes_root: Path
-    template_path: Path
-    evidence_template_path: Path
-    statuses: List[str]
-    statuses_set: FrozenSet[str]
+    root: Path = ROOT
+    itemdb_root: Path = ITEMDB_ROOT
+    findings_root: Path = FINDINGS_ROOT
+    evidence_root: Path = EVIDENCE_ROOT
+    notes_root: Path = NOTES_ROOT
+    reports_root: Path = REPORTS_ROOT
+    template_path: Path = TEMPLATE_PATH
+    evidence_template_path: Path = EVIDENCE_TEMPLATE_PATH
+    statuses: List[str] = field(default_factory=lambda: list(STATUSES))
+    statuses_set: FrozenSet[str] = field(default_factory=lambda: frozenset(STATUSES))
 
     @classmethod
-    def default(cls) -> FindingsContext:
-        return cls(
-            root=ROOT,
-            findings_root=FINDINGS_ROOT,
-            evidence_root=EVIDENCE_ROOT,
-            notes_root=NOTES_ROOT,
-            template_path=TEMPLATE_PATH,
-            evidence_template_path=EVIDENCE_TEMPLATE_PATH,
-            statuses=STATUSES,
-            statuses_set=STATUSES_SET,
-        )
+    def default(cls) -> "FindingsContext":
+        return cls()
