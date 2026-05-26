@@ -79,26 +79,24 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
     def test_phase1_check_patches_notes_root_and_sandbox_plan(self, tmp_path):
         import phases.completion as completion_mod
 
-        for name in completion_mod._PHASE1_REQUIRED_ARTIFACT_NAMES:
-            artifact = tmp_path / name
-            artifact.parent.mkdir(parents=True, exist_ok=True)
-            artifact.write_text("")
-
-        fake_time = time.time()
-        fake_root = tmp_path / "codecome_workspace"
-        fake_root.mkdir()
-        sandbox_dir = fake_root / "sandbox"
-        sandbox_dir.mkdir()
-        (sandbox_dir / "CODECOME-GENERATED.md").write_text("")
-
         orig_notes_root = completion_mod.NOTES_ROOT
         orig_sandbox_plan = completion_mod.SANDBOX_PLAN_PATH
         orig_root = completion_mod.ROOT
 
         completion_mod.NOTES_ROOT = tmp_path
         completion_mod.SANDBOX_PLAN_PATH = tmp_path / "sandbox-plan.md"
+        completion_mod.ROOT = tmp_path / "codecome_workspace"
+
+        fake_time = time.time()
+
+        (completion_mod.ROOT / "sandbox").mkdir(parents=True)
+        (completion_mod.ROOT / "sandbox" / "CODECOME-GENERATED.md").write_text("")
         completion_mod.SANDBOX_PLAN_PATH.write_text("")
-        completion_mod.ROOT = fake_root
+
+        for name in completion_mod._PHASE1_REQUIRED_ARTIFACT_NAMES:
+            artifact = tmp_path / name
+            artifact.parent.mkdir(parents=True, exist_ok=True)
+            artifact.write_text("")
 
         try:
             result = completion_mod.check_phase_graceful_completion("1", None, fake_time)
