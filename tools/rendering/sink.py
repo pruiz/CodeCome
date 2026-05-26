@@ -100,8 +100,8 @@ class TextualRichLogSink:
 
     def write(self, renderable: Any, *, expand: bool = True) -> None:
         # The proxy's .write() is thread-safe (post_message in Textual).
-        # Some targets (e.g. the legacy TextualConsoleProxy) do not accept
-        # an expand keyword; fall back gracefully.
+        # Some targets, including TextualConsoleProxy, expose write(renderable)
+        # without RichLog's expand= parameter.
         try:
             self._target.write(renderable, expand=expand)  # type: ignore[call-arg]
         except TypeError:
