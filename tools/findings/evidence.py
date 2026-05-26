@@ -39,7 +39,7 @@ def create_evidence(
 ) -> Path:
     findings_root = findings_root if findings_root is not None else FINDINGS_ROOT
     evidence_root = evidence_root if evidence_root is not None else EVIDENCE_ROOT
-    template_path = template_path if template_path is not None else _C.EVIDENCE_TEMPLATE_PATH
+    template_path = template_path if template_path is not None else EVIDENCE_TEMPLATE_PATH
 
     if not FINDING_ID_STRICT_RE.fullmatch(finding_id):
         raise ValueError(f"Invalid finding id: {finding_id}")

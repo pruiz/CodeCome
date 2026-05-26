@@ -2,48 +2,36 @@
 # Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later OR AGPL-3.0-or-later
 
-"""Tests for tools/package-finding.py"""
+"""Tests for tools/findings/package.py"""
 
 from __future__ import annotations
 
-import sys
 import zipfile
 from pathlib import Path
 
 import pytest
 
-from conftest import ROOT, load_tool_module
-
-MODULE = load_tool_module("package_finding", "tools/package-finding.py")
-
-
-@pytest.fixture(autouse=True)
-def _chdir_to_repo(tmp_path, monkeypatch):
-    """Ensure MODULE.ITEMDB resolves inside a temp tree so we never touch the real itemdb."""
-    fake_itemdb = tmp_path / "itemdb"
-    fake_itemdb.mkdir(parents=True)
-    monkeypatch.setattr(MODULE, "ITEMDB", fake_itemdb)
-    monkeypatch.setattr(MODULE, "EVIDENCE_DIR", fake_itemdb / "evidence")
+import findings.package as pkg_module
 
 
 @pytest.mark.unit
 def test_validate_finding_id_accepts_valid_ids():
-    assert MODULE.validate_finding_id("CC-0001") == "CC-0001"
-    assert MODULE.validate_finding_id("  CC-1234  ") == "CC-1234"
+    assert pkg_module.validate_finding_id("CC-0001") == "CC-0001"
+    assert pkg_module.validate_finding_id("  CC-1234  ") == "CC-1234"
 
 
 @pytest.mark.unit
 def test_validate_finding_id_rejects_invalid_ids():
     for invalid in ("abc", "cc-0001", "CC-001", "CC-00001", "C-0001", "CC-0001-extra"):
         try:
-            MODULE.validate_finding_id(invalid)
+            pkg_module.validate_finding_id(invalid)
             pytest.fail(f"Expected SystemExit for {invalid!r}")
         except SystemExit as e:
             assert e.code == 2
 
 
 @pytest.mark.unit
-def test_discover_files_includes_matching_and_excludes_zip(monkeypatch, tmp_path):
+def test_discover_files_includes_matching_and_excludes_zip(tmp_path):
     itemdb = tmp_path / "itemdb"
     (itemdb / "findings" / "PENDING").mkdir(parents=True)
     (itemdb / "evidence" / "CC-0001").mkdir(parents=True)
@@ -58,10 +46,7 @@ def test_discover_files_includes_matching_and_excludes_zip(monkeypatch, tmp_path
     f4.parent.mkdir(parents=True)
     f4.write_text("other finding")
 
-    monkeypatch.setattr(MODULE, "ITEMDB", itemdb)
-    monkeypatch.setattr(MODULE, "EVIDENCE_DIR", itemdb / "evidence")
-
-    files = MODULE.discover_files("CC-0001")
+    files = pkg_module.discover_files("CC-0001", itemdb=itemdb, evidence_root=itemdb / "evidence")
     names = [f.name for f in files]
 
     assert "CC-0001-off-by-one.md" in names
@@ -71,14 +56,13 @@ def test_discover_files_includes_matching_and_excludes_zip(monkeypatch, tmp_path
 
 
 @pytest.mark.unit
-def test_discover_files_returns_empty_when_no_itemdb(monkeypatch, tmp_path):
+def test_discover_files_returns_empty_when_no_itemdb(tmp_path):
     nonexistent = tmp_path / "no_itemdb"
-    monkeypatch.setattr(MODULE, "ITEMDB", nonexistent)
-    assert MODULE.discover_files("CC-0001") == []
+    assert pkg_module.discover_files("CC-0001", itemdb=nonexistent) == []
 
 
 @pytest.mark.unit
-def test_create_bundle_makes_zip_with_relative_paths(monkeypatch, tmp_path):
+def test_create_bundle_makes_zip_with_relative_paths(tmp_path):
     itemdb = tmp_path / "itemdb"
     evidence = itemdb / "evidence"
     evidence.mkdir(parents=True)
@@ -91,11 +75,11 @@ def test_create_bundle_makes_zip_with_relative_paths(monkeypatch, tmp_path):
     f2.parent.mkdir(parents=True)
     f2.write_text("log")
 
-    monkeypatch.setattr(MODULE, "ITEMDB", itemdb)
-    monkeypatch.setattr(MODULE, "EVIDENCE_DIR", evidence)
-    monkeypatch.setattr(MODULE, "ROOT", tmp_path)
-
-    zip_path = MODULE.create_bundle("CC-0001", [f1, f2])
+    zip_path = pkg_module.create_bundle(
+        "CC-0001", [f1, f2],
+        evidence_root=evidence,
+        root=tmp_path,
+    )
 
     assert zip_path.exists()
     with zipfile.ZipFile(zip_path, "r") as zf:
@@ -107,7 +91,7 @@ def test_create_bundle_makes_zip_with_relative_paths(monkeypatch, tmp_path):
 
 
 @pytest.mark.unit
-def test_create_bundle_overwrites_existing_zip(monkeypatch, tmp_path):
+def test_create_bundle_overwrites_existing_zip(tmp_path):
     itemdb = tmp_path / "itemdb"
     evidence = itemdb / "evidence"
     evidence.mkdir(parents=True)
@@ -119,11 +103,11 @@ def test_create_bundle_overwrites_existing_zip(monkeypatch, tmp_path):
     f1.parent.mkdir(parents=True)
     f1.write_text("note")
 
-    monkeypatch.setattr(MODULE, "ITEMDB", itemdb)
-    monkeypatch.setattr(MODULE, "EVIDENCE_DIR", evidence)
-    monkeypatch.setattr(MODULE, "ROOT", tmp_path)
-
-    zip_path = MODULE.create_bundle("CC-0001", [f1])
+    zip_path = pkg_module.create_bundle(
+        "CC-0001", [f1],
+        evidence_root=evidence,
+        root=tmp_path,
+    )
 
     assert zip_path.exists()
     with zipfile.ZipFile(zip_path, "r") as zf:
@@ -132,7 +116,7 @@ def test_create_bundle_overwrites_existing_zip(monkeypatch, tmp_path):
 
 
 @pytest.mark.unit
-def test_main_exits_zero_on_success(capsys, monkeypatch, tmp_path):
+def test_main_exits_zero_on_success(capsys, tmp_path, monkeypatch):
     itemdb = tmp_path / "itemdb"
     evidence = itemdb / "evidence"
     evidence.mkdir(parents=True)
@@ -141,11 +125,10 @@ def test_main_exits_zero_on_success(capsys, monkeypatch, tmp_path):
     f1.parent.mkdir(parents=True)
     f1.write_text("confirmed finding")
 
-    monkeypatch.setattr(MODULE, "ITEMDB", itemdb)
-    monkeypatch.setattr(MODULE, "EVIDENCE_DIR", evidence)
-    monkeypatch.setattr(MODULE, "ROOT", tmp_path)
+    monkeypatch.setattr(pkg_module, "ROOT", tmp_path)
+    monkeypatch.setattr(pkg_module, "EVIDENCE_ROOT", evidence)
 
-    code = MODULE.main(["CC-0001"])
+    code = pkg_module.main(["CC-0001"])
     assert code == 0
 
     out = capsys.readouterr().out
@@ -157,16 +140,15 @@ def test_main_exits_zero_on_success(capsys, monkeypatch, tmp_path):
 
 
 @pytest.mark.unit
-def test_main_exits_one_when_no_files(capsys, monkeypatch, tmp_path):
+def test_main_exits_one_when_no_files(capsys, tmp_path, monkeypatch):
     itemdb = tmp_path / "itemdb"
     evidence = itemdb / "evidence"
     evidence.mkdir(parents=True)
 
-    monkeypatch.setattr(MODULE, "ITEMDB", itemdb)
-    monkeypatch.setattr(MODULE, "EVIDENCE_DIR", evidence)
-    monkeypatch.setattr(MODULE, "ROOT", tmp_path)
+    monkeypatch.setattr(pkg_module, "ROOT", tmp_path)
+    monkeypatch.setattr(pkg_module, "EVIDENCE_ROOT", evidence)
 
-    code = MODULE.main(["CC-0001"])
+    code = pkg_module.main(["CC-0001"])
     assert code == 1
 
     err = capsys.readouterr().err
@@ -174,7 +156,7 @@ def test_main_exits_one_when_no_files(capsys, monkeypatch, tmp_path):
 
 
 @pytest.mark.unit
-def test_main_dry_run_prints_without_creating_zip(capsys, monkeypatch, tmp_path):
+def test_main_dry_run_prints_without_creating_zip(capsys, tmp_path, monkeypatch):
     itemdb = tmp_path / "itemdb"
     evidence = itemdb / "evidence"
     evidence.mkdir(parents=True)
@@ -183,11 +165,10 @@ def test_main_dry_run_prints_without_creating_zip(capsys, monkeypatch, tmp_path)
     f1.parent.mkdir(parents=True)
     f1.write_text("finding")
 
-    monkeypatch.setattr(MODULE, "ITEMDB", itemdb)
-    monkeypatch.setattr(MODULE, "EVIDENCE_DIR", evidence)
-    monkeypatch.setattr(MODULE, "ROOT", tmp_path)
+    monkeypatch.setattr(pkg_module, "ROOT", tmp_path)
+    monkeypatch.setattr(pkg_module, "EVIDENCE_ROOT", evidence)
 
-    code = MODULE.main(["--dry-run", "CC-0001"])
+    code = pkg_module.main(["--dry-run", "CC-0001"])
     assert code == 0
 
     out = capsys.readouterr().out

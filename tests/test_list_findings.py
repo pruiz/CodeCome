@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from conftest import load_tool_module
+from findings import listing as listing_module
 
 
 def test_filter_eligible_for_exploit_only_returns_supported_statuses():
-    module = load_tool_module("list_findings", "tools/list-findings.py")
     rows = [
         {"id": "CC-0001", "status": "CONFIRMED", "exploitation_status": ""},
         {"id": "CC-0002", "status": "CONFIRMED", "exploitation_status": "IN_PROGRESS"},
@@ -14,14 +13,12 @@ def test_filter_eligible_for_exploit_only_returns_supported_statuses():
         {"id": "CC-0004", "status": "PENDING", "exploitation_status": ""},
     ]
 
-    out = module.filter_eligible_for_exploit(rows)
+    out = listing_module.filter_eligible_for_exploit(rows)
     ids = [row["id"] for row in out]
     assert ids == ["CC-0001", "CC-0002"]
 
 
 def test_load_findings_skips_invalid_yaml_frontmatter(tmp_path, monkeypatch):
-    module = load_tool_module("list_findings_invalid_yaml", "tools/list-findings.py")
-
     findings_root = tmp_path / "itemdb" / "findings"
     pending_dir = findings_root / "PENDING"
     confirmed_dir = findings_root / "CONFIRMED"
@@ -61,10 +58,12 @@ Valid.
         encoding="utf-8",
     )
 
-    monkeypatch.setattr(module, "ROOT", tmp_path)
-    monkeypatch.setattr(module, "FINDINGS_ROOT", Path(findings_root))
-
-    rows = module.load_findings(None)
+    rows = listing_module.load_findings(
+        None,
+        root=tmp_path,
+        findings_root=findings_root,
+        statuses=listing_module.STATUSES,
+    )
 
     assert [row["id"] for row in rows] == ["CC-9998", "CC-9999"]
     broken_row = next(row for row in rows if row["id"] == "CC-9998")
