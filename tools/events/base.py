@@ -114,20 +114,11 @@ class BaseEventLoop:
     # Session message sync (catch-up after reconnect / before idle)
     # ------------------------------------------------------------------
 
-    _SYNC_DELAY_S = 0.05
-    _SYNC_RETRIES = 5
-
     def _sync_session_messages(self) -> list[dict[str, Any]]:
         self._last_message_sync_at = time.time()
-        messages: list[Any] = []
-        for attempt in range(self._SYNC_RETRIES):
-            messages = self._fetch_session_messages()
-            if not messages:
-                return []
-            if not self._has_unresolved_tool_output(messages):
-                break
-            if attempt < self._SYNC_RETRIES - 1:
-                time.sleep(self._SYNC_DELAY_S)
+        messages = self._fetch_session_messages()
+        if not messages:
+            return []
         return self._messages_to_events(messages)
 
     def _fetch_session_messages(self) -> list[Any]:
@@ -189,28 +180,6 @@ class BaseEventLoop:
                 events.extend(self._tracker.ingest(synthesized))
 
         return events
-
-    def _has_unresolved_tool_output(self, messages: list[Any]) -> bool:
-        for item in messages:
-            if not isinstance(item, dict):
-                continue
-            info = item.get("info")
-            parts = item.get("parts")
-            if not isinstance(info, dict) or not isinstance(parts, list):
-                continue
-            if info.get("role") != "assistant" or info.get("sessionID") != self.session_id:
-                continue
-            for part in parts:
-                if not isinstance(part, dict) or part.get("type") != "tool":
-                    continue
-                state = part.get("state")
-                if not isinstance(state, dict):
-                    continue
-                metadata = state.get("metadata")
-                metadata = metadata if isinstance(metadata, dict) else {}
-                if state.get("output") == "(no output)" and metadata.get("exit", 0) == 0:
-                    return True
-        return False
 
     # ------------------------------------------------------------------
     # Stop
