@@ -1,6 +1,6 @@
 # Plan: Phase A8 — PR Review Fixes and Architectural Cleanup
 
-**Status:** Implemented (A8 + A8.1 cleanup complete)
+**Status:** Implemented; final documentation and PR cleanup pending
 **Date:** 2026-05-25
 **Parent:** [tools-refactor-plan.md](tools-refactor-plan.md)
 **PR:** #21 (`wip/tools-refactor`)
@@ -10,13 +10,13 @@
 
 ## 1. Summary
 
-PR #21 accumulated 20 unresolved review threads during the A1–A5 implementation.
-This plan addresses all of them in a single phase (A8), grouped into an ordered
-execution sequence that respects dependency chains.
+PR #21 accumulated 20 review threads during the A1–A5 implementation. This
+plan tracks the A8 fixes in an ordered execution sequence that respects
+dependency chains.
 
-Two items are deferred:
-- **Unify run-agent.py + codecome.py** → deferred to Phase 2 (Epic B).
-- **Legacy globals in cli.py** → already resolved in the last commit.
+Two items are tracked outside A8:
+- **Future CLI consolidation**: unify `run-agent.py` + `codecome.py` after this PR if still desired.
+- **Epic B findings/itemdb consolidation**: documented separately in [tools-refactor-epic-b-plan.md](tools-refactor-epic-b-plan.md).
 
 ---
 
@@ -31,10 +31,10 @@ come first, then structural moves, then the larger splits/extractions.
 |----|--------|------|--------|
 | T3 | plan:266 | `tools/mock_llm_scripts/` | `git mv` to `mock-llm-scripts`, update all 16 path-based references across 6 files. |
 | T4 | harness:50 | `chat/harness.py` | Remove redundant `check_opencode_version()` call and its import; `cli.py:76` already covers both modes. |
-| T5 | harness:56 | multiple | Define `ROOT` once in `codecome/config.py` (already has it at line 24). Remove duplicate `ROOT =` definitions from `cli_render.py`, `transcript.py`, `graceful.py`, and `chat/harness.py`; import from `codecome.config` instead. |
+| T5 | harness:56 | multiple | Define `ROOT` once in `codecome/config.py`. Remove duplicate `ROOT =` definitions from `codecome/console.py`, `transcript.py`, `phases/completion.py`, and `chat/harness.py`; import from `codecome.config` instead. |
 | T12 | config:36 | `codecome/config.py` | Replace inline `_COLOR_ENABLED`/`_RESET`/`_BOLD`/`_DIM` with `import _colors as C` and use `C.RESET`, `C.BOLD`, `C.DIM`. |
 | T15 | events/__init__:10 | `events/__init__.py` | Add `ChatEventLoop` to exports. |
-| T2 | plan:260 | `.project/tools-refactor-plan.md` | Add note that run-agent.py + codecome.py unification is deferred to Phase 2. |
+| T2 | plan:260 | `.project/tools-refactor-plan.md` | Add note that `run-agent.py` + `codecome.py` unification is deferred to future CLI consolidation, not Epic B. |
 
 ### Batch 2 — Naming and small structural changes
 
@@ -42,7 +42,7 @@ come first, then structural moves, then the larger splits/extractions.
 |----|--------|------|--------|
 | T7 | harness:83 | multiple | Make `log_level` configurable: read from `--log-level` CLI arg or `OPENCODE_LOG_LEVEL` env var (default `"WARN"`). Both phase and chat paths use the same source. |
 | T6 | harness:66 | `codecome/config.py` | Extract `resolve_runtime_config(agent, extra_args) -> RuntimeConfig` that bundles model, variant, thinking resolution into a single call. Both `cli.py` and `chat/harness.py` call this instead of duplicating three separate calls. |
-| T13 | graceful:1 | `codecome/graceful.py` | Create `tools/phases/` package. Move `graceful.py` to `phases/completion.py`. Update all imports (`codecome.graceful` → `phases.completion`). |
+| T13 | completion:1 | `phases/completion.py` | Create `tools/phases/` package. Move phase completion checks and resume prompt builders to `phases/completion.py`. Update all imports to `phases.completion`. |
 
 ### Batch 3 — Transcript class
 
@@ -54,8 +54,8 @@ come first, then structural moves, then the larger splits/extractions.
 
 | ID | Thread | File | Action |
 |----|--------|------|--------|
-| T16 | events.py:42 | `rendering/events.py` | Split into `rendering/events/` package: `base.py` (EventRenderer + constants + subagent state), then one file per renderer class. `rendering/events/__init__.py` re-exports everything so existing imports continue to work. |
-| T11 | cli_render:1 | `codecome/console.py` | Move rendering-related parts (`HAVE_RICH`, Rich stubs, `_get_rendering_ctx`, `render_event`) into `rendering/dispatch.py`. Keep CLI-only parts (`build_console`, `_emit_fatal_error`) in `codecome/console.py`. Update imports. |
+| T16 | events package | `rendering/events/` | Split event rendering into `rendering/events/`: `base.py` (EventRenderer + constants + subagent state), then one file per renderer class. `rendering/events/__init__.py` re-exports renderer symbols. |
+| T11 | console split | `codecome/console.py` | Move rendering-related parts (`HAVE_RICH`, Rich stubs, `_get_rendering_ctx`, `render_event`) into `rendering/dispatch.py`. Keep CLI-only parts (`build_console`, `_emit_fatal_error`) in `codecome/console.py`. Update imports. |
 | T1 | plan:207 | `rendering/tools/` | Restructure: move `command.py` → `command/__init__.py`, move `interceptors/` → `command/interceptors/`. Update all import paths from `rendering.tools.interceptors.*` to `rendering.tools.command.interceptors.*`. Update plan document. |
 
 ### Batch 5 — Phase harness extraction
@@ -95,7 +95,7 @@ tools/
 │
 ├── phases/                       # Phase-specific logic  ← NEW PACKAGE
 │   ├── __init__.py
-│   └── completion.py             #   ← MOVED from codecome/graceful.py
+│   └── completion.py             #   Phase completion checks and resume prompt builders
 │
 ├── rendering/                    # Rendering infrastructure
 │   ├── __init__.py
@@ -107,7 +107,7 @@ tools/
 │   ├── settings.py
 │   ├── sink.py
 │   ├── utils.py
-│   ├── events/                   #   ← NEW PACKAGE (split from events.py)
+│   ├── events/                   #   Event renderer package
 │   │   ├── __init__.py           #     Re-exports all renderer classes + constants
 │   │   ├── base.py               #     EventRenderer, finish constants, subagent state
 │   │   ├── step_start.py
@@ -172,7 +172,7 @@ had on `rendering/`. Now `codecome/` imports `rendering.dispatch` instead of the
 ## 5. Acceptance Criteria
 
 ```
-- All 20 unresolved PR threads addressed (18 fixed, 2 deferred with notes).
+- A8-scoped PR threads are fixed, with non-A8 items explicitly tracked elsewhere.
 - `make tests` passes.
 - `py_compile` passes for all moved/new files.
 - No duplicate ROOT definitions across modules.
