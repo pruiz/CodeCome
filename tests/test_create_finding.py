@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from argparse import Namespace
 
-from conftest import load_tool_module
+from findings.constants import FindingsContext
+from findings import create as create_module
 
 
 def _mk_workspace(tmp_path):
@@ -12,7 +13,6 @@ def _mk_workspace(tmp_path):
 
 
 def test_create_finding_writes_expected_file(tmp_path):
-    module = load_tool_module("create_finding", "tools/create-finding.py")
     _mk_workspace(tmp_path)
 
     template = (
@@ -36,9 +36,14 @@ def test_create_finding_writes_expected_file(tmp_path):
     )
     (tmp_path / "templates" / "finding.md").write_text(template, encoding="utf-8")
 
-    module.ROOT = tmp_path
-    module.TEMPLATE_PATH = tmp_path / "templates" / "finding.md"
-    module.FINDINGS_ROOT = tmp_path / "itemdb" / "findings"
+    ctx = FindingsContext(
+        root=tmp_path,
+        findings_root=tmp_path / "itemdb" / "findings",
+        evidence_root=tmp_path / "itemdb" / "evidence",
+        notes_root=tmp_path / "itemdb" / "notes",
+        template_path=tmp_path / "templates" / "finding.md",
+        evidence_template_path=tmp_path / "templates" / "evidence-readme.md",
+    )
 
     args = Namespace(
         title="Missing auth check",
@@ -52,7 +57,7 @@ def test_create_finding_writes_expected_file(tmp_path):
         force=False,
     )
 
-    out = module.create_finding(args)
+    out = create_module.create_finding(args, ctx=ctx)
     assert out.exists()
     content = out.read_text(encoding="utf-8")
     assert 'id: "CC-0001"' in content
@@ -64,13 +69,17 @@ def test_create_finding_writes_expected_file(tmp_path):
 
 
 def test_create_finding_rejects_invalid_explicit_id(tmp_path):
-    module = load_tool_module("create_finding_invalid", "tools/create-finding.py")
     _mk_workspace(tmp_path)
     (tmp_path / "templates" / "finding.md").write_text('---\nid: "CC-0000"\n---\n', encoding="utf-8")
 
-    module.ROOT = tmp_path
-    module.TEMPLATE_PATH = tmp_path / "templates" / "finding.md"
-    module.FINDINGS_ROOT = tmp_path / "itemdb" / "findings"
+    ctx = FindingsContext(
+        root=tmp_path,
+        findings_root=tmp_path / "itemdb" / "findings",
+        evidence_root=tmp_path / "itemdb" / "evidence",
+        notes_root=tmp_path / "itemdb" / "notes",
+        template_path=tmp_path / "templates" / "finding.md",
+        evidence_template_path=tmp_path / "templates" / "evidence-readme.md",
+    )
 
     args = Namespace(
         title="x",
@@ -85,7 +94,7 @@ def test_create_finding_rejects_invalid_explicit_id(tmp_path):
     )
 
     try:
-        module.create_finding(args)
+        create_module.create_finding(args, ctx=ctx)
         raise AssertionError("Expected ValueError")
     except ValueError as exc:
         assert "Invalid finding id format" in str(exc)
