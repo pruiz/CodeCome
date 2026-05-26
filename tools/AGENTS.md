@@ -65,8 +65,8 @@ tools/
 │   └── serve.py                  #   ServerRunner (start, stop, health check)
 │
 ├── findings/                     # Finding / itemdb tooling
-│   ├── __init__.py               #   Package re-exports, _colors exposure
-│   ├── constants.py              #   ROOT, FINDINGS_ROOT, FindingsContext, regexes
+│   ├── __init__.py               #   Lightweight package marker; no broad re-exports
+│   ├── constants.py              #   Itemdb paths/constants, FindingsContext, regexes
 │   ├── frontmatter.py            #   YAML frontmatter parsing and replacement
 │   ├── ids.py                    #   Finding ID generation, lookup, iteration
 │   ├── create.py                 #   create_finding() implementation
@@ -147,54 +147,43 @@ Frontmatter parsing, finding ID lookup, status directory constants, slug helpers
 
 #### `FindingsContext` — dependency injection for filesystem paths
 
-Implementation functions in `findings/` that need filesystem paths accept a `FindingsContext` (or individual keyword arguments with defaults from `findings.constants`). The context is constructed by the **wrapper script** from its module-level constants and passed explicitly.
+`tools/findings/constants.py` owns itemdb paths and shared constants. `FindingsContext` is default-constructible from those constants, and implementation functions in `findings/` that need filesystem paths accept an optional `ctx`. Callers normally omit `ctx`; tests pass a temporary `FindingsContext` when they need isolated paths.
 
 ```python
 # In findings/constants.py
 @dataclass(frozen=True)
 class FindingsContext:
-    root: Path
-    findings_root: Path
-    evidence_root: Path
+    root: Path = ROOT
+    findings_root: Path = FINDINGS_ROOT
+    evidence_root: Path = EVIDENCE_ROOT
     ...
     @classmethod
     def default(cls) -> FindingsContext: ...
 
 # In findings/create.py (implementation)
 def create_finding(args, *, ctx: Optional[FindingsContext] = None) -> Path:
-    ctx = ctx if ctx is not None else FindingsContext.default()
+    ctx = ctx or FindingsContext.default()
     ...
     finding_id = args.id or next_finding_id(findings_root=ctx.findings_root)
 
 # In create-finding.py (wrapper)
-ROOT = Path(__file__).resolve().parents[1]
-FINDINGS_ROOT = ROOT / "itemdb" / "findings"
-TEMPLATE_PATH = ROOT / "templates" / "finding.md"
+from findings.create import main
 
-def create_finding(args):
-    ctx = FindingsContext(root=ROOT, findings_root=FINDINGS_ROOT, template_path=TEMPLATE_PATH, ...)
-    return _create_finding(args, ctx=ctx)
+if __name__ == "__main__":
+    raise SystemExit(main())
 ```
 
-This pattern keeps implementation code **test-agnostic**: it never inspects `sys.modules`, never scans for wrapper modules, and never knows about test patching. Wrappers own the responsibility of wiring constants to implementations.
+This pattern keeps wrappers thin and implementation code **test-agnostic**. Wrappers do not define copied filesystem constants. No sys.modules scanning, no wrapper module scanning, no dynamic wrapper imports, and no test-patching awareness belong in implementation code. `findings.__init__` must stay lightweight; import concrete helpers from their owning modules instead of adding broad package re-exports.
 
 ### 9. No test-awareness in implementation code
 
 Implementation modules under `tools/findings/` (and all other packages) must **never**:
-- Scan `sys.modules` to find wrapper modules or patched constants.
+- No sys.modules scanning to find wrapper modules or patched constants.
 - Use `__import__()` to dynamically resolve a wrapper by name.
 - Inspect `__file__` attributes of other modules to identify callers.
 - Contain any logic whose sole purpose is to accommodate test monkeypatching.
 
-If a function needs a configurable path or constant, accept it as a parameter with a sensible default from `findings.constants`. The wrapper script is responsible for passing the correct value.
-
-**Anti-pattern** (never do this):
-```python
-def _get_wrapper():
-    for mod in sys.modules.values():
-        if getattr(mod, "__file__", "").endswith("create-finding.py"):
-            return mod
-```
+If a function needs a configurable path or constant, accept it as a parameter or as part of an optional `FindingsContext` with a sensible default from `findings.constants`. Tests should pass a temporary `FindingsContext` explicitly instead of monkeypatching wrapper globals.
 
 **Correct pattern**:
 ```python
@@ -207,16 +196,13 @@ def create_finding(args, *, ctx=None):
 
 Packages should depend downward, not sideways:
 ```
-run-agent.py → codecome/  →  (none)
-            → events/     →  (none)
-            → rendering/  →  codecome/
-            → chat/       →  codecome/, events/
-
-codecome/   → events/, rendering/, phases/ (lazy imports only in execution paths)
-phases/     →  codecome/ (config only)
-events/     →  (stdlib only, except sse_client ↔ base)
-rendering/  →  codecome/ (config only), _colors
-chat/       →  codecome/, events/
+run-agent.py -> codecome/
+codecome/    -> events/, rendering/, phases/, opencode/, common, _colors
+chat/        -> codecome/, events/, rendering/, opencode/, _colors
+phases/      -> findings.constants or common paths
+findings/    -> findings sibling modules, _colors only as needed
+rendering/   -> common, _colors
+events/      -> stdlib/opencode HTTP only
 ```
 
 Avoid circular imports. When two packages need each other, prefer callable injection (as done with `render_event_fn` in the runner) or lazy imports inside function bodies.
