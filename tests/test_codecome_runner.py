@@ -5,7 +5,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import argparse
 import pytest
 import threading
-import json
 from unittest.mock import MagicMock
 
 from codecome import runner
@@ -45,7 +44,7 @@ def test_consume_events_renders_and_logs(mock_args, mock_console, monkeypatch):
     
     res = runner._consume_events(
         "http://base", "session_123", mock_console, "1", "Recon", mock_args,
-        fake_transcript, True, "auth", "dir", fake_render
+        fake_transcript, "auth", "dir", fake_render
     )
     
     assert isinstance(res, RunResult)
@@ -70,7 +69,7 @@ def test_run_single_attempt_success(mock_args, mock_console, monkeypatch):
     monkeypatch.setattr(Transcript, "for_phase", classmethod(lambda cls, p, f: fake_transcript))
     
     code, session_id, res, path = runner._run_single_attempt(
-        mock_args, mock_console, "do work", "model", "var", True,
+        mock_args, mock_console, "do work", "model", "var",
         "http://base", "auth", "dir", lambda *a: None
     )
     
@@ -97,7 +96,7 @@ def test_run_single_attempt_consumer_exception(mock_args, mock_console, monkeypa
         fatal_errors.append(msg)
         
     code, session_id, res, path = runner._run_single_attempt(
-        mock_args, mock_console, "do work", "model", "var", True,
+        mock_args, mock_console, "do work", "model", "var",
         "http://base", "auth", "dir", lambda *a: None,
         emit_fatal_error_fn=fake_fatal
     )
@@ -118,7 +117,7 @@ def test_run_single_attempt_existing_session(mock_args, mock_console, monkeypatc
     monkeypatch.setattr(Transcript, "for_phase", classmethod(lambda cls, p, f: fake_transcript))
     
     code, session_id, res, path = runner._run_single_attempt(
-        mock_args, mock_console, "do work", "model", "var", True,
+        mock_args, mock_console, "do work", "model", "var",
         "http://base", "auth", "dir", lambda *a: None,
         existing_session_id="existing_123"
     )
