@@ -8,7 +8,6 @@ from datetime import date
 from pathlib import Path
 from typing import Dict, List
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import _colors as C
 
 from findings.frontmatter import load_frontmatter

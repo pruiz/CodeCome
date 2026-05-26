@@ -9,7 +9,6 @@ from datetime import date
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import _colors as C
 
 from findings.constants import ROOT, FINDINGS_ROOT, NOTES_ROOT, STATUSES, DEFAULT_OUTPUT
