@@ -370,6 +370,58 @@ class TestWriteRenderer:
         r = WriteRenderer(_ctx("plain"))
         assert r.render("write", {"input": "not a dict"}) is False
 
+    def test_renders_new_file_rich_fallback_on_small_highlight_limit(self):
+        from rich.console import Console
+        from rendering.context import RenderContext
+        from rendering.sink import RichConsoleSink
+        from rendering.settings import RenderSettings
+        from rendering.cache import SnapshotCache
+
+        sink = RichConsoleSink(Console(record=True))
+        ctx = RenderContext(
+            root=Path("/fake"),
+            sink=sink,
+            settings=RenderSettings(write_highlight_limit=10),
+            cache=SnapshotCache(),
+        )
+        r = WriteRenderer(ctx)
+        content = "hello world\n" * 10
+        state = {
+            "input": {"filePath": "/fake/new.txt", "content": content},
+            "output": "Wrote file new.txt",
+            "status": "completed",
+        }
+        assert r.render("write", state) is True
+        markup = sink.console.export_text()
+        assert "new.txt" in markup
+        assert "hello world" in markup
+
+    def test_renders_new_file_rich_syntax_on_large_highlight_limit(self):
+        from rich.console import Console
+        from rendering.context import RenderContext
+        from rendering.sink import RichConsoleSink
+        from rendering.settings import RenderSettings
+        from rendering.cache import SnapshotCache
+
+        sink = RichConsoleSink(Console(record=True))
+        ctx = RenderContext(
+            root=Path("/fake"),
+            sink=sink,
+            settings=RenderSettings(write_highlight_limit=1_000_000),
+            cache=SnapshotCache(),
+        )
+        r = WriteRenderer(ctx)
+        content = "hello world\n" * 10
+        state = {
+            "input": {"filePath": "/fake/new.txt", "content": content},
+            "output": "Wrote file new.txt",
+            "status": "completed",
+        }
+        assert r.render("write", state) is True
+        markup = sink.console.export_text()
+        assert "new.txt" in markup
+        assert "hello world" in markup
+
 
 # ——————————————————————————————————————————————
 # EditRenderer

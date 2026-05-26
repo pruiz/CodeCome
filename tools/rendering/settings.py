@@ -42,6 +42,7 @@ class RenderSettings:
     # --- Write -----------------------------------------------------------
     write_content_lines: int = 25
     write_diff_limit: int = 50
+    write_highlight_limit: int = 200 * 1024
 
     # --- Edit ------------------------------------------------------------
     edit_diff_lines: int = 25
@@ -96,6 +97,7 @@ class RenderSettings:
             read_highlight_limit=_int_env("CODECOME_READ_HIGHLIGHT_LIMIT", 200 * 1024),
             write_content_lines=_int_env("CODECOME_WRITE_CONTENT_LINES", 25),
             write_diff_limit=_int_env("CODECOME_WRITE_DIFF_LIMIT", 50),
+            write_highlight_limit=_int_env("CODECOME_WRITE_HIGHLIGHT_LIMIT", 200 * 1024),
             edit_diff_lines=_int_env("CODECOME_EDIT_DIFF_LINES", 25),
             apply_patch_diff_lines=_int_env(
                 "CODECOME_APPLY_PATCH_DIFF_LINES",
