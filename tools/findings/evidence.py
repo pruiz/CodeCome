@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from datetime import date
 from pathlib import Path
 from typing import Optional
@@ -12,45 +11,39 @@ from typing import Optional
 import _colors as C
 
 from findings.constants import (
-    EVIDENCE_ROOT,
-    EVIDENCE_TEMPLATE_PATH,
-    FINDINGS_ROOT,
     FINDING_ID_STRICT_RE,
     ROOT,
+    FindingsContext,
 )
 
 
 def finding_exists(
     finding_id: str,
     *,
-    findings_root: Optional[Path] = None,
+    ctx: Optional[FindingsContext] = None,
 ) -> bool:
-    findings_root = findings_root if findings_root is not None else FINDINGS_ROOT
-    return any(findings_root.rglob(f"{finding_id}-*.md"))
+    ctx = ctx if ctx is not None else FindingsContext.default()
+    return any(ctx.findings_root.rglob(f"{finding_id}-*.md"))
 
 
 def create_evidence(
     finding_id: str,
-    force: bool,
+    force: bool = False,
     *,
-    findings_root: Optional[Path] = None,
-    evidence_root: Optional[Path] = None,
-    template_path: Optional[Path] = None,
+    ctx: Optional[FindingsContext] = None,
 ) -> Path:
-    findings_root = findings_root if findings_root is not None else FINDINGS_ROOT
-    evidence_root = evidence_root if evidence_root is not None else EVIDENCE_ROOT
-    template_path = template_path if template_path is not None else EVIDENCE_TEMPLATE_PATH
+    ctx = ctx if ctx is not None else FindingsContext.default()
 
     if not FINDING_ID_STRICT_RE.fullmatch(finding_id):
         raise ValueError(f"Invalid finding id: {finding_id}")
 
-    if not finding_exists(finding_id, findings_root=findings_root):
+    if not finding_exists(finding_id, ctx=ctx):
         raise FileNotFoundError(f"Finding not found: {finding_id}")
 
-    if not template_path.exists():
-        raise FileNotFoundError(f"Template not found: {template_path}")
+    if not ctx.evidence_template_path.exists():
+        raise FileNotFoundError(f"Template not found: {ctx.evidence_template_path}")
 
-    evidence_dir = evidence_root / finding_id
+    evidence_dir = ctx.evidence_root / finding_id
     evidence_dir.mkdir(parents=True, exist_ok=True)
 
     readme_path = evidence_dir / "README.md"
@@ -58,7 +51,7 @@ def create_evidence(
     if readme_path.exists() and not force:
         raise FileExistsError(f"Evidence README already exists: {readme_path}")
 
-    content = template_path.read_text(encoding="utf-8")
+    content = ctx.evidence_template_path.read_text(encoding="utf-8")
     content = content.replace("CC-0000", finding_id)
     content = content.replace("YYYY-MM-DD", date.today().isoformat())
 

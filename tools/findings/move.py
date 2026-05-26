@@ -5,14 +5,13 @@ from __future__ import annotations
 
 import re
 import shutil
-import sys
 from datetime import date
 from pathlib import Path
 from typing import Optional
 
 import _colors as C
 
-from findings.constants import FINDINGS_ROOT, FRONTMATTER_RE, ROOT, STATUSES_SET
+from findings.constants import FRONTMATTER_RE, ROOT, STATUSES, FindingsContext
 from findings.ids import find_finding
 from findings.frontmatter import replace_scalar_frontmatter
 
@@ -56,13 +55,11 @@ def move_finding(
     path: Path,
     status: str,
     *,
-    findings_root: Optional[Path] = None,
-    statuses_set: Optional[frozenset] = None,
+    ctx: Optional[FindingsContext] = None,
 ) -> Path:
-    findings_root = findings_root if findings_root is not None else FINDINGS_ROOT
-    statuses_set = statuses_set if statuses_set is not None else STATUSES_SET
+    ctx = ctx if ctx is not None else FindingsContext.default()
 
-    if status not in statuses_set:
+    if status not in ctx.statuses_set:
         raise ValueError(f"Invalid status: {status}")
 
     content = path.read_text(encoding="utf-8")
@@ -77,7 +74,7 @@ def move_finding(
 
     content = update_frontmatter(content, status, validation_status)
 
-    target_dir = findings_root / status
+    target_dir = ctx.findings_root / status
     target_dir.mkdir(parents=True, exist_ok=True)
 
     target_path = target_dir / path.name
@@ -100,7 +97,7 @@ def build_parser():
     )
 
     parser.add_argument("finding", help="Finding id, for example CC-0001, or path to finding file.")
-    parser.add_argument("status", choices=sorted(STATUSES_SET), help="Target status.")
+    parser.add_argument("status", choices=sorted(STATUSES), help="Target status.")
 
     return parser
 

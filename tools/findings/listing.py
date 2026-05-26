@@ -4,35 +4,25 @@
 from __future__ import annotations
 
 import _colors as C
-from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Optional
 
-from findings.constants import FINDINGS_ROOT, ROOT, STATUSES
+from findings.constants import FindingsContext
 from findings.frontmatter import load_frontmatter
 from findings.ids import extract_id_from_path
 
 
 def load_findings(
-    status_filter: Optional[str],
+    status_filter: str | None,
     *,
-    root: Optional[Path] = None,
-    findings_root: Optional[Path] = None,
-    statuses: Optional[List[str]] = None,
-) -> List[Dict[str, object]]:
-    """Load findings from the filesystem.
-    
-    Constants default to findings.constants values but can be overridden
-    (e.g., by wrappers that need test-patched paths).
-    """
-    root = root if root is not None else ROOT
-    findings_root = findings_root if findings_root is not None else FINDINGS_ROOT
-    statuses = statuses if statuses is not None else STATUSES
-    
-    rows: List[Dict[str, object]] = []
-    status_list = [status_filter] if status_filter else statuses
+    ctx: Optional[FindingsContext] = None,
+) -> list[dict[str, object]]:
+    ctx = ctx if ctx is not None else FindingsContext.default()
+
+    rows: list[dict[str, object]] = []
+    status_list = [status_filter] if status_filter else ctx.statuses
 
     for status in status_list:
-        status_dir = findings_root / status
+        status_dir = ctx.findings_root / status
         if not status_dir.exists():
             continue
 
@@ -51,7 +41,7 @@ def load_findings(
                         else ""
                     ),
                     "title": frontmatter.get("title", path.stem),
-                    "path": str(path.relative_to(root)),
+                    "path": str(path.relative_to(ctx.root)),
                 }
             )
 
@@ -59,7 +49,7 @@ def load_findings(
     return rows
 
 
-def print_plain(rows: List[Dict[str, object]]) -> None:
+def print_plain(rows: list[dict[str, object]]) -> None:
     if not rows:
         print(C.info("No findings."))
         return
@@ -78,7 +68,7 @@ def print_plain(rows: List[Dict[str, object]]) -> None:
         )
 
 
-def print_markdown(rows: List[Dict[str, object]]) -> None:
+def print_markdown(rows: list[dict[str, object]]) -> None:
     print("| ID | Status | Severity | Confidence | Title | Path |")
     print("|---|---|---|---|---|---|")
 
@@ -97,12 +87,12 @@ def print_markdown(rows: List[Dict[str, object]]) -> None:
         )
 
 
-def print_ids(rows: List[Dict[str, object]]) -> None:
+def print_ids(rows: list[dict[str, object]]) -> None:
     for row in rows:
         print(row["id"])
 
 
-def filter_eligible_for_exploit(rows: List[Dict[str, object]]) -> List[Dict[str, object]]:
+def filter_eligible_for_exploit(rows: list[dict[str, object]]) -> list[dict[str, object]]:
     eligible_statuses = {"", "NOT_STARTED", "IN_PROGRESS"}
     return [
         row
@@ -117,7 +107,7 @@ def build_parser():
 
     parser.add_argument(
         "--status",
-        choices=STATUSES,
+        choices=sorted(FindingsContext.default().statuses),
         help="Only list findings with this status directory.",
     )
 
