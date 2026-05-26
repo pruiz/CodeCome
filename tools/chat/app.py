@@ -110,16 +110,8 @@ def _chat_render_and_log(self, console, phase, label, event):
 
     When bound via ``__get__`` to a _ChatApp instance, ``self`` is
     guaranteed to carry the attributes accessed below."""
-    from codecome.event_pipeline import render_and_log_event
-
-    render_and_log_event(
-        console=console, phase=phase, label=label, event=event,
-        transcript=self.transcript,
-        debug=getattr(self.args, "debug", False),
-        thinking_on=self.thinking_on,
-        render_event_fn=render_event,
-        debug_fn=_chat_debug,
-    )
+    self.event_recorder.record(event)
+    render_event(console, phase, label, event)
     if event.get("type") == "message.updated":
         _chat_update_modeline_info(self, event)
 
@@ -335,6 +327,12 @@ try:
             self.thinking_on = thinking_on
             from codecome.transcript import Transcript
             self.transcript = transcript if transcript is not None else Transcript.null()
+            from codecome.recording import EventRecorder
+            self.event_recorder = EventRecorder(
+                self.transcript,
+                debug=getattr(args, "debug", False),
+                debug_fn=_chat_debug,
+            )
             self.chat_loop = None
             self.console_proxy = None
             self.rich_log = None

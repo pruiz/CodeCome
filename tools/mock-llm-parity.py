@@ -465,6 +465,11 @@ def main() -> int:
     _warn_if_affected_version()
 
     out_dir = args.out_dir
+    # Pre-clean stale output files from previous runs to ensure hermetic tests.
+    if out_dir.exists():
+        for f in out_dir.iterdir():
+            if f.is_file():
+                f.unlink()
     out_dir.mkdir(parents=True, exist_ok=True)
 
     _write_json(

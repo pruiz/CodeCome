@@ -41,12 +41,17 @@ def test_chat_render_and_log(monkeypatch):
     mock_args = MagicMock()
     mock_args.debug = True
     
+    from codecome.recording import EventRecorder
+    event_recorder = EventRecorder(mock_transcript, debug=True)
+    
     class FakeSelf:
-        transcript = mock_transcript
-        args = mock_args
-        thinking_on = True
-        _modeline_info = ""
-        
+        def __init__(self):
+            self.transcript = mock_transcript
+            self.args = mock_args
+            self.thinking_on = True
+            self._modeline_info = ""
+            self.event_recorder = event_recorder
+    
     fake_self = FakeSelf()
     
     rendered = []

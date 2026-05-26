@@ -151,7 +151,7 @@ def run_phase_mode(args: argparse.Namespace) -> int:
             # Clear per-session dedup state so retries don't suppress updates.
             _reset_subagent_state()
             returncode, session_id, run_result, transcript_path = _run_single_attempt(
-                args, console, prompt, model, variant, thinking_on, base_url,
+                args, console, prompt, model, variant, base_url,
                 server_info.password, str(ROOT),
                 render_event_fn=render_event,
                 emit_fatal_error_fn=_emit_fatal_error,

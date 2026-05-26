@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 import threading
@@ -20,7 +19,7 @@ from events.phase_loop import PhaseEventLoop, RunResult
 from codecome.config import ROOT
 from codecome.session import create_session, send_prompt_to_session
 from codecome.transcript import Transcript
-from codecome.event_pipeline import render_and_log_event
+from codecome.recording import EventRecorder
 
 
 def _consume_events(
@@ -31,10 +30,9 @@ def _consume_events(
     label: str,
     args: argparse.Namespace,
     transcript: Transcript,
-    thinking_on: bool,
     auth_token: str | None,
     workspace_dir: str | None,
-    render_event_fn: Callable[..., None],  # CLI/rendering event dispatcher
+    render_event_fn: Callable[..., None],
 ) -> RunResult:
     event_loop = PhaseEventLoop(
         base_url=base_url,
@@ -46,14 +44,13 @@ def _consume_events(
         workspace_dir=workspace_dir,
     )
 
-    def _render_and_log(console_: Any, phase_: str, label_: str, event: dict[str, Any]) -> None:
-        render_and_log_event(
-            console=console_, phase=phase_, label=label_, event=event,
-            transcript=transcript, debug=args.debug, thinking_on=thinking_on,
-            render_event_fn=render_event_fn,
-        )
+    recorder = EventRecorder(transcript, debug=args.debug)
 
-    return event_loop.run(_render_and_log)
+    def _handle_event(console_: Any, phase_: str, label_: str, event: dict[str, Any]) -> None:
+        recorder.record(event)
+        render_event_fn(console_, phase_, label_, event)
+
+    return event_loop.run(_handle_event)
 
 
 def _run_single_attempt(
@@ -62,11 +59,10 @@ def _run_single_attempt(
     prompt: str,
     model: str | None,
     variant: str | None,
-    thinking_on: bool,
     base_url: str,
     auth_token: str | None,
     workspace_dir: str | None,
-    render_event_fn: Callable[..., None],  # CLI/rendering event dispatcher
+    render_event_fn: Callable[..., None],
     emit_fatal_error_fn: Callable[..., None] | None = None,
     existing_session_id: str | None = None,
 ) -> tuple[int, str, RunResult, Path]:
@@ -97,7 +93,7 @@ def _run_single_attempt(
                 run_result_box["result"] = _consume_events(
                     base_url, session_id, console,
                     str(args.phase), str(args.label), args,
-                    transcript, thinking_on,
+                    transcript,
                     auth_token, workspace_dir,
                     render_event_fn=render_event_fn,
                 )
