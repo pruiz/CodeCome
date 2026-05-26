@@ -11,9 +11,8 @@ import re
 from pathlib import Path
 from typing import Any, Iterator
 
-from codecome.config import ROOT
-
 from findings.constants import (
+    ROOT,
     FINDINGS_ROOT,
     EVIDENCE_ROOT,
     NOTES_ROOT,
