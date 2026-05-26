@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from codecome.config import truthy_env
+from common.env import truthy_env
 
 
 def _int_env(name: str, default: int) -> int:

@@ -25,10 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 import _colors as C  # noqa: E402  — tools/ is on sys.path at runtime
 
-
-def truthy_env(name: str) -> bool:
-    value = os.environ.get(name)
-    return value is not None and value not in {"", "0", "false", "False", "no", "No"}
+from common.env import truthy_env  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
