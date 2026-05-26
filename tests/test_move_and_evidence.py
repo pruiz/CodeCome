@@ -5,15 +5,18 @@ import sys
 
 from conftest import load_tool_module
 import findings.constants as const_ROOT
+from findings.constants import FindingsContext
 from findings import move as move_module
 from findings import evidence as evidence_module
 from findings import create as create_module
 
 
 def test_move_finding_updates_status_and_moves_file(tmp_path, monkeypatch):
-    monkeypatch.setattr(const_ROOT, "ROOT", tmp_path)
-    monkeypatch.setattr(const_ROOT, "FINDINGS_ROOT", tmp_path / "itemdb" / "findings")
-    monkeypatch.setattr(const_ROOT, "STATUSES_SET", frozenset({"PENDING", "CONFIRMED", "EXPLOITED", "REJECTED", "DUPLICATE"}))
+    ctx = FindingsContext(
+        root=tmp_path,
+        itemdb_root=tmp_path / "itemdb",
+        findings_root=tmp_path / "itemdb" / "findings",
+    )
 
     src = tmp_path / "itemdb" / "findings" / "PENDING" / "CC-0001-test.md"
     src.parent.mkdir(parents=True)
@@ -28,7 +31,7 @@ def test_move_finding_updates_status_and_moves_file(tmp_path, monkeypatch):
         encoding="utf-8",
     )
 
-    out = move_module.move_finding(src, "CONFIRMED", findings_root=tmp_path / "itemdb" / "findings")
+    out = move_module.move_finding(src, "CONFIRMED", ctx=ctx)
     assert out.exists()
     assert out.parent.name == "CONFIRMED"
     text = out.read_text(encoding="utf-8")
@@ -38,23 +41,20 @@ def test_move_finding_updates_status_and_moves_file(tmp_path, monkeypatch):
 
 
 def test_create_evidence_requires_existing_finding(tmp_path, monkeypatch):
-    monkeypatch.setattr(const_ROOT, "ROOT", tmp_path)
-    monkeypatch.setattr(const_ROOT, "FINDINGS_ROOT", tmp_path / "itemdb" / "findings")
-    monkeypatch.setattr(const_ROOT, "EVIDENCE_ROOT", tmp_path / "itemdb" / "evidence")
-    monkeypatch.setattr(const_ROOT, "EVIDENCE_TEMPLATE_PATH", tmp_path / "templates" / "evidence-readme.md")
+    ctx = FindingsContext(
+        root=tmp_path,
+        itemdb_root=tmp_path / "itemdb",
+        findings_root=tmp_path / "itemdb" / "findings",
+        evidence_root=tmp_path / "itemdb" / "evidence",
+        evidence_template_path=tmp_path / "templates" / "evidence-readme.md",
+    )
 
     template_path = tmp_path / "templates" / "evidence-readme.md"
     template_path.parent.mkdir(parents=True)
     template_path.write_text("# Evidence for CC-0000\nDate: YYYY-MM-DD\n", encoding="utf-8")
 
     try:
-        evidence_module.create_evidence(
-            "CC-0001",
-            force=False,
-            findings_root=tmp_path / "itemdb" / "findings",
-            evidence_root=tmp_path / "itemdb" / "evidence",
-            template_path=template_path,
-        )
+        evidence_module.create_evidence("CC-0001", ctx=ctx)
         raise AssertionError("Expected FileNotFoundError")
     except FileNotFoundError as exc:
         assert "Finding not found" in str(exc)
