@@ -25,7 +25,7 @@ import _colors as C
 from opencode.serve import ServerRunner, ServerRunnerError
 
 from codecome.console import build_console, _emit_fatal_error
-from rendering.dispatch import HAVE_RICH, _get_rendering_ctx, render_event
+from rendering.dispatch import HAVE_RICH, _get_rendering_ctx, configure_rendering, render_event
 from rendering.events import _FINISH_TERMINAL_OK, _FINISH_MID_TURN, _FINISH_FAILURE
 from codecome.config import ROOT, resolve_color_mode, load_prompt, resolve_runtime_config
 from phases.completion import (
@@ -65,6 +65,7 @@ def run_phase_mode(args: argparse.Namespace) -> int:
     model = rc.model
     variant = rc.variant
     thinking_on = rc.thinking_on
+    configure_rendering(console, render_reasoning=thinking_on)
 
     model_label = model or "(unknown)"
     variant_label = variant or "(unknown)"
