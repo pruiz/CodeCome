@@ -13,9 +13,8 @@ event renderers into a ``RenderContext`` and provides the single
 from __future__ import annotations
 
 import dataclasses
+from pathlib import Path
 from typing import Any
-
-from codecome.config import ROOT
 
 # ---------------------------------------------------------------------------
 # Rich availability
@@ -48,7 +47,9 @@ except ImportError:  # pragma: no cover
 _RENDERING_CTX_CACHE: dict[str, Any] = {}
 
 
-def _get_rendering_ctx(console: Any) -> Any:
+def _get_rendering_ctx(console: Any, *, root: Path | None = None) -> Any:
+    if root is None:
+        root = Path(__file__).resolve().parents[2]
     mode = "rich" if (HAVE_RICH and console is not None) else "plain"
     if mode in _RENDERING_CTX_CACHE:
         ctx = _RENDERING_CTX_CACHE[mode]
@@ -64,7 +65,7 @@ def _get_rendering_ctx(console: Any) -> Any:
     else:
         sink = PlainSink()
     ctx = RenderContext(
-        root=ROOT,
+        root=root,
         sink=sink,
         settings=RenderSettings.from_env(),
         cache=SnapshotCache(),
@@ -87,6 +88,10 @@ def _get_rendering_ctx(console: Any) -> Any:
     }
     _RENDERING_CTX_CACHE[mode] = ctx
     return ctx
+
+
+def reset_rendering_context_cache() -> None:
+    _RENDERING_CTX_CACHE.clear()
 
 
 def configure_rendering(console: Any, **settings_overrides) -> Any:

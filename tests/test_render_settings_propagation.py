@@ -83,7 +83,7 @@ def test_thinking_off_propagates_render_reasoning_false(monkeypatch):
     args.write_diff_limit = None
     args.edit_diff_lines = None
 
-    rendering_dispatch._RENDERING_CTX_CACHE.clear()
+    rendering_dispatch.reset_rendering_context_cache()
     monkeypatch.setattr(harness_mod, "ServerRunner", lambda: _FakeServerRunner())
     monkeypatch.setattr(runner_mod, "_run_single_attempt",
                         lambda *a, **kw: (0, "ses_ok", _FakeRunResult(),
