@@ -14,16 +14,13 @@ import _colors as C
 class StepStartRenderer(EventRenderer):
     event_types = ("step_start",)
 
-    def __init__(self, context, *, phase: str = "", label: str = ""):
-        super().__init__(context)
-        self.phase = phase
-        self.label = label
-
     def render(self, event: dict[str, Any]) -> bool:
         step_type = event.get("part", {}).get("type", "step-start")
+        phase = self.context.phase
+        label = self.context.label
         if self.rich:
             from rich.text import Text
-            self.sink.write(Text(f"[{self.phase}] {self.label}: {step_type}", style="cyan"))
+            self.sink.write(Text(f"[{phase}] {label}: {step_type}", style="cyan"))
         elif self.plain:
-            self.sink.write_text(C.info(f"[{self.phase}] {self.label}: {step_type}"))
+            self.sink.write_text(C.info(f"[{phase}] {label}: {step_type}"))
         return True

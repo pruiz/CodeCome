@@ -70,22 +70,62 @@ def _get_rendering_ctx(console: Any, *, root: Path | None = None) -> Any:
         settings=RenderSettings.from_env(),
         cache=SnapshotCache(),
     )
-    from rendering import events as _evts
-    ctx._renderers = {
-        "server.connected": _evts.ServerConnectedRenderer(ctx),
-        "server.heartbeat": _evts.ServerHeartbeatRenderer(ctx),
-        "message.updated": _evts.MessageUpdatedRenderer(ctx),
-        "text": _evts.TextEventRenderer(ctx),
-        "reasoning": _evts.ReasoningEventRenderer(ctx),
-        "tool_use": _evts.ToolUseEventRenderer(ctx),
-        "step_start": _evts.StepStartRenderer(ctx),
-        "step_finish": _evts.StepFinishRenderer(ctx),
-        "error": _evts.ErrorEventRenderer(ctx),
-        "session.status": _evts.SessionStatusRenderer(ctx),
-        "session.diff": _evts.SessionDiffRenderer(ctx),
-        "subagent.status": _evts.SubagentStatusRenderer(ctx),
-        "unknown": _evts.UnknownEventRenderer(ctx),
-    }
+    from rendering.registry import RendererRegistry
+    registry = RendererRegistry(ctx)
+
+    from rendering.events import (
+        ServerConnectedRenderer,
+        ServerHeartbeatRenderer,
+        MessageUpdatedRenderer,
+        TextEventRenderer,
+        ReasoningEventRenderer,
+        ToolUseEventRenderer,
+        StepStartRenderer,
+        StepFinishRenderer,
+        ErrorEventRenderer,
+        SessionStatusRenderer,
+        SessionDiffRenderer,
+        SubagentStatusRenderer,
+    )
+    registry.register_event(ServerConnectedRenderer(ctx))
+    registry.register_event(ServerHeartbeatRenderer(ctx))
+    registry.register_event(MessageUpdatedRenderer(ctx))
+    registry.register_event(TextEventRenderer(ctx))
+    registry.register_event(ReasoningEventRenderer(ctx))
+    registry.register_event(ToolUseEventRenderer(ctx))
+    registry.register_event(StepStartRenderer(ctx))
+    registry.register_event(StepFinishRenderer(ctx))
+    registry.register_event(ErrorEventRenderer(ctx))
+    registry.register_event(SessionStatusRenderer(ctx))
+    registry.register_event(SessionDiffRenderer(ctx))
+    registry.register_event(SubagentStatusRenderer(ctx))
+
+    from rendering.tools import (
+        ApplyPatchRenderer,
+        CommandRenderer,
+        EditRenderer,
+        GlobRenderer,
+        GrepRenderer,
+        PermissionErrorRenderer,
+        ReadRenderer,
+        SkillRenderer,
+        TaskRenderer,
+        TodoRenderer,
+        WriteRenderer,
+    )
+    registry.register_tool(ReadRenderer(ctx))
+    registry.register_tool(WriteRenderer(ctx))
+    registry.register_tool(EditRenderer(ctx))
+    registry.register_tool(GlobRenderer(ctx))
+    registry.register_tool(GrepRenderer(ctx))
+    registry.register_tool(TodoRenderer(ctx))
+    registry.register_tool(TaskRenderer(ctx))
+    registry.register_tool(SkillRenderer(ctx))
+    registry.register_tool(CommandRenderer(ctx))
+    registry.register_tool(ApplyPatchRenderer(ctx))
+    registry.register_tool(PermissionErrorRenderer(ctx))
+
+    ctx.registry = registry
     _RENDERING_CTX_CACHE[mode] = ctx
     return ctx
 
@@ -111,24 +151,7 @@ def configure_rendering(console: Any, **settings_overrides) -> Any:
 # ---------------------------------------------------------------------------
 
 def render_event(console: Console, phase: str, label: str, event: dict[str, Any]) -> None:
-    event_type = event.get("type")
     ctx = _get_rendering_ctx(console)
-    renderers = getattr(ctx, "_renderers", {})
-
-    if event_type == "step_start":
-        renderer = renderers.get("step_start")
-        if renderer:
-            renderer.phase = phase
-            renderer.label = label
-            renderer.render(event)
-        else:
-            from rendering.events import StepStartRenderer
-            StepStartRenderer(ctx, phase=phase, label=label).render(event)
-    elif event_type in renderers:
-        renderers[event_type].render(event)
-    else:
-        unknown = renderers.get("unknown")
-        if unknown is None:
-            from rendering.events import UnknownEventRenderer
-            unknown = UnknownEventRenderer(ctx)
-        unknown.render(event)
+    ctx.phase = phase
+    ctx.label = label
+    ctx.registry.dispatch_event(event)
