@@ -13,7 +13,22 @@ from typing import Any, Iterator
 
 from codecome.config import ROOT
 
+from findings.constants import (
+    FINDINGS_ROOT,
+    EVIDENCE_ROOT,
+    NOTES_ROOT,
+    REPORTS_ROOT,
+    SANDBOX_PLAN_PATH,
+    evidence_dir_for,
+    exploits_dir_for,
+    finding_status_dir,
+)
+
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+
+_ITEMDB_NOTES_DIR = "itemdb/notes/"
+_ITEMDB_FINDINGS_DIR = "itemdb/findings/"
+_ITEMDB_REPORTS_DIR = "itemdb/reports/"
 
 _PHASE1_REQUIRED_ARTIFACT_NAMES = [
     "target-profile.md",
@@ -31,8 +46,7 @@ _PHASE1_REQUIRED_ARTIFACT_NAMES = [
 
 
 def _phase1_required_artifacts() -> list[Path]:
-    notes_dir = ROOT / "itemdb" / "notes"
-    return [notes_dir / name for name in _PHASE1_REQUIRED_ARTIFACT_NAMES]
+    return [NOTES_ROOT / name for name in _PHASE1_REQUIRED_ARTIFACT_NAMES]
 
 
 def _path_is_fresh(path: Path, run_start_time: float) -> bool:
@@ -81,26 +95,26 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                 fresh_required = any(_path_is_fresh(path, run_start_time) for path in required_artifacts)
                 sandbox_generated = ROOT / "sandbox" / "CODECOME-GENERATED.md"
                 sandbox_state_recorded = _path_is_fresh(sandbox_generated, run_start_time) or _path_is_fresh(
-                    ROOT / "itemdb" / "notes" / "sandbox-plan.md", run_start_time
+                    SANDBOX_PLAN_PATH, run_start_time
                 )
                 return fresh_required and sandbox_state_recorded
             return False
         elif str(phase) in ("2", "sweep"):
-            pending_dir = ROOT / "itemdb" / "findings" / "PENDING"
+            pending_dir = finding_status_dir("PENDING")
             if pending_dir.exists():
                 return any(f.name.endswith(".md") and f.name != ".gitkeep" and f.stat().st_mtime >= run_start_time for f in pending_dir.iterdir())
             return False
         elif str(phase) == "3":
-            findings_dir = ROOT / "itemdb" / "findings"
+            findings_dir = FINDINGS_ROOT
             return any(
                 path.suffix == ".md" and path.name != ".gitkeep" and path.stat().st_mtime >= run_start_time
                 for path in _iter_files(findings_dir)
             )
         elif str(phase) == "4" and finding:
-            evidence_dir = ROOT / "itemdb" / "evidence" / finding
+            evidence_dir = evidence_dir_for(finding)
             return any(path.stat().st_mtime >= run_start_time for path in _iter_files(evidence_dir))
         elif str(phase) == "5" and finding:
-            exploited_file = ROOT / "itemdb" / "findings" / "EXPLOITED" / f"{finding}.md"
+            exploited_file = finding_status_dir("EXPLOITED") / f"{finding}.md"
             if (
                 exploited_file.exists()
                 and exploited_file.stat().st_mtime >= run_start_time
@@ -111,14 +125,14 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                     and fm.get("status") == "EXPLOITED"
                     and _exploitation_status_looks_real(fm)
                 ):
-                    exploits_dir = ROOT / "itemdb" / "evidence" / finding / "exploits"
+                    exploits_dir = exploits_dir_for(finding)
                     if any(
                         path.stat().st_mtime >= run_start_time
                         for path in _iter_files(exploits_dir)
                     ):
                         return True
 
-            confirmed_file = ROOT / "itemdb" / "findings" / "CONFIRMED" / f"{finding}.md"
+            confirmed_file = finding_status_dir("CONFIRMED") / f"{finding}.md"
             if (
                 confirmed_file.exists()
                 and confirmed_file.stat().st_mtime >= run_start_time
@@ -135,7 +149,7 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
 
             return False
         elif str(phase) == "6":
-            reports_dir = ROOT / "itemdb" / "reports"
+            reports_dir = REPORTS_ROOT
             if reports_dir.exists():
                 return any(f.name.endswith(".md") and f.name != ".gitkeep" and f.stat().st_mtime >= run_start_time for f in reports_dir.iterdir())
             return False
@@ -147,40 +161,40 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
 def phase_checklist_lines(phase: str, finding: str | None) -> list[str]:
     if str(phase) == "1":
         return [
-            "Ensure all required Phase 1 notes exist under itemdb/notes/.",
-            "Ensure itemdb/notes/file-risk-index.yml is present and consistent with interesting-files.md.",
-            "Ensure itemdb/notes/sandbox-plan.md documents the Phase 1b outcome.",
+            f"Ensure all required Phase 1 notes exist under {_ITEMDB_NOTES_DIR}.",
+            f"Ensure {NOTES_ROOT.relative_to(ROOT)}/file-risk-index.yml is present and consistent with interesting-files.md.",
+            f"Ensure {NOTES_ROOT.relative_to(ROOT)}/sandbox-plan.md documents the Phase 1b outcome.",
             "If sandbox bootstrap succeeded, ensure sandbox/CODECOME-GENERATED.md exists; otherwise document the halt clearly in sandbox-plan.md.",
         ]
     if str(phase) in ("2", "sweep"):
         return [
-            "Create or update precise findings under itemdb/findings/PENDING/.",
+            f"Create or update precise findings under {FINDINGS_ROOT.relative_to(ROOT)}/PENDING/.",
             "Each finding must identify affected code, trust-boundary/source-to-sink reasoning, attackability, impact, validation plan, and counter-analysis placeholder.",
             "Do not stop until the new or updated findings are durable on disk.",
         ]
     if str(phase) == "3":
         return [
-            "Review all candidate findings under itemdb/findings/PENDING/.",
+            f"Review all candidate findings under {FINDINGS_ROOT.relative_to(ROOT)}/PENDING/.",
             "Move clearly invalid findings to REJECTED and duplicates to DUPLICATE.",
             "Leave surviving findings reviewable, deduplicated, and updated with counter-analysis.",
         ]
     if str(phase) == "4":
         finding_ref = finding or "<finding-id>"
         return [
-            f"Ensure validation evidence exists under itemdb/evidence/{finding_ref}/, including README.md.",
+            f"Ensure validation evidence exists under {EVIDENCE_ROOT.relative_to(ROOT)}/{finding_ref}/, including README.md.",
             "Update the finding with validation results and move it to the correct status directory if needed.",
             "Do not stop until the evidence and finding status are consistent.",
         ]
     if str(phase) == "5":
         finding_ref = finding or "<finding-id>"
         return [
-            f"If exploitation succeeds, ensure itemdb/evidence/{finding_ref}/exploits/ contains the exploit artifacts and exploits/README.md.",
+            f"If exploitation succeeds, ensure {EVIDENCE_ROOT.relative_to(ROOT)}/{finding_ref}/exploits/ contains the exploit artifacts and exploits/README.md.",
             "If exploitation is not feasible, keep the finding in CONFIRMED and update its exploitation.status to NOT_FEASIBLE with a clear explanation.",
             "Do not stop until the exploit artifacts or the NOT_FEASIBLE documentation are durable and consistent.",
         ]
     if str(phase) == "6":
         return [
-            "Ensure the report output under itemdb/reports/ is written and reviewable.",
+            f"Ensure the report output under {REPORTS_ROOT.relative_to(ROOT)}/ is written and reviewable.",
             "Include the required summary sections and evidence references for exploited and confirmed findings.",
             "Do not stop until the report artifacts are durable on disk.",
         ]
