@@ -9,7 +9,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from findings import _colors as C
+import _colors as C
+
 from findings.ids import find_finding as _find_finding
 from findings.move import (
     move_finding as _move_finding,

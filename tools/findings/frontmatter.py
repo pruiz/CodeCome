@@ -12,7 +12,7 @@ try:
 except ImportError:
     yaml = None
 
-from findings import constants as C
+from findings.constants import FRONTMATTER_RE, SECTION_RE
 
 
 def load_frontmatter(path: Path) -> Dict[str, object]:
@@ -21,7 +21,7 @@ def load_frontmatter(path: Path) -> Dict[str, object]:
         raise RuntimeError("PyYAML is not installed. Run: pip install -r requirements.txt")
 
     content = path.read_text(encoding="utf-8")
-    match = C.FRONTMATTER_RE.match(content)
+    match = FRONTMATTER_RE.match(content)
 
     if not match:
         return {}
@@ -40,7 +40,7 @@ def load_frontmatter_strict(path: Path) -> Dict[str, object]:
         raise RuntimeError("PyYAML is not installed. Run: pip install -r requirements.txt")
 
     content = path.read_text(encoding="utf-8")
-    match = C.FRONTMATTER_RE.match(content)
+    match = FRONTMATTER_RE.match(content)
 
     if not match:
         raise ValueError("missing YAML frontmatter")
@@ -56,7 +56,7 @@ def replace_scalar_frontmatter(content: str, key: str, value: str) -> str:
     """Replace a quoted scalar value in YAML frontmatter only (not in body)."""
     pattern = re.compile(rf'^{re.escape(key)}:\s*".*"$', re.MULTILINE)
     replacement = f'{key}: "{value}"'
-    fm_match = C.FRONTMATTER_RE.match(content)
+    fm_match = FRONTMATTER_RE.match(content)
     if fm_match:
         fm_block = content[: fm_match.end()]
         body = content[fm_match.end() :]
@@ -77,11 +77,11 @@ def replace_nested_value(content: str, key: str, value: str) -> str:
 
 def extract_sections(path: Path) -> Dict[str, str]:
     content = path.read_text(encoding="utf-8")
-    match = C.FRONTMATTER_RE.match(content)
+    match = FRONTMATTER_RE.match(content)
     body = content[match.end() :] if match else content
     sections: Dict[str, str] = {}
 
-    for section_match in C.SECTION_RE.finditer(body):
+    for section_match in SECTION_RE.finditer(body):
         title = section_match.group("title").strip()
         section_body = section_match.group("body").strip()
         sections[title] = section_body or "Pending."

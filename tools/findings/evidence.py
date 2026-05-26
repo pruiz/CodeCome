@@ -12,8 +12,13 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import _colors as C
 
-from findings import constants as _C
-from findings.constants import ROOT, FINDING_ID_STRICT_RE
+from findings.constants import (
+    EVIDENCE_ROOT,
+    EVIDENCE_TEMPLATE_PATH,
+    FINDINGS_ROOT,
+    FINDING_ID_STRICT_RE,
+    ROOT,
+)
 
 
 def finding_exists(
@@ -21,7 +26,7 @@ def finding_exists(
     *,
     findings_root: Optional[Path] = None,
 ) -> bool:
-    findings_root = findings_root if findings_root is not None else _C.FINDINGS_ROOT
+    findings_root = findings_root if findings_root is not None else FINDINGS_ROOT
     return any(findings_root.rglob(f"{finding_id}-*.md"))
 
 
@@ -33,8 +38,8 @@ def create_evidence(
     evidence_root: Optional[Path] = None,
     template_path: Optional[Path] = None,
 ) -> Path:
-    findings_root = findings_root if findings_root is not None else _C.FINDINGS_ROOT
-    evidence_root = evidence_root if evidence_root is not None else _C.EVIDENCE_ROOT
+    findings_root = findings_root if findings_root is not None else FINDINGS_ROOT
+    evidence_root = evidence_root if evidence_root is not None else EVIDENCE_ROOT
     template_path = template_path if template_path is not None else _C.EVIDENCE_TEMPLATE_PATH
 
     if not FINDING_ID_STRICT_RE.fullmatch(finding_id):

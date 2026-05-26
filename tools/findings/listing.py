@@ -3,14 +3,11 @@
 
 from __future__ import annotations
 
-import sys
+import _colors as C
 from pathlib import Path
 from typing import Dict, List, Optional
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import _colors as C
-
-from findings import constants as _C
+from findings.constants import FINDINGS_ROOT, ROOT, STATUSES
 from findings.frontmatter import load_frontmatter
 from findings.ids import extract_id_from_path
 
@@ -27,9 +24,9 @@ def load_findings(
     Constants default to findings.constants values but can be overridden
     (e.g., by wrappers that need test-patched paths).
     """
-    root = root if root is not None else _C.ROOT
-    findings_root = findings_root if findings_root is not None else _C.FINDINGS_ROOT
-    statuses = statuses if statuses is not None else _C.STATUSES
+    root = root if root is not None else ROOT
+    findings_root = findings_root if findings_root is not None else FINDINGS_ROOT
+    statuses = statuses if statuses is not None else STATUSES
     
     rows: List[Dict[str, object]] = []
     status_list = [status_filter] if status_filter else statuses
@@ -120,7 +117,7 @@ def build_parser():
 
     parser.add_argument(
         "--status",
-        choices=_C.STATUSES,
+        choices=STATUSES,
         help="Only list findings with this status directory.",
     )
 

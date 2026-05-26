@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Iterable, List, Optional
 
-from findings import constants as _C
+from findings.constants import FINDINGS_ROOT, FINDING_ID_RE, FINDING_ID_STRICT_RE, ROOT
 
 
 def extract_id_from_path(path: Path) -> str:
@@ -27,7 +27,7 @@ def iter_finding_files(
     findings_root: Optional[Path] = None,
 ) -> List[Path]:
     """Recursive CC-*.md glob, sorted. Used by create (next_id), checks."""
-    findings_root = findings_root if findings_root is not None else _C.FINDINGS_ROOT
+    findings_root = findings_root if findings_root is not None else FINDINGS_ROOT
     files: List[Path] = []
 
     if not findings_root.exists():
@@ -47,7 +47,7 @@ def iter_findings(
     statuses: Optional[List[str]] = None,
 ) -> Iterable[Path]:
     """Iterate by status dir (CC-*.md glob per dir). Used by listing, report, index."""
-    findings_root = findings_root if findings_root is not None else _C.FINDINGS_ROOT
+    findings_root = findings_root if findings_root is not None else FINDINGS_ROOT
     statuses = statuses if statuses is not None else _C.STATUSES
     status_list = [status_filter] if status_filter else statuses
 
@@ -66,7 +66,7 @@ def next_finding_id(
     ids: List[int] = []
 
     for path in iter_finding_files(findings_root=findings_root):
-        match = _C.FINDING_ID_RE.search(path.name)
+        match = FINDING_ID_RE.search(path.name)
         if match:
             ids.append(int(match.group(1)))
 
@@ -80,14 +80,14 @@ def find_finding(
     findings_root: Optional[Path] = None,
     root: Optional[Path] = None,
 ) -> Path:
-    findings_root = findings_root if findings_root is not None else _C.FINDINGS_ROOT
-    root = root if root is not None else _C.ROOT
+    findings_root = findings_root if findings_root is not None else FINDINGS_ROOT
+    root = root if root is not None else ROOT
     candidate = Path(identifier)
 
     if candidate.exists():
         return candidate.resolve()
 
-    if not _C.FINDING_ID_STRICT_RE.fullmatch(identifier):
+    if not FINDING_ID_STRICT_RE.fullmatch(identifier):
         raise FileNotFoundError(f"Invalid finding id or path: {identifier}")
 
     matches = sorted(findings_root.rglob(f"{identifier}-*.md"))

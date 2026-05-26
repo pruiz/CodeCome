@@ -12,7 +12,7 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import _colors as C
 
-from findings import constants as _C
+from findings.constants import EVIDENCE_ROOT
 from findings.constants import ROOT, FINDING_ID_STRICT_RE
 
 
@@ -30,8 +30,8 @@ def discover_files(
     itemdb: Optional[Path] = None,
     evidence_root: Optional[Path] = None,
 ) -> list[Path]:
-    itemdb = itemdb if itemdb is not None else _C.ROOT / "itemdb"
-    evidence_root = evidence_root if evidence_root is not None else _C.EVIDENCE_ROOT
+    itemdb = itemdb if itemdb is not None else ROOT / "itemdb"
+    evidence_root = evidence_root if evidence_root is not None else EVIDENCE_ROOT
     zip_path = evidence_root / f"{finding_id}.zip"
 
     matches: list[Path] = []
@@ -57,8 +57,8 @@ def create_bundle(
     evidence_root: Optional[Path] = None,
     root: Optional[Path] = None,
 ) -> Path:
-    evidence_root = evidence_root if evidence_root is not None else _C.EVIDENCE_ROOT
-    root = root if root is not None else _C.ROOT
+    evidence_root = evidence_root if evidence_root is not None else EVIDENCE_ROOT
+    root = root if root is not None else ROOT
     zip_path = evidence_root / f"{finding_id}.zip"
 
     if dry_run:
