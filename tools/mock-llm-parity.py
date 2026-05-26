@@ -405,6 +405,41 @@ def compare_events(
     return False, "\n".join(diff)
 
 
+_OPENCODE_VERSION_WARNING_THRESHOLD = (1, 15, 10)
+
+
+def _get_opencode_version() -> tuple[int, int, int] | None:
+    try:
+        result = subprocess.run(
+            ["opencode", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10.0,
+        )
+        if result.returncode != 0:
+            return None
+        version_str = result.stdout.strip()
+        parts = version_str.lstrip("v").split(".")
+        return tuple(int(p) for p in parts[:3])
+    except Exception:
+        return None
+
+
+def _warn_if_affected_version() -> None:
+    version = _get_opencode_version()
+    if version is None:
+        return
+    if version >= _OPENCODE_VERSION_WARNING_THRESHOLD:
+        print(
+            f"WARNING: opencode serve {version[0]}.{version[1]}.{version[2]} has a known timing-related bug\n"
+            "       on Python 3.12 where bash tool output may be reported as '(no output)' in\n"
+            "       serve mode due to session.idle being emitted before tool results are fully\n"
+            "       persisted. This can cause flaky parity test failures. Consider pinning to\n"
+            "       opencode 1.15.7 or earlier in your CI workflow.\n",
+            file=sys.stderr,
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Deterministic parity test between opencode run and opencode serve"
@@ -426,6 +461,8 @@ def main() -> int:
         default=ROOT / "tmp" / "mock-llm-parity",
     )
     args = parser.parse_args()
+
+    _warn_if_affected_version()
 
     out_dir = args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
