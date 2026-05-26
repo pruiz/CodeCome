@@ -206,6 +206,33 @@ class TestSseClient:
         client = sse_cls("http://localhost:8080")
         assert client._parse_buffer(["data: not-json"]) is None
 
+    def test_on_reconnect_called_once_after_actual_reconnect(self, sse_cls):
+        client = sse_cls("http://localhost:8080", reconnect=True, max_reconnects=1)
+        reconnects = []
+        client.on_reconnect = lambda: reconnects.append("reconnect")
+        streams = iter([
+            [{"type": "server.connected"}, {"type": "server.heartbeat"}],
+            [{"type": "server.connected"}, {"type": "server.heartbeat"}],
+        ])
+
+        def fake_open_stream():
+            stream = next(streams)
+            for event in stream:
+                yield event
+            raise load_events()[1]("drop")
+
+        client._open_stream = fake_open_stream
+        events = []
+        with pytest.raises(load_events()[1]):
+            for event in client.events():
+                events.append(event)
+
+        assert [event["type"] for event in events] == [
+            "server.connected", "server.heartbeat",
+            "server.connected", "server.heartbeat",
+        ]
+        assert reconnects == ["reconnect"]
+
 
 # ---------------------------------------------------------------------------
 # emit_event bridge
