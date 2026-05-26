@@ -86,7 +86,7 @@ class WriteRenderer(ToolRenderer):
         else:
             sections.append(Text("(new file)", style="dim"))
             sections.append(Text())
-            self._render_body_rich(sections, new_content, settings.write_content_lines, lexer)
+            self._render_body_rich(sections, new_content, settings.write_content_lines, lexer, settings.write_highlight_limit)
 
         sections.append(Text())
         sections.append(Text(status_text, style="green"))
@@ -95,7 +95,7 @@ class WriteRenderer(ToolRenderer):
             cache.set(file_path, new_content)
         return True
 
-    def _render_body_rich(self, sections: list[Any], body: str, cap: int, lexer: str) -> None:
+    def _render_body_rich(self, sections: list[Any], body: str, cap: int, lexer: str, highlight_limit: int) -> None:
         from rich.syntax import Syntax
         from rich.text import Text
 
@@ -104,7 +104,7 @@ class WriteRenderer(ToolRenderer):
         visible_lines = body_lines[:cap]
         leftover = max(0, total - cap)
         visible = "\n".join(visible_lines)
-        if len(visible.encode("utf-8", errors="replace")) > 200 * 1024:
+        if len(visible.encode("utf-8", errors="replace")) > highlight_limit:
             sections.append(Text(visible))
         else:
             sections.append(Syntax(visible, lexer, theme="monokai", line_numbers=True, word_wrap=True))

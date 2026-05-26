@@ -105,7 +105,7 @@ class ReadRenderer(ToolRenderer):
 
     @staticmethod
     def _render_truncated_body(sections: list[Any], body: str, cap: int, lexer: str, footer: str | None,
-                                highlight_limit: int = 200 * 1024) -> None:
+                                highlight_limit: int) -> None:
         from rich.syntax import Syntax
         from rich.text import Text
 
