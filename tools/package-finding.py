@@ -9,13 +9,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from findings.constants import EVIDENCE_ROOT
 from findings.package import (
     validate_finding_id,
     discover_files as _discover_files,
     create_bundle as _create_bundle,
     build_parser,
 )
-from findings import EVIDENCE_ROOT
 
 ROOT = Path(__file__).resolve().parents[1]
 ITEMDB = ROOT / "itemdb"

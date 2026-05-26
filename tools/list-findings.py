@@ -9,10 +9,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from findings import main as _main, STATUSES
+from findings.constants import STATUSES
 from findings.listing import (
     filter_eligible_for_exploit,
     load_findings as _load_findings,
+    main as _main,
 )
 
 ROOT = Path(__file__).resolve().parents[1]

@@ -12,7 +12,26 @@ try:
 except ImportError:
     yaml = None
 
-from findings import constants as C
+from findings.constants import (
+    CONFIDENCES,
+    CVSS_V4_VECTOR_RE,
+    FINDING_FILENAME_RE,
+    FINDING_ID_FORMAT_RE,
+    FINDINGS_ROOT,
+    FRONTMATTER_RE,
+    REQUIRED_CVSS_V4_FIELDS,
+    REQUIRED_EXPLOITATION_FIELDS,
+    REQUIRED_EXPLOITED_SECTIONS,
+    REQUIRED_FIELDS,
+    REQUIRED_VALIDATION_FIELDS,
+    ROOT,
+    SECTION_RE,
+    SEVERITIES,
+    STATUSES,
+    STATUSES_SET,
+    VALID_CONFIDENCES,
+    VALID_SEVERITIES,
+)
 from findings.frontmatter import load_frontmatter_strict
 
 
@@ -43,11 +62,11 @@ def severity_from_cvss_v4_score(score: float) -> str:
 
 def load_sections(path: Path) -> Dict[str, str]:
     content = path.read_text(encoding="utf-8")
-    match = C.FRONTMATTER_RE.match(content)
+    match = FRONTMATTER_RE.match(content)
     body = content[match.end() :] if match else content
     sections: Dict[str, str] = {}
 
-    for section_match in C.SECTION_RE.finditer(body):
+    for section_match in SECTION_RE.finditer(body):
         title = section_match.group("title").strip()
         sections[title] = section_match.group("body").strip()
 
@@ -61,7 +80,7 @@ def validate_cvss_v4(data: Dict[str, object], status: object, severity: object) 
     if not isinstance(cvss_v4, dict):
         return ["cvss_v4 must be an object"]
 
-    for field in C.REQUIRED_CVSS_V4_FIELDS:
+    for field in REQUIRED_CVSS_V4_FIELDS:
         if field not in cvss_v4:
             errors.append(f"missing cvss_v4 field: cvss_v4.{field}")
 
@@ -79,7 +98,7 @@ def validate_cvss_v4(data: Dict[str, object], status: object, severity: object) 
     if status in ("CONFIRMED", "EXPLOITED"):
         if not isinstance(vector, str) or is_placeholder(vector):
             errors.append(f"{status} status requires populated cvss_v4.vector")
-        elif not C.CVSS_V4_VECTOR_RE.match(vector):
+        elif not CVSS_V4_VECTOR_RE.match(vector):
             errors.append("cvss_v4.vector must start with 'CVSS:4.0/'")
 
         if not isinstance(justification, str) or is_placeholder(justification):
@@ -89,7 +108,7 @@ def validate_cvss_v4(data: Dict[str, object], status: object, severity: object) 
             expected_severity = severity_from_cvss_v4_score(float(score))
             if not expected_severity:
                 errors.append("cvss_v4.score must be between 0.0 and 10.0")
-            elif severity in C.SEVERITIES and severity != expected_severity:
+            elif severity in SEVERITIES and severity != expected_severity:
                 errors.append(
                     f"severity {severity!r} does not match cvss_v4.score {score!r} "
                     f"(expected {expected_severity!r})"
@@ -106,36 +125,36 @@ def validate_finding(path: Path) -> List[str]:
     except Exception as exc:
         return [str(exc)]
 
-    for field in C.REQUIRED_FIELDS:
+    for field in REQUIRED_FIELDS:
         if field not in data:
             errors.append(f"missing required field: {field}")
 
     finding_id = data.get("id")
-    if not isinstance(finding_id, str) or not C.FINDING_ID_FORMAT_RE.fullmatch(finding_id):
+    if not isinstance(finding_id, str) or not FINDING_ID_FORMAT_RE.fullmatch(finding_id):
         errors.append(f"invalid id: {finding_id!r}")
 
     status = data.get("status")
-    if status not in C.STATUSES_SET:
+    if status not in STATUSES_SET:
         errors.append(f"invalid status: {status!r}")
 
     if status and path.parent.name != status:
         errors.append(f"status mismatch: frontmatter={status!r}, directory={path.parent.name!r}")
 
     filename = path.name
-    if not C.FINDING_FILENAME_RE.match(filename):
+    if not FINDING_FILENAME_RE.match(filename):
         errors.append(
             f"filename must follow CC-XXXX-slug-title.md convention: "
             f"bare CC-XXXX.md names are not allowed (got {filename!r})"
         )
 
     severity = data.get("severity")
-    if severity not in C.SEVERITIES:
+    if severity not in SEVERITIES:
         errors.append(f"invalid severity: {severity!r}")
 
     errors.extend(validate_cvss_v4(data, status, severity))
 
     confidence = data.get("confidence")
-    if confidence not in C.CONFIDENCES:
+    if confidence not in CONFIDENCES:
         errors.append(f"invalid confidence: {confidence!r}")
 
     if confidence == "CONFIRMED" and status not in ("CONFIRMED", "EXPLOITED"):
@@ -145,7 +164,7 @@ def validate_finding(path: Path) -> List[str]:
     if not isinstance(validation, dict):
         errors.append("validation must be an object")
     else:
-        for field in C.REQUIRED_VALIDATION_FIELDS:
+        for field in REQUIRED_VALIDATION_FIELDS:
             if field not in validation:
                 errors.append(f"missing validation field: validation.{field}")
 
@@ -164,7 +183,7 @@ def validate_finding(path: Path) -> List[str]:
 
     exploitation = data.get("exploitation")
     if isinstance(exploitation, dict):
-        for field in C.REQUIRED_EXPLOITATION_FIELDS:
+        for field in REQUIRED_EXPLOITATION_FIELDS:
             if field not in exploitation:
                 errors.append(f"missing exploitation field: exploitation.{field}")
 
@@ -196,7 +215,7 @@ def validate_finding(path: Path) -> List[str]:
 
     sections = load_sections(path)
     if status == "EXPLOITED":
-        for section in C.REQUIRED_EXPLOITED_SECTIONS:
+        for section in REQUIRED_EXPLOITED_SECTIONS:
             body = sections.get(section)
             if body is None:
                 errors.append(f"EXPLOITED status requires #{section} section")
@@ -219,7 +238,7 @@ def validate_finding(path: Path) -> List[str]:
 
 def validate_file_risk_index() -> List[str]:
     errors: List[str] = []
-    index_path = C.ROOT / "itemdb" / "notes" / "file-risk-index.yml"
+    index_path = ROOT / "itemdb" / "notes" / "file-risk-index.yml"
 
     if not index_path.exists():
         return errors
@@ -255,4 +274,4 @@ def validate_file_risk_index() -> List[str]:
 
 
 def iter_all_finding_files() -> List[Path]:
-    return sorted(C.FINDINGS_ROOT.rglob("CC-*.md"))
+    return sorted(FINDINGS_ROOT.rglob("CC-*.md"))

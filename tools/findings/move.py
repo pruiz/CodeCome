@@ -13,8 +13,7 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import _colors as C
 
-from findings import constants as _C
-from findings.constants import ROOT, FRONTMATTER_RE
+from findings.constants import FINDINGS_ROOT, FRONTMATTER_RE, ROOT, STATUSES_SET
 from findings.ids import find_finding
 from findings.frontmatter import replace_scalar_frontmatter
 
@@ -61,8 +60,8 @@ def move_finding(
     findings_root: Optional[Path] = None,
     statuses_set: Optional[frozenset] = None,
 ) -> Path:
-    findings_root = findings_root if findings_root is not None else _C.FINDINGS_ROOT
-    statuses_set = statuses_set if statuses_set is not None else _C.STATUSES_SET
+    findings_root = findings_root if findings_root is not None else FINDINGS_ROOT
+    statuses_set = statuses_set if statuses_set is not None else STATUSES_SET
 
     if status not in statuses_set:
         raise ValueError(f"Invalid status: {status}")
@@ -102,7 +101,7 @@ def build_parser():
     )
 
     parser.add_argument("finding", help="Finding id, for example CC-0001, or path to finding file.")
-    parser.add_argument("status", choices=sorted(_C.STATUSES_SET), help="Target status.")
+    parser.add_argument("status", choices=sorted(STATUSES_SET), help="Target status.")
 
     return parser
 
