@@ -114,8 +114,44 @@ class BaseEventLoop:
     # Session message sync (catch-up after reconnect / before idle)
     # ------------------------------------------------------------------
 
+    _SYNC_DELAY_S = 0.05
+    _SYNC_RETRIES = 3
+
     def _sync_session_messages(self) -> list[dict[str, Any]]:
         self._last_message_sync_at = time.time()
+
+        for attempt in range(self._SYNC_RETRIES):
+            if attempt > 0:
+                time.sleep(self._SYNC_DELAY_S)
+
+            events = self._fetch_session_messages()
+            if not events:
+                continue
+
+            if self._has_unresolved_tool_output(events):
+                continue
+
+            return events
+
+        return events
+
+    @staticmethod
+    def _has_unresolved_tool_output(events: list[dict[str, Any]]) -> bool:
+        for ev in events:
+            if ev.get("type") != "tool_use":
+                continue
+            part = ev.get("part", {})
+            state = part.get("state", {})
+            output = state.get("output", "")
+            if output != "(no output)":
+                continue
+            metadata = state.get("metadata", {})
+            if metadata.get("exit", 0) != 0:
+                continue
+            return True
+        return False
+
+    def _fetch_session_messages(self) -> list[dict[str, Any]]:
         events: list[dict[str, Any]] = []
         try:
             req = urllib.request.Request(
