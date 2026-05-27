@@ -611,6 +611,49 @@ class TestPhaseEventLoopEndToEnd:
         assert result.last_finish_reason == "stop"
         assert [e["type"] for e in emitted] == ["server.connected", "session.status", "message.updated", "step_start", "text", "step_finish", "session.idle"]
 
+    def test_session_snapshot_sync_does_not_replay_seen_assistant_message(self, event_loop_objects, monkeypatch):
+        PhaseEventLoop, RunResult, SseClient = event_loop_objects
+        emitted: list[dict] = []
+
+        live_info = {
+            "id": "msg-1",
+            "role": "assistant",
+            "agent": "test",
+            "modelID": "demo-model",
+            "sessionID": "sess-1",
+            "tokens": {"input": 10, "output": 3},
+        }
+
+        class FakeSseClient:
+            def __init__(self, *a, **kw): pass
+            def events(self):
+                return iter([
+                    {"type": "message.updated", "properties": {"sessionID": "sess-1", "info": live_info}},
+                    {"type": "session.idle", "properties": {"sessionID": "sess-1"}},
+                ])
+            def stop(self): pass
+
+        class FakeResp:
+            def __init__(self, payload): self.payload = payload
+            def read(self): return json.dumps(self.payload).encode("utf-8")
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+
+        messages_payload = [{"info": live_info, "parts": []}]
+
+        def fake_urlopen(req, **kw):
+            if req.full_url.endswith("/session/sess-1/message"):
+                return FakeResp(messages_payload)
+            raise AssertionError(f"unexpected urlopen call: {req.full_url}")
+
+        _patch_phase_sse_client(monkeypatch, FakeSseClient)
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+        loop = PhaseEventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
+        loop.run(lambda c, p, l, e: emitted.append(e))
+
+        assert [e["type"] for e in emitted] == ["message.updated", "session.idle"]
+
     def test_session_snapshot_sync_emits_tool_use_from_completed_parts(self, event_loop_objects, monkeypatch):
         PhaseEventLoop, RunResult, SseClient = event_loop_objects
         emitted: list[dict] = []

@@ -32,3 +32,5 @@ class RenderContext:
     phase: str = ""
     label: str = ""
     registry: "RendererRegistry | None" = None
+    last_busy_status_rendered_at: float = 0.0
+    last_assistant_header_rendered_at: float = 0.0

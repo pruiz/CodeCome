@@ -83,6 +83,21 @@ class PhaseEventLoop(BaseEventLoop):
                 if not self._belongs_to_session(event):
                     continue
 
+                # Keep snapshot catch-up from replaying assistant messages that
+                # already arrived on the live SSE stream.
+                if event.get("type") == "message.updated":
+                    info = event.get("properties", {}).get("info", {})
+                    if isinstance(info, dict):
+                        msg_id = info.get("id")
+                        if isinstance(msg_id, str) and msg_id:
+                            tokens = info.get("tokens", {})
+                            has_input = bool(tokens.get("input", 0)) if isinstance(tokens, dict) else False
+                            stream_key = f"{msg_id}:tok={1 if has_input else 0}"
+                            if stream_key in self._seen_message_ids:
+                                continue
+                            self._seen_message_ids.add(stream_key)
+                            self._seen_message_ids.add(msg_id)
+
                 if event.get("type") == "permission.asked":
                     self._handle_permission(event)
                     perm_err = self._extract_permission_error(event)

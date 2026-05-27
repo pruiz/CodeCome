@@ -251,6 +251,51 @@ class TestSessionStatusRenderer:
         r = SessionStatusRenderer(_ctx("rich"))
         assert r.render({"properties": {"status": {"type": "busy"}}}) is True
 
+    def test_throttles_repeated_busy_status(self, capsys, monkeypatch):
+        times = iter([100.0, 101.0])
+        monkeypatch.setattr("rendering.events.session_status.time.monotonic", lambda: next(times))
+        r = SessionStatusRenderer(_ctx("plain", session_busy_throttle_s=5))
+
+        assert r.render({"properties": {"status": {"type": "busy"}}}) is True
+        assert r.render({"properties": {"status": {"type": "busy"}}}) is True
+
+        out = capsys.readouterr().out
+        assert out.count("session status: busy") == 1
+
+    def test_renders_busy_after_throttle_window(self, capsys, monkeypatch):
+        times = iter([100.0, 106.0])
+        monkeypatch.setattr("rendering.events.session_status.time.monotonic", lambda: next(times))
+        r = SessionStatusRenderer(_ctx("plain", session_busy_throttle_s=5))
+
+        assert r.render({"properties": {"status": {"type": "busy"}}}) is True
+        assert r.render({"properties": {"status": {"type": "busy"}}}) is True
+
+        out = capsys.readouterr().out
+        assert out.count("session status: busy") == 2
+
+    def test_busy_throttle_zero_disables_suppression(self, capsys, monkeypatch):
+        times = iter([100.0, 101.0])
+        monkeypatch.setattr("rendering.events.session_status.time.monotonic", lambda: next(times))
+        r = SessionStatusRenderer(_ctx("plain", session_busy_throttle_s=0))
+
+        assert r.render({"properties": {"status": {"type": "busy"}}}) is True
+        assert r.render({"properties": {"status": {"type": "busy"}}}) is True
+
+        out = capsys.readouterr().out
+        assert out.count("session status: busy") == 2
+
+    def test_idle_is_not_busy_throttled(self, capsys, monkeypatch):
+        times = iter([100.0])
+        monkeypatch.setattr("rendering.events.session_status.time.monotonic", lambda: next(times))
+        r = SessionStatusRenderer(_ctx("plain", session_busy_throttle_s=5))
+
+        assert r.render({"properties": {"status": {"type": "busy"}}}) is True
+        assert r.render({"properties": {"status": {"type": "idle"}}}) is True
+
+        out = capsys.readouterr().out
+        assert "session status: busy" in out
+        assert "session status: idle" in out
+
 
 # ---------------------------------------------------------------------------
 # ServerConnectedRenderer
@@ -372,6 +417,65 @@ class TestMessageUpdatedRenderer:
         r = MessageUpdatedRenderer(_ctx("plain"))
         assert r.render({"properties": {"info": {"role": "user", "summary": "test"}}}) is True
         out = capsys.readouterr().out
+        assert "User" in out
+
+    def test_throttles_token_then_tokenless_assistant_header(self, capsys, monkeypatch):
+        times = iter([100.0, 101.0])
+        monkeypatch.setattr("rendering.events.message.time.monotonic", lambda: next(times))
+        r = MessageUpdatedRenderer(_ctx("plain", assistant_header_throttle_s=3))
+
+        assert r.render({"info": {"role": "assistant", "tokens": {"input": 10, "output": 2}}}) is True
+        assert r.render({"info": {"role": "assistant", "modelID": "gpt-5"}}) is True
+
+        out = capsys.readouterr().out
+        assert out.count("Assistant") == 1
+        assert "10" in out
+
+    def test_throttles_tokenless_then_token_assistant_header(self, capsys, monkeypatch):
+        times = iter([100.0, 101.0])
+        monkeypatch.setattr("rendering.events.message.time.monotonic", lambda: next(times))
+        r = MessageUpdatedRenderer(_ctx("plain", assistant_header_throttle_s=3))
+
+        assert r.render({"info": {"role": "assistant", "modelID": "gpt-5"}}) is True
+        assert r.render({"info": {"role": "assistant", "tokens": {"input": 10, "output": 2}}}) is True
+
+        out = capsys.readouterr().out
+        assert out.count("Assistant") == 1
+        assert "gpt-5" in out
+        assert "10" not in out
+
+    def test_renders_assistant_after_throttle_window(self, capsys, monkeypatch):
+        times = iter([100.0, 104.0])
+        monkeypatch.setattr("rendering.events.message.time.monotonic", lambda: next(times))
+        r = MessageUpdatedRenderer(_ctx("plain", assistant_header_throttle_s=3))
+
+        assert r.render({"info": {"role": "assistant", "modelID": "gpt-5"}}) is True
+        assert r.render({"info": {"role": "assistant", "tokens": {"input": 10, "output": 2}}}) is True
+
+        out = capsys.readouterr().out
+        assert out.count("Assistant") == 2
+
+    def test_assistant_header_throttle_zero_disables_suppression(self, capsys, monkeypatch):
+        times = iter([100.0, 101.0])
+        monkeypatch.setattr("rendering.events.message.time.monotonic", lambda: next(times))
+        r = MessageUpdatedRenderer(_ctx("plain", assistant_header_throttle_s=0))
+
+        assert r.render({"info": {"role": "assistant", "modelID": "gpt-5"}}) is True
+        assert r.render({"info": {"role": "assistant", "tokens": {"input": 10, "output": 2}}}) is True
+
+        out = capsys.readouterr().out
+        assert out.count("Assistant") == 2
+
+    def test_user_message_is_not_assistant_throttled(self, capsys, monkeypatch):
+        times = iter([100.0])
+        monkeypatch.setattr("rendering.events.message.time.monotonic", lambda: next(times))
+        r = MessageUpdatedRenderer(_ctx("plain", assistant_header_throttle_s=3))
+
+        assert r.render({"info": {"role": "assistant", "modelID": "gpt-5"}}) is True
+        assert r.render({"info": {"role": "user", "summary": "test"}}) is True
+
+        out = capsys.readouterr().out
+        assert "Assistant" in out
         assert "User" in out
 
 
