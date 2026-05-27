@@ -257,14 +257,14 @@ class ServerRunner:
             if proc.poll() is None:
                 try:
                     os.killpg(proc.pid, signal.SIGTERM)
-                except ProcessLookupError:
+                except (ProcessLookupError, PermissionError):
                     proc.terminate()
                 try:
                     proc.wait(timeout=_GRACEFUL_SHUTDOWN_S)
                 except subprocess.TimeoutExpired:
                     try:
                         os.killpg(proc.pid, signal.SIGKILL)
-                    except ProcessLookupError:
+                    except (ProcessLookupError, PermissionError):
                         proc.kill()
                     proc.wait()
         except ProcessLookupError:
