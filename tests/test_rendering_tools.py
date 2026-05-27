@@ -28,6 +28,7 @@ from rendering.tools.command.interceptors.sandbox_bootstrap import SandboxBootst
 from rendering.tools.command.interceptors.rtk_read import RtkReadInterceptor
 from rendering.tools.command.interceptors.rtk_grep import RtkGrepInterceptor
 from rendering.tools.command.interceptors.shell_listing import ShellListingInterceptor
+from rendering.tools.web import WebRenderer
 
 
 def _ctx(sink_mode="plain"):
@@ -225,6 +226,55 @@ class TestPermissionErrorRenderer:
         r = PermissionErrorRenderer(_ctx("rich"))
         r.render_message("tool permission rejected: bash")
         # Should not raise
+
+
+# ——————————————————————————————————————————————
+# WebRenderer
+# ——————————————————————————————————————————————
+
+class TestWebRenderer:
+    def test_renders_webfetch_plain(self, capsys):
+        r = WebRenderer(_ctx("plain"))
+        state = {
+            "status": "completed",
+            "input": {"url": "https://example.test/doc", "format": "markdown", "timeout": 30},
+            "output": "# Example\nFetched body",
+        }
+        assert r.render("webfetch", state) is True
+        out = capsys.readouterr().out
+        assert "web fetch" in out.lower()
+        assert "https://example.test/doc" in out
+        assert "format=markdown" in out
+        assert "Fetched body" in out
+
+    def test_renders_web_search_plain(self, capsys):
+        r = WebRenderer(_ctx("plain"))
+        state = {
+            "status": "completed",
+            "input": {"query": "gSOAP CVE"},
+            "output": "Search result block",
+        }
+        assert r.render("web-search", state) is True
+        out = capsys.readouterr().out
+        assert "web search" in out.lower()
+        assert "gSOAP CVE" in out
+        assert "Search result block" in out
+
+    def test_renders_websearch_alias_plain(self, capsys):
+        r = WebRenderer(_ctx("plain"))
+        state = {"status": "completed", "input": {"query": "alias query"}, "output": "Alias result"}
+        assert r.render("websearch", state) is True
+        out = capsys.readouterr().out
+        assert "alias query" in out
+
+    def test_renders_web_rich(self):
+        r = WebRenderer(_ctx("rich"))
+        state = {"status": "completed", "input": {"url": "https://example.test"}, "output": "Body"}
+        assert r.render("webfetch", state) is True
+
+    def test_returns_false_for_non_dict_input(self):
+        r = WebRenderer(_ctx("plain"))
+        assert r.render("webfetch", {"input": "nope"}) is False
 
 
 # ——————————————————————————————————————————————

@@ -16,11 +16,11 @@ class ReasoningEventRenderer(EventRenderer):
 
     def render(self, event: dict[str, Any]) -> bool:
         if not self.context.settings.render_reasoning:
-            return False
+            return True
         part = event.get("part", {})
         text = str(part.get("text", "")).strip()
         if not text:
-            return False
+            return True
 
         truncated_note = ""
         max_chars = self.context.settings.reasoning_max_chars

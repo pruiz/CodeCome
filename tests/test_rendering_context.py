@@ -85,3 +85,24 @@ class TestRenderContext:
         proxy_console.print.assert_called_once()
         assert "session status: busy" not in first_console.export_text()
         rendering_dispatch.reset_rendering_context_cache()
+
+    def test_dispatch_context_renders_webfetch_without_permission_renderer_crash(self, capsys):
+        rendering_dispatch.reset_rendering_context_cache()
+        event = {
+            "type": "tool_use",
+            "part": {
+                "tool": "webfetch",
+                "state": {
+                    "status": "completed",
+                    "input": {"url": "https://example.test"},
+                    "output": "Fetched content",
+                },
+            },
+        }
+
+        rendering_dispatch.render_event(None, "1", "recon", event)
+
+        out = capsys.readouterr().out
+        assert "web fetch" in out.lower()
+        assert "https://example.test" in out
+        rendering_dispatch.reset_rendering_context_cache()
