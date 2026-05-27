@@ -190,6 +190,19 @@ def stop_mock_server(info: MockServerInfo) -> None:
             pass
 
 
+def set_mockllm_port_env(port: int) -> str | None:
+    previous = os.environ.get("MOCKLLM_PORT")
+    os.environ["MOCKLLM_PORT"] = str(port)
+    return previous
+
+
+def restore_mockllm_port_env(previous: str | None) -> None:
+    if previous is None:
+        os.environ.pop("MOCKLLM_PORT", None)
+    else:
+        os.environ["MOCKLLM_PORT"] = previous
+
+
 def _post_json(url: str, payload: dict[str, Any], timeout: float = 30.0, auth_token: str | None = None, workspace_dir: str | None = None) -> Any:
     headers = {"Content-Type": "application/json"}
     if auth_token:
@@ -483,16 +496,13 @@ def main() -> int:
         },
     )
 
-    config_path = ROOT / "opencode.json"
-    config = json.loads(config_path.read_text(encoding="utf-8"))
-    original_base_url = config.get("provider", {}).get("test", {}).get("options", {}).get("baseURL", "")
     mock_info: MockServerInfo | None = None
+    previous_mockllm_port = os.environ.get("MOCKLLM_PORT")
 
     try:
-        # --- Start mock server and rewrite provider URL -------------------
+        # --- Start mock server and expose its port to opencode config ------
         mock_info = start_mock_server(args.script, after_429=args.__dict__.get("429_after", -1), after_500=args.__dict__.get("500_after", -1))
-        config["provider"]["test"]["options"]["baseURL"] = f"http://{MOCK_HOST}:{mock_info.port}/v1"
-        config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+        previous_mockllm_port = set_mockllm_port_env(mock_info.port)
 
         # Pre-clean stale files from previous runs to ensure hermetic tests.
         for f in ROOT.glob("tmp/parity-*.txt"):
@@ -507,16 +517,10 @@ def main() -> int:
 
         serve_events = run_serve(args.prompt, args.model, args.agent, args.timeout)
     finally:
-        # --- Restore original provider URL --------------------------------
+        # --- Restore process state ----------------------------------------
         if mock_info is not None:
             stop_mock_server(mock_info)
-        if "options" not in config["provider"]["test"]:
-            config["provider"]["test"]["options"] = {}
-        if original_base_url:
-            config["provider"]["test"]["options"]["baseURL"] = original_base_url
-        else:
-            config["provider"]["test"]["options"].pop("baseURL", None)
-        config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+        restore_mockllm_port_env(previous_mockllm_port)
 
     _write_json(out_dir / "run.json", run_events)
     _write_json(out_dir / "serve.json", serve_events)
