@@ -393,6 +393,25 @@ class TestServerRunner:
         assert info.base_url == "http://127.0.0.1:54321"
         runner.stop()
 
+    def test_stop_falls_back_when_killpg_permission_denied(self, classes, monkeypatch):
+        ServerRunner, _, _ = classes
+        terminated = []
+
+        class FakeProc:
+            pid = 1234
+            def poll(self): return None
+            def terminate(self): terminated.append("terminate")
+            def wait(self, timeout=None): return 0
+
+        def deny_killpg(*_args):
+            raise PermissionError("not our process group")
+
+        monkeypatch.setattr("opencode.serve.os.killpg", deny_killpg)
+
+        ServerRunner._kill(FakeProc())
+
+        assert terminated == ["terminate"]
+
 
 # ---------------------------------------------------------------------------
 # End-to-end PhaseEventLoop with fake SSE producer
