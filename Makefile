@@ -17,6 +17,9 @@ ifeq ($(CHAT),1)
 WRAPPER_ARGS += --chat
 endif
 
+# Env vars injected into opencode serve (wrapper mode) and opencode run (raw mode)
+CODECOME_OPENCODE_ENV_EXPORT := OPENCODE_ENABLE_EXA=1
+
 # Pass --thinking to raw opencode run when CODECOME_THINKING=1
 OPENCODE_THINKING_FLAG := $(if $(filter 1,$(CODECOME_THINKING)),--thinking,)
 
@@ -140,7 +143,7 @@ venv-check:
 phase-1: venv-check
 	@$(PYTHON) tools/gate-check.py 1
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		opencode run --agent recon $(OPENCODE_THINKING_FLAG) "$$(cat prompts/phase-1-recon.md)"; \
+		$(CODECOME_OPENCODE_ENV_EXPORT) opencode run --agent recon $(OPENCODE_THINKING_FLAG) "$$(cat prompts/phase-1-recon.md)"; \
 	else \
 		$(PYTHON) tools/run-agent.py $(WRAPPER_ARGS) --phase 1 --label "Target Reconnaissance + Sandbox Bootstrap" --agent recon --prompt-file prompts/phase-1-recon.md; \
 	fi
@@ -153,7 +156,7 @@ phase-2: venv-check
 		printf "Or override (not recommended): CODECOME_ALLOW_NO_SANDBOX=1 make phase-2\n\n" ; \
 		exit 1 )
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		opencode run --agent auditor $(OPENCODE_THINKING_FLAG) "$$(cat prompts/phase-2-audit.md)"; \
+		$(CODECOME_OPENCODE_ENV_EXPORT) opencode run --agent auditor $(OPENCODE_THINKING_FLAG) "$$(cat prompts/phase-2-audit.md)"; \
 	else \
 		$(PYTHON) tools/run-agent.py $(WRAPPER_ARGS) --phase 2 --label "Hypothesis Generation" --agent auditor --prompt-file prompts/phase-2-audit.md; \
 	fi
@@ -161,7 +164,7 @@ phase-2: venv-check
 phase-3: venv-check
 	@$(PYTHON) tools/gate-check.py 3
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		opencode run --agent reviewer $(OPENCODE_THINKING_FLAG) "$$(cat prompts/phase-3-review.md)"; \
+		$(CODECOME_OPENCODE_ENV_EXPORT) opencode run --agent reviewer $(OPENCODE_THINKING_FLAG) "$$(cat prompts/phase-3-review.md)"; \
 	else \
 		$(PYTHON) tools/run-agent.py $(WRAPPER_ARGS) --phase 3 --label "Counter-analysis" --agent reviewer --prompt-file prompts/phase-3-review.md; \
 	fi
@@ -170,7 +173,7 @@ phase-4: venv-check
 	@test -n "$(FINDING)" || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) Missing required FINDING argument for Phase 4 (Validation).\n\nSpecify which finding you want to validate:\n\n    $(BOLD)make phase-4 FINDING=CC-0001$(RESET)\n\nTo list available pending findings: $(BOLD)make findings STATUS=PENDING$(RESET)\n\n" && exit 1)
 	@$(PYTHON) tools/gate-check.py 4 $(FINDING)
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		opencode run --agent validator $(OPENCODE_THINKING_FLAG) "$$(sed 's#FINDING_PATH_OR_ID#$(FINDING)#g' prompts/phase-4-validate.md)"; \
+		$(CODECOME_OPENCODE_ENV_EXPORT) opencode run --agent validator $(OPENCODE_THINKING_FLAG) "$$(sed 's#FINDING_PATH_OR_ID#$(FINDING)#g' prompts/phase-4-validate.md)"; \
 	else \
 		$(PYTHON) tools/run-agent.py $(WRAPPER_ARGS) --phase 4 --label "Validation" --agent validator --prompt-file prompts/phase-4-validate.md --finding "$(FINDING)"; \
 	fi
@@ -179,7 +182,7 @@ phase-5: venv-check
 	@test -n "$(FINDING)" || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) Missing required FINDING argument for Phase 5 (Exploitation).\n\nSpecify which finding you want to exploit:\n\n    $(BOLD)make phase-5 FINDING=CC-0001$(RESET)\n\nTo list available confirmed findings: $(BOLD)make findings STATUS=CONFIRMED$(RESET)\n\n" && exit 1)
 	@$(PYTHON) tools/gate-check.py 5 $(FINDING)
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		opencode run --agent exploiter $(OPENCODE_THINKING_FLAG) "$$(sed 's#FINDING_PATH_OR_ID#$(FINDING)#g' prompts/phase-5-exploit.md)"; \
+		$(CODECOME_OPENCODE_ENV_EXPORT) opencode run --agent exploiter $(OPENCODE_THINKING_FLAG) "$$(sed 's#FINDING_PATH_OR_ID#$(FINDING)#g' prompts/phase-5-exploit.md)"; \
 	else \
 		$(PYTHON) tools/run-agent.py $(WRAPPER_ARGS) --phase 5 --label "Exploit Development" --agent exploiter --prompt-file prompts/phase-5-exploit.md --finding "$(FINDING)"; \
 	fi
@@ -187,7 +190,7 @@ phase-5: venv-check
 phase-6: venv-check
 	@$(PYTHON) tools/gate-check.py 6
 	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		opencode run --agent reporter $(OPENCODE_THINKING_FLAG) "$$(cat prompts/phase-6-report.md)"; \
+		$(CODECOME_OPENCODE_ENV_EXPORT) opencode run --agent reporter $(OPENCODE_THINKING_FLAG) "$$(cat prompts/phase-6-report.md)"; \
 	else \
 		$(PYTHON) tools/run-agent.py $(WRAPPER_ARGS) --phase 6 --label "Reporting" --agent reporter --prompt-file prompts/phase-6-report.md; \
 	fi
