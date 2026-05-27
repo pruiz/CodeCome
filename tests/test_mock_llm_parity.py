@@ -189,6 +189,32 @@ class TestNormalizeEvent:
         assert "time" not in out["part"]["state"]
 
 
+class TestMockLLMParityConfig:
+    def test_mockllm_port_env_restore(self, monkeypatch):
+        mod = load_parity_module()
+
+        monkeypatch.delenv("MOCKLLM_PORT", raising=False)
+        previous = mod.set_mockllm_port_env(12345)
+        assert previous is None
+        assert mod.os.environ["MOCKLLM_PORT"] == "12345"
+
+        mod.restore_mockllm_port_env(previous)
+        assert "MOCKLLM_PORT" not in mod.os.environ
+
+        monkeypatch.setenv("MOCKLLM_PORT", "7777")
+        previous = mod.set_mockllm_port_env(12345)
+        assert previous == "7777"
+        assert mod.os.environ["MOCKLLM_PORT"] == "12345"
+
+        mod.restore_mockllm_port_env(previous)
+        assert mod.os.environ["MOCKLLM_PORT"] == "7777"
+
+    def test_opencode_config_uses_mockllm_port_interpolation(self):
+        config = json.loads((ROOT / "opencode.json").read_text(encoding="utf-8"))
+        base_url = config["provider"]["test"]["options"]["baseURL"]
+        assert base_url == "http://127.0.0.1:{env:MOCKLLM_PORT}/v1"
+
+
 @pytest.mark.slow
 class TestMockLLMParity:
     """End-to-end parity tests (heavy — invoke real opencode CLI)."""

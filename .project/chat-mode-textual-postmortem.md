@@ -56,7 +56,7 @@ We rebuilt `_ChatApp` from scratch as a 5-step ladder, each step adding one piec
 | Step | Δ from previous | Result |
 |------|-----------------|--------|
 | 1    | Bare TUI: `compose()` yielding `RichLog`/`Input`/`Footer`, `on_mount` writing one line | ✅ works |
-| 2    | + start `opencode serve` and create a session in `_run_chat_mode` (still bare ChatApp) | ✅ works |
+| 2    | + start `opencode serve` and create a session in the chat harness (still bare ChatApp) | ✅ works |
 | 3    | + `TextualConsoleProxy` + inner `RenderMessage(Message)` + `@on(RenderMessage)` handler + a one-shot `set_timer` test post | ✅ works (handler fires) |
 | 4    | + raw daemon SSE consumer thread (`chat_loop.start_consumer`) + **synchronous** `chat_loop.send_prompt(...)` blocking inside `on_mount` | ✅ works (model output streams in) |
 | 4a   | + `set_interval(1.0, _heartbeat)` canary | ✅ works (ticks fire) |
@@ -129,7 +129,7 @@ The class docstring of `_ChatApp` lists these in code:
 
 5. **No Input enable/disable toggling from outside `on_input_submitted`.** Doing so required a second `set_interval` polling timer (poller for state from bg threads), which broke dispatch. The Input stays enabled at all times. The "Thinking…" UX is sacrificed; idle/busy is communicated by `render_session_status` printing `session status: busy/idle` in the normal render pipeline (parity with phase mode).
 
-6. **Transcript jsonl is mandatory.** `_run_chat_mode` opens `tmp/last-chat-<YYYYMMDD-HHMMSS>-pid<pid>.jsonl` line-buffered before constructing `ChatApp`, passes the file handle in via the `transcript_fp` constructor argument, and closes it in the `finally` block. After `app.run()` returns, the outer console prints a `Chat session ended` summary plus the `transcript: tmp/last-chat-...` path (parity with phase mode's per-attempt jsonl + final summary).
+6. **Transcript jsonl is mandatory.** The chat harness opens `tmp/last-chat-<YYYYMMDD-HHMMSS>-pid<pid>.jsonl` line-buffered before constructing `ChatApp`, passes the file handle in via the `transcript_fp` constructor argument, and closes it in the `finally` block. After `app.run()` returns, the outer console prints a `Chat session ended` summary plus the `transcript: tmp/last-chat-...` path (parity with phase mode's per-attempt jsonl + final summary).
 
 7. **Bottom-bar modeline + heartbeat.** The heartbeat (`set_interval(1.0, _heartbeat)`) updates a `Static` widget (id `modeline`) passed as the leftmost child of `Footer` in `compose`. The widget displays `● | provider/model | ↑in ↓out | $cost` with a pulse icon alternating `●`/`◌` each tick. Data comes from `_modeline_info` (atomically refreshed by `_render_and_log` on every `message.updated` event). The heartbeat also writes `_heartbeat: tick #N` to the debug log when `--debug` is set. No second timer, no new handlers — single set_interval doing double duty.
 
@@ -223,7 +223,7 @@ Textual's `App` exposes `self.console` (a Rich Console managed by the driver). S
 
 The original implementation forwarded SIGTERM to the opencode server process group via `os.killpg(info.pid, signum)`. Because `ServerRunner.start()` puts the server in a new session (`start_new_session=True`), `os.killpg` from our process raised `PermissionError: [Errno 1] Operation not permitted`, which crashed mid-render and left the terminal in alternate-screen mode.
 
-**Safe alternative:** install no custom signal handlers. Textual handles SIGINT via its own `action_quit` binding. Server cleanup goes in `_run_chat_mode`'s `finally` block via `runner.stop()` (which uses `os.killpg` correctly within `ServerRunner`).
+**Safe alternative:** install no custom signal handlers. Textual handles SIGINT via its own `action_quit` binding. Server cleanup goes in the chat harness `finally` block via `runner.stop()` (which uses `os.killpg` correctly within `ServerRunner`).
 
 ---
 
@@ -366,10 +366,10 @@ When (not if) `make chat` mysteriously goes black:
 
 | File | Role |
 |------|------|
-| `tools/run-agent.py` | Houses `_ChatApp`, `TextualConsoleProxy`, `_run_chat_mode`, debug logging helpers (`_chat_debug`, `_setup_chat_debug`, `_close_chat_debug`). The `_ChatApp` class docstring summarises the rules. |
+| `tools/run-agent.py` | Historically housed `_ChatApp`, `TextualConsoleProxy`, the chat harness, debug logging helpers (`_chat_debug`, `_setup_chat_debug`, `_close_chat_debug`). The implementation now lives under `tools/chat/` and `tools/codecome/`. |
 | `tools/events/chat_loop.py` | `ChatEventLoop` — owns the SSE consumer daemon thread and the `send_prompt` HTTP helper. Used by chat mode AND by other (potentially) interactive code paths. Has an optional `debug` callback. |
 | `tools/events/sse_client.py`, `state_tracker.py`, `emitters.py` | Reused from non-interactive phase mode. Not chat-specific. |
-| `tests/test_chat_mode.py` | Unit tests for `ChatEventLoop`, `TextualConsoleProxy`, `_ChatApp._render_and_log` parity, and the `_run_chat_mode` transcript-file lifecycle. Pure Python (no Textual app instance); won't catch the freezes documented here, but does catch parity regressions vs phase mode. |
+| `tests/test_chat_mode.py` | Unit tests for `ChatEventLoop`, `TextualConsoleProxy`, `_ChatApp._render_and_log` parity, and the chat harness transcript-file lifecycle. Pure Python (no Textual app instance); won't catch the freezes documented here, but does catch parity regressions vs phase mode. |
 | `Makefile` (`chat:` target) | Entry point. Accepts `DEBUG=1` to forward `--debug` (which enables the diagnostic log file and the raw-event mirror to it). |
 | `.project/chat-mode-plan.md` | Original design plan (pre-bisection). Kept for historical context; this postmortem supersedes it on architecture details. |
 | `.project/chat-mode-textual-postmortem.md` | This document. |
@@ -413,12 +413,12 @@ When (not if) `make chat` mysteriously goes black:
 
 ### 2026-05-22 — Parity pass
 
-- **Added: transcript jsonl.** `_run_chat_mode` now opens `tmp/last-chat-<YYYYMMDD-HHMMSS>-pid<pid>.jsonl` before starting the TUI and closes it in `finally`. Every SSE event seen by `_render_and_log` is persisted as a JSON line. The file handle is passed into `_ChatApp(transcript_fp=...)`.
+- **Added: transcript jsonl.** The chat harness now opens `tmp/last-chat-<YYYYMMDD-HHMMSS>-pid<pid>.jsonl` before starting the TUI and closes it in `finally`. Every SSE event seen by `_render_and_log` is persisted as a JSON line. The file handle is passed into `_ChatApp(transcript_fp=...)`.
 - **Added: end-of-session summary.** After `app.run()` returns, the restored terminal prints a green `Chat session ended` rule plus the `transcript: tmp/last-chat-...jsonl` path. Mirrors phase mode's success summary.
 - **Added: initial-prompt echo.** Before spawning the `_send_initial_prompt` worker, `on_mount` writes `User: <prompt>` to the RichLog so the user can see what they sent.
 - **Added: `--debug` raw-event mirror.** With `--debug`, `_render_and_log` now writes `_render_and_log: raw event: <json>` to the chat-debug log file (rather than stderr, which Textual owns). Phase mode mirrors to stderr; chat mode routes to the same per-run diagnostic file the heartbeat already writes to.
 - **Removed: `[idle]` / `[busy]` chat-only state markers.** `_render_and_log` no longer posts these. The non-chat `render_session_status` renderer (already invoked via `render_event`) prints `session status: busy/idle` through the normal proxy path, which is the same signal phase mode emits. This achieves full event parity between chat and phase modes.
-- **Tests:** added `TestChatRenderAndLogParity` (7 cases covering transcript writes, OSError swallowing, reasoning suppression, debug-mode mirror, no state-marker emission) and `TestChatTranscriptPath` (1 case verifying the `tmp/last-chat-<ts>-pid<pid>.jsonl` filename pattern is opened and closed by `_run_chat_mode`). Suite size: 23 → 31 chat tests (260 → 268 project total).
+- **Tests:** added `TestChatRenderAndLogParity` (7 cases covering transcript writes, OSError swallowing, reasoning suppression, debug-mode mirror, no state-marker emission) and `TestChatTranscriptPath` (1 case verifying the `tmp/last-chat-<ts>-pid<pid>.jsonl` filename pattern is opened and closed by the chat harness). Suite size: 23 → 31 chat tests (260 → 268 project total).
 - **Docstring of `_ChatApp` updated.** Reflects the parity changes and the new transcript responsibility.
 
 ### 2026-05-22 — Initial working build (post-bisection)
