@@ -155,6 +155,7 @@ class ServerRunner:
         log_path = _build_log_path()
         env = dict(os.environ)
         env["OPENCODE_SERVER_PASSWORD"] = password
+        env["OPENCODE_ENABLE_EXA"] = "1"
 
         cmd = [
             "opencode", "serve",

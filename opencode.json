@@ -1,9 +1,12 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": [
-    "./.opencode/plugins/status-forwarder.ts"
+    "./.opencode/plugins/status-forwarder.ts",
+    "opencode-websearch@latest"
   ],
   "permission": {
+    "websearch": "allow",
+    "codesearch": "allow",
     "read": {
       "*": "allow",
       "*.env": "deny",
