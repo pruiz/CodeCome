@@ -14,6 +14,8 @@ import os
 from collections import OrderedDict
 from pathlib import Path
 
+_SnapshotSignature = tuple[int, int]
+
 
 class SnapshotCache:
     """LRU cache of file content snapshots keyed by absolute path.
@@ -24,7 +26,7 @@ class SnapshotCache:
     def __init__(self, *, enabled: bool = True, max_entries: int = 200) -> None:
         self._enabled = enabled
         self._max = max_entries
-        self._entries: OrderedDict[str, tuple[str, float]] = OrderedDict()
+        self._entries: OrderedDict[str, tuple[str, _SnapshotSignature]] = OrderedDict()
 
     # ------------------------------------------------------------------
     # Public API
@@ -35,10 +37,10 @@ class SnapshotCache:
         if not self._enabled:
             return
         p = os.fspath(path)
-        mtime = self._current_mtime(p)
-        if mtime is None:
+        signature = self._current_signature(p)
+        if signature is None:
             return
-        self._entries[p] = (content, mtime)
+        self._entries[p] = (content, signature)
         self._entries.move_to_end(p)
         while len(self._entries) > self._max:
             self._entries.popitem(last=False)
@@ -58,9 +60,9 @@ class SnapshotCache:
         if not self._enabled:
             return
         stale = []
-        for p, (_, recorded_mtime) in self._entries.items():
-            actual = self._current_mtime(p)
-            if actual is None or actual != recorded_mtime:
+        for p, (_, recorded_signature) in self._entries.items():
+            actual = self._current_signature(p)
+            if actual is None or actual != recorded_signature:
                 stale.append(p)
         for p in stale:
             del self._entries[p]
@@ -87,8 +89,9 @@ class SnapshotCache:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _current_mtime(path: str) -> float | None:
+    def _current_signature(path: str) -> _SnapshotSignature | None:
         try:
-            return os.stat(path).st_mtime
+            stat = os.stat(path)
+            return (stat.st_mtime_ns, stat.st_size)
         except OSError:
             return None
