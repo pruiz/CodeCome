@@ -181,6 +181,27 @@ class BaseEventLoop:
 
         return events
 
+    def _should_skip_message_updated(self, event: dict[str, Any]) -> bool:
+        """Track live assistant message updates and suppress duplicate token states."""
+        if event.get("type") != "message.updated":
+            return False
+        info = event.get("properties", {}).get("info", {})
+        if not isinstance(info, dict):
+            return False
+        msg_id = info.get("id")
+        if not isinstance(msg_id, str) or not msg_id:
+            return False
+
+        tokens = info.get("tokens", {})
+        has_input = bool(tokens.get("input", 0)) if isinstance(tokens, dict) else False
+        stream_key = f"{msg_id}:tok={1 if has_input else 0}"
+        if stream_key in self._seen_message_ids:
+            return True
+
+        self._seen_message_ids.add(stream_key)
+        self._seen_message_ids.add(msg_id)
+        return False
+
     # ------------------------------------------------------------------
     # Stop
     # ------------------------------------------------------------------

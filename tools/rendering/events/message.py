@@ -41,6 +41,7 @@ class MessageUpdatedRenderer(EventRenderer):
         model_label = f"{provider_id}/{model_id}" if provider_id and model_id else model_id
 
         if role == "user":
+            self.context.last_assistant_header_rendered_at = 0.0
             message = "> User"
             style = "dim"
         elif role == "assistant":
@@ -68,6 +69,7 @@ class MessageUpdatedRenderer(EventRenderer):
                 message = f"> Assistant \u00b7 {model_label}" if model_label else "> Assistant"
                 style = "bold blue"
         else:
+            self.context.last_assistant_header_rendered_at = 0.0
             agent = str(info.get("agent", "assistant"))
             message = f"> {agent} \u00b7 {model_label}" if model_label else f"> {agent}"
             style = "bold blue"
