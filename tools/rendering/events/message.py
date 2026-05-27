@@ -27,10 +27,6 @@ class MessageUpdatedRenderer(EventRenderer):
         has_tokens = isinstance(tokens, dict) and (
             tokens.get("input", 0) or tokens.get("output", 0) or tokens.get("reasoning", 0)
         )
-        has_summary = "summary" in info or "finish" in info
-        if not has_summary and not has_tokens:
-            return False
-
         mcache = tokens.get("cache", {}) if isinstance(tokens, dict) else {}
         cost = info.get("cost", 0) or 0
 

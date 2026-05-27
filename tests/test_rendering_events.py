@@ -351,9 +351,11 @@ class TestMessageUpdatedRenderer:
         out = capsys.readouterr().out
         assert "auditor" in out
 
-    def test_returns_false_when_no_tokens_or_summary(self):
+    def test_returns_true_and_renders_role_when_no_tokens_or_summary(self, capsys):
         r = MessageUpdatedRenderer(_ctx("plain"))
-        assert r.render({"info": {"role": "assistant"}}) is False
+        assert r.render({"info": {"role": "assistant"}}) is True
+        out = capsys.readouterr().out
+        assert "Assistant" in out
 
     def test_renders_with_cost(self, capsys):
         r = MessageUpdatedRenderer(_ctx("plain"))
