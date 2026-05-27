@@ -47,6 +47,14 @@ except ImportError:  # pragma: no cover
 _RENDERING_CTX_CACHE: dict[str, Any] = {}
 
 
+def _make_sink(console: Any) -> Any:
+    from rendering.sink import PlainSink, RichConsoleSink
+
+    if HAVE_RICH and console is not None:
+        return RichConsoleSink(console)
+    return PlainSink()
+
+
 def _get_rendering_ctx(console: Any, *, root: Path | None = None) -> Any:
     if root is None:
         root = Path(__file__).resolve().parents[2]
@@ -58,12 +66,7 @@ def _get_rendering_ctx(console: Any, *, root: Path | None = None) -> Any:
     from rendering.cache import SnapshotCache
     from rendering.context import RenderContext
     from rendering.settings import RenderSettings
-    from rendering.sink import PlainSink, RichConsoleSink
-
-    if mode == "rich":
-        sink = RichConsoleSink(console)
-    else:
-        sink = PlainSink()
+    sink = _make_sink(console)
     ctx = RenderContext(
         root=root,
         sink=sink,
@@ -141,6 +144,20 @@ def configure_rendering(console: Any, **settings_overrides) -> Any:
     so the decision can flow into RenderSettings before events are rendered.
     """
     ctx = _get_rendering_ctx(console)
+    if settings_overrides:
+        ctx.settings = dataclasses.replace(ctx.settings, **settings_overrides)
+    return ctx
+
+
+def reconfigure_rendering(console: Any, **settings_overrides) -> Any:
+    """Rebind the cached rendering context to a new output sink.
+
+    Chat mode creates its final Textual output proxy only after the app is
+    mounted.  This updates the sink in-place without clearing caches or
+    rebuilding the renderer registry.
+    """
+    ctx = _get_rendering_ctx(console)
+    ctx.sink = _make_sink(console)
     if settings_overrides:
         ctx.settings = dataclasses.replace(ctx.settings, **settings_overrides)
     return ctx
