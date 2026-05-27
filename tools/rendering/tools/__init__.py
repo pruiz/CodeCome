@@ -18,6 +18,7 @@ from rendering.tools.read import ReadRenderer
 from rendering.tools.skill import SkillRenderer
 from rendering.tools.task import TaskRenderer
 from rendering.tools.todo import TodoRenderer
+from rendering.tools.web import WebRenderer
 from rendering.tools.write import WriteRenderer
 
 __all__ = [
@@ -33,5 +34,6 @@ __all__ = [
     "TaskRenderer",
     "TodoRenderer",
     "ToolRenderer",
+    "WebRenderer",
     "WriteRenderer",
 ]

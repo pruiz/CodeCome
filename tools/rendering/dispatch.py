@@ -109,11 +109,11 @@ def _get_rendering_ctx(console: Any, *, root: Path | None = None) -> Any:
         EditRenderer,
         GlobRenderer,
         GrepRenderer,
-        PermissionErrorRenderer,
         ReadRenderer,
         SkillRenderer,
         TaskRenderer,
         TodoRenderer,
+        WebRenderer,
         WriteRenderer,
     )
     registry.register_tool(ReadRenderer(ctx))
@@ -126,7 +126,7 @@ def _get_rendering_ctx(console: Any, *, root: Path | None = None) -> Any:
     registry.register_tool(SkillRenderer(ctx))
     registry.register_tool(CommandRenderer(ctx))
     registry.register_tool(ApplyPatchRenderer(ctx))
-    registry.register_tool(PermissionErrorRenderer(ctx))
+    registry.register_tool(WebRenderer(ctx))
 
     ctx.registry = registry
     _RENDERING_CTX_CACHE[mode] = ctx

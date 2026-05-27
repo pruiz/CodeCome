@@ -127,11 +127,12 @@ class TestReasoningEventRenderer:
 
     def test_disabled_by_settings(self):
         r = ReasoningEventRenderer(_ctx("plain", render_reasoning=False))
-        assert r.render({"part": {"text": "Hidden"}}) is False
+        assert r.render({"part": {"text": "Hidden"}}) is True
 
-    def test_skips_empty_text(self):
+    def test_skips_empty_text(self, capsys):
         r = ReasoningEventRenderer(_ctx("plain", render_reasoning=True))
-        assert r.render({"part": {"text": ""}}) is False
+        assert r.render({"part": {"text": ""}}) is True
+        assert capsys.readouterr().out == ""
 
     def test_truncates_long_text(self, capsys):
         r = ReasoningEventRenderer(_ctx("plain", render_reasoning=True, reasoning_max_chars=10))
