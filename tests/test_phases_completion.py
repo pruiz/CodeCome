@@ -87,7 +87,7 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
         completion_mod.SANDBOX_PLAN_PATH = tmp_path / "sandbox-plan.md"
         completion_mod.ROOT = tmp_path / "codecome_workspace"
 
-        fake_time = time.time()
+        fake_time = time.time() - 2
 
         (completion_mod.ROOT / "sandbox").mkdir(parents=True)
         (completion_mod.ROOT / "sandbox" / "CODECOME-GENERATED.md").write_text("")

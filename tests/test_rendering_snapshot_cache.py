@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -40,9 +41,25 @@ class TestSnapshotCache:
     def test_invalidate_stale_removes_modified(self, tmp_path):
         cache = SnapshotCache()
         path = tmp_path / "mod.txt"
+        old_ns = 1_700_000_000_000_000_000
+        new_ns = old_ns + 1_000_000_000
         path.write_text("v1", encoding="utf-8")
+        os.utime(path, ns=(old_ns, old_ns))
         cache.set(str(path), "v1")
         path.write_text("v2", encoding="utf-8")
+        os.utime(path, ns=(new_ns, new_ns))
+        cache.invalidate_stale()
+        assert cache.get(str(path)) is None
+
+    def test_invalidate_stale_removes_modified_with_same_timestamp_and_different_size(self, tmp_path):
+        cache = SnapshotCache()
+        path = tmp_path / "coarse.txt"
+        fixed_ns = 1_700_000_000_000_000_000
+        path.write_text("v1", encoding="utf-8")
+        os.utime(path, ns=(fixed_ns, fixed_ns))
+        cache.set(str(path), "v1")
+        path.write_text("v22", encoding="utf-8")
+        os.utime(path, ns=(fixed_ns, fixed_ns))
         cache.invalidate_stale()
         assert cache.get(str(path)) is None
 
