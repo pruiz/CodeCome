@@ -362,6 +362,12 @@ try:
             self.chat_input = self.query_one(Input)
             self.modeline = self.query_one("#status-left", Static)
             self.console_proxy = TextualConsoleProxy(self.rich_log, self)
+            from rendering import dispatch as rendering_dispatch
+
+            rendering_dispatch.reconfigure_rendering(
+                self.console_proxy,
+                render_reasoning=bool(self.thinking_on),
+            )
             _chat_debug("on_mount: proxy created")
 
             # Set initial modeline with model/agent info.
