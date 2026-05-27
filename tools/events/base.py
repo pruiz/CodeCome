@@ -154,14 +154,18 @@ class BaseEventLoop:
                 continue
 
             message_id = info.get("id")
-            if isinstance(message_id, str) and message_id and message_id not in self._seen_message_ids:
-                events.append({
-                    "type": "message.updated",
-                    "timestamp": int(time.time() * 1000),
-                    "sessionID": self.session_id,
-                    "info": info,
-                })
-                self._seen_message_ids.add(message_id)
+            if isinstance(message_id, str) and message_id:
+                tokens = info.get("tokens", {})
+                has_input = bool(tokens.get("input", 0)) if isinstance(tokens, dict) else False
+                stream_key = f"{message_id}:tok={1 if has_input else 0}"
+                if stream_key not in self._seen_message_ids:
+                    self._seen_message_ids.add(stream_key)
+                    events.append({
+                        "type": "message.updated",
+                        "timestamp": int(time.time() * 1000),
+                        "sessionID": self.session_id,
+                        "info": info,
+                    })
 
             for part in parts:
                 if not isinstance(part, dict):
@@ -199,7 +203,6 @@ class BaseEventLoop:
             return True
 
         self._seen_message_ids.add(stream_key)
-        self._seen_message_ids.add(msg_id)
         return False
 
     # ------------------------------------------------------------------
