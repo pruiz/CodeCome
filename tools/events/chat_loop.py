@@ -161,21 +161,10 @@ class ChatEventLoop(BaseEventLoop):
                 if self.debug and (event_count <= 5 or event_count % 20 == 0):
                     self.debug(f"_consumer_worker: event #{event_count} type={event.get('type')}")
 
-                # Track message IDs and token-state from the SSE stream.
-                if event.get("type") == "message.updated":
-                    info = event.get("properties", {}).get("info", {})
-                    if isinstance(info, dict):
-                        msg_id = info.get("id")
-                        if isinstance(msg_id, str) and msg_id:
-                            tokens = info.get("tokens", {})
-                            has_input = bool(tokens.get("input", 0)) if isinstance(tokens, dict) else False
-                            stream_key = f"{msg_id}:tok={1 if has_input else 0}"
-                            if stream_key in self._seen_message_ids:
-                                if self.debug:
-                                    self.debug(f"_consumer_worker: suppressing duplicate msg {stream_key}")
-                                continue
-                            self._seen_message_ids.add(stream_key)
-                            self._seen_message_ids.add(msg_id)
+                if self._should_skip_message_updated(event):
+                    if self.debug:
+                        self.debug("_consumer_worker: suppressing duplicate message.updated")
+                    continue
 
                 if event.get("type") == "permission.asked":
                     self._handle_permission(event)
