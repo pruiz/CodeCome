@@ -612,7 +612,7 @@ class TestPhaseEventLoopEndToEnd:
         assert [e["type"] for e in emitted] == ["server.connected", "session.status", "message.updated", "step_start", "text", "step_finish", "session.idle"]
 
     def test_session_snapshot_sync_does_not_replay_seen_assistant_message(self, event_loop_objects, monkeypatch):
-        PhaseEventLoop, RunResult, SseClient = event_loop_objects
+        PhaseEventLoop, _, _ = event_loop_objects
         emitted: list[dict] = []
 
         live_info = {
@@ -650,12 +650,12 @@ class TestPhaseEventLoopEndToEnd:
         monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
         loop = PhaseEventLoop("http://localhost:8080", "sess-1", None, "1", "recon")
-        loop.run(lambda c, p, l, e: emitted.append(e))
+        loop.run(lambda _c, _p, _label, event: emitted.append(event))
 
         assert [e["type"] for e in emitted] == ["message.updated", "session.idle"]
 
     def test_session_snapshot_sync_emits_tool_use_from_completed_parts(self, event_loop_objects, monkeypatch):
-        PhaseEventLoop, RunResult, SseClient = event_loop_objects
+        PhaseEventLoop, _, _ = event_loop_objects
         emitted: list[dict] = []
 
         class FakeSseClient:
