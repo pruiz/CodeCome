@@ -85,6 +85,10 @@ class RenderSettings:
     task_prompt_preview_lines: int = 5
     render_subagent_updates: bool = True
 
+    # --- Event noise throttling ------------------------------------------
+    session_busy_throttle_s: int = 5
+    assistant_header_throttle_s: int = 3
+
     # --- Snapshot cache --------------------------------------------------
     write_cache_enabled: bool = True
     write_cache_cap: int = 200
@@ -122,6 +126,8 @@ class RenderSettings:
             subagent_update_throttle_s=_int_env("CODECOME_SUBAGENT_UPDATE_THROTTLE_S", 5),
             task_prompt_preview_lines=_int_env("CODECOME_TASK_PROMPT_PREVIEW_LINES", 5),
             render_subagent_updates=_bool_env("CODECOME_RENDER_SUBAGENT_UPDATES", True),
+            session_busy_throttle_s=_int_env("CODECOME_SESSION_BUSY_THROTTLE_S", 5),
+            assistant_header_throttle_s=_int_env("CODECOME_ASSISTANT_HEADER_THROTTLE_S", 3),
             write_cache_enabled=_bool_env("CODECOME_WRITE_CACHE", True),
             write_cache_cap=_int_env("CODECOME_WRITE_CACHE_CAP", 200),
         )

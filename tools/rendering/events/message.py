@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from rendering.events.base import EventRenderer
@@ -43,6 +44,12 @@ class MessageUpdatedRenderer(EventRenderer):
             message = "> User"
             style = "dim"
         elif role == "assistant":
+            throttle_s = self.context.settings.assistant_header_throttle_s
+            now = time.monotonic()
+            if (throttle_s > 0 and self.context.last_assistant_header_rendered_at > 0 and
+                    now - self.context.last_assistant_header_rendered_at < throttle_s):
+                return True
+            self.context.last_assistant_header_rendered_at = now
             if has_tokens:
                 _in = tokens.get("input", 0)
                 _out = tokens.get("output", 0)

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from rendering.events.base import EventRenderer
@@ -28,6 +29,12 @@ class SessionStatusRenderer(EventRenderer):
             elif self.plain:
                 self.sink.write_text(C.warn(text))
         elif status_type == "busy":
+            throttle_s = self.context.settings.session_busy_throttle_s
+            now = time.monotonic()
+            if (throttle_s > 0 and self.context.last_busy_status_rendered_at > 0 and
+                    now - self.context.last_busy_status_rendered_at < throttle_s):
+                return True
+            self.context.last_busy_status_rendered_at = now
             text = "session status: busy"
             if self.rich:
                 from rich.text import Text
