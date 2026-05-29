@@ -137,12 +137,11 @@ def _extract(zip_path: Path, dest_dir: Path) -> None:
     if inner.is_dir():
         for item in inner.iterdir():
             target = dest_dir / item.name
-            if target.exists():
-                if target.is_dir():
-                    shutil.rmtree(target)
-                else:
-                    target.unlink()
-            item.rename(target)
+            if target.is_dir():
+                shutil.rmtree(target)
+            elif target.is_file():
+                target.unlink()
+            shutil.move(str(item), str(target))
         shutil.rmtree(inner)
 
 
