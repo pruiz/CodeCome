@@ -17,12 +17,14 @@ OPENCODE_THINKING_FLAG := $(if $(filter 1,$(CODECOME_THINKING)),--thinking,)
 
 ifndef NO_COLOR
 RED := \033[31m
+GREEN := \033[32m
 YELLOW := \033[33m
 CYAN := \033[36m
 BOLD := \033[1m
 RESET := \033[0m
 else
 RED :=
+GREEN :=
 YELLOW :=
 CYAN :=
 BOLD :=
@@ -125,12 +127,23 @@ help:
 # ---------------------------------------------------------------------------
 
 init:
-	@python3 -m venv .venv
-	@$(PYTHON) -m pip install --upgrade pip
-	@$(PYTHON) -m pip install --no-input -r requirements.txt
+	@printf "\n$(BOLD)$(CYAN)==> [1/4] Creating Python virtual environment$(RESET)\n"
+	@python3 -m venv .venv || { printf "$(BOLD)$(RED)[FAIL]$(RESET) Could not create .venv\n"; exit 1; }
+	@printf "$(BOLD)$(GREEN)[OK]$(RESET) Virtual environment ready at .venv\n\n"
+	@printf "$(BOLD)$(CYAN)==> [2/4] Upgrading pip$(RESET)\n"
+	@$(PYTHON) -m pip install --upgrade pip || { printf "$(BOLD)$(RED)[FAIL]$(RESET) pip upgrade failed\n"; exit 1; }
+	@printf "$(BOLD)$(GREEN)[OK]$(RESET) pip upgraded\n\n"
+	@printf "$(BOLD)$(CYAN)==> [3/4] Installing Python requirements$(RESET)\n"
+	@$(PYTHON) -m pip install --no-input -r requirements.txt || { printf "$(BOLD)$(RED)[FAIL]$(RESET) requirements install failed\n"; exit 1; }
+	@printf "$(BOLD)$(GREEN)[OK]$(RESET) Python dependencies installed\n\n"
+	@printf "$(BOLD)$(CYAN)==> [4/4] Installing managed CodeQL CLI$(RESET)\n"
 	@if [ "$$CODEQL" != "0" ] && [ "$$CODEQL_SKIP_INSTALL" != "1" ]; then \
-		$(PYTHON) tools/codeql.py install; \
+		$(PYTHON) tools/codeql.py install || { printf "$(BOLD)$(RED)[FAIL]$(RESET) managed CodeQL install failed\n"; exit 1; }; \
+		printf "$(BOLD)$(GREEN)[OK]$(RESET) Managed CodeQL CLI ready\n"; \
+	else \
+		printf "$(BOLD)$(YELLOW)[SKIP]$(RESET) Managed CodeQL install skipped (CODEQL=0 or CODEQL_SKIP_INSTALL=1)\n"; \
 	fi
+	@printf "\n$(BOLD)$(GREEN)Setup complete.$(RESET)\n"
 
 venv: init
 

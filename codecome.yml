@@ -95,7 +95,7 @@ audit:
       install:
         managed: true
         version: "latest"
-        path: ".tools/codeql/current/codeql/codeql"
+        path: ".tools/codeql/current/codeql"
 
       output_dir: "./itemdb/evidence/codeql"
       database_dir: "./itemdb/evidence/codeql/databases"
