@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import platform
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -117,32 +118,45 @@ def _download(url: str, dest: Path) -> None:
 
 
 def _extract(zip_path: Path, dest_dir: Path) -> None:
-    """Extract a zip archive to *dest_dir*, flattening the inner codeql/ dir.
+    """Extract a zip archive to *dest_dir*, stripping the leading ``codeql/``.
 
-    The GitHub release bundle contains a top-level ``codeql/`` directory.
-    After extraction we move its contents up one level into *dest_dir*
-    so the binary lands directly under the versioned directory.
-    The now-empty inner ``codeql/`` directory is removed.
+    GitHub's CodeQL bundles contain a single top-level ``codeql/`` directory.
+    We strip that prefix during extraction so the launcher ends up at
+    ``dest_dir/codeql`` and the rest of the bundle contents sit directly under
+    the version directory.
     """
     import zipfile
 
+    prefix = "codeql/"
     dest_dir.mkdir(parents=True, exist_ok=True)
     print(f"Extracting to {dest_dir} …")
     with zipfile.ZipFile(zip_path, "r") as zf:
-        zf.extractall(dest_dir)
+        for info in zf.infolist():
+            if not info.filename.startswith(prefix):
+                raise RuntimeError(
+                    f"Unexpected CodeQL bundle layout: {info.filename!r} does not start with {prefix!r}"
+                )
 
-    # Flatten: the bundle creates an inner "codeql/" subdir; move everything
-    # inside it up into dest_dir so the binary sits at dest_dir/codeql.
-    inner = dest_dir / "codeql"
-    if inner.is_dir():
-        for item in inner.iterdir():
-            target = dest_dir / item.name
-            if target.is_dir():
-                shutil.rmtree(target)
-            elif target.is_file():
-                target.unlink()
-            shutil.move(str(item), str(target))
-        shutil.rmtree(inner)
+            relative_name = info.filename[len(prefix):]
+            if not relative_name:
+                continue
+
+            target = dest_dir / relative_name
+            if info.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(info, "r") as src, target.open("wb") as dst:
+                shutil.copyfileobj(src, dst)
+
+            mode = (info.external_attr >> 16) & 0o777
+            if mode:
+                target.chmod(mode)
+
+    launcher = dest_dir / "codeql"
+    if launcher.is_file():
+        launcher.chmod(launcher.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
 # ---------------------------------------------------------------------------
@@ -152,11 +166,15 @@ def _extract(zip_path: Path, dest_dir: Path) -> None:
 def _codeql_binary(base_dir: Path) -> Path:
     """Return the path to the codeql executable inside an extracted bundle.
 
-    After flattening, the binary sits directly at ``base_dir/codeql``.
+    New installs place the binary at ``base_dir/codeql``. Keep a temporary
+    fallback for older nested local installs.
     """
     binary = base_dir / "codeql"
     if binary.is_file():
         return binary
+    legacy_binary = base_dir / "codeql" / "codeql"
+    if legacy_binary.is_file():
+        return legacy_binary
     return binary  # fall back; will fail usefully in _verify if missing
 
 
@@ -231,8 +249,8 @@ def install(config: Optional[CodeQLConfig] = None) -> int:
         zip_path = tmp_dir / f"codeql-{version}-{plat}.zip"
         _download(url, zip_path)
 
-        # Remove previous version dir if force-reinstalling
-        if force and version_dir.exists():
+        # Replace stale partial installs before extracting a fresh bundle.
+        if version_dir.exists():
             shutil.rmtree(version_dir)
 
         _extract(zip_path, version_dir)
