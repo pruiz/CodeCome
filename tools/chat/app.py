@@ -174,7 +174,10 @@ def _chat_update_activity_state(self, event: dict[str, Any]) -> None:
     if event_type == "server.heartbeat":
         return
 
-    if event_type == "session.status":
+    if event_type in {"session.status", "session.idle"}:
+        if event_type == "session.idle":
+            set_state("idle")
+            return
         props = event.get("properties", {}) if isinstance(event.get("properties"), dict) else {}
         status = props.get("status", {}) if isinstance(props.get("status"), dict) else {}
         status_type = str(status.get("type", ""))
