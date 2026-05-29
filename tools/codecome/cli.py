@@ -68,7 +68,7 @@ def main() -> int:
 
     # Phase 1 handles its own prompt files via subphase orchestration.
     required = ["phase", "label", "agent"]
-    if str(args.phase) not in ("1", "None"):
+    if str(args.phase) != "1":
         required.append("prompt_file")
     missing = [n for n in required if getattr(args, n) is None]
     if missing:

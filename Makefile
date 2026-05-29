@@ -129,7 +129,7 @@ init:
 	@$(PYTHON) -m pip install --upgrade pip
 	@$(PYTHON) -m pip install --no-input -r requirements.txt
 	@if [ "$$CODEQL" != "0" ] && [ "$$CODEQL_SKIP_INSTALL" != "1" ]; then \
-		printf "$(BOLD)$(CYAN)[CodeQL]$(RESET) Managed CodeQL install not yet implemented — coming in a future PR.\n"; \
+		$(PYTHON) tools/codeql.py install; \
 	fi
 
 venv: init
@@ -192,7 +192,7 @@ sweep: venv-check
 
 opencode-raw:
 	@test -n "$(AGENT)" || (echo "AGENT is required. Usage: make opencode-raw AGENT=auditor PROMPT_FILE=prompts/foo.md" && exit 1)
-	@test -n "$(PROMPT_FILE)" || (echo "PROMPT_FILE is required. Usage: make opencode-raw AGENT=auditor PROMPT_FILE=prompts/foo.md" && exit 1)
+	@test -r "$(PROMPT_FILE)" || (echo "PROMPT_FILE must be a readable file. Usage: make opencode-raw AGENT=auditor PROMPT_FILE=prompts/foo.md" && exit 1)
 	@opencode run --agent "$(AGENT)" $(OPENCODE_THINKING_FLAG) "$$(cat "$(PROMPT_FILE)")"
 
 validate-all: venv-check
