@@ -1,9 +1,9 @@
 # Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later OR AGPL-3.0-or-later
 
-.PHONY: help venv venv-check check status next-id frontmatter tests test-parity itemdb-reset index report
+.PHONY: help init venv venv-check check status next-id frontmatter tests test-parity itemdb-reset index report
 .PHONY: findings findings-create findings-move findings-evidence findings-package
-.PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all
+.PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all opencode-raw
 .PHONY: sandbox-setup sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-reset sandbox-build sandbox-test
 .PHONY: sandbox-list sandbox-inspect sandbox-detect sandbox-bootstrap sandbox-validate sandbox-regenerate sandbox-status show-model
 
@@ -11,14 +11,6 @@ PYTHON := .venv/bin/python3
 export PATH := $(CURDIR)/.venv/bin:$(PATH)
 export PROMPT_EXTRA
 export PROMPT_EXTRA_FILE
-
-CHAT ?= 0
-ifeq ($(CHAT),1)
-WRAPPER_ARGS += --chat
-endif
-
-# Env vars injected into opencode serve (wrapper mode) and opencode run (raw mode)
-CODECOME_OPENCODE_ENV_EXPORT := OPENCODE_ENABLE_EXA=1
 
 # Pass --thinking to raw opencode run when CODECOME_THINKING=1
 OPENCODE_THINKING_FLAG := $(if $(filter 1,$(CODECOME_THINKING)),--thinking,)
@@ -44,7 +36,7 @@ help:
 	@printf "\n"
 	@printf "  $(BOLD)$(CYAN)Workflow phases:$(RESET)\n"
 	@printf "\n"
-	@printf "    $(BOLD)make venv$(RESET)                     Create/update repo-local virtualenv\n"
+	@printf "    $(BOLD)make init$(RESET)                     Create/update repo-local virtualenv\n"
 	@printf "    $(BOLD)make phase-1$(RESET)                  Run reconnaissance\n"
 	@printf "    $(BOLD)make phase-2$(RESET)                  Run hypothesis generation\n"
 	@printf "    $(BOLD)make phase-3$(RESET)                  Run counter-analysis\n"
@@ -60,11 +52,9 @@ help:
 	@printf "    $(BOLD)make sweep$(RESET)                   Run deep sweep on top-scoring files\n"
 	@printf "    $(BOLD)make sweep FILE=\"src/foo.*\"$(RESET)  Run deep sweep on specific file(s)\n"
 	@printf "\n"
-	@printf "  $(BOLD)$(CYAN)Wrapper controls:$(RESET)\n"
+	@printf "  $(BOLD)$(CYAN)Phase controls:$(RESET)\n"
 	@printf "\n"
-	@printf "    $(BOLD)CODECOME_USE_WRAPPER=0$(RESET)       Bypass styled wrapper and use raw opencode run\n"
-	@printf "        $(BOLD)CODECOME_THINKING=1$(RESET)          Show model reasoning/thinking blocks in output\n"
-	@printf "    $(BOLD)OPENCODE_ARGS='...'$(RESET)          Extra flags for opencode run (forwarded directly when CODECOME_USE_WRAPPER=0; in wrapper mode only --model, --variant and --thinking are used)\n"
+	@printf "    $(BOLD)CODECOME_THINKING=1$(RESET)          Show model reasoning/thinking blocks in output\n"
 	@printf "    $(BOLD)CODECOME_MODEL=<id>$(RESET)          Pin the model per phase (e.g. anthropic/claude-opus-4-7)\n"
 	@printf "    $(BOLD)CODECOME_MODEL_VARIANT=<v>$(RESET)   Pin the model variant (e.g. high, max)\n"
 	@printf "    $(BOLD)PROMPT_EXTRA=\"...\"$(RESET)            Append extra instructions to phase prompt\n"
@@ -72,6 +62,13 @@ help:
 	@printf "\n"
 	@printf "    $(BOLD)make show-model$(RESET)              Print the model resolution table for an agent\n"
 	@printf "    $(BOLD)make show-model AGENT=auditor$(RESET)\n"
+	@printf "\n"
+	@printf "  $(BOLD)$(CYAN)Raw debug (non-workflow):$(RESET)\n"
+	@printf "\n"
+	@printf "    $(BOLD)make opencode-raw$(RESET)            Run opencode directly (bypasses harness)\n"
+	@printf "        $(BOLD)AGENT=<name>$(RESET)                Required. Agent to run (e.g. auditor)\n"
+	@printf "        $(BOLD)PROMPT_FILE=path$(RESET)            Required. Prompt file to send\n"
+	@printf "        $(BOLD)CODECOME_THINKING=1$(RESET)         Show reasoning/thinking blocks\n"
 	@printf "\n"
 	@printf "  $(BOLD)$(CYAN)Workspace tools:$(RESET)\n"
 	@printf "\n"
@@ -127,14 +124,19 @@ help:
 # Python environment
 # ---------------------------------------------------------------------------
 
-venv:
+init:
 	@python3 -m venv .venv
 	@$(PYTHON) -m pip install --upgrade pip
 	@$(PYTHON) -m pip install --no-input -r requirements.txt
+	@if [ "$$CODEQL" != "0" ] && [ "$$CODEQL_SKIP_INSTALL" != "1" ]; then \
+		printf "$(BOLD)$(CYAN)[CodeQL]$(RESET) Managed CodeQL install not yet implemented — coming in a future PR.\n"; \
+	fi
+
+venv: init
 
 venv-check:
-	@test -x "$(PYTHON)" || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) Missing repo virtualenv at .venv\n\nRun:\n\n    make venv\n\n" && exit 1)
-	@$(PYTHON) -c "import yaml, rich" >/dev/null 2>&1 || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) .venv is missing required Python packages\n\nRun:\n\n    make venv\n\nIf you updated requirements, rerun the same command to resync .venv.\n\n" && exit 1)
+	@test -x "$(PYTHON)" || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) Missing repo virtualenv at .venv\n\nRun:\n\n    make init\n\n" && exit 1)
+	@$(PYTHON) -c "import yaml, rich" >/dev/null 2>&1 || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) .venv is missing required Python packages\n\nRun:\n\n    make init\n\nIf you updated requirements, rerun the same command to resync .venv.\n\n" && exit 1)
 
 # ---------------------------------------------------------------------------
 # Workflow phases
@@ -142,11 +144,7 @@ venv-check:
 
 phase-1: venv-check
 	@$(PYTHON) tools/gate-check.py 1
-	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		$(CODECOME_OPENCODE_ENV_EXPORT) opencode run --agent recon $(OPENCODE_THINKING_FLAG) "$$(cat prompts/phase-1-recon.md)"; \
-	else \
-		$(PYTHON) tools/run-agent.py $(WRAPPER_ARGS) --phase 1 --label "Target Reconnaissance + Sandbox Bootstrap" --agent recon --prompt-file prompts/phase-1-recon.md; \
-	fi
+	@$(PYTHON) tools/run-agent.py --phase 1 --label "Target Reconnaissance + Sandbox Bootstrap" --agent recon --prompt-file prompts/phase-1-recon.md
 
 phase-2: venv-check
 	@$(PYTHON) tools/gate-check.py 2
@@ -155,45 +153,25 @@ phase-2: venv-check
 		printf "Run: make sandbox-status\n" ; \
 		printf "Or override (not recommended): CODECOME_ALLOW_NO_SANDBOX=1 make phase-2\n\n" ; \
 		exit 1 )
-	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		$(CODECOME_OPENCODE_ENV_EXPORT) opencode run --agent auditor $(OPENCODE_THINKING_FLAG) "$$(cat prompts/phase-2-audit.md)"; \
-	else \
-		$(PYTHON) tools/run-agent.py $(WRAPPER_ARGS) --phase 2 --label "Hypothesis Generation" --agent auditor --prompt-file prompts/phase-2-audit.md; \
-	fi
+	@$(PYTHON) tools/run-agent.py --phase 2 --label "Hypothesis Generation" --agent auditor --prompt-file prompts/phase-2-audit.md
 
 phase-3: venv-check
 	@$(PYTHON) tools/gate-check.py 3
-	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		$(CODECOME_OPENCODE_ENV_EXPORT) opencode run --agent reviewer $(OPENCODE_THINKING_FLAG) "$$(cat prompts/phase-3-review.md)"; \
-	else \
-		$(PYTHON) tools/run-agent.py $(WRAPPER_ARGS) --phase 3 --label "Counter-analysis" --agent reviewer --prompt-file prompts/phase-3-review.md; \
-	fi
+	@$(PYTHON) tools/run-agent.py --phase 3 --label "Counter-analysis" --agent reviewer --prompt-file prompts/phase-3-review.md
 
 phase-4: venv-check
 	@test -n "$(FINDING)" || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) Missing required FINDING argument for Phase 4 (Validation).\n\nSpecify which finding you want to validate:\n\n    $(BOLD)make phase-4 FINDING=CC-0001$(RESET)\n\nTo list available pending findings: $(BOLD)make findings STATUS=PENDING$(RESET)\n\n" && exit 1)
 	@$(PYTHON) tools/gate-check.py 4 $(FINDING)
-	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		$(CODECOME_OPENCODE_ENV_EXPORT) opencode run --agent validator $(OPENCODE_THINKING_FLAG) "$$(sed 's#FINDING_PATH_OR_ID#$(FINDING)#g' prompts/phase-4-validate.md)"; \
-	else \
-		$(PYTHON) tools/run-agent.py $(WRAPPER_ARGS) --phase 4 --label "Validation" --agent validator --prompt-file prompts/phase-4-validate.md --finding "$(FINDING)"; \
-	fi
+	@$(PYTHON) tools/run-agent.py --phase 4 --label "Validation" --agent validator --prompt-file prompts/phase-4-validate.md --finding "$(FINDING)"
 
 phase-5: venv-check
 	@test -n "$(FINDING)" || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) Missing required FINDING argument for Phase 5 (Exploitation).\n\nSpecify which finding you want to exploit:\n\n    $(BOLD)make phase-5 FINDING=CC-0001$(RESET)\n\nTo list available confirmed findings: $(BOLD)make findings STATUS=CONFIRMED$(RESET)\n\n" && exit 1)
 	@$(PYTHON) tools/gate-check.py 5 $(FINDING)
-	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		$(CODECOME_OPENCODE_ENV_EXPORT) opencode run --agent exploiter $(OPENCODE_THINKING_FLAG) "$$(sed 's#FINDING_PATH_OR_ID#$(FINDING)#g' prompts/phase-5-exploit.md)"; \
-	else \
-		$(PYTHON) tools/run-agent.py $(WRAPPER_ARGS) --phase 5 --label "Exploit Development" --agent exploiter --prompt-file prompts/phase-5-exploit.md --finding "$(FINDING)"; \
-	fi
+	@$(PYTHON) tools/run-agent.py --phase 5 --label "Exploit Development" --agent exploiter --prompt-file prompts/phase-5-exploit.md --finding "$(FINDING)"
 
 phase-6: venv-check
 	@$(PYTHON) tools/gate-check.py 6
-	@if [ "$$CODECOME_USE_WRAPPER" = "0" ]; then \
-		$(CODECOME_OPENCODE_ENV_EXPORT) opencode run --agent reporter $(OPENCODE_THINKING_FLAG) "$$(cat prompts/phase-6-report.md)"; \
-	else \
-		$(PYTHON) tools/run-agent.py $(WRAPPER_ARGS) --phase 6 --label "Reporting" --agent reporter --prompt-file prompts/phase-6-report.md; \
-	fi
+	@$(PYTHON) tools/run-agent.py --phase 6 --label "Reporting" --agent reporter --prompt-file prompts/phase-6-report.md
 
 chat: venv-check
 	@$(PYTHON) tools/run-agent.py --chat --label "Interactive Chat" --agent $(or $(AGENT),chat) --prompt-file prompts/chat-initial.md $(if $(DEBUG),--debug,)
@@ -207,6 +185,15 @@ sweep: venv-check
 	else \
 		$(PYTHON) tools/run-sweep.py; \
 	fi
+
+# ---------------------------------------------------------------------------
+# Raw opencode debug target (non-workflow)
+# ---------------------------------------------------------------------------
+
+opencode-raw:
+	@test -n "$(AGENT)" || (echo "AGENT is required. Usage: make opencode-raw AGENT=auditor PROMPT_FILE=prompts/foo.md" && exit 1)
+	@test -n "$(PROMPT_FILE)" || (echo "PROMPT_FILE is required. Usage: make opencode-raw AGENT=auditor PROMPT_FILE=prompts/foo.md" && exit 1)
+	@opencode run --agent "$(AGENT)" $(OPENCODE_THINKING_FLAG) "$$(cat "$(PROMPT_FILE)")"
 
 validate-all: venv-check
 	@ids=$$($(PYTHON) tools/list-findings.py --status PENDING --format ids 2>/dev/null); \
