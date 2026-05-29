@@ -39,3 +39,9 @@ class EventRenderer(BaseRenderer):
 
     def render(self, event: dict[str, Any]) -> bool:
         raise NotImplementedError
+
+
+def _clear_hidden_reasoning_state(context: Any) -> None:
+    context.hidden_reasoning_active = False
+    context.hidden_reasoning_started_at = 0.0
+    context.last_hidden_reasoning_rendered_at = 0.0

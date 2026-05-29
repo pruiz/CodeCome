@@ -134,6 +134,54 @@ class TestReasoningEventRenderer:
         assert r.render({"part": {"text": ""}}) is True
         assert capsys.readouterr().out == ""
 
+    def test_renders_hidden_reasoning_after_first_event(self, capsys, monkeypatch):
+        monkeypatch.setattr("rendering.events.reasoning.time.monotonic", lambda: 100.0)
+        r = ReasoningEventRenderer(_ctx("plain", render_reasoning=True, hidden_reasoning_throttle_s=2))
+        event = {"part": {"text": "", "metadata": {"openai": {"reasoningEncryptedContent": "enc"}}}}
+
+        assert r.render(event) is True
+
+        out = capsys.readouterr().out
+        assert "Assistant reasoning [0.0s so far]" in out
+
+    def test_throttles_hidden_reasoning_updates(self, capsys, monkeypatch):
+        times = iter([100.0, 101.0])
+        monkeypatch.setattr("rendering.events.reasoning.time.monotonic", lambda: next(times))
+        r = ReasoningEventRenderer(_ctx("plain", render_reasoning=True, hidden_reasoning_throttle_s=2))
+        event = {"part": {"text": "", "metadata": {"openai": {"reasoningEncryptedContent": "enc"}}}}
+
+        assert r.render(event) is True
+        assert r.render(event) is True
+
+        out = capsys.readouterr().out
+        assert out.count("Assistant reasoning") == 1
+
+    def test_hidden_reasoning_suppresses_server_heartbeat(self, capsys, monkeypatch):
+        monkeypatch.setattr("rendering.events.reasoning.time.monotonic", lambda: 100.0)
+        ctx = _ctx("plain", render_reasoning=True, hidden_reasoning_throttle_s=2)
+        reasoning = ReasoningEventRenderer(ctx)
+        heartbeat = ServerHeartbeatRenderer(ctx)
+        event = {"part": {"text": "", "metadata": {"openai": {"reasoningEncryptedContent": "enc"}}}}
+
+        assert reasoning.render(event) is True
+        assert heartbeat.render({}) is True
+
+        out = capsys.readouterr().out
+        assert "Assistant reasoning" in out
+        assert "server heartbeat" not in out
+
+    def test_visible_text_clears_hidden_reasoning_state(self, capsys, monkeypatch):
+        monkeypatch.setattr("rendering.events.reasoning.time.monotonic", lambda: 100.0)
+        ctx = _ctx("plain", render_reasoning=True, hidden_reasoning_throttle_s=2)
+        reasoning = ReasoningEventRenderer(ctx)
+        text_renderer = TextEventRenderer(ctx)
+
+        assert reasoning.render({"part": {"text": "", "metadata": {"openai": {"reasoningEncryptedContent": "enc"}}}}) is True
+        assert ctx.hidden_reasoning_active is True
+
+        assert text_renderer.render({"part": {"text": "done"}}) is True
+        assert ctx.hidden_reasoning_active is False
+
     def test_truncates_long_text(self, capsys):
         r = ReasoningEventRenderer(_ctx("plain", render_reasoning=True, reasoning_max_chars=10))
         assert r.render({"part": {"text": "123456789012345"}}) is True
@@ -246,6 +294,12 @@ class TestSessionStatusRenderer:
         assert r.render({"properties": {"status": {"type": "idle"}}}) is True
         out = capsys.readouterr().out
         assert "idle" in out
+
+    def test_renders_legacy_session_idle_event(self, capsys):
+        r = SessionStatusRenderer(_ctx("plain"))
+        assert r.render({"type": "session.idle"}) is True
+        out = capsys.readouterr().out
+        assert "session status: idle" in out
 
     def test_renders_status_rich(self):
         r = SessionStatusRenderer(_ctx("rich"))
