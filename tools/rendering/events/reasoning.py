@@ -62,6 +62,9 @@ class ReasoningEventRenderer(EventRenderer):
             self.context.hidden_reasoning_started_at = now
             self.context.last_hidden_reasoning_rendered_at = 0.0
 
+        # BaseRenderer.rich is True for both "rich" and "textual" modes, so we
+        # must check sink.mode directly to suppress inline output only in
+        # Textual chat mode. self.plain/self.rich cannot distinguish textual.
         if self.sink.mode == "textual":
             return True
 
