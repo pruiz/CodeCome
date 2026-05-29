@@ -66,7 +66,11 @@ def main() -> int:
         from chat.harness import run_harness
         return run_harness(parser, args)
 
-    missing = [n for n in ("phase", "label", "agent", "prompt_file") if getattr(args, n) is None]
+    # Phase 1 handles its own prompt files via subphase orchestration.
+    required = ["phase", "label", "agent"]
+    if str(args.phase) not in ("1", "None"):
+        required.append("prompt_file")
+    missing = [n for n in required if getattr(args, n) is None]
     if missing:
         parser.error(
             "the following arguments are required when not using --show-model or --chat: "
