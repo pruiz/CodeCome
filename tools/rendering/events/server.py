@@ -28,6 +28,8 @@ class ServerHeartbeatRenderer(EventRenderer):
     event_types = ("server.heartbeat",)
 
     def render(self, event: dict[str, Any]) -> bool:
+        if self.context.hidden_reasoning_active:
+            return True
         message = "server heartbeat"
         if self.rich:
             from rich.text import Text

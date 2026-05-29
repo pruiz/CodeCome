@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from rendering.events.base import EventRenderer, _FINISH_FAILURE
+from rendering.events.base import EventRenderer, _FINISH_FAILURE, _clear_hidden_reasoning_state
 import _colors as C
 
 
@@ -16,6 +16,7 @@ class StepFinishRenderer(EventRenderer):
 
     def render(self, event: dict[str, Any]) -> bool:
         part = event.get("part", {})
+        _clear_hidden_reasoning_state(self.context)
         reason = str(part.get("reason", "unknown"))
         tokens = self._format_tokens(part.get("tokens", {}))
         suffix = f" ({tokens})" if tokens else ""

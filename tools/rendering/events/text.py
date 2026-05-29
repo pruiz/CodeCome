@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from rendering.events.base import EventRenderer
+from rendering.events.base import EventRenderer, _clear_hidden_reasoning_state
 import _colors as C
 
 
@@ -19,6 +19,7 @@ class TextEventRenderer(EventRenderer):
         text = str(part.get("text", "")).strip()
         if not text:
             return False
+        _clear_hidden_reasoning_state(self.context)
         if self.rich:
             from rich.markdown import Markdown
             from rich.panel import Panel

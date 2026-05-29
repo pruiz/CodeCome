@@ -88,6 +88,7 @@ class RenderSettings:
     # --- Event noise throttling ------------------------------------------
     session_busy_throttle_s: int = 5
     assistant_header_throttle_s: int = 3
+    hidden_reasoning_throttle_s: int = 2
 
     # --- Snapshot cache --------------------------------------------------
     write_cache_enabled: bool = True
@@ -128,6 +129,7 @@ class RenderSettings:
             render_subagent_updates=_bool_env("CODECOME_RENDER_SUBAGENT_UPDATES", True),
             session_busy_throttle_s=_int_env("CODECOME_SESSION_BUSY_THROTTLE_S", 5),
             assistant_header_throttle_s=_int_env("CODECOME_ASSISTANT_HEADER_THROTTLE_S", 3),
+            hidden_reasoning_throttle_s=_int_env("CODECOME_HIDDEN_REASONING_THROTTLE_S", 2),
             write_cache_enabled=_bool_env("CODECOME_WRITE_CACHE", True),
             write_cache_cap=_int_env("CODECOME_WRITE_CACHE_CAP", 200),
         )

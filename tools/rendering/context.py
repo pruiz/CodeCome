@@ -34,3 +34,6 @@ class RenderContext:
     registry: "RendererRegistry | None" = None
     last_busy_status_rendered_at: float = 0.0
     last_assistant_header_rendered_at: float = 0.0
+    hidden_reasoning_active: bool = False
+    hidden_reasoning_started_at: float = 0.0
+    last_hidden_reasoning_rendered_at: float = 0.0

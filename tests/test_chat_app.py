@@ -49,7 +49,10 @@ def test_chat_render_and_log(monkeypatch):
             self.transcript = mock_transcript
             self.args = mock_args
             self.thinking_on = True
-            self._modeline_info = ""
+            self._modeline_meta = ""
+            self._modeline_state = "idle"
+            self._modeline_state_since = None
+            self._modeline_connected = True
             self.event_recorder = event_recorder
     
     fake_self = FakeSelf()
@@ -63,20 +66,21 @@ def test_chat_render_and_log(monkeypatch):
     event = {"type": "message.updated", "info": {"role": "assistant", "modelID": "gpt-5"}}
     
     app._chat_render_and_log(fake_self, None, "1", "label", event)
-    
+
     assert len(rendered) == 1
-    assert "gpt-5" in fake_self._modeline_info
+    assert "gpt-5" in fake_self._modeline_meta
+    assert fake_self._modeline_state == "busy"
     mock_transcript.write_event.assert_called()
 
 def test_chat_update_modeline_info():
     class FakeSelf:
-        _modeline_info = ""
+        _modeline_meta = ""
         
     fake_self = FakeSelf()
     
     # Missing info
     app._chat_update_modeline_info(fake_self, {})
-    assert fake_self._modeline_info == ""
+    assert fake_self._modeline_meta == ""
     
     # With role assistant and model
     event = {
@@ -90,8 +94,40 @@ def test_chat_update_modeline_info():
         }
     }
     app._chat_update_modeline_info(fake_self, event)
-    
-    assert "anthropic/claude" in fake_self._modeline_info
-    assert "↑10" in fake_self._modeline_info
-    assert "↓20" in fake_self._modeline_info
-    assert "$0.05" in fake_self._modeline_info
+
+    assert "anthropic/claude" in fake_self._modeline_meta
+    assert "↑10" in fake_self._modeline_meta
+    assert "↓20" in fake_self._modeline_meta
+    assert "$0.05" in fake_self._modeline_meta
+
+def test_chat_hidden_reasoning_sets_thinking_state(monkeypatch):
+    class FakeSelf:
+        def __init__(self):
+            self._modeline_state = "idle"
+            self._modeline_state_since = None
+            self._modeline_connected = True
+
+    fake_self = FakeSelf()
+    monkeypatch.setattr(app.time, "monotonic", lambda: 100.0)
+
+    app._chat_update_activity_state(
+        fake_self,
+        {"type": "reasoning", "part": {"text": "", "metadata": {"openai": {"reasoningEncryptedContent": "enc"}}}},
+    )
+
+    assert fake_self._modeline_state == "thinking"
+    assert fake_self._modeline_state_since == 100.0
+
+def test_chat_text_resets_to_idle(monkeypatch):
+    class FakeSelf:
+        def __init__(self):
+            self._modeline_state = "thinking"
+            self._modeline_state_since = 90.0
+            self._modeline_connected = True
+
+    fake_self = FakeSelf()
+    monkeypatch.setattr(app.time, "monotonic", lambda: 100.0)
+
+    app._chat_update_activity_state(fake_self, {"type": "text", "part": {"text": "done"}})
+
+    assert fake_self._modeline_state == "idle"

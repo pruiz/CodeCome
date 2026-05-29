@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from rendering.events.base import EventRenderer
+from rendering.events.base import EventRenderer, _clear_hidden_reasoning_state
 import _colors as C
 
 
@@ -42,9 +42,11 @@ class MessageUpdatedRenderer(EventRenderer):
 
         if role == "user":
             self.context.last_assistant_header_rendered_at = 0.0
+            _clear_hidden_reasoning_state(self.context)
             message = "> User"
             style = "dim"
         elif role == "assistant":
+            _clear_hidden_reasoning_state(self.context)
             throttle_s = self.context.settings.assistant_header_throttle_s
             now = time.monotonic()
             if (throttle_s > 0 and self.context.last_assistant_header_rendered_at > 0 and
@@ -70,6 +72,7 @@ class MessageUpdatedRenderer(EventRenderer):
                 style = "bold blue"
         else:
             self.context.last_assistant_header_rendered_at = 0.0
+            _clear_hidden_reasoning_state(self.context)
             agent = str(info.get("agent", "assistant"))
             message = f"> {agent} \u00b7 {model_label}" if model_label else f"> {agent}"
             style = "bold blue"

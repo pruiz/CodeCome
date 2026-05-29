@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -112,6 +113,7 @@ def _chat_render_and_log(self, console, phase, label, event):
     guaranteed to carry the attributes accessed below."""
     self.event_recorder.record(event)
     render_event(console, phase, label, event)
+    _chat_update_activity_state(self, event)
     if event.get("type") == "message.updated":
         _chat_update_modeline_info(self, event)
 
@@ -144,9 +146,63 @@ def _chat_update_modeline_info(self, event: dict[str, Any]) -> None:
     cost = info.get("cost", 0) or 0
     cost_str = f" ${cost:.4f}" if cost else ""
     try:
-        self._modeline_info = f"{model_label} | {token_str}{cost_str}"
+        meta = f"{model_label} | {token_str}{cost_str}" if token_str else f"{model_label}{cost_str}"
+        self._modeline_meta = meta.strip()
     except AttributeError:
         pass
+
+
+def _chat_update_activity_state(self, event: dict[str, Any]) -> None:
+    """Track footer activity state using only arriving events."""
+    event_type = str(event.get("type", ""))
+    now = time.monotonic()
+
+    def set_state(state: str, *, started_at: float | None = None) -> None:
+        try:
+            self._modeline_state = state
+            self._modeline_state_since = now if started_at is None else started_at
+        except AttributeError:
+            pass
+
+    if event_type == "server.connected":
+        try:
+            self._modeline_connected = True
+        except AttributeError:
+            pass
+        return
+
+    if event_type == "server.heartbeat":
+        return
+
+    if event_type == "session.status":
+        props = event.get("properties", {}) if isinstance(event.get("properties"), dict) else {}
+        status = props.get("status", {}) if isinstance(props.get("status"), dict) else {}
+        status_type = str(status.get("type", ""))
+        if status_type == "idle":
+            set_state("idle")
+        elif status_type in {"busy", "retry"} and getattr(self, "_modeline_state", "idle") != "thinking":
+            set_state("busy")
+        return
+
+    if event_type == "reasoning":
+        part = event.get("part", {}) if isinstance(event.get("part"), dict) else {}
+        text = str(part.get("text", "")).strip()
+        metadata = part.get("metadata", {}) if isinstance(part.get("metadata"), dict) else {}
+        openai_meta = metadata.get("openai", {}) if isinstance(metadata.get("openai"), dict) else {}
+        has_hidden_reasoning = bool(openai_meta.get("reasoningEncryptedContent"))
+        if has_hidden_reasoning and not text:
+            started_at = getattr(self, "_modeline_state_since", None) if getattr(self, "_modeline_state", "") == "thinking" else now
+            set_state("thinking", started_at=started_at)
+        elif text:
+            set_state("busy")
+        return
+
+    if event_type == "text":
+        set_state("idle")
+        return
+
+    if event_type in {"tool_use", "step_start", "step_finish", "message.updated"}:
+        set_state("busy")
 
 
 # ---------------------------------------------------------------------------
@@ -279,8 +335,16 @@ try:
             color: $footer-foreground;
             background: $footer-background;
         }
-        #footer-right {
+        #status-meta {
             width: 1fr;
+            height: 1;
+            padding: 0 1;
+            content-align: center middle;
+            color: $footer-foreground;
+            background: $footer-background;
+        }
+        #footer-right {
+            width: auto;
             height: 1;
         }
         Footer {
@@ -338,11 +402,15 @@ try:
             self.rich_log = None
             self.chat_input = None
             self.modeline = None
+            self.modeline_meta = None
             self._heartbeat_count = 0
             # Updated by _render_and_log (consumer thread) on every
             # message.updated event.  Read by _heartbeat (main thread)
             # to drive the status-line in the bottom bar.
-            self._modeline_info = ""
+            self._modeline_meta = ""
+            self._modeline_state = "idle"
+            self._modeline_state_since = None
+            self._modeline_connected = True
             # Tracks Ctrl+S terminal-select mode.  When True, Textual mouse
             # handling is disabled so the terminal emulator's native mouse
             # selection works (which copies to the system clipboard via the
@@ -354,6 +422,7 @@ try:
             yield Input(id="chat_input", placeholder="Type a message and press Enter...")
             with Horizontal(id="bottom-bar"):
                 yield Static("ready", id="status-left")
+                yield Static("", id="status-meta")
                 yield Footer(id="footer-right")
 
         def on_mount(self) -> None:
@@ -361,6 +430,7 @@ try:
             self.rich_log = self.query_one(RichLog)
             self.chat_input = self.query_one(Input)
             self.modeline = self.query_one("#status-left", Static)
+            self.modeline_meta = self.query_one("#status-meta", Static)
             self.console_proxy = TextualConsoleProxy(self.rich_log, self)
             from rendering import dispatch as rendering_dispatch
 
@@ -374,7 +444,8 @@ try:
             provider = (self.model or "").split("/", 1)[0] if self.model else ""
             _model_id = (self.model or "").split("/", 1)[1] if self.model and "/" in self.model else (self.model or "\u2026")
             model_label = f"{provider}/{_model_id}" if provider else _model_id
-            self.modeline.update(f"\u25cf | {model_label} | ready")
+            self.modeline.update("\u25cf \u00b7 Idle")
+            self.modeline_meta.update(model_label)
 
             # Heartbeat canary — fires every 1s on the main thread.  Helpful
             # in the debug log to confirm the event loop is alive.
@@ -443,21 +514,41 @@ try:
             self._heartbeat_count += 1
             _chat_debug(f"_heartbeat: tick #{self._heartbeat_count} (main loop alive)")
 
-            # Update the bottom-bar status line (modeline) with live
-            # token usage and an activity pulse.  _modeline_info is
-            # written by _render_and_log on the consumer thread on
-            # every message.updated event; we read it here atomically.
+            # Update the bottom-bar state lane and the right-aligned
+            # metadata lane. Both are fed by event-arrival updates from
+            # _render_and_log on the consumer thread.
             pulse = "\u25cf" if self._heartbeat_count % 2 else "\u25cc"
             sel_tag = " [SEL]" if self._terminal_select_mode else ""
-            info = self._modeline_info or ""
-            if info:
-                text = f"{pulse}{sel_tag} | {info}"
+            connected = getattr(self, "_modeline_connected", True)
+            state = getattr(self, "_modeline_state", "idle")
+            state_since = getattr(self, "_modeline_state_since", None)
+
+            if not connected:
+                state_icon = "\u00b7"
+                state_text = "Offline"
+            elif state == "thinking":
+                state_icon = "~"
+                if state_since is None:
+                    state_text = "Thinking..."
+                else:
+                    elapsed = max(time.monotonic() - state_since, 0.0)
+                    state_text = "Thinking..." if elapsed < 2.0 else f"Thinking {elapsed:.1f}s"
+            elif state == "busy":
+                state_icon = ">"
+                state_text = "Busy"
             else:
+                state_icon = "\u00b7"
+                state_text = "Idle"
+
+            self.modeline.update(f"{pulse}{sel_tag} {state_icon} {state_text}")
+
+            meta = getattr(self, "_modeline_meta", "") or ""
+            if not meta:
                 provider = (self.model or "").split("/", 1)[0] if self.model else ""
                 _model_id = (self.model or "").split("/", 1)[1] if self.model and "/" in self.model else (self.model or "\u2026")
-                model_label = f"{provider}/{_model_id}" if provider else _model_id
-                text = f"{pulse}{sel_tag} | {model_label} | idle"
-            self.modeline.update(text)
+                meta = f"{provider}/{_model_id}" if provider else _model_id
+            if self.modeline_meta is not None:
+                self.modeline_meta.update(meta)
 
         # --- Textual workers (@work(thread=True)) — short-lived only ---
 
