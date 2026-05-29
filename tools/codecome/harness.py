@@ -59,6 +59,37 @@ def run_phase_mode(args: argparse.Namespace) -> int:
     if _overrides:
         _rendering_ctx.settings = dataclasses.replace(_rendering_ctx.settings, **_overrides)
 
+    # ── Phase 1: subphase orchestration with own server lifecycle ──
+    if str(args.phase) == "1":
+        os.environ["_CODECOME_INSIDE_HARNESS"] = "1"
+        _p1_runner = ServerRunner()
+        try:
+            _p1_server_info = _p1_runner.start(hostname="127.0.0.1", log_level=args.log_level)
+        except ServerRunnerError as exc:
+            _emit_fatal_error(console, "Server Error", str(exc))
+            return 1
+
+        def _p1_forward_signal(signum: int, _frame: Any) -> None:
+            info = _p1_runner.info
+            if info is not None:
+                try:
+                    os.killpg(info.pid, signum)
+                except ProcessLookupError:
+                    pass
+            signal.signal(signum, signal.SIG_DFL)
+            os.kill(os.getpid(), signum)
+
+        _p1_prev_sigint = signal.signal(signal.SIGINT, _p1_forward_signal)
+        _p1_prev_sigterm = signal.signal(signal.SIGTERM, _p1_forward_signal)
+        try:
+            from codecome.phase_1 import run_phase_1 as _run_phase_1
+            return _run_phase_1(args, console, _rendering_ctx, _p1_runner, _p1_server_info.base_url)
+        finally:
+            signal.signal(signal.SIGINT, _p1_prev_sigint)
+            signal.signal(signal.SIGTERM, _p1_prev_sigterm)
+            _p1_runner.stop()
+
+    # ── Phases 2-6 below this point ──
     prompt_file = ROOT / args.prompt_file
     prompt = load_prompt(prompt_file, args.finding, phase=args.phase)
     rc = resolve_runtime_config(args.agent)

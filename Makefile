@@ -144,7 +144,7 @@ venv-check:
 
 phase-1: venv-check
 	@$(PYTHON) tools/gate-check.py 1
-	@$(PYTHON) tools/run-agent.py --phase 1 --label "Target Reconnaissance + Sandbox Bootstrap" --agent recon --prompt-file prompts/phase-1-recon.md
+	@$(PYTHON) tools/run-agent.py --phase 1 --label "Phase 1: Reconnaissance" --agent recon
 
 phase-2: venv-check
 	@$(PYTHON) tools/gate-check.py 2
