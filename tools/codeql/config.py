@@ -36,7 +36,7 @@ DEFAULTS: dict[str, Any] = {
     "pack_catalog": "./templates/codeql-packs.yml",
     "install_managed": True,
     "install_version": "latest",
-    "install_path": ".tools/codeql/current/codeql/codeql",
+    "install_path": ".tools/codeql/current/codeql",
     "output_dir": "./itemdb/evidence/codeql",
     "database_dir": "./itemdb/evidence/codeql/databases",
     "cache_dir": "./.cache/codeql",
@@ -104,7 +104,7 @@ class CodeQLConfig:
 
     install_managed: bool = True
     install_version: str = "latest"
-    install_path: str = ".tools/codeql/current/codeql/codeql"
+    install_path: str = ".tools/codeql/current/codeql"
 
     output_dir: str = "./itemdb/evidence/codeql"
     database_dir: str = "./itemdb/evidence/codeql/databases"

@@ -117,7 +117,13 @@ def _download(url: str, dest: Path) -> None:
 
 
 def _extract(zip_path: Path, dest_dir: Path) -> None:
-    """Extract a zip archive to *dest_dir*."""
+    """Extract a zip archive to *dest_dir*, flattening the inner codeql/ dir.
+
+    The GitHub release bundle contains a top-level ``codeql/`` directory.
+    After extraction we move its contents up one level into *dest_dir*
+    so the binary lands directly under the versioned directory.
+    The now-empty inner ``codeql/`` directory is removed.
+    """
     import zipfile
 
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -125,19 +131,34 @@ def _extract(zip_path: Path, dest_dir: Path) -> None:
     with zipfile.ZipFile(zip_path, "r") as zf:
         zf.extractall(dest_dir)
 
+    # Flatten: the bundle creates an inner "codeql/" subdir; move everything
+    # inside it up into dest_dir so the binary sits at dest_dir/codeql.
+    inner = dest_dir / "codeql"
+    if inner.is_dir():
+        for item in inner.iterdir():
+            target = dest_dir / item.name
+            if target.exists():
+                if target.is_dir():
+                    shutil.rmtree(target)
+                else:
+                    target.unlink()
+            item.rename(target)
+        shutil.rmtree(inner)
+
 
 # ---------------------------------------------------------------------------
 # Install
 # ---------------------------------------------------------------------------
 
 def _codeql_binary(base_dir: Path) -> Path:
-    """Return the path to the codeql executable inside an extracted bundle."""
-    # The bundle extracts to codeql/ subdirectory
-    codeql_dir = base_dir / "codeql"
-    if codeql_dir.is_dir():
-        return codeql_dir / "codeql"
-    # Some older bundles extract directly
-    return base_dir / "codeql"
+    """Return the path to the codeql executable inside an extracted bundle.
+
+    After flattening, the binary sits directly at ``base_dir/codeql``.
+    """
+    binary = base_dir / "codeql"
+    if binary.is_file():
+        return binary
+    return binary  # fall back; will fail usefully in _verify if missing
 
 
 def install(config: Optional[CodeQLConfig] = None) -> int:
