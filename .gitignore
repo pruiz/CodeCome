@@ -220,6 +220,10 @@ __marimo__/
 tmp/*
 !tmp/.gitkeep
 
+# CodeQL managed install and cache
+.tools/
+.cache/codeql/
+
 # CodeCome runtime artifacts
 itemdb/index.md
 

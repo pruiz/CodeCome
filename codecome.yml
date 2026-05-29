@@ -85,6 +85,34 @@ audit:
     - "Race conditions"
     - "Privilege escalation"
 
+  static_analysis:
+    codeql:
+      enabled: true
+      fail_policy: "soft"
+
+      pack_catalog: "./templates/codeql-packs.yml"
+
+      install:
+        managed: true
+        version: "latest"
+        path: ".tools/codeql/current/codeql/codeql"
+
+      output_dir: "./itemdb/evidence/codeql"
+      database_dir: "./itemdb/evidence/codeql/databases"
+      cache_dir: "./.cache/codeql"
+
+      phase_1:
+        enabled: true
+
+      phase_2:
+        enabled: true
+        candidate_mode: "precreate"
+        max_candidates: 10
+
+      sweep:
+        enabled: true
+        inject_context: true
+
 environment:
   type: "sandbox"
   path: "./sandbox"
@@ -191,4 +219,3 @@ agents:
   #   model: "anthropic/claude-opus-4-7"
   # reporter:
   #   model: "anthropic/claude-opus-4-7"
-

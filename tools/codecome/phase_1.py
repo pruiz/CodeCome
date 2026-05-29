@@ -11,7 +11,6 @@ reused across all three subphase sessions.
 
 from __future__ import annotations
 
-import importlib.util
 import subprocess
 import sys
 import time
@@ -23,6 +22,12 @@ from opencode.serve import ServerRunner, ServerRunnerError
 from codecome.console import build_console, _emit_fatal_error
 from codecome.config import ROOT, resolve_color_mode, load_prompt, resolve_runtime_config
 from codecome.runner import _run_single_attempt
+from phases.phase_1_gates import (
+    check_phase_1a,
+    check_phase_1b,
+    check_phase_1c,
+    count_findings_snapshot,
+)
 from rendering.dispatch import HAVE_RICH, _get_rendering_ctx, configure_rendering, render_event
 from rendering.events import (
     _FINISH_TERMINAL_OK,
@@ -35,17 +40,6 @@ from phases.completion import (
     build_phase_resume_prompt,
     build_frontmatter_resume_prompt,
 )
-
-# gate-check.py uses a hyphen and cannot be imported with a regular
-# ``import`` statement.  Load it via importlib.
-_gc_spec = importlib.util.spec_from_file_location(
-    "gate_check",
-    str(ROOT / "tools" / "gate-check.py"),
-)
-_gate_check = importlib.util.module_from_spec(_gc_spec)
-_gc_spec.loader.exec_module(_gate_check)
-
-
 # ---------------------------------------------------------------------------
 # CodeQL placeholder (no-op until PR 5)
 # ---------------------------------------------------------------------------
@@ -155,6 +149,7 @@ def _run_subphase(
     while True:
         attempt_number += 1
         _reset_subagent_state()
+        finish_warning = None
 
         returncode, session_id, run_result, transcript_path = _run_single_attempt(
             args, console, prompt, model, variant, base_url,
@@ -358,11 +353,6 @@ def _run_subphase(
                 print(C.fail(f"  reason: {finish_warning}"))
             print(f"  finish reason: {last_finish_reason!r}  transcript: {transcript_path.relative_to(ROOT) if transcript_path.name else 'N/A'}")
 
-    # Update findings snapshot for gate check
-    if findings_snapshot is not None and returncode == 0:
-        from tools.gate_check import _count_findings_since
-        pass  # snapshot is read by caller; we'll track in the orchestrator
-
     return returncode, findings_snapshot
 
 
@@ -379,7 +369,7 @@ def run_phase_1(
 ) -> int:
     """Orchestrate Phase 1 subphases 1a → 1b → 1c with gates."""
     # Snapshot findings before 1a
-    findings_snapshot = _gate_check._count_findings_since()
+    findings_snapshot = count_findings_snapshot()
 
     # ---- Phase 1a: Target Profile ----
     rc, _ = _run_subphase(
@@ -396,7 +386,7 @@ def run_phase_1(
     if rc != 0:
         return rc
 
-    gate_rc = _gate_check.check_phase_1a(console)
+    gate_rc = check_phase_1a(console)
     if gate_rc != 0:
         return gate_rc
 
@@ -419,7 +409,7 @@ def run_phase_1(
     if rc != 0:
         return rc
 
-    gate_rc = _gate_check.check_phase_1b(console, findings_snapshot=findings_snapshot)
+    gate_rc = check_phase_1b(console, findings_snapshot=findings_snapshot)
     if gate_rc != 0:
         return gate_rc
 
@@ -438,7 +428,7 @@ def run_phase_1(
     if rc != 0:
         return rc
 
-    gate_rc = _gate_check.check_phase_1c(console)
+    gate_rc = check_phase_1c(console)
     if gate_rc != 0:
         return gate_rc
 
