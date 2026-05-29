@@ -125,7 +125,7 @@ def check_phase_1a(console=None) -> int:
     else:
         try:
             plan = yaml.safe_load(plan_path.read_text(encoding="utf-8"))
-        except Exception as exc:
+        except (yaml.YAMLError, OSError, UnicodeDecodeError) as exc:
             _emit(console, "fail", f"codeql-plan.yml is not valid YAML: {exc}")
             return 1
 
@@ -194,7 +194,7 @@ def check_phase_1b(console=None, findings_snapshot: dict[str, int] | None = None
     if yaml is not None:
         try:
             data = yaml.safe_load(risk_path.read_text(encoding="utf-8"))
-        except Exception as exc:
+        except (yaml.YAMLError, OSError, UnicodeDecodeError) as exc:
             _emit(console, "fail", f"file-risk-index.yml is not valid YAML: {exc}")
             return 1
 

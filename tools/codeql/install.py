@@ -38,8 +38,9 @@ def _detect_platform() -> str:
         return "osx64"
     if system == "linux":
         return "linux64"
-    # Fallback: try linux64 for other unix-like systems
-    return "linux64"
+    if system == "windows":
+        return "win64"
+    raise RuntimeError(f"Unsupported platform: system={system} machine={machine}")
 
 
 def _bundle_suffix(plat: str) -> str:
@@ -128,6 +129,7 @@ def _extract(zip_path: Path, dest_dir: Path) -> None:
     import zipfile
 
     prefix = "codeql/"
+    dest_root = dest_dir.resolve()
     dest_dir.mkdir(parents=True, exist_ok=True)
     print(f"Extracting to {dest_dir} …")
     with zipfile.ZipFile(zip_path, "r") as zf:
@@ -141,7 +143,9 @@ def _extract(zip_path: Path, dest_dir: Path) -> None:
             if not relative_name:
                 continue
 
-            target = dest_dir / relative_name
+            target = (dest_dir / relative_name).resolve()
+            if target != dest_root and dest_root not in target.parents:
+                raise RuntimeError(f"Refusing to extract CodeQL bundle member outside target dir: {info.filename!r}")
             if info.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
                 continue
@@ -224,7 +228,11 @@ def install(config: Optional[CodeQLConfig] = None) -> int:
         return _verify(binary_path)
 
     # --- Download ---
-    plat = _detect_platform()
+    try:
+        plat = _detect_platform()
+    except RuntimeError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
     print(f"Platform: {plat}")
 
     if version == "latest":

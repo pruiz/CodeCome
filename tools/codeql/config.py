@@ -54,7 +54,7 @@ DEFAULTS: dict[str, Any] = {
 # ---------------------------------------------------------------------------
 
 def _load_codecome_yml() -> dict[str, Any] | None:
-    """Load codecome.yml and return the ``audit.static_analysis.codeql`` block."""
+    """Load codecome.yml and return the configured CodeQL block."""
     if yaml is None:
         return None
     path = ROOT / "codecome.yml"
@@ -67,13 +67,19 @@ def _load_codecome_yml() -> dict[str, Any] | None:
     if not isinstance(data, dict):
         return None
     audit = data.get("audit")
-    if not isinstance(audit, dict):
-        return None
-    sa = audit.get("static_analysis")
-    if not isinstance(sa, dict):
-        return None
-    cq = sa.get("codeql")
-    return cq if isinstance(cq, dict) else None
+    if isinstance(audit, dict):
+        sa = audit.get("static_analysis")
+        if isinstance(sa, dict):
+            cq = sa.get("codeql")
+            if isinstance(cq, dict):
+                return cq
+
+    sa = data.get("static_analysis")
+    if isinstance(sa, dict):
+        cq = sa.get("codeql")
+        if isinstance(cq, dict):
+            return cq
+    return None
 
 
 def _bool_env(name: str) -> bool | None:
@@ -87,6 +93,13 @@ def _bool_env(name: str) -> bool | None:
 def _str_env(name: str) -> str | None:
     raw = os.environ.get(name)
     return raw.strip() if raw else None
+
+
+def _safe_int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 # ---------------------------------------------------------------------------
@@ -202,8 +215,11 @@ def resolve_config() -> CodeQLConfig:
     phase_2_enabled = _get("phase_2_enabled", DEFAULTS["phase_2_enabled"],
                            env="CODEQL_PHASE_2", coerce=bool)
     candidate_mode = _str_env("CODEQL_CANDIDATES") or _get("candidate_mode", DEFAULTS["candidate_mode"])
-    max_candidates = _get("max_candidates", DEFAULTS["max_candidates"],
-                          env="CODEQL_MAX_CANDIDATES", coerce=int)
+    max_candidates_raw = _str_env("CODEQL_MAX_CANDIDATES")
+    if max_candidates_raw is None:
+        max_candidates = _safe_int(_get("max_candidates", DEFAULTS["max_candidates"]), DEFAULTS["max_candidates"])
+    else:
+        max_candidates = _safe_int(max_candidates_raw, DEFAULTS["max_candidates"])
 
     # Sweep settings
     sweep_enabled = _get("sweep_enabled", DEFAULTS["sweep_enabled"],
@@ -224,7 +240,7 @@ def resolve_config() -> CodeQLConfig:
         phase_1_enabled=phase_1_enabled,
         phase_2_enabled=phase_2_enabled,
         candidate_mode=candidate_mode,
-        max_candidates=int(max_candidates),
+        max_candidates=max_candidates,
         sweep_enabled=sweep_enabled,
         sweep_inject_context=sweep_inject_context,
         abs_pack_catalog=(ROOT / pack_catalog).resolve(),
