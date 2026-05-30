@@ -90,6 +90,8 @@ def _get_rendering_ctx(console: Any, *, root: Path | None = None) -> Any:
         SessionDiffRenderer,
         SubagentStatusRenderer,
         PatchRenderer,
+        FileEditedRenderer,
+        FileWatcherRenderer,
     )
     registry.register_event(ServerConnectedRenderer(ctx))
     registry.register_event(ServerHeartbeatRenderer(ctx))
@@ -104,6 +106,8 @@ def _get_rendering_ctx(console: Any, *, root: Path | None = None) -> Any:
     registry.register_event(SessionDiffRenderer(ctx))
     registry.register_event(SubagentStatusRenderer(ctx))
     registry.register_event(PatchRenderer(ctx))
+    registry.register_event(FileEditedRenderer(ctx))
+    registry.register_event(FileWatcherRenderer(ctx))
 
     from rendering.tools import (
         ApplyPatchRenderer,

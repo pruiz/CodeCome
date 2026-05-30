@@ -7,7 +7,7 @@ RenderContext — shared runtime state for the render pipeline.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from rendering.cache import SnapshotCache
@@ -37,3 +37,4 @@ class RenderContext:
     hidden_reasoning_active: bool = False
     hidden_reasoning_started_at: float = 0.0
     last_hidden_reasoning_rendered_at: float = 0.0
+    inflight_write_files: set[str] = field(default_factory=set)
