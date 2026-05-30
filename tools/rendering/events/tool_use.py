@@ -38,9 +38,7 @@ class ToolUseEventRenderer(EventRenderer):
 
         if _is_write_like(inp):
             file_path = _normalize_path(str(inp["filePath"]))
-            if status == "running":
-                self.context.inflight_write_files.add(file_path)
-            elif status in ("completed", "error"):
+            if status in ("completed", "error"):
                 self.context.inflight_write_files.discard(file_path)
 
         _clear_hidden_reasoning_state(self.context)

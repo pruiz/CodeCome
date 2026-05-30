@@ -138,6 +138,7 @@ def test_import_risk_caps_score(tmp_path: Path) -> None:
     )
 
     status, _ = import_risk(signals_path, risk_path)
+    assert status is None
 
     import yaml
     risk = yaml.safe_load(risk_path.read_text())

@@ -155,7 +155,7 @@ def test_resolve_profile_packs_rejects_unknown_language() -> None:
         raise AssertionError("expected PackResolverError")
 
 
-def test_load_codeql_plan_rejects_invalid_language_entry(tmp_path: Path) -> None:
+def test_resolve_plan_packs_candidate_policy(tmp_path: Path) -> None:
     catalog_path = tmp_path / "catalog.yml"
     plan_path = tmp_path / "plan.yml"
     _write_catalog(catalog_path)

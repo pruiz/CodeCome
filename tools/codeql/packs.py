@@ -23,7 +23,7 @@ def _require_yaml() -> None:
         raise PackResolverError("PyYAML is required to load CodeQL pack catalogs and plans.")
 
 
-def _load_yaml_mapping(path: Path, *, what: str) -> dict[str, Any]:
+def load_yaml_mapping(path: Path, *, what: str) -> dict[str, Any]:
     _require_yaml()
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -36,7 +36,7 @@ def _load_yaml_mapping(path: Path, *, what: str) -> dict[str, Any]:
 
 def load_pack_catalog(path: Path) -> dict[str, Any]:
     """Load and validate the CodeQL pack catalog."""
-    data = _load_yaml_mapping(path, what="CodeQL pack catalog")
+    data = load_yaml_mapping(path, what="CodeQL pack catalog")
 
     if data.get("schema_version") != 1:
         raise PackResolverError(f"CodeQL pack catalog at {path} must have schema_version: 1.")
@@ -82,7 +82,7 @@ def load_pack_catalog(path: Path) -> dict[str, Any]:
 
 def load_codeql_plan(path: Path) -> dict[str, Any]:
     """Load and validate a CodeQL plan file."""
-    data = _load_yaml_mapping(path, what="CodeQL plan")
+    data = load_yaml_mapping(path, what="CodeQL plan")
 
     languages = data.get("languages")
     if not isinstance(languages, list):

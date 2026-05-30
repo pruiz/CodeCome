@@ -238,6 +238,9 @@ def install(config: Optional[CodeQLConfig] = None) -> int:
         print(f"ERROR: invalid version '{version}' — must be semver-like (e.g. 2.25.5)", file=sys.stderr)
         return 1
 
+    # Normalize: strip optional leading 'v' to avoid double-v in URLs/paths.
+    version = version.lstrip("v")
+
     # --- Determine target directories ---
     tools_dir = ROOT / ".tools" / "codeql"
     version_dir = tools_dir / version

@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from codeql.packs import PackResolverError, _load_yaml_mapping, dump_yaml
+from codeql.packs import PackResolverError, load_yaml_mapping, dump_yaml
 
 
 def import_risk(file_signals_path: Path, risk_index_path: Path) -> tuple[str | None, list[str]]:
@@ -32,12 +32,12 @@ def import_risk(file_signals_path: Path, risk_index_path: Path) -> tuple[str | N
         return "skipped", [f"file-risk-index.yml not found at {risk_index_path}"]
 
     try:
-        signals = _load_yaml_mapping(file_signals_path, what="CodeQL file signals")
+        signals = load_yaml_mapping(file_signals_path, what="CodeQL file signals")
     except PackResolverError as exc:
         return None, [str(exc)]
 
     try:
-        risk_index = _load_yaml_mapping(risk_index_path, what="file risk index")
+        risk_index = load_yaml_mapping(risk_index_path, what="file risk index")
     except PackResolverError as exc:
         return None, [str(exc)]
 
