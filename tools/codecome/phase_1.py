@@ -181,6 +181,16 @@ def _check_codeql_artifacts(console: Any) -> int:
             print(C.fail(msg))
         return 1
 
+    if status == "failed":
+        msg = "CodeQL artifact gate: FAILED — execution crashed, blocking Phase 1b"
+        if HAVE_RICH:
+            from rich.text import Text
+            console.print(Text(msg, style="bold red"))
+        else:
+            import _colors as C
+            print(C.fail(msg))
+        return 1
+
     label = f"CodeQL artifact gate: {status}"
     if HAVE_RICH:
         from rich.text import Text
@@ -493,6 +503,7 @@ def run_phase_1(
 ) -> int:
     """Orchestrate Phase 1 subphases 1a → 1b → 1c with gates."""
     # ---- Phase 1a: Target Profile ----
+    findings_snapshot_1a = count_findings_snapshot()
     rc = _run_subphase(
         args=args,
         console=console,
@@ -507,7 +518,7 @@ def run_phase_1(
     if rc != 0:
         return rc
 
-    gate_rc = check_phase_1a(console)
+    gate_rc = check_phase_1a(console, findings_snapshot=findings_snapshot_1a)
     if gate_rc != 0:
         return gate_rc
 

@@ -366,6 +366,4 @@ def _coerce_str(value: Any) -> str | None:
     return str(value)
 
 
-def _rel(path_str: str, source_root: Path) -> str:
-    """Make a path workspace-relative when possible."""
-    return str(path_str)
+

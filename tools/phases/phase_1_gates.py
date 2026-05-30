@@ -100,7 +100,7 @@ def count_findings_snapshot(snapshot: dict[str, int] | None = None) -> dict[str,
     return {status: max(0, current[status] - snapshot.get(status, 0)) for status in FINDING_STATUS_DIRS}
 
 
-def check_phase_1a(console=None) -> int:
+def check_phase_1a(console=None, findings_snapshot: dict[str, int] | None = None) -> int:
     """Gate 1a: target-profile/build-model/codeql-plan outputs must exist."""
     _emit(console, "header", "Gate 1a: Target Profile")
     _emit_separator(console, "cyan")
@@ -118,6 +118,19 @@ def check_phase_1a(console=None) -> int:
     _emit(console, "ok", "itemdb/notes/target-profile.md exists")
     _emit(console, "ok", "itemdb/notes/build-model.md exists")
     _emit(console, "ok", "itemdb/notes/codeql-plan.yml exists")
+
+    if findings_snapshot is not None:
+        delta = count_findings_snapshot(findings_snapshot)
+        new_findings = sum(delta.values())
+        if new_findings > 0:
+            _emit(
+                console,
+                "warn",
+                f"{new_findings} new finding(s) were created during Phase 1a. Findings should not be created during reconnaissance.",
+            )
+            for status, count in delta.items():
+                if count > 0:
+                    _emit(console, "info", f"    {status}: +{count}")
 
     plan_path = notes_dir / "codeql-plan.yml"
     if yaml is None:
@@ -216,6 +229,9 @@ def check_phase_1b(console=None, findings_snapshot: dict[str, int] | None = None
             if not isinstance(entry, dict):
                 continue
             path_val = entry.get("path", "")
+            if path_val == "src/example/path/to/file.ext":
+                _emit(console, "fail", "file-risk-index.yml: contains template placeholder entry ('src/example/path/to/file.ext')")
+                return 1
             if "../" in str(path_val) or str(path_val).startswith("/"):
                 _emit(console, "warn", f"file-risk-index.yml: path '{path_val}' is not workspace-relative")
             score = entry.get("score")
