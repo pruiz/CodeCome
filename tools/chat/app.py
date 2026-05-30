@@ -493,6 +493,7 @@ try:
                 workspace_dir=str(Path(__file__).resolve().parents[2]),
                 debug=_chat_debug if self.args and self.args.debug else None,
             )
+            self.chat_loop.set_raw_event_recorder(self.event_recorder.record)
 
             # Raw daemon thread — the SSE consumer.
             _chat_debug("on_mount: starting SSE consumer (raw daemon thread)")

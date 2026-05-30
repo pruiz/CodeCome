@@ -62,7 +62,8 @@ def test_phase_event_loop_returns_result_on_idle(monkeypatch):
     def render_fn(console, phase, label, event):
         rendered.append((phase, label, event))
 
-    result = loop.run(render_fn)
+    raw_events = []
+    result = loop.run(render_fn, raw_events.append)
 
     assert isinstance(result, RunResult)
     assert result.any_step_finish_seen is True
@@ -70,6 +71,7 @@ def test_phase_event_loop_returns_result_on_idle(monkeypatch):
     assert result.last_finish_reason == "stop"
     assert result.last_finish_tokens == {"output": 3}
     assert rendered[-1][2]["properties"]["status"]["type"] == "idle"
+    assert raw_events == events
 
 
 def test_chat_event_loop_recovery_sync_emits_synced_events(monkeypatch):
@@ -96,13 +98,15 @@ def test_chat_event_loop_recovery_sync_emits_synced_events(monkeypatch):
     monkeypatch.setattr(loop, "_sync_session_messages", lambda: [synced])
 
     rendered = []
+    raw_events = []
 
     def render_fn(console, phase, label, event):
         rendered.append(event)
 
-    loop._consumer_worker(render_fn)
+    loop._consumer_worker(render_fn, raw_events.append)
 
     assert synced in rendered
     assert any(event.get("type") == "session.status" and event.get("properties", {}).get("status", {}).get("type") == "idle" for event in rendered)
     assert loop.get_state(timeout=0.1)[0] == ChatState.BUSY
     assert loop.get_state(timeout=0.1)[0] == ChatState.IDLE
+    assert raw_events == events

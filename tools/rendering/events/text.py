@@ -18,7 +18,7 @@ class TextEventRenderer(EventRenderer):
         part = event.get("part", {})
         text = str(part.get("text", "")).strip()
         if not text:
-            return False
+            return True
         _clear_hidden_reasoning_state(self.context)
         if self.rich:
             from rich.markdown import Markdown

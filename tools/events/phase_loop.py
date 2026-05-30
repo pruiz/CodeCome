@@ -59,6 +59,7 @@ class PhaseEventLoop(BaseEventLoop):
     def run(
         self,
         render_fn: Callable[[Any, str, str, dict[str, Any]], None],
+        record_raw_event_fn: Callable[[dict[str, Any]], None] | None = None,
     ) -> RunResult:
         _any_step_finish_seen = False
         _step_finish_count = 0
@@ -82,6 +83,9 @@ class PhaseEventLoop(BaseEventLoop):
 
                 if not self._belongs_to_session(event):
                     continue
+
+                if record_raw_event_fn is not None:
+                    record_raw_event_fn(event)
 
                 if self._should_skip_message_updated(event):
                     continue

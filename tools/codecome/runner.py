@@ -47,10 +47,9 @@ def _consume_events(
     recorder = EventRecorder(transcript, debug=args.debug)
 
     def _handle_event(console_: Any, phase_: str, label_: str, event: dict[str, Any]) -> None:
-        recorder.record(event)
         render_event_fn(console_, phase_, label_, event)
 
-    return event_loop.run(_handle_event)
+    return event_loop.run(_handle_event, recorder.record)
 
 
 def _run_single_attempt(
@@ -65,15 +64,16 @@ def _run_single_attempt(
     render_event_fn: Callable[..., None],
     emit_fatal_error_fn: Callable[..., None] | None = None,
     existing_session_id: str | None = None,
+    transcript_phase: str | None = None,
 ) -> tuple[int, str, RunResult, Path]:
 
     transcript: Transcript
     try:
-        transcript = Transcript.for_phase(str(args.phase), args.finding)
+        transcript = Transcript.for_phase(transcript_phase or str(args.phase), args.finding)
     except OSError as exc:
         finding_tag = (args.finding or "no-finding").replace("/", "_")
         transcript = Transcript.null()
-        transcript.path = ROOT / "tmp" / f"last-phase-{args.phase}-{finding_tag}-attempt-N.jsonl"
+        transcript.path = ROOT / "tmp" / f"last-phase-{transcript_phase or args.phase}-{finding_tag}-attempt-N.jsonl"
         try:
             console.print("warning: could not open transcript ", transcript.path, ": ", exc)
         except AttributeError:
