@@ -13,6 +13,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -20,6 +21,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from codeql.config import resolve_config
+from codeql.install import ROOT
+from codeql.packs import PackResolverError, dump_yaml, load_codeql_plan, load_pack_catalog, resolve_plan_packs
 
 
 def _cmd_install() -> int:
@@ -81,6 +84,36 @@ def _cmd_check() -> int:
     return 0
 
 
+def _cmd_resolve_packs(args: argparse.Namespace) -> int:
+    """Resolve CodeQL plan pack profiles to concrete pack references."""
+    config = resolve_config()
+
+    plan_path = ROOT / args.plan if not Path(args.plan).is_absolute() else Path(args.plan)
+    catalog_path = config.abs_pack_catalog
+    output_path = ROOT / args.output if not Path(args.output).is_absolute() else Path(args.output)
+
+    try:
+        catalog = load_pack_catalog(catalog_path)
+        plan = load_codeql_plan(plan_path)
+        resolved = resolve_plan_packs(plan, catalog)
+    except PackResolverError as exc:
+        print(f"FAIL: {exc}")
+        return 1
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(dump_yaml(resolved), encoding="utf-8")
+
+    if args.format == "json":
+        print(json.dumps(resolved, indent=2))
+    else:
+        print(f"Resolved CodeQL packs written to {output_path.relative_to(ROOT) if output_path.is_relative_to(ROOT) else output_path}")
+        for language in resolved["languages"]:
+            print(f"- {language['id']}: {', '.join(language['profiles'])}")
+            for pack in language["packs"]:
+                print(f"    {pack}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="CodeQL CLI wrapper for CodeCome.",
@@ -89,6 +122,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("install", help="Install the managed CodeQL CLI.")
     sub.add_parser("check", help="Verify the CodeQL CLI is installed and working.")
+    resolve = sub.add_parser("resolve-packs", help="Resolve plan pack profiles to concrete pack references.")
+    resolve.add_argument("--plan", default="itemdb/notes/codeql-plan.yml", help="Path to codeql-plan.yml")
+    resolve.add_argument(
+        "--output",
+        default="itemdb/evidence/codeql/selected-query-packs.yml",
+        help="Path to write resolved pack selections",
+    )
+    resolve.add_argument("--format", choices=["text", "json"], default="text", help="Output format")
 
     return parser
 
@@ -101,6 +142,8 @@ def main() -> int:
         return _cmd_install()
     elif args.command == "check":
         return _cmd_check()
+    elif args.command == "resolve-packs":
+        return _cmd_resolve_packs(args)
 
     return 1
 
