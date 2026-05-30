@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import yaml
 
 from codeql.config import CodeQLConfig
+from codeql.pipeline import record_skipped_run
 
 
 def _make_config(tmp_path: Path) -> CodeQLConfig:
@@ -60,8 +61,43 @@ def test_pipeline_skipped_no_plan(tmp_path: Path) -> None:
         result = run_full_pipeline(config)
 
     assert result["status"] == "skipped"
-    mock_run.assert_called_once_with(config)
+    mock_run.assert_called_once_with(config, progress=None)
     mock_normalize.assert_not_called()
+
+
+def test_pipeline_emits_progress(tmp_path: Path) -> None:
+    config = _make_config(tmp_path)
+    messages: list[str] = []
+
+    manifest = {
+        "schema_version": 1,
+        "phase": "phase-1",
+        "status": "skipped",
+        "codeql_enabled": True,
+        "codeql_version": "2.18.0",
+        "started_at": "2025-01-01T00:00:00Z",
+        "finished_at": "2025-01-01T00:00:01Z",
+        "plan_file": "itemdb/notes/codeql-plan.yml",
+        "pack_catalog": "codeql-pack-catalog.yml",
+        "fail_policy": "soft",
+        "analysis_units": [],
+        "languages": [],
+        "warnings": [],
+        "failures": ["codeql-plan.yml not found"],
+    }
+
+    with patch("codeql.runner.run_codeql", return_value=manifest) as mock_run, \
+         patch("codeql.pipeline.ROOT", tmp_path):
+        from codeql.pipeline import run_full_pipeline
+
+        result = run_full_pipeline(config, progress=messages.append)
+
+    assert result["status"] == "skipped"
+    mock_run.assert_called_once()
+    assert mock_run.call_args.args == (config,)
+    assert mock_run.call_args.kwargs["progress"] is not None
+    assert "CodeQL: manifest written" in messages
+    assert "CodeQL: summary written" in messages
 
 
 def test_pipeline_completed_writes_manifest(tmp_path: Path) -> None:
@@ -126,3 +162,16 @@ def test_pipeline_soft_failed_continues(tmp_path: Path) -> None:
 
     assert result["status"] == "soft-failed"
     # Should not raise
+
+
+def test_record_skipped_run_writes_manifest_and_summary(tmp_path: Path) -> None:
+    config = _make_config(tmp_path)
+    config.enabled = False
+
+    manifest = record_skipped_run(config, "CodeQL disabled for Phase 1")
+
+    assert manifest["status"] == "skipped"
+    assert manifest["codeql_enabled"] is False
+    assert manifest["skip_reason"] == "CodeQL disabled for Phase 1"
+    assert (config.abs_output_dir / "run-manifest.yml").is_file()
+    assert (config.abs_output_dir / "codeql-summary.md").is_file()

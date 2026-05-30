@@ -25,13 +25,13 @@ def normalize_all(
     alert_counter = 0
 
     for sarif_file in sorted(sarif_dir.glob("*.sarif")):
-        stem = sarif_file.stem  # e.g. "python.official"
-        parts = stem.split(".", 1)
-        if len(parts) != 2:
+        stem = sarif_file.stem  # e.g. "api.python.official"
+        parts = stem.split(".", 2)
+        if len(parts) != 3:
             continue
-        language_id, profile = parts
+        analysis_unit_id, language_id, profile = parts
 
-        new_alerts = _parse_sarif(sarif_file, language_id, profile, alert_counter, source_root)
+        new_alerts = _parse_sarif(sarif_file, analysis_unit_id, language_id, profile, alert_counter, source_root)
         alert_counter += len(new_alerts)
         alerts.extend(new_alerts)
 
@@ -74,6 +74,7 @@ def normalize_all(
 
 def _parse_sarif(
     path: Path,
+    analysis_unit_id: str,
     language_id: str,
     pack_profile: str,
     start_index: int,
@@ -102,7 +103,7 @@ def _parse_sarif(
             if not isinstance(result, dict):
                 continue
             alert = _normalize_one_result(
-                result, rules_lookup, language_id, pack_profile,
+                result, rules_lookup, analysis_unit_id, language_id, pack_profile,
                 start_index + ri + 1, source_root,
             )
             if alert:
@@ -138,6 +139,7 @@ def _build_rules_lookup(run: dict[str, Any]) -> dict[str, dict[str, Any]]:
 def _normalize_one_result(
     result: dict[str, Any],
     rules_lookup: dict[str, dict[str, Any]],
+    analysis_unit_id: str,
     language_id: str,
     pack_profile: str,
     index: int,
@@ -164,6 +166,7 @@ def _normalize_one_result(
     return {
         "id": f"CQ-{index:04d}",
         "fingerprint": fingerprint,
+        "analysis_unit_id": analysis_unit_id,
         "language": language_id,
         "pack_profile": pack_profile,
         "pack": _first_pack(result, rules_lookup),
@@ -364,6 +367,5 @@ def _coerce_str(value: Any) -> str | None:
     if value is None:
         return None
     return str(value)
-
 
 

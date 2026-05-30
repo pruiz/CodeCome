@@ -44,15 +44,18 @@ def _write_plan(path: Path) -> None:
     path.write_text(
         (
             "schema_version: 1\n"
-            "languages:\n"
-            "  - id: python\n"
-            "    packs:\n"
-            "      - official\n"
-            "      - github-security-lab\n"
-            "  - id: c-cpp\n"
-            "    packs:\n"
-            "      - official\n"
-            "      - coding-standards\n"
+            "analysis_units:\n"
+            "  - id: root\n"
+            "    path: ./src\n"
+            "    languages:\n"
+            "      - id: python\n"
+            "        packs:\n"
+            "          - official\n"
+            "          - github-security-lab\n"
+            "      - id: c-cpp\n"
+            "        packs:\n"
+            "          - official\n"
+            "          - coding-standards\n"
         ),
         encoding="utf-8",
     )
@@ -113,16 +116,17 @@ def test_resolve_plan_packs_includes_profile_packs(tmp_path: Path) -> None:
     plan = load_codeql_plan(plan_path)
     resolved = resolve_plan_packs(plan, catalog)
 
-    assert resolved["languages"][0]["packs"] == [
+    languages = resolved["analysis_units"][0]["languages"]
+    assert languages[0]["packs"] == [
         "codeql/python-queries",
         "githubsecuritylab/codeql-python-queries",
     ]
     # profile_packs maps each profile to its individual packs (no dedup across profiles)
-    assert resolved["languages"][0]["profile_packs"] == {
+    assert languages[0]["profile_packs"] == {
         "official": ["codeql/python-queries"],
         "github-security-lab": ["githubsecuritylab/codeql-python-queries"],
     }
-    assert resolved["languages"][1]["candidate_policy"]["coding-standards"]["allow_precreate"] is False
+    assert languages[1]["candidate_policy"]["coding-standards"]["allow_precreate"] is False
 
 
 def test_resolve_profile_packs_rejects_unknown_profile() -> None:
@@ -165,20 +169,21 @@ def test_resolve_plan_packs_candidate_policy(tmp_path: Path) -> None:
     plan = load_codeql_plan(plan_path)
     resolved = resolve_plan_packs(plan, catalog)
 
-    assert resolved["languages"][0]["packs"] == [
+    languages = resolved["analysis_units"][0]["languages"]
+    assert languages[0]["packs"] == [
         "codeql/python-queries",
         "githubsecuritylab/codeql-python-queries",
     ]
-    assert resolved["languages"][1]["candidate_policy"]["coding-standards"]["allow_precreate"] is False
+    assert languages[1]["candidate_policy"]["coding-standards"]["allow_precreate"] is False
 
 
 def test_load_codeql_plan_rejects_invalid_language_entry(tmp_path: Path) -> None:
     plan_path = tmp_path / "bad-plan.yml"
-    plan_path.write_text("languages:\n  - nope\n", encoding="utf-8")
+    plan_path.write_text("analysis_units:\n  - nope\n", encoding="utf-8")
 
     try:
         load_codeql_plan(plan_path)
     except PackResolverError as exc:
-        assert "non-mapping language entry" in str(exc)
+        assert "non-mapping analysis unit" in str(exc)
     else:
         raise AssertionError("expected PackResolverError")

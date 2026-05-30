@@ -98,25 +98,25 @@ def test_write_manifest(tmp_path: Path) -> None:
 
 
 def test_lookup_build_match() -> None:
-    plan = [
+    languages = [
         {"id": "python", "build_mode": "none", "build_command": None},
         {"id": "c-cpp", "build_mode": "manual", "build_command": "make -C src"},
     ]
-    mode, cmd = _lookup_build({"id": "c-cpp"}, plan)
+    mode, cmd = _lookup_build("c-cpp", languages)
     assert mode == "manual"
     assert cmd == "make -C src"
 
 
 def test_lookup_build_fallback() -> None:
-    plan: list = []
-    mode, cmd = _lookup_build({"id": "python"}, plan)
+    languages: list = []
+    mode, cmd = _lookup_build("python", languages)
     assert mode == "none"
     assert cmd is None
 
 
 def test_lookup_build_no_match_within_plan() -> None:
-    plan = [{"id": "go", "build_mode": "autobuild"}]
-    mode, cmd = _lookup_build({"id": "python"}, plan)
+    languages = [{"id": "go", "build_mode": "autobuild"}]
+    mode, cmd = _lookup_build("python", languages)
     assert mode == "none"
     assert cmd is None
 
@@ -140,6 +140,30 @@ def test_create_database_creates_parent_dir(tmp_path: Path) -> None:
     assert msg == ""
     assert db_dir.parent.is_dir()
     assert mock_run.call_args.args[0][3] == str(db_dir)
+    assert "--build-mode=none" in mock_run.call_args.args[0]
+
+
+def test_create_database_manual_build_mode_and_command(tmp_path: Path) -> None:
+    db_dir = tmp_path / "itemdb" / "codeql" / "databases" / "root" / "c-cpp"
+    completed = MagicMock(returncode=0, stderr="")
+
+    with patch("codeql.runner.subprocess.run", return_value=completed) as mock_run:
+        ok, msg = _create_database(
+            tmp_path / "codeql",
+            "c-cpp",
+            "./src/native",
+            db_dir,
+            "manual",
+            "make -C src/native",
+            [],
+        )
+
+    assert ok is True
+    assert msg == ""
+    cmd = mock_run.call_args.args[0]
+    assert "--build-mode=manual" in cmd
+    assert "-c" in cmd
+    assert "make -C src/native" in cmd
 
 
 def test_run_codeql_database_failure_honors_soft_policy(tmp_path: Path) -> None:
@@ -165,11 +189,17 @@ def test_run_codeql_database_failure_honors_soft_policy(tmp_path: Path) -> None:
     )
 
     resolved = {
-        "languages": [
+        "analysis_units": [
             {
-                "id": "c-cpp",
-                "profiles": ["official"],
-                "profile_packs": {"official": ["codeql/cpp-queries"]},
+                "id": "root",
+                "path": "./src",
+                "languages": [
+                    {
+                        "id": "c-cpp",
+                        "profiles": ["official"],
+                        "profile_packs": {"official": ["codeql/cpp-queries"]},
+                    }
+                ],
             }
         ]
     }
@@ -177,7 +207,7 @@ def test_run_codeql_database_failure_honors_soft_policy(tmp_path: Path) -> None:
     with patch("codeql.runner.ROOT", tmp_path), \
          patch("codeql.runner._get_codeql_version", return_value="2.25.5"), \
          patch("codeql.runner.load_pack_catalog", return_value={}), \
-         patch("codeql.runner.load_codeql_plan", return_value={"source_path": "./src", "languages": []}), \
+         patch("codeql.runner.load_codeql_plan", return_value={"analysis_units": [{"id": "root", "path": "./src", "languages": [{"id": "c-cpp", "build_mode": "autobuild", "build_command": None}]}]}), \
          patch("codeql.runner.resolve_plan_packs", return_value=resolved), \
          patch("codeql.runner._create_database", return_value=(False, "db create failed")):
         manifest = run_codeql(config)
@@ -185,4 +215,5 @@ def test_run_codeql_database_failure_honors_soft_policy(tmp_path: Path) -> None:
     assert manifest["status"] == "soft-failed"
     assert manifest["fail_policy"] == "soft"
     assert manifest["failures"] == ["db create failed"]
-    assert manifest["languages"] == ["c-cpp"]
+    assert manifest["analysis_units"] == ["root"]
+    assert manifest["languages"] == ["root:c-cpp"]

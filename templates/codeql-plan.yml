@@ -8,31 +8,43 @@ generated_by: "phase-1a-profile"
 source_path: "./src"
 recommended: true
 
-languages: []
-# Example language entries:
+analysis_units: []
+# Example analysis units discovered under ./src:
 #
-# languages:
-#   - id: "python"
-#     confidence: "HIGH"
-#     build_mode: "none"
-#     build_command: null
-#     packs:
-#       - "official"
-#       - "github-security-lab"
+# analysis_units:
+#   - id: "api"
+#     path: "./src/api"
+#     kind: "service"
+#     primary: true
+#     languages:
+#       - id: "python"
+#         confidence: "HIGH"
+#         build_mode: "none"
+#         build_command: null
+#         packs:
+#           - "official"
+#           - "github-security-lab"
 #
-#   - id: "c-cpp"
-#     confidence: "HIGH"
-#     build_mode: "manual"
-#     build_command: "make -C src"
-#     packs:
-#       - "official"
-#       - "github-security-lab"
-#       - "trailofbits"
-#       - "coding-standards"
+#   - id: "native-lib"
+#     path: "./src/native"
+#     kind: "library"
+#     primary: false
+#     languages:
+#       - id: "c-cpp"
+#         confidence: "HIGH"
+#         build_mode: "manual"
+#         build_command: "make -C src/native"
+#         packs:
+#           - "official"
+#           - "github-security-lab"
+#           - "trailofbits"
+#           - "coding-standards"
 #
-# Allowed language IDs: python, javascript-typescript, c-cpp, go, csharp, java-kotlin
+# Allowed language IDs: python, javascript-typescript, ruby, c-cpp, go, csharp, java-kotlin, swift
 # Allowed confidence values: HIGH, MEDIUM, LOW
-# Allowed build_mode values: none, manual, autobuild
+# Allowed build_mode values by language:
+#   none: python, javascript-typescript, ruby, csharp, java-kotlin
+#   manual/autobuild: c-cpp, go, csharp, java-kotlin, swift
 # Allowed pack profile names: official, github-security-lab, trailofbits, coding-standards, local
 
 exclude:

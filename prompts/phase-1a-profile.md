@@ -59,14 +59,23 @@ Create `itemdb/notes/codeql-plan.yml` by filling in the template from `templates
 
 Rules:
 
+- Discover analysis units under `./src`. An analysis unit is a coherent project/component with one source root and one or more languages/stacks, such as an API service, frontend app, native library, CLI, package, firmware tree, or benchmark corpus.
+- Use stable, lowercase `analysis_units[].id` values such as `api`, `frontend`, `native-lib`, or `root`. These IDs are discovered here; users do not define them in `codecome.yml`.
+- Set `analysis_units[].path` to the real source path under `./src` for that unit. Do not use CodeQL-generated helper paths such as `_codeql_detected_source_root`.
+- Use one `analysis_units` entry for a single-project repository and multiple entries for monorepos or mixed stacks.
 - Only include languages you have detected with **HIGH** or **MEDIUM** confidence.
-- For each language, select the appropriate pack profiles:
+- For each language in each analysis unit, select the appropriate pack profiles:
   - `official` — always include for languages with CodeQL support.
   - `github-security-lab` — include for security-focused audits.
   - `trailofbits` — include for C/C++ and Go targets.
   - `coding-standards` — include for C/C++ targets where coding standards queries apply.
   - `local` — include if custom queries exist under `queries/codeql/<language>/`.
-- Set `build_mode` to `none` for interpreted languages, `manual` for compiled languages with a known build command, or `autobuild` if CodeQL autobuild should be attempted.
+- Set `build_mode` according to CodeQL language support:
+  - `none`: python, javascript-typescript, ruby, csharp, java-kotlin.
+  - `manual` or `autobuild`: c-cpp, go, csharp, java-kotlin, swift.
+- Do not set `build_mode: none` for C/C++, Go, or Swift.
+- Use `manual` only when you identified a concrete build command for that analysis unit.
+- Use `autobuild` only as an explicit choice when build files exist but the exact command is uncertain.
 - Fill in `build_command` when `build_mode` is `manual`.
 - Set `recommended: false` if you cannot confidently profile any language.
 - Add relevant `notes` explaining your language choices and any uncertainties.

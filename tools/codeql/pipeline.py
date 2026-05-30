@@ -6,12 +6,34 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+from datetime import datetime, timezone
 
 from codeql.config import ROOT, CodeQLConfig
 
 
-def run_full_pipeline(config: CodeQLConfig) -> dict[str, Any]:
+def record_skipped_run(config: CodeQLConfig, reason: str) -> dict[str, Any]:
+    """Write a skipped CodeQL manifest and summary for a deliberate skip."""
+    from codeql.runner import _manifest, write_manifest, write_summary
+
+    started_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    manifest = _manifest(
+        "skipped",
+        started_at,
+        config,
+        [],
+        [],
+        failures=[reason],
+        skip_reason=reason,
+    )
+    output_dir = config.abs_output_dir
+    normalized_dir = output_dir / "normalized"
+    write_manifest(manifest, output_dir)
+    write_summary(manifest, normalized_dir, output_dir)
+    return manifest
+
+
+def run_full_pipeline(config: CodeQLConfig, progress: Callable[[str], None] | None = None) -> dict[str, Any]:
     """Run the complete CodeQL analysis pipeline.
 
     Steps (all internal, no printing):
@@ -32,10 +54,11 @@ def run_full_pipeline(config: CodeQLConfig) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Step 1: run analysis
-    manifest = run_codeql(config)
+    manifest = run_codeql(config, progress=progress)
 
     # Step 2: write manifest
     write_manifest(manifest, output_dir)
+    _progress(progress, "CodeQL: manifest written")
 
     status = manifest["status"]
     normalized_dir = output_dir / "normalized"
@@ -51,6 +74,7 @@ def run_full_pipeline(config: CodeQLConfig) -> dict[str, Any]:
                     sarif_dir, normalized_dir, resolved,
                     manifest.get("codeql_version", "unknown"), ROOT,
                 )
+                _progress(progress, "CodeQL: normalized SARIF artifacts")
             except Exception as exc:
                 manifest.setdefault("warnings", []).append(
                     f"SARIF normalization failed: {exc}"
@@ -62,6 +86,7 @@ def run_full_pipeline(config: CodeQLConfig) -> dict[str, Any]:
     if signals_path.is_file():
         try:
             import_risk(signals_path, risk_path)
+            _progress(progress, "CodeQL: imported file risk signals")
         except Exception as exc:
             manifest.setdefault("warnings", []).append(
                 f"Risk import failed: {exc}"
@@ -69,5 +94,11 @@ def run_full_pipeline(config: CodeQLConfig) -> dict[str, Any]:
 
     # Step 5: write summary
     write_summary(manifest, normalized_dir, output_dir)
+    _progress(progress, "CodeQL: summary written")
 
     return manifest
+
+
+def _progress(progress: Callable[[str], None] | None, message: str) -> None:
+    if progress is not None:
+        progress(message)

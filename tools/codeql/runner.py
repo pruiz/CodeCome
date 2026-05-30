@@ -9,13 +9,14 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
+from codeql.capabilities import supported_build_modes
 from codeql.config import ROOT, CodeQLConfig
 from codeql.packs import PackResolverError, dump_yaml, load_codeql_plan, load_pack_catalog, resolve_plan_packs
 
 
-def run_codeql(config: CodeQLConfig) -> dict[str, Any]:
+def run_codeql(config: CodeQLConfig, progress: Callable[[str], None] | None = None) -> dict[str, Any]:
     """Run CodeQL analysis for every language in the plan.
 
     Returns the run manifest as a dict.
@@ -30,6 +31,7 @@ def run_codeql(config: CodeQLConfig) -> dict[str, Any]:
             return _manifest("soft-failed", now_utc, config, [], [f"CodeQL binary not found at {binary_path}"])
 
     version = _get_codeql_version(binary_path)
+    _progress(progress, f"CodeQL: using {version}")
 
     plan_path = ROOT / "itemdb/notes/codeql-plan.yml"
     if not plan_path.is_file():
@@ -40,6 +42,7 @@ def run_codeql(config: CodeQLConfig) -> dict[str, Any]:
         return _manifest("skipped", now_utc, config, [version], [], failures=[f"Pack catalog not found at {catalog_path}"])
 
     try:
+        _progress(progress, f"CodeQL: loading plan {_rel(plan_path)}")
         catalog = load_pack_catalog(catalog_path)
         plan = load_codeql_plan(plan_path)
         resolved = resolve_plan_packs(plan, catalog)
@@ -49,54 +52,84 @@ def run_codeql(config: CodeQLConfig) -> dict[str, Any]:
     resolved_path = config.abs_output_dir / "selected-query-packs.yml"
     resolved_path.parent.mkdir(parents=True, exist_ok=True)
     resolved_path.write_text(dump_yaml(resolved), encoding="utf-8")
+    _progress(progress, f"CodeQL: resolved packs for {len(resolved['analysis_units'])} analysis unit(s)")
 
-    source_path = plan.get("source_path", "./src")
     exclude_patterns = plan.get("exclude", [])
 
     warnings: list[str] = []
     failures: list[str] = []
     language_ids: list[str] = []
+    analysis_units: list[str] = []
 
-    for lang_entry in resolved["languages"]:
-        language_id = lang_entry["id"]
-        profiles = lang_entry.get("profiles", [])
-        profile_packs = lang_entry.get("profile_packs", {})
-        language_ids.append(language_id)
+    for unit_entry in resolved["analysis_units"]:
+        unit_id = unit_entry["id"]
+        source_path = unit_entry["path"]
+        analysis_units.append(unit_id)
+        plan_unit = _lookup_unit(unit_id, plan.get("analysis_units", []))
 
-        build_mode, build_command = _lookup_build(lang_entry, plan.get("languages", []))
+        for lang_entry in unit_entry["languages"]:
+            language_id = lang_entry["id"]
+            profiles = lang_entry.get("profiles", [])
+            profile_packs = lang_entry.get("profile_packs", {})
+            language_ids.append(f"{unit_id}:{language_id}")
 
-        db_dir = config.abs_database_dir / language_id
-        sarif_dir = config.abs_output_dir / "sarif"
-        sarif_dir.mkdir(parents=True, exist_ok=True)
+            build_mode, build_command = _lookup_build(language_id, plan_unit.get("languages", []))
+            supported_modes = supported_build_modes(language_id)
+            if build_mode not in supported_modes:
+                failures.append(
+                    f"Unsupported build_mode '{build_mode}' for {language_id} in analysis unit {unit_id}. "
+                    f"Allowed: {', '.join(sorted(supported_modes))}"
+                )
+                return _manifest(_tool_failure_status(config), now_utc, config, [version], warnings, failures, language_ids, analysis_units)
 
-        ok, msg = _create_database(binary_path, language_id, source_path, db_dir, build_mode, build_command, exclude_patterns)
-        if not ok:
-            failures.append(msg)
-            return _manifest(_tool_failure_status(config), now_utc, config, [version], warnings, failures, language_ids)
+            db_dir = config.abs_database_dir / unit_id / language_id
+            sarif_dir = config.abs_output_dir / "sarif"
+            sarif_dir.mkdir(parents=True, exist_ok=True)
 
-        for profile in profiles:
-            packs = profile_packs.get(profile, [])
-            if not packs:
-                continue
-            sarif_path = sarif_dir / f"{language_id}.{profile}.sarif"
-            ok, msg = _run_analyze(binary_path, db_dir, packs, sarif_path)
+            _progress(progress, f"CodeQL: creating database {unit_id}:{language_id} ({build_mode})")
+            ok, msg = _create_database(binary_path, language_id, source_path, db_dir, build_mode, build_command, exclude_patterns)
             if not ok:
                 failures.append(msg)
-                return _manifest(_tool_failure_status(config), now_utc, config, [version], warnings, failures, language_ids)
+                return _manifest(_tool_failure_status(config), now_utc, config, [version], warnings, failures, language_ids, analysis_units)
+            _progress(progress, f"CodeQL: database ready {unit_id}:{language_id}")
+
+            for profile in profiles:
+                packs = profile_packs.get(profile, [])
+                if not packs:
+                    continue
+                sarif_path = sarif_dir / f"{unit_id}.{language_id}.{profile}.sarif"
+                _progress(progress, f"CodeQL: analyzing {unit_id}:{language_id} profile {profile}")
+                ok, msg = _run_analyze(binary_path, db_dir, packs, sarif_path)
+                if not ok:
+                    failures.append(msg)
+                    return _manifest(_tool_failure_status(config), now_utc, config, [version], warnings, failures, language_ids, analysis_units)
+                _progress(progress, f"CodeQL: SARIF written {_rel(sarif_path)}")
 
     if failures:
-        return _manifest("failed", now_utc, config, [version], warnings, failures, language_ids)
+        return _manifest("failed", now_utc, config, [version], warnings, failures, language_ids, analysis_units)
 
-    return _manifest("completed", now_utc, config, [version], warnings, failures, language_ids)
+    return _manifest("completed", now_utc, config, [version], warnings, failures, language_ids, analysis_units)
 
 
 def _tool_failure_status(config: CodeQLConfig) -> str:
     return "failed" if config.fail_policy == "hard" else "soft-failed"
 
 
-def _lookup_build(lang_entry: dict, plan_languages: list[dict]) -> tuple[str, str | None]:
+def _progress(progress: Callable[[str], None] | None, message: str) -> None:
+    if progress is not None:
+        progress(message)
+
+
+def _lookup_unit(unit_id: str, plan_units: list[dict]) -> dict:
+    """Return the plan analysis unit with *unit_id*."""
+    for unit in plan_units:
+        if unit.get("id") == unit_id:
+            return unit
+    return {}
+
+
+def _lookup_build(language_id: str, plan_languages: list[dict]) -> tuple[str, str | None]:
     """Return (build_mode, build_command) for a language entry."""
-    language_id = lang_entry["id"]
     for pl in plan_languages:
         if pl.get("id") == language_id:
             mode = pl.get("build_mode", "none")
@@ -138,10 +171,12 @@ def _create_database(
         "--no-run-unnecessary-builds",
     ]
 
-    if build_mode == "manual" and build_command:
-        cmd += ["-c", build_command]
+    if build_mode == "none":
+        cmd += ["--build-mode=none"]
+    elif build_mode == "manual" and build_command:
+        cmd += ["--build-mode=manual", "-c", build_command]
     elif build_mode == "autobuild":
-        pass  # let CodeQL auto-detect
+        cmd += ["--build-mode=autobuild"]
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
@@ -192,16 +227,20 @@ def _manifest(
     warnings: list[str],
     failures: list[str] | None = None,
     languages: list[str] | None = None,
+    analysis_units: list[str] | None = None,
+    skip_reason: str | None = None,
 ) -> dict[str, Any]:
     if failures is None:
         failures = []
     if languages is None:
         languages = []
+    if analysis_units is None:
+        analysis_units = []
 
     codeql_version = versions[0] if versions else "unknown"
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    return {
+    manifest = {
         "schema_version": 1,
         "phase": "phase-1",
         "status": status,
@@ -212,10 +251,14 @@ def _manifest(
         "plan_file": "itemdb/notes/codeql-plan.yml",
         "pack_catalog": str(_rel(config.abs_pack_catalog)),
         "fail_policy": config.fail_policy,
+        "analysis_units": analysis_units,
         "languages": languages,
         "warnings": warnings,
         "failures": failures if failures else [],
     }
+    if skip_reason:
+        manifest["skip_reason"] = skip_reason
+    return manifest
 
 
 def write_manifest(manifest: dict[str, Any], output_dir: Path) -> Path:
@@ -279,6 +322,7 @@ def write_summary(manifest: dict[str, Any], normalized_dir: Path, output_dir: Pa
         lines.append("")
 
     path = output_dir / "codeql-summary.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
 

@@ -58,6 +58,8 @@ def _run_codeql(console: Any) -> int:
 
     if not config.enabled:
         msg = "CodeQL disabled — skipping."
+        from codeql.pipeline import record_skipped_run
+        record_skipped_run(config, "CodeQL disabled for Phase 1")
         if HAVE_RICH:
             from rich.text import Text
             console.print(Text(msg, style="yellow"))
@@ -68,6 +70,8 @@ def _run_codeql(console: Any) -> int:
 
     if not config.phase_1_enabled:
         msg = "CodeQL phase 1 disabled — skipping."
+        from codeql.pipeline import record_skipped_run
+        record_skipped_run(config, "CodeQL phase 1 disabled")
         if HAVE_RICH:
             from rich.text import Text
             console.print(Text(msg, style="yellow"))
@@ -84,8 +88,15 @@ def _run_codeql(console: Any) -> int:
 
     from codeql.pipeline import run_full_pipeline
 
+    def progress(message: str) -> None:
+        if HAVE_RICH:
+            from rich.text import Text
+            console.print(Text(message, style="dim"))
+        else:
+            print(message, flush=True)
+
     try:
-        manifest = run_full_pipeline(config)
+        manifest = run_full_pipeline(config, progress=progress)
     except Exception as exc:
         msg = f"CodeQL: FAILED — {exc}"
         if HAVE_RICH:
