@@ -97,8 +97,8 @@ audit:
         version: "latest"
         path: ".tools/codeql/current/codeql"
 
-      output_dir: "./itemdb/evidence/codeql"
-      database_dir: "./itemdb/evidence/codeql/databases"
+      output_dir: "./itemdb/codeql"
+      database_dir: "./itemdb/codeql/databases"
       cache_dir: "./.cache/codeql"
 
       phase_1:

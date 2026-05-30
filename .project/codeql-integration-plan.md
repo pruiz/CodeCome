@@ -190,12 +190,12 @@ make phase-1
         command:
           tools/codeql.py run --plan itemdb/notes/codeql-plan.yml
         outputs:
-          itemdb/evidence/codeql/run-manifest.yml
-          itemdb/evidence/codeql/selected-query-packs.yml
-          itemdb/evidence/codeql/sarif/*.sarif
-          itemdb/evidence/codeql/normalized/alerts.yml
-          itemdb/evidence/codeql/normalized/file-signals.yml
-          itemdb/evidence/codeql/codeql-summary.md
+          itemdb/codeql/run-manifest.yml
+          itemdb/codeql/selected-query-packs.yml
+          itemdb/codeql/sarif/*.sarif
+          itemdb/codeql/normalized/alerts.yml
+          itemdb/codeql/normalized/file-signals.yml
+          itemdb/codeql/codeql-summary.md
 
      5. CodeQL artifact gate
         verifies:
@@ -570,8 +570,8 @@ static_analysis:
       version: "latest"
       path: ".tools/codeql/current/codeql"
 
-    output_dir: "./itemdb/evidence/codeql"
-    database_dir: "./itemdb/evidence/codeql/databases"
+    output_dir: "./itemdb/codeql"
+    database_dir: "./itemdb/codeql/databases"
     cache_dir: "./.cache/codeql"
 
     phase_1:
@@ -592,7 +592,7 @@ static_analysis:
 Use this layout:
 
 ```text
-itemdb/evidence/codeql/
+itemdb/codeql/
   run-manifest.yml
   selected-query-packs.yml
   codeql-summary.md
@@ -637,7 +637,7 @@ failures: []
 
 Do not expose raw SARIF directly to model prompts. Normalize it first.
 
-`itemdb/evidence/codeql/normalized/alerts.yml`:
+`itemdb/codeql/normalized/alerts.yml`:
 
 ```yaml
 schema_version: 1
@@ -756,8 +756,8 @@ tools/codeql.py create-candidates
 Inputs:
 
 ```text
-itemdb/evidence/codeql/normalized/alerts.yml
-itemdb/evidence/codeql/normalized/file-signals.yml
+itemdb/codeql/normalized/alerts.yml
+itemdb/codeql/normalized/file-signals.yml
 itemdb/notes/file-risk-index.yml
 itemdb/findings/**/CC-*.md
 ```
@@ -765,7 +765,7 @@ itemdb/findings/**/CC-*.md
 Outputs:
 
 ```text
-itemdb/evidence/codeql/normalized/candidate-findings.yml
+itemdb/codeql/normalized/candidate-findings.yml
 itemdb/notes/codeql-candidate-findings.md
 ```
 
@@ -796,7 +796,7 @@ Add to `prompts/phase-2-audit.md`:
 ## CodeQL candidate handling
 
 If `itemdb/notes/codeql-candidate-findings.md` or
-`itemdb/evidence/codeql/normalized/candidate-findings.yml` exists, you must
+`itemdb/codeql/normalized/candidate-findings.yml` exists, you must
 account for each candidate.
 
 For each candidate, choose one:
@@ -964,7 +964,7 @@ static_analysis:
     packs:
       - "githubsecuritylab/codeql-python-queries"
     sarif:
-      - "itemdb/evidence/codeql/sarif/python.github-security-lab.sarif"
+      - "itemdb/codeql/sarif/python.github-security-lab.sarif"
 ```
 
 If the frontmatter checker rejects extra fields, place this information in the finding body under:

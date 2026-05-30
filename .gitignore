@@ -224,6 +224,9 @@ tmp/*
 .tools/
 .cache/codeql/
 
+# CodeQL runtime artifacts
+itemdb/codeql/*
+
 # CodeCome runtime artifacts
 itemdb/index.md
 
