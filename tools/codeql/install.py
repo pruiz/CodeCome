@@ -27,6 +27,19 @@ from codeql.config import resolve_config, CodeQLConfig, ROOT
 GITHUB_API_RELEASES = "https://api.github.com/repos/github/codeql-cli-binaries/releases"
 
 
+def _github_headers() -> dict[str, str]:
+    """Return GitHub API headers, using a token when available."""
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "CodeCome-CodeQL-Installer/1.0",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
 # ---------------------------------------------------------------------------
 # Platform detection
 # ---------------------------------------------------------------------------
@@ -57,7 +70,7 @@ def _fetch_latest_version() -> str:
     import json
 
     url = f"{GITHUB_API_RELEASES}/latest"
-    req = Request(url, headers={"Accept": "application/vnd.github+json"})
+    req = Request(url, headers=_github_headers())
     try:
         with urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode())
@@ -74,7 +87,7 @@ def _fetch_release_assets(version: str) -> list[dict]:
     import json
 
     url = f"{GITHUB_API_RELEASES}/tags/v{version}"
-    req = Request(url, headers={"Accept": "application/vnd.github+json"})
+    req = Request(url, headers=_github_headers())
     try:
         with urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode())
@@ -103,7 +116,7 @@ def _find_download_url(assets: list[dict], plat: str) -> Optional[str]:
 def _download(url: str, dest: Path) -> None:
     """Download a file from *url* to *dest*."""
     print(f"Downloading {url} …")
-    req = Request(url, headers={"User-Agent": "CodeCome-CodeQL-Installer/1.0"})
+    req = Request(url, headers=_github_headers())
     try:
         with urlopen(req, timeout=300) as resp:
             with open(dest, "wb") as f:
