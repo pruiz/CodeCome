@@ -137,6 +137,24 @@ def allow_precreate(profile_name: str, catalog: dict[str, Any]) -> bool:
     return value if isinstance(value, bool) else True
 
 
+def _resolve_profile_packs(language_id: str, profiles: list[str], catalog: dict[str, Any]) -> dict[str, list[str]]:
+    """Resolve each profile to its own pack list (no dedup across profiles)."""
+    packs = catalog["packs"]
+    language_profiles = packs.get(language_id)
+    if not isinstance(language_profiles, dict):
+        raise PackResolverError(f"Unsupported CodeQL language id: {language_id!r}.")
+
+    result: dict[str, list[str]] = {}
+    for profile_name in profiles:
+        refs = language_profiles.get(profile_name)
+        if not isinstance(refs, list):
+            raise PackResolverError(
+                f"Unknown CodeQL pack profile {profile_name!r} for language {language_id!r}."
+            )
+        result[profile_name] = list(refs)
+    return result
+
+
 def resolve_plan_packs(plan: dict[str, Any], catalog: dict[str, Any]) -> dict[str, Any]:
     """Resolve all language entries in a CodeQL plan to concrete pack references."""
     languages_out: list[dict[str, Any]] = []
@@ -149,6 +167,7 @@ def resolve_plan_packs(plan: dict[str, Any], catalog: dict[str, Any]) -> dict[st
                 "id": language_id,
                 "profiles": profiles,
                 "packs": resolve_pack_profiles(language_id, profiles, catalog),
+                "profile_packs": _resolve_profile_packs(language_id, profiles, catalog),
                 "candidate_policy": {
                     profile: {"allow_precreate": allow_precreate(profile, catalog)}
                     for profile in profiles
