@@ -44,10 +44,8 @@ def run_frontmatter_validation() -> tuple[int, str]:
         if FILE_RISK_INDEX_PATH.exists():
             out.write(C.ok(str(FILE_RISK_INDEX_REL)) + "\n")
 
-    if not paths:
-        if not FILE_RISK_INDEX_PATH.exists():
-            out.write(C.info("No findings or index to validate.") + "\n")
-        return (0 if total_errors == 0 else 1, out.getvalue())
+    if not paths and not FILE_RISK_INDEX_PATH.exists():
+        out.write(C.info("No findings or index to validate.") + "\n")
 
     for path in paths:
         errors = validate_finding(path)
@@ -59,10 +57,11 @@ def run_frontmatter_validation() -> tuple[int, str]:
         for error in errors:
             out.write(f"  {C.SYM_BULLET} {error}\n")
 
-    if total_errors:
-        out.write(f"\n{C.fail(f'Found {total_errors} frontmatter error(s).')}\n")
-    else:
-        out.write(f"\n{C.ok(f'Validated {len(paths)} finding(s).')}\n")
+    if paths or FILE_RISK_INDEX_PATH.exists():
+        if total_errors:
+            out.write(f"\n{C.fail(f'Found {total_errors} frontmatter error(s).')}\n")
+        else:
+            out.write(f"\n{C.ok(f'Validated {len(paths)} finding(s).')}\n")
 
     return (1 if total_errors else 0, out.getvalue())
 

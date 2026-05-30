@@ -71,7 +71,7 @@ def test_run_single_attempt_uses_explicit_transcript_phase(mock_args, mock_conso
 
     monkeypatch.setattr(Transcript, "for_phase", classmethod(fake_for_phase))
 
-    code, session_id, res, path = runner._run_single_attempt(
+    code, session_id, _res, _path = runner._run_single_attempt(
         mock_args, mock_console, "do work", "model", "var",
         "http://base", "auth", "dir", lambda *a: None,
         transcript_phase="1a",
@@ -97,7 +97,7 @@ def test_run_single_attempt_success(mock_args, mock_console, monkeypatch):
     fake_transcript.path = Path("fake.jsonl")
     monkeypatch.setattr(Transcript, "for_phase", classmethod(lambda cls, p, f: fake_transcript))
     
-    code, session_id, res, path = runner._run_single_attempt(
+    code, session_id, res, _path = runner._run_single_attempt(
         mock_args, mock_console, "do work", "model", "var",
         "http://base", "auth", "dir", lambda *a: None
     )
@@ -124,7 +124,7 @@ def test_run_single_attempt_consumer_exception(mock_args, mock_console, monkeypa
     def fake_fatal(console, title, msg):
         fatal_errors.append(msg)
         
-    code, session_id, res, path = runner._run_single_attempt(
+    code, session_id, _res, _path = runner._run_single_attempt(
         mock_args, mock_console, "do work", "model", "var",
         "http://base", "auth", "dir", lambda *a: None,
         emit_fatal_error_fn=fake_fatal
@@ -145,7 +145,7 @@ def test_run_single_attempt_existing_session(mock_args, mock_console, monkeypatc
     fake_transcript.path = Path("fake.jsonl")
     monkeypatch.setattr(Transcript, "for_phase", classmethod(lambda cls, p, f: fake_transcript))
     
-    code, session_id, res, path = runner._run_single_attempt(
+    code, session_id, _res, _path = runner._run_single_attempt(
         mock_args, mock_console, "do work", "model", "var",
         "http://base", "auth", "dir", lambda *a: None,
         existing_session_id="existing_123"

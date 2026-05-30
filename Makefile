@@ -105,7 +105,7 @@ help:
 	@printf "    $(BOLD)make sandbox-build$(RESET)  Build the target inside the sandbox\n"
 	@printf "    $(BOLD)make sandbox-test$(RESET)   Test the target inside the sandbox\n"
 	@printf "\n"
-	@printf "  $(BOLD)$(CYAN)Sandbox bootstrap (Phase 1b):$(RESET)\n"
+	@printf "  $(BOLD)$(CYAN)Sandbox bootstrap (Phase 1c):$(RESET)\n"
 	@printf "\n"
 	@printf "    $(BOLD)make sandbox-list$(RESET)                List curated example sandboxes\n"
 	@printf "    $(BOLD)make sandbox-inspect ID=python$(RESET)   Inspect one example\n"
@@ -311,7 +311,7 @@ findings-package:
 # Sandbox
 # ---------------------------------------------------------------------------
 
-SANDBOX_SCRIPT_HINT := "No sandbox helper script found. Run 'make phase-1' (sub-stage 1b) to bootstrap sandbox/ from templates/sandboxes/, or place the helper script under sandbox/scripts/ manually."
+SANDBOX_SCRIPT_HINT := "No sandbox helper script found. Run 'make phase-1' (sub-stage 1c) to bootstrap sandbox/ from templates/sandboxes/, or place the helper script under sandbox/scripts/ manually."
 
 sandbox-setup:
 	@if [ -x sandbox/scripts/setup.sh ]; then \
@@ -360,7 +360,7 @@ sandbox-test:
 	./sandbox/scripts/test.sh
 
 # ---------------------------------------------------------------------------
-# Sandbox bootstrap (Phase 1b)
+# Sandbox bootstrap (Phase 1c)
 # ---------------------------------------------------------------------------
 
 sandbox-list: venv-check

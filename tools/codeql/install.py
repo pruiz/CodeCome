@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import shutil
 import stat
 import subprocess
@@ -25,6 +26,13 @@ from codeql.config import resolve_config, CodeQLConfig, ROOT
 
 
 GITHUB_API_RELEASES = "https://api.github.com/repos/github/codeql-cli-binaries/releases"
+
+_VERSION_RE = re.compile(r"^v?\d+\.\d+\.\d+$")
+
+
+def _validate_version(version: str) -> bool:
+    """Return True if *version* is a safe semver-like string (no path traversal)."""
+    return bool(_VERSION_RE.match(version))
 
 
 def _github_headers() -> dict[str, str]:
@@ -225,6 +233,10 @@ def install(config: Optional[CodeQLConfig] = None) -> int:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1
         print(f"Latest version: {version}")
+
+    if not _validate_version(version):
+        print(f"ERROR: invalid version '{version}' — must be semver-like (e.g. 2.25.5)", file=sys.stderr)
+        return 1
 
     # --- Determine target directories ---
     tools_dir = ROOT / ".tools" / "codeql"

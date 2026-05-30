@@ -18,7 +18,8 @@ class PatchRenderer(EventRenderer):
     def render(self, event: dict[str, Any]) -> bool:
         part = event.get("part", {})
         hash_ = part.get("hash", "")
-        files: list[str] = part.get("files", [])
+        raw_files = part.get("files")
+        files: list[str] = raw_files if isinstance(raw_files, list) else []
         short_hash = hash_[:8] if hash_ else ""
 
         if not files and not short_hash:
