@@ -32,6 +32,10 @@ def _cmd_check() -> int:
     """Check that CodeQL CLI is available and working."""
     config = resolve_config()
 
+    if not config.enabled:
+        print("CodeQL is disabled (CODEQL=0 or CODEQL_SKIP=1).")
+        return 0
+
     binary_path = config.abs_install_path
 
     # 1. Binary check

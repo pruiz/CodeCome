@@ -368,9 +368,6 @@ def run_phase_1(
     base_url: str,
 ) -> int:
     """Orchestrate Phase 1 subphases 1a → 1b → 1c with gates."""
-    # Snapshot findings before 1a
-    findings_snapshot = count_findings_snapshot()
-
     # ---- Phase 1a: Target Profile ----
     rc, _ = _run_subphase(
         args=args,
@@ -392,6 +389,9 @@ def run_phase_1(
 
     # ---- CodeQL placeholder ----
     _run_codeql_placeholder(console)
+
+    # Snapshot findings immediately before 1b so the warning scope matches 1b.
+    findings_snapshot = count_findings_snapshot()
 
     # ---- Phase 1b: CodeQL-assisted Reconnaissance ----
     rc, _ = _run_subphase(

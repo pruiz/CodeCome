@@ -7,7 +7,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
-from codecome.config import ROOT as CONFIG_ROOT
 from phases import gates as gates_module
 
 
