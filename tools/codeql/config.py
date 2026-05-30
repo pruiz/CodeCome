@@ -62,24 +62,18 @@ def _load_codecome_yml() -> dict[str, Any] | None:
         return None
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except Exception:
+    except (yaml.YAMLError, OSError, UnicodeDecodeError):
         return None
     if not isinstance(data, dict):
         return None
     audit = data.get("audit")
-    if isinstance(audit, dict):
-        sa = audit.get("static_analysis")
-        if isinstance(sa, dict):
-            cq = sa.get("codeql")
-            if isinstance(cq, dict):
-                return cq
-
-    sa = data.get("static_analysis")
-    if isinstance(sa, dict):
-        cq = sa.get("codeql")
-        if isinstance(cq, dict):
-            return cq
-    return None
+    if not isinstance(audit, dict):
+        return None
+    sa = audit.get("static_analysis")
+    if not isinstance(sa, dict):
+        return None
+    cq = sa.get("codeql")
+    return cq if isinstance(cq, dict) else None
 
 
 def _bool_env(name: str) -> bool | None:
