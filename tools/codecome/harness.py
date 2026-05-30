@@ -15,8 +15,6 @@ import argparse
 import dataclasses
 import os
 import signal
-import subprocess
-import sys
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -254,15 +252,11 @@ def run_phase_mode(args: argparse.Namespace) -> int:
                     returncode = 2
 
             if returncode == 0:
-                validation_result = subprocess.run(
-                    [sys.executable, "tools/check-frontmatter.py"],
-                    cwd=ROOT,
-                    capture_output=True,
-                    text=True
-                )
-                if validation_result.returncode != 0:
+                from findings.checks_entry import run_frontmatter_validation
+
+                validation_rc, validation_output = run_frontmatter_validation()
+                if validation_rc != 0:
                     max_frontmatter_retries = 2
-                    validation_output = (validation_result.stderr or validation_result.stdout).strip() or "(no validator output)"
                     if frontmatter_retry_count < max_frontmatter_retries:
                         frontmatter_retry_count += 1
                         msg = (

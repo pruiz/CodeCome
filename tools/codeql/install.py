@@ -278,6 +278,10 @@ def install(config: Optional[CodeQLConfig] = None) -> int:
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
+    # Recompute the binary path after extraction — a legacy nested install
+    # may have been replaced with the new flat layout during this run.
+    binary_path = _codeql_binary(version_dir)
+
     # --- Create current symlink ---
     _ensure_symlink(version_dir, current_link)
 
