@@ -47,6 +47,8 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run make init (includes managed CodeQL install)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: make init
 
       - name: Run pytest with coverage
