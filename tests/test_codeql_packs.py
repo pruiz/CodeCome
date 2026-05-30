@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
-from codeql.packs import PackResolverError, load_codeql_plan, load_pack_catalog, resolve_pack_profiles, resolve_plan_packs
+from codeql.packs import PackResolverError, load_codeql_plan, load_pack_catalog, resolve_pack_profiles, resolve_plan_packs, _resolve_profile_packs
 
 
 def _write_catalog(path: Path) -> None:
@@ -103,7 +103,59 @@ def test_resolve_pack_profiles_rejects_unknown_profile(tmp_path: Path) -> None:
         raise AssertionError("expected PackResolverError")
 
 
-def test_resolve_plan_packs_returns_candidate_policy(tmp_path: Path) -> None:
+def test_resolve_plan_packs_includes_profile_packs(tmp_path: Path) -> None:
+    catalog_path = tmp_path / "catalog.yml"
+    plan_path = tmp_path / "plan.yml"
+    _write_catalog(catalog_path)
+    _write_plan(plan_path)
+
+    catalog = load_pack_catalog(catalog_path)
+    plan = load_codeql_plan(plan_path)
+    resolved = resolve_plan_packs(plan, catalog)
+
+    assert resolved["languages"][0]["packs"] == [
+        "codeql/python-queries",
+        "githubsecuritylab/codeql-python-queries",
+    ]
+    # profile_packs maps each profile to its individual packs (no dedup across profiles)
+    assert resolved["languages"][0]["profile_packs"] == {
+        "official": ["codeql/python-queries"],
+        "github-security-lab": ["githubsecuritylab/codeql-python-queries"],
+    }
+    assert resolved["languages"][1]["candidate_policy"]["coding-standards"]["allow_precreate"] is False
+
+
+def test_resolve_profile_packs_rejects_unknown_profile() -> None:
+    catalog = {
+        "schema_version": 1,
+        "packs": {
+            "python": {
+                "official": ["codeql/python-queries"],
+            }
+        },
+    }
+    try:
+        _resolve_profile_packs("python", ["trailofbits"], catalog)
+    except PackResolverError as exc:
+        assert "Unknown CodeQL pack profile" in str(exc)
+    else:
+        raise AssertionError("expected PackResolverError")
+
+
+def test_resolve_profile_packs_rejects_unknown_language() -> None:
+    catalog = {
+        "schema_version": 1,
+        "packs": {},
+    }
+    try:
+        _resolve_profile_packs("ruby", ["official"], catalog)
+    except PackResolverError as exc:
+        assert "Unsupported CodeQL language id" in str(exc)
+    else:
+        raise AssertionError("expected PackResolverError")
+
+
+def test_load_codeql_plan_rejects_invalid_language_entry(tmp_path: Path) -> None:
     catalog_path = tmp_path / "catalog.yml"
     plan_path = tmp_path / "plan.yml"
     _write_catalog(catalog_path)
