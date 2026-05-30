@@ -180,14 +180,10 @@ def resolve_config() -> CodeQLConfig:
     else:
         enabled = _get("enabled", DEFAULTS["enabled"], coerce=bool)
 
-    # If CODEQL=0 overrides everything
-    if not enabled:
-        return CodeQLConfig(enabled=False)
-
     # Also check CODEQL_SKIP
     skip = _bool_env("CODEQL_SKIP")
     if skip is True:
-        return CodeQLConfig(enabled=False)
+        enabled = False
 
     fail_policy = _str_env("CODEQL_FAIL_POLICY") or _get("fail_policy", DEFAULTS["fail_policy"])
 

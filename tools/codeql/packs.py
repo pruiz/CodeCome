@@ -84,21 +84,33 @@ def load_codeql_plan(path: Path) -> dict[str, Any]:
     """Load and validate a CodeQL plan file."""
     data = load_yaml_mapping(path, what="CodeQL plan")
 
-    languages = data.get("languages")
-    if not isinstance(languages, list):
-        raise PackResolverError(f"CodeQL plan at {path} must define 'languages' as a list.")
+    units = data.get("analysis_units")
+    if not isinstance(units, list):
+        raise PackResolverError(f"CodeQL plan at {path} must define 'analysis_units' as a list.")
 
-    for i, entry in enumerate(languages):
-        if not isinstance(entry, dict):
-            raise PackResolverError(f"CodeQL plan at {path} has non-mapping language entry at index {i}.")
-        language_id = entry.get("id")
-        if not isinstance(language_id, str) or not language_id:
-            raise PackResolverError(f"CodeQL plan at {path} has language entry {i} without a valid 'id'.")
-        profiles = entry.get("packs")
-        if not isinstance(profiles, list) or not all(isinstance(p, str) and p for p in profiles):
-            raise PackResolverError(
-                f"CodeQL plan at {path} must define language {language_id!r} packs as a list of profile names."
-            )
+    for i, unit in enumerate(units):
+        if not isinstance(unit, dict):
+            raise PackResolverError(f"CodeQL plan at {path} has non-mapping analysis unit at index {i}.")
+        unit_id = unit.get("id")
+        if not isinstance(unit_id, str) or not unit_id:
+            raise PackResolverError(f"CodeQL plan at {path} has analysis unit {i} without a valid 'id'.")
+        unit_path = unit.get("path")
+        if not isinstance(unit_path, str) or not unit_path:
+            raise PackResolverError(f"CodeQL plan at {path} has analysis unit {unit_id!r} without a valid 'path'.")
+        languages = unit.get("languages")
+        if not isinstance(languages, list) or not languages:
+            raise PackResolverError(f"CodeQL plan at {path} must define analysis unit {unit_id!r} languages as a non-empty list.")
+        for j, entry in enumerate(languages):
+            if not isinstance(entry, dict):
+                raise PackResolverError(f"CodeQL plan at {path} has non-mapping language entry {j} in analysis unit {unit_id!r}.")
+            language_id = entry.get("id")
+            if not isinstance(language_id, str) or not language_id:
+                raise PackResolverError(f"CodeQL plan at {path} has language entry {j} in analysis unit {unit_id!r} without a valid 'id'.")
+            profiles = entry.get("packs")
+            if not isinstance(profiles, list) or not all(isinstance(p, str) and p for p in profiles):
+                raise PackResolverError(
+                    f"CodeQL plan at {path} must define language {language_id!r} packs as a list of profile names."
+                )
 
     return data
 
@@ -157,28 +169,39 @@ def _resolve_profile_packs(language_id: str, profiles: list[str], catalog: dict[
 
 def resolve_plan_packs(plan: dict[str, Any], catalog: dict[str, Any]) -> dict[str, Any]:
     """Resolve all language entries in a CodeQL plan to concrete pack references."""
-    languages_out: list[dict[str, Any]] = []
+    units_out: list[dict[str, Any]] = []
 
-    for entry in plan.get("languages", []):
-        language_id = entry["id"]
-        profiles = list(entry.get("packs", []))
-        languages_out.append(
+    for unit in plan.get("analysis_units", []):
+        languages_out: list[dict[str, Any]] = []
+        for entry in unit.get("languages", []):
+            language_id = entry["id"]
+            profiles = list(entry.get("packs", []))
+            languages_out.append(
+                {
+                    "id": language_id,
+                    "profiles": profiles,
+                    "packs": resolve_pack_profiles(language_id, profiles, catalog),
+                    "profile_packs": _resolve_profile_packs(language_id, profiles, catalog),
+                    "candidate_policy": {
+                        profile: {"allow_precreate": allow_precreate(profile, catalog)}
+                        for profile in profiles
+                    },
+                }
+            )
+        units_out.append(
             {
-                "id": language_id,
-                "profiles": profiles,
-                "packs": resolve_pack_profiles(language_id, profiles, catalog),
-                "profile_packs": _resolve_profile_packs(language_id, profiles, catalog),
-                "candidate_policy": {
-                    profile: {"allow_precreate": allow_precreate(profile, catalog)}
-                    for profile in profiles
-                },
+                "id": unit["id"],
+                "path": unit["path"],
+                "kind": unit.get("kind"),
+                "primary": unit.get("primary", False),
+                "languages": languages_out,
             }
         )
 
     return {
         "schema_version": 1,
         "generated_by": "codeql-pack-resolver",
-        "languages": languages_out,
+        "analysis_units": units_out,
     }
 
 

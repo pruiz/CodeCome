@@ -345,6 +345,110 @@ def count_findings() -> Dict[str, int]:
     return counts
 
 
+def _phase_1_notes_exist() -> bool:
+    notes_dir = ROOT / "itemdb" / "notes"
+    return (notes_dir / "target-profile.md").is_file() and (notes_dir / "build-model.md").is_file()
+
+
+def check_codeql_status() -> int:
+    """Check CodeQL configuration and last recorded artifact state."""
+    print()
+    print(C.header("CodeQL:"))
+
+    try:
+        from codeql.config import resolve_config
+        from codeql.artifacts import check_artifacts
+        from codeql.packs import load_codeql_plan
+    except Exception as exc:
+        print(C.warn(f"CodeQL checks unavailable: {exc}"))
+        return 0
+
+    config = resolve_config()
+    manifest_path = config.abs_output_dir / "run-manifest.yml"
+    manifest = None
+
+    if manifest_path.is_file() and yaml is not None:
+        try:
+            loaded = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+            manifest = loaded if isinstance(loaded, dict) else None
+        except (OSError, yaml.YAMLError, UnicodeDecodeError):
+            manifest = None
+
+    current_state = "enabled" if config.enabled else "disabled"
+    print(C.ok(f"current config: CodeQL {current_state}"))
+
+    if manifest and manifest.get("status") == "skipped" and manifest.get("codeql_enabled") is False:
+        reason = manifest.get("skip_reason") or "CodeQL disabled during recorded run"
+        print(C.ok(f"last phase-1 CodeQL state: skipped ({reason})"))
+        print(C.info("No CodeQL artifacts are required for that recorded run."))
+        return 0
+
+    if not config.enabled:
+        print(C.ok("CodeQL disabled for current invocation; artifact checks skipped."))
+        return 0
+
+    exit_code = 0
+    if config.phase_1_enabled:
+        print(C.ok("phase-1 integration: enabled"))
+    else:
+        print(C.ok("phase-1 integration: disabled; artifact checks skipped."))
+        return 0
+
+    if config.abs_install_path.is_file():
+        print(C.ok(f"binary: {config.abs_install_path.relative_to(ROOT) if config.abs_install_path.is_relative_to(ROOT) else config.abs_install_path}"))
+    else:
+        print(C.fail(f"binary missing: {config.abs_install_path}"))
+        exit_code = 1
+
+    if config.abs_pack_catalog.is_file():
+        print(C.ok(f"pack catalog: {config.abs_pack_catalog.relative_to(ROOT) if config.abs_pack_catalog.is_relative_to(ROOT) else config.abs_pack_catalog}"))
+    else:
+        print(C.fail(f"pack catalog missing: {config.abs_pack_catalog}"))
+        exit_code = 1
+
+    plan_path = ROOT / "itemdb" / "notes" / "codeql-plan.yml"
+    if plan_path.is_file():
+        try:
+            load_codeql_plan(plan_path)
+            print(C.ok("plan: itemdb/notes/codeql-plan.yml"))
+        except Exception as exc:
+            print(C.fail(f"plan invalid: {exc}"))
+            exit_code = 1
+    elif _phase_1_notes_exist():
+        print(C.warn("plan missing after Phase 1 notes exist: itemdb/notes/codeql-plan.yml"))
+    else:
+        print(C.info("Phase 1 has not produced a CodeQL plan yet; no artifacts expected."))
+        return exit_code
+
+    artifact_status, warnings = check_artifacts(config.abs_output_dir)
+    if artifact_status == "missing":
+        if _phase_1_notes_exist():
+            print(C.warn("artifacts: missing run-manifest.yml; run make phase-1 to refresh CodeQL state."))
+        else:
+            print(C.info("artifacts: not present yet; Phase 1 has not run."))
+    elif artifact_status == "completed" and not warnings:
+        print(C.ok("artifacts: completed"))
+    elif artifact_status == "soft-failed":
+        print(C.warn("artifacts: soft-failed"))
+        for warning in warnings:
+            print(C.warn(f"  {warning}"))
+        if (manifest or {}).get("fail_policy", config.fail_policy) == "hard":
+            exit_code = 1
+    elif artifact_status == "skipped":
+        print(C.ok("artifacts: skipped"))
+        for warning in warnings:
+            print(C.info(f"  {warning}"))
+    else:
+        formatter = C.fail if artifact_status in {"failed", "unknown"} else C.warn
+        print(formatter(f"artifacts: {artifact_status}"))
+        for warning in warnings:
+            print(formatter(f"  {warning}"))
+        if artifact_status in {"completed", "failed", "unknown"}:
+            exit_code = 1
+
+    return exit_code
+
+
 def command_check(_: argparse.Namespace) -> int:
     missing = []
 
@@ -374,6 +478,8 @@ def command_check(_: argparse.Namespace) -> int:
     ) if src_dir.is_dir() else False
     if not has_source:
         print(C.warn("src/ is empty — place your target source code there before running phase-1."))
+
+    check_exit = check_codeql_status()
 
     # Warn (do not fail) about missing optional recording tools used by Phase 5.
     recording_warnings = check_recording_tools()
@@ -408,7 +514,7 @@ def command_check(_: argparse.Namespace) -> int:
         "and PTY-acquisition guidance."
     )
 
-    return 0
+    return check_exit
 
 
 def command_status(_: argparse.Namespace) -> int:

@@ -17,6 +17,7 @@ except ImportError:  # pragma: no cover
 import _colors as C
 
 from codecome.config import ROOT
+from codeql.capabilities import is_supported_language, supported_build_modes
 
 
 REQUIRED_NOTES_1B = [
@@ -69,7 +70,8 @@ def _emit(console, level: str, text: str) -> None:
         "warn": C.warn,
         "info": C.info,
     }
-    fn_map.get(level, print)(text)
+    formatter = fn_map.get(level)
+    print(formatter(text) if formatter else text)
 
 
 def _emit_separator(console, style: str = "green") -> None:
@@ -147,40 +149,92 @@ def check_phase_1a(console=None, findings_snapshot: dict[str, int] | None = None
             return 1
 
         if plan.get("recommended") is True:
-            languages = plan.get("languages", [])
-            if not isinstance(languages, list) or len(languages) == 0:
-                _emit(console, "fail", "codeql-plan.yml: recommended=true but no language entries")
+            units = plan.get("analysis_units", [])
+            if not isinstance(units, list) or len(units) == 0:
+                _emit(console, "fail", "codeql-plan.yml: recommended=true but no analysis_units entries")
                 return 1
 
-            valid_build_modes = {"none", "manual", "autobuild"}
             valid_confidences = {"HIGH", "MEDIUM", "LOW"}
-            for i, lang in enumerate(languages):
-                if not isinstance(lang, dict):
-                    _emit(console, "fail", f"codeql-plan.yml: language entry {i} is not a mapping")
+            seen_unit_ids: set[str] = set()
+            seen_databases: set[tuple[str, str]] = set()
+            for i, unit in enumerate(units):
+                if not isinstance(unit, dict):
+                    _emit(console, "fail", f"codeql-plan.yml: analysis unit {i} is not a mapping")
                     return 1
-                if "id" not in lang:
-                    _emit(console, "fail", f"codeql-plan.yml: language entry {i} missing 'id'")
+                unit_id = unit.get("id")
+                if not isinstance(unit_id, str) or not unit_id:
+                    _emit(console, "fail", f"codeql-plan.yml: analysis unit {i} missing valid 'id'")
                     return 1
-                if lang.get("confidence") not in valid_confidences:
-                    _emit(
-                        console,
-                        "warn",
-                        f"codeql-plan.yml: language '{lang.get('id', '?')}' has unexpected confidence '{lang.get('confidence')}'",
-                    )
-                if lang.get("build_mode") not in valid_build_modes:
-                    _emit(
-                        console,
-                        "warn",
-                        f"codeql-plan.yml: language '{lang.get('id', '?')}' has unexpected build_mode '{lang.get('build_mode')}'",
-                    )
-                if "packs" not in lang:
-                    _emit(console, "fail", f"codeql-plan.yml: language '{lang['id']}' missing 'packs'")
+                if unit_id in seen_unit_ids:
+                    _emit(console, "fail", f"codeql-plan.yml: duplicate analysis unit id '{unit_id}'")
                     return 1
-                if not isinstance(lang["packs"], list) or len(lang["packs"]) == 0:
-                    _emit(console, "fail", f"codeql-plan.yml: language '{lang['id']}' has empty packs list")
+                seen_unit_ids.add(unit_id)
+
+                unit_path = unit.get("path")
+                if not isinstance(unit_path, str) or not unit_path:
+                    _emit(console, "fail", f"codeql-plan.yml: analysis unit '{unit_id}' missing valid 'path'")
+                    return 1
+                resolved_path = (ROOT / unit_path).resolve()
+                src_root = (ROOT / "src").resolve()
+                try:
+                    under_src = resolved_path == src_root or resolved_path.is_relative_to(src_root)
+                except ValueError:
+                    under_src = False
+                if not under_src:
+                    _emit(console, "fail", f"codeql-plan.yml: analysis unit '{unit_id}' path must be under src/: {unit_path}")
+                    return 1
+                if "_codeql_detected_source_root" in resolved_path.parts:
+                    _emit(console, "fail", f"codeql-plan.yml: analysis unit '{unit_id}' path uses CodeQL-generated helper path")
+                    return 1
+                if not resolved_path.exists():
+                    _emit(console, "fail", f"codeql-plan.yml: analysis unit '{unit_id}' path does not exist: {unit_path}")
                     return 1
 
-            _emit(console, "ok", f"codeql-plan.yml: {len(languages)} language(s) configured")
+                languages = unit.get("languages")
+                if not isinstance(languages, list) or len(languages) == 0:
+                    _emit(console, "fail", f"codeql-plan.yml: analysis unit '{unit_id}' has no languages")
+                    return 1
+
+                for j, lang in enumerate(languages):
+                    if not isinstance(lang, dict):
+                        _emit(console, "fail", f"codeql-plan.yml: analysis unit '{unit_id}' language entry {j} is not a mapping")
+                        return 1
+                    language_id = lang.get("id")
+                    if not isinstance(language_id, str) or not language_id:
+                        _emit(console, "fail", f"codeql-plan.yml: analysis unit '{unit_id}' language entry {j} missing valid 'id'")
+                        return 1
+                    if not is_supported_language(language_id):
+                        _emit(console, "fail", f"codeql-plan.yml: unsupported CodeQL language '{language_id}' in analysis unit '{unit_id}'")
+                        return 1
+                    db_key = (unit_id, language_id)
+                    if db_key in seen_databases:
+                        _emit(console, "fail", f"codeql-plan.yml: duplicate language '{language_id}' in analysis unit '{unit_id}'")
+                        return 1
+                    seen_databases.add(db_key)
+                    if lang.get("confidence") not in valid_confidences:
+                        _emit(
+                            console,
+                            "warn",
+                            f"codeql-plan.yml: language '{language_id}' in analysis unit '{unit_id}' has unexpected confidence '{lang.get('confidence')}'",
+                        )
+                    build_mode = lang.get("build_mode")
+                    supported_modes = supported_build_modes(language_id)
+                    if build_mode not in supported_modes:
+                        allowed = ", ".join(sorted(supported_modes))
+                        _emit(console, "fail", f"codeql-plan.yml: language '{language_id}' in analysis unit '{unit_id}' has unsupported build_mode '{build_mode}' (allowed: {allowed})")
+                        return 1
+                    build_command = lang.get("build_command")
+                    if build_mode == "manual" and not (isinstance(build_command, str) and build_command.strip()):
+                        _emit(console, "fail", f"codeql-plan.yml: language '{language_id}' in analysis unit '{unit_id}' uses manual build without build_command")
+                        return 1
+                    if "packs" not in lang:
+                        _emit(console, "fail", f"codeql-plan.yml: language '{language_id}' in analysis unit '{unit_id}' missing 'packs'")
+                        return 1
+                    if not isinstance(lang["packs"], list) or len(lang["packs"]) == 0:
+                        _emit(console, "fail", f"codeql-plan.yml: language '{language_id}' in analysis unit '{unit_id}' has empty packs list")
+                        return 1
+
+            _emit(console, "ok", f"codeql-plan.yml: {len(units)} analysis unit(s) configured")
 
     _emit_separator(console, "green")
     _emit(console, "ok", "Ready to run Phase 1b (CodeQL-assisted Reconnaissance).")

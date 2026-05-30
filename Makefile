@@ -1,7 +1,7 @@
 # Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later OR AGPL-3.0-or-later
 
-.PHONY: help init venv venv-check check status next-id frontmatter tests test-parity itemdb-reset index report
+.PHONY: help init venv venv-check check status next-id frontmatter tests test-parity itemdb-reset codeql-clean index report
 .PHONY: findings findings-create findings-move findings-evidence findings-package
 .PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all opencode-raw
 .PHONY: sandbox-setup sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-reset sandbox-build sandbox-test
@@ -80,6 +80,7 @@ help:
 	@printf "    $(BOLD)make frontmatter$(RESET)    Validate finding frontmatter\n"
 	@printf "    $(BOLD)make tests$(RESET)          Run dev test suite + frontmatter gate\n"
 	@printf "    $(BOLD)make itemdb-reset$(RESET)   Remove local audit artifacts and recreate .gitkeep files\n"
+	@printf "    $(BOLD)make codeql-clean$(RESET)   Remove generated CodeQL artifacts and cache\n"
 	@printf "    $(BOLD)make index$(RESET)          Regenerate itemdb/index.md\n"
 	@printf "    $(BOLD)make report$(RESET)         Regenerate itemdb/reports/report.md (local, no AI)\n"
 	@printf "\n"
@@ -279,6 +280,11 @@ itemdb-reset: venv-check
 	touch runs/.gitkeep
 	touch tmp/.gitkeep
 	$(PYTHON) tools/render-index.py
+
+codeql-clean:
+	rm -rf itemdb/codeql
+	rm -rf .cache/codeql
+	rm -rf src/_codeql_detected_source_root
 
 index: venv-check
 	$(PYTHON) tools/render-index.py

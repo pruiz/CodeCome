@@ -107,10 +107,12 @@ def _cmd_resolve_packs(args: argparse.Namespace) -> int:
         print(json.dumps(resolved, indent=2))
     else:
         print(f"Resolved CodeQL packs written to {output_path.relative_to(ROOT) if output_path.is_relative_to(ROOT) else output_path}")
-        for language in resolved["languages"]:
-            print(f"- {language['id']}: {', '.join(language['profiles'])}")
-            for pack in language["packs"]:
-                print(f"    {pack}")
+        for unit in resolved["analysis_units"]:
+            print(f"- {unit['id']} ({unit['path']})")
+            for language in unit["languages"]:
+                print(f"    {language['id']}: {', '.join(language['profiles'])}")
+                for pack in language["packs"]:
+                    print(f"        {pack}")
     return 0
 
 
@@ -120,6 +122,8 @@ def _cmd_run() -> int:
 
     if not config.enabled:
         print("CodeQL is disabled (CODEQL=0 or CODEQL_SKIP=1). Skipping run.")
+        from codeql.pipeline import record_skipped_run
+        record_skipped_run(config, "CodeQL disabled for this run")
         return 0
 
     binary_path = config.abs_install_path
@@ -130,7 +134,10 @@ def _cmd_run() -> int:
 
     from codeql.pipeline import run_full_pipeline
 
-    manifest = run_full_pipeline(config)
+    def progress(message: str) -> None:
+        print(message, flush=True)
+
+    manifest = run_full_pipeline(config, progress=progress)
 
     status = manifest["status"]
     print(f"CodeQL run: {status}")

@@ -76,7 +76,7 @@ def test_normalize_all_empty_sarif_dir(tmp_path: Path) -> None:
     sarif_dir.mkdir()
     out_dir = tmp_path / "normalized"
 
-    resolved = {"languages": []}
+    resolved = {"analysis_units": []}
     alerts_path, signals_path = normalize_all(
         sarif_dir, out_dir, resolved, "2.21.0", tmp_path,
     )
@@ -91,7 +91,7 @@ def test_normalize_all_empty_sarif_dir(tmp_path: Path) -> None:
 def test_normalize_one_sarif(tmp_path: Path) -> None:
     sarif_dir = tmp_path / "sarif"
     sarif_dir.mkdir()
-    sarif_file = sarif_dir / "python.official.sarif"
+    sarif_file = sarif_dir / "api.python.official.sarif"
     sarif_file.write_text(
         json.dumps(
             _minimal_sarif(
@@ -104,7 +104,7 @@ def test_normalize_one_sarif(tmp_path: Path) -> None:
     )
     out_dir = tmp_path / "normalized"
 
-    resolved = {"languages": [{"id": "python", "profiles": ["official"]}]}
+    resolved = {"analysis_units": [{"id": "api", "languages": [{"id": "python", "profiles": ["official"]}]}]}
     alerts_path, signals_path = normalize_all(
         sarif_dir, out_dir, resolved, "2.21.0", tmp_path,
     )
@@ -114,6 +114,7 @@ def test_normalize_one_sarif(tmp_path: Path) -> None:
     assert len(alerts["alerts"]) == 1
     a = alerts["alerts"][0]
     assert a["id"] == "CQ-0001"
+    assert a["analysis_unit_id"] == "api"
     assert a["language"] == "python"
     assert a["pack_profile"] == "official"
     assert a["rule_id"] == "py/path-injection"
@@ -134,7 +135,7 @@ def test_normalize_ignores_non_matching_filenames(tmp_path: Path) -> None:
     (sarif_dir / "single.sarif").write_text(json.dumps(_minimal_sarif([])))
     out_dir = tmp_path / "normalized"
 
-    resolved = {"languages": []}
+    resolved = {"analysis_units": []}
     alerts_path, _ = normalize_all(
         sarif_dir, out_dir, resolved, "2.21.0", tmp_path,
     )
@@ -147,10 +148,10 @@ def test_normalize_ignores_non_matching_filenames(tmp_path: Path) -> None:
 def test_normalize_handles_invalid_json(tmp_path: Path) -> None:
     sarif_dir = tmp_path / "sarif"
     sarif_dir.mkdir()
-    (sarif_dir / "python.bad.sarif").write_text("not json", encoding="utf-8")
+    (sarif_dir / "api.python.bad.sarif").write_text("not json", encoding="utf-8")
     out_dir = tmp_path / "normalized"
 
-    resolved = {"languages": []}
+    resolved = {"analysis_units": []}
     alerts_path, _ = normalize_all(
         sarif_dir, out_dir, resolved, "2.21.0", tmp_path,
     )
