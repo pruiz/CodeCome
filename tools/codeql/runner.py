@@ -72,7 +72,7 @@ def run_codeql(config: CodeQLConfig) -> dict[str, Any]:
         ok, msg = _create_database(binary_path, language_id, source_path, db_dir, build_mode, build_command, exclude_patterns)
         if not ok:
             failures.append(msg)
-            return _manifest("failed", now_utc, config, [version], warnings, failures, language_ids)
+            return _manifest(_tool_failure_status(config), now_utc, config, [version], warnings, failures, language_ids)
 
         for profile in profiles:
             packs = profile_packs.get(profile, [])
@@ -82,12 +82,16 @@ def run_codeql(config: CodeQLConfig) -> dict[str, Any]:
             ok, msg = _run_analyze(binary_path, db_dir, packs, sarif_path)
             if not ok:
                 failures.append(msg)
-                return _manifest("failed", now_utc, config, [version], warnings, failures, language_ids)
+                return _manifest(_tool_failure_status(config), now_utc, config, [version], warnings, failures, language_ids)
 
     if failures:
         return _manifest("failed", now_utc, config, [version], warnings, failures, language_ids)
 
     return _manifest("completed", now_utc, config, [version], warnings, failures, language_ids)
+
+
+def _tool_failure_status(config: CodeQLConfig) -> str:
+    return "failed" if config.fail_policy == "hard" else "soft-failed"
 
 
 def _lookup_build(lang_entry: dict, plan_languages: list[dict]) -> tuple[str, str | None]:
@@ -123,6 +127,8 @@ def _create_database(
     exclude_patterns: list[str],
 ) -> tuple[bool, str]:
     """Create a CodeQL database.  Returns (success, message)."""
+    db_dir.parent.mkdir(parents=True, exist_ok=True)
+
     cmd = [
         str(binary), "database", "create",
         str(db_dir),

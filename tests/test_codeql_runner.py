@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
 from codeql.config import CodeQLConfig
-from codeql.runner import _lookup_build, _manifest, write_manifest
+from codeql.runner import _create_database, _lookup_build, _manifest, run_codeql, write_manifest
 
 
 def test_manifest_completed() -> None:
@@ -118,3 +119,70 @@ def test_lookup_build_no_match_within_plan() -> None:
     mode, cmd = _lookup_build({"id": "python"}, plan)
     assert mode == "none"
     assert cmd is None
+
+
+def test_create_database_creates_parent_dir(tmp_path: Path) -> None:
+    db_dir = tmp_path / "itemdb" / "codeql" / "databases" / "c-cpp"
+    completed = MagicMock(returncode=0, stderr="")
+
+    with patch("codeql.runner.subprocess.run", return_value=completed) as mock_run:
+        ok, msg = _create_database(
+            tmp_path / "codeql",
+            "c-cpp",
+            "./src",
+            db_dir,
+            "none",
+            None,
+            [],
+        )
+
+    assert ok is True
+    assert msg == ""
+    assert db_dir.parent.is_dir()
+    assert mock_run.call_args.args[0][3] == str(db_dir)
+
+
+def test_run_codeql_database_failure_honors_soft_policy(tmp_path: Path) -> None:
+    binary = tmp_path / ".tools" / "codeql" / "current" / "codeql"
+    binary.parent.mkdir(parents=True)
+    binary.write_text("", encoding="utf-8")
+
+    plan_path = tmp_path / "itemdb" / "notes" / "codeql-plan.yml"
+    plan_path.parent.mkdir(parents=True)
+    plan_path.write_text("schema_version: 1\n", encoding="utf-8")
+
+    catalog = tmp_path / "templates" / "codeql-packs.yml"
+    catalog.parent.mkdir(parents=True)
+    catalog.write_text("schema_version: 1\n", encoding="utf-8")
+
+    config = CodeQLConfig(
+        enabled=True,
+        fail_policy="soft",
+        abs_install_path=binary,
+        abs_pack_catalog=catalog,
+        abs_output_dir=tmp_path / "itemdb" / "codeql",
+        abs_database_dir=tmp_path / "itemdb" / "codeql" / "databases",
+    )
+
+    resolved = {
+        "languages": [
+            {
+                "id": "c-cpp",
+                "profiles": ["official"],
+                "profile_packs": {"official": ["codeql/cpp-queries"]},
+            }
+        ]
+    }
+
+    with patch("codeql.runner.ROOT", tmp_path), \
+         patch("codeql.runner._get_codeql_version", return_value="2.25.5"), \
+         patch("codeql.runner.load_pack_catalog", return_value={}), \
+         patch("codeql.runner.load_codeql_plan", return_value={"source_path": "./src", "languages": []}), \
+         patch("codeql.runner.resolve_plan_packs", return_value=resolved), \
+         patch("codeql.runner._create_database", return_value=(False, "db create failed")):
+        manifest = run_codeql(config)
+
+    assert manifest["status"] == "soft-failed"
+    assert manifest["fail_policy"] == "soft"
+    assert manifest["failures"] == ["db create failed"]
+    assert manifest["languages"] == ["c-cpp"]
