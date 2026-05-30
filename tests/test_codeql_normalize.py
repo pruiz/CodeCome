@@ -311,6 +311,7 @@ def test_build_file_signals() -> None:
 def test_map_category() -> None:
     assert _map_category("py/path-injection", {}) == "Path traversal"
     assert _map_category("java/sql-injection", {}) == "SQL injection"
+    assert _map_category("js/nosql-injection", {}) == "NoSQL injection"
     assert _map_category("js/xss", {}) == "Cross-site scripting"
     assert _map_category("unknown-rule", {}) == "unknown-rule"
 

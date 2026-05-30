@@ -4,8 +4,8 @@
 """
 Phase 1 subphase orchestration.
 
-Runs Phase 1 as three subphases (1a / 1b / 1c) with gates and a CodeQL
-placeholder between 1a and 1b.  The opencode server is started once and
+Runs Phase 1 as three subphases (1a / 1b / 1c) with gates and CodeQL
+analysis between 1a and 1b.  The opencode server is started once and
 reused across all three subphase sessions.
 """
 
@@ -39,28 +39,161 @@ from phases.completion import (
     build_frontmatter_resume_prompt,
 )
 # ---------------------------------------------------------------------------
-# CodeQL placeholder (no-op until PR 5)
+# CodeQL analysis (between 1a gate and 1b)
 # ---------------------------------------------------------------------------
 
-def _run_codeql_placeholder(console: Any) -> None:
-    """Log that CodeQL is not yet implemented."""
+def _run_codeql(console: Any) -> int:
+    """Run full CodeQL pipeline and report results."""
+    from codeql.config import resolve_config as _resolve_codeql_config
+
+    config = _resolve_codeql_config()
+
     if HAVE_RICH:
         from rich.rule import Rule
         from rich.text import Text
-        console.print(Rule(title="CodeQL", style="yellow"))
-        console.print(Text(
-            "CodeQL analysis not yet implemented — coming in a future PR. "
-            "Proceeding to Phase 1b without CodeQL artifacts.",
-            style="yellow",
-        ))
+        console.print(Rule(title="CodeQL", style="cyan"))
     else:
         import _colors as C
         print(C.header("CodeQL"))
-        print(C.warn(
-            "CodeQL analysis not yet implemented — coming in a future PR. "
-            "Proceeding to Phase 1b without CodeQL artifacts."
-        ))
-        print()
+
+    if not config.enabled:
+        msg = "CodeQL disabled — skipping."
+        if HAVE_RICH:
+            from rich.text import Text
+            console.print(Text(msg, style="yellow"))
+        else:
+            import _colors as C
+            print(C.warn(msg))
+        return 0
+
+    if not config.phase_1_enabled:
+        msg = "CodeQL phase 1 disabled — skipping."
+        if HAVE_RICH:
+            from rich.text import Text
+            console.print(Text(msg, style="yellow"))
+        else:
+            import _colors as C
+            print(C.warn(msg))
+        return 0
+
+    if HAVE_RICH:
+        from rich.text import Text
+        console.print(Text("Running CodeQL analysis…", style="dim"))
+    else:
+        print("Running CodeQL analysis…")
+
+    from codeql.pipeline import run_full_pipeline
+
+    try:
+        manifest = run_full_pipeline(config)
+    except Exception as exc:
+        msg = f"CodeQL: FAILED — {exc}"
+        if HAVE_RICH:
+            from rich.text import Text
+            console.print(Text(msg, style="bold red"))
+        else:
+            import _colors as C
+            print(C.fail(msg))
+        if config.fail_policy == "hard":
+            return 1
+        return 0
+
+    status = manifest["status"]
+    warnings = manifest.get("warnings", [])
+    failures = manifest.get("failures", [])
+
+    if status == "completed":
+        msg = f"CodeQL: analysis completed ({len(manifest.get('languages', []))} language(s))"
+        if HAVE_RICH:
+            from rich.text import Text
+            console.print(Text(msg, style="green"))
+        else:
+            import _colors as C
+            print(C.ok(msg))
+    elif status == "skipped":
+        reason = failures[0] if failures else "no plan"
+        msg = f"CodeQL: skipped — {reason}"
+        if HAVE_RICH:
+            from rich.text import Text
+            console.print(Text(msg, style="yellow"))
+        else:
+            import _colors as C
+            print(C.warn(msg))
+    elif status == "soft-failed":
+        msg = "CodeQL: soft-failed — continuing"
+        if HAVE_RICH:
+            from rich.text import Text
+            console.print(Text(msg, style="yellow"))
+        else:
+            import _colors as C
+            print(C.warn(msg))
+        for w in warnings + failures:
+            if HAVE_RICH:
+                console.print(Text(f"  {w}", style="yellow"))
+            else:
+                print(C.warn(f"  {w}"))
+    elif status == "failed":
+        msg = "CodeQL: FAILED"
+        if HAVE_RICH:
+            from rich.text import Text
+            console.print(Text(msg, style="bold red"))
+        else:
+            import _colors as C
+            print(C.fail(msg))
+        for f in failures:
+            if HAVE_RICH:
+                console.print(Text(f"  {f}", style="red"))
+            else:
+                print(C.fail(f"  {f}"))
+        if config.fail_policy == "hard":
+            return 1
+
+    return 0
+
+
+def _check_codeql_artifacts(console: Any) -> int:
+    """Validate CodeQL artifacts; block 1b only on hard fail policy."""
+    from codeql.config import resolve_config as _resolve_codeql_config
+    from codeql.artifacts import check_artifacts
+
+    config = _resolve_codeql_config()
+
+    if not config.enabled or not config.phase_1_enabled:
+        return 0
+
+    status, warnings = check_artifacts(config.abs_output_dir)
+
+    for w in warnings:
+        if HAVE_RICH:
+            from rich.text import Text
+            console.print(Text(f"  WARN: {w}", style="yellow"))
+        else:
+            import _colors as C
+            print(C.warn(f"  WARN: {w}"))
+
+    if config.fail_policy == "hard" and status == "failed":
+        msg = "CodeQL artifact gate: FAILED — blocking Phase 1b"
+        if HAVE_RICH:
+            from rich.text import Text
+            console.print(Text(msg, style="bold red"))
+        else:
+            import _colors as C
+            print(C.fail(msg))
+        return 1
+
+    label = f"CodeQL artifact gate: {status}"
+    if HAVE_RICH:
+        from rich.text import Text
+        style = "green" if status == "completed" else "yellow"
+        console.print(Text(label, style=style))
+    else:
+        import _colors as C
+        if status == "completed":
+            print(C.ok(label))
+        else:
+            print(C.info(label))
+
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -378,8 +511,13 @@ def run_phase_1(
     if gate_rc != 0:
         return gate_rc
 
-    # ---- CodeQL placeholder ----
-    _run_codeql_placeholder(console)
+    # ---- CodeQL analysis ----
+    rc = _run_codeql(console)
+    if rc != 0:
+        return rc
+    rc = _check_codeql_artifacts(console)
+    if rc != 0:
+        return rc
 
     # Snapshot findings immediately before 1b so the warning scope matches 1b.
     findings_snapshot = count_findings_snapshot()

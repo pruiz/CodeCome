@@ -226,6 +226,61 @@ def write_manifest(manifest: dict[str, Any], output_dir: Path) -> Path:
     return path
 
 
+def write_summary(manifest: dict[str, Any], normalized_dir: Path, output_dir: Path) -> Path:
+    """Write codeql-summary.md."""
+    status = manifest.get("status", "unknown")
+    version = manifest.get("codeql_version", "unknown")
+    languages = manifest.get("languages", [])
+    warnings = manifest.get("warnings", [])
+    failures = manifest.get("failures", [])
+    fail_policy = manifest.get("fail_policy", "soft")
+
+    lines = [
+        "# CodeQL Analysis Summary",
+        "",
+        f"- **Status**: {status}",
+        f"- **CodeQL version**: {version}",
+        f"- **Fail policy**: {fail_policy}",
+        f"- **Started**: {manifest.get('started_at', '')}",
+        f"- **Finished**: {manifest.get('finished_at', '')}",
+        "",
+    ]
+
+    if languages:
+        lines.append(f"- **Languages**: {', '.join(languages)}")
+        lines.append("")
+
+    alerts_path = normalized_dir / "alerts.yml"
+
+    if alerts_path.is_file():
+        from codeql.packs import load_yaml_mapping
+        try:
+            data = load_yaml_mapping(alerts_path, what="alerts")
+            total_alerts = len(data.get("alerts", []))
+            lines.append(f"- **Total alerts**: {total_alerts}")
+            lines.append("")
+        except Exception:
+            pass
+
+    if warnings:
+        lines.append("## Warnings")
+        lines.append("")
+        for w in warnings:
+            lines.append(f"- {w}")
+        lines.append("")
+
+    if failures:
+        lines.append("## Failures")
+        lines.append("")
+        for f in failures:
+            lines.append(f"- {f}")
+        lines.append("")
+
+    path = output_dir / "codeql-summary.md"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
 def _rel(path: Path) -> str:
     """Return a workspace-relative path when under ROOT, else the absolute path."""
     try:

@@ -25,10 +25,10 @@ Also read the Phase 1a outputs:
 
 If CodeQL analysis was performed, the following artifacts may exist. Treat them as reconnaissance evidence, not proof of vulnerability:
 
-- `itemdb/evidence/codeql/run-manifest.yml` — CodeQL run outcome and metadata.
-- `itemdb/evidence/codeql/normalized/alerts.yml` — Normalized CodeQL alerts with source/sink/flow.
-- `itemdb/evidence/codeql/normalized/file-signals.yml` — Per-file CodeQL signal scores.
-- `itemdb/evidence/codeql/codeql-summary.md` — Human-readable CodeQL summary.
+- `itemdb/codeql/run-manifest.yml` — CodeQL run outcome and metadata.
+- `itemdb/codeql/normalized/alerts.yml` — Normalized CodeQL alerts with source/sink/flow.
+- `itemdb/codeql/normalized/file-signals.yml` — Per-file CodeQL signal scores.
+- `itemdb/codeql/codeql-summary.md` — Human-readable CodeQL summary.
 
 If these files exist:
 
@@ -145,7 +145,7 @@ Prioritize files that contain or strongly influence:
 
 For each high-risk file, include concrete reasons, likely entry points, sources, sinks, trust boundaries, suggested vulnerability classes, suggested skills, and suggested validation methods when inferable.
 
-If CodeQL file signals exist (`itemdb/evidence/codeql/normalized/file-signals.yml`), incorporate them:
+If CodeQL file signals exist (`itemdb/codeql/normalized/file-signals.yml`), incorporate them:
 - Add `external_signals.codeql` blocks to file entries with CodeQL alerts.
 - Boost scores where CodeQL reports high-precision alerts, but cap at 5.
 - Explain every CodeQL-driven score boost in the `reasons` field.

@@ -129,7 +129,7 @@ def _build_rules_lookup(run: dict[str, Any]) -> dict[str, dict[str, Any]]:
             lookup[rid] = {
                 "name": rule.get("name", rid),
                 "precision": _coerce_str(props.get("precision")) or _coerce_str(rule.get("precision")),
-                "security_severity": _coerce_str(props.get("security-severity")) or _coerce_str(props.get("security-severity")),
+                "security_severity": _coerce_str(props.get("security-severity")) or _coerce_str(rule.get("security-severity")),
                 "severity": _coerce_str(props.get("problem.severity")),
             }
     return lookup
@@ -309,8 +309,8 @@ def _map_category(rule_id: str, result: dict[str, Any]) -> str:
         "path-injection": "Path traversal",
         "command-line-injection": "Command injection",
         "code-injection": "Code injection",
-        "sql-injection": "SQL injection",
         "nosql-injection": "NoSQL injection",
+        "sql-injection": "SQL injection",
         "xss": "Cross-site scripting",
         "hardcoded-credentials": "Hardcoded credentials",
         "incomplete-url-substring-sanitization": "URL redirection",
