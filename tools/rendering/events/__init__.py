@@ -33,6 +33,7 @@ from rendering.events.session_diff import SessionDiffRenderer
 from rendering.events.message import MessageUpdatedRenderer
 from rendering.events.subagent import SubagentStatusRenderer
 from rendering.events.patch import PatchRenderer
+from rendering.events.file_events import FileEditedRenderer, FileWatcherRenderer
 from rendering.events.unknown import UnknownEventRenderer
 
 __all__ = [
@@ -55,5 +56,7 @@ __all__ = [
     "MessageUpdatedRenderer",
     "SubagentStatusRenderer",
     "PatchRenderer",
+    "FileEditedRenderer",
+    "FileWatcherRenderer",
     "UnknownEventRenderer",
 ]
