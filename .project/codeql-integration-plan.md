@@ -2,7 +2,7 @@
 
 Status: WIP planning document  
 Branch: `wip/codeql-integration-plan`  
-Scope: planning only; no implementation changes in this branch.
+Scope: planning + phased implementation (install, config, pack resolver, runner, SARIF normalization).
 
 ## Goals
 

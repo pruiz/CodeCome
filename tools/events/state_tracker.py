@@ -110,9 +110,12 @@ class StateTracker:
         return []
 
     def _build_finalized_event(self, event: dict[str, Any]) -> dict[str, Any] | None:
-        """ Convert a message.part.updated into the ND-JSON shape expected by render_event().
+        """Convert a message.part.updated into the ND-JSON shape expected by render_event().
 
-        Returns None for event types we don't translate yet (e.g. async progress).
+        Returns None only for parts that are not yet finalized: text and reasoning
+        parts without ``time.end``, and tool parts that are still pending/running.
+        Unknown part types are normalized into a ``message.part.updated`` envelope
+        with a top-level ``"part"`` key instead of returning None.
         """
         props = event.get("properties", {})
         part = props.get("part", {})
