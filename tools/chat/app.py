@@ -7,7 +7,7 @@ Chat app: Textual-based interactive chat TUI classes.
 Provides:
   - TextualConsoleProxy: RichLog bridge for background-thread console output.
   - ChatApp / QuitScreen: module-level type hints (real classes set after try/except).
-  - _chat_render_and_log / _chat_update_modeline_info: standalone helpers,
+  - _chat_render / _chat_update_modeline_info: standalone helpers,
     callable without Textual (for testing parity).
   - _QuitScreen: quit confirmation modal.
   - _ChatApp: the Textual App.
@@ -105,13 +105,15 @@ class TextualConsoleProxy:
 # launching a real TUI.
 # ---------------------------------------------------------------------------
 
-def _chat_render_and_log(self, console, phase, label, event):
+def _chat_render(self, console, phase, label, event):
     """Standalone version of _ChatApp._render_and_log.  See the docstring
     on the class for the full contract.
 
+    Raw event recording is handled separately by the chat event loop;
+    this function only drives rendering and UI updates.
+
     When bound via ``__get__`` to a _ChatApp instance, ``self`` is
     guaranteed to carry the attributes accessed below."""
-    self.event_recorder.record(event)
     render_event(console, phase, label, event)
     _chat_update_activity_state(self, event)
     if event.get("type") == "message.updated":
@@ -608,7 +610,7 @@ try:
         # --- Consumer-thread callback ---
 
         def _render_and_log(self, console, phase, label, event):
-            _chat_render_and_log(self, console, phase, label, event)
+            _chat_render(self, console, phase, label, event)
 
         def _update_modeline_info(self, event: dict[str, Any]) -> None:
             _chat_update_modeline_info(self, event)

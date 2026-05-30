@@ -11,8 +11,6 @@ reused across all three subphase sessions.
 
 from __future__ import annotations
 
-import subprocess
-import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -81,14 +79,8 @@ def _run_subphase(
     agent: str,
     prompt_file: str,
     finding: str | None = None,
-    findings_snapshot: dict[str, int] | None = None,
-) -> tuple[int, dict[str, int] | None]:
-    """Run a single subphase agent session with retry/resume.
-
-    Returns (exit_code, cumulative_findings_snapshot).  The snapshot is
-    updated after the session completes so that gate functions can detect
-    unexpected finding creation.
-    """
+) -> int:
+    """Run a single subphase agent session with retry/resume."""
     prompt_path = ROOT / prompt_file
     prompt = load_prompt(prompt_path, finding, phase=phase_id)
     rc = resolve_runtime_config(agent)
@@ -225,15 +217,11 @@ def _run_subphase(
                 returncode = 2
 
         if returncode == 0:
-            validation_result = subprocess.run(
-                [sys.executable, "tools/check-frontmatter.py"],
-                cwd=ROOT,
-                capture_output=True,
-                text=True,
-            )
-            if validation_result.returncode != 0:
+            from findings.checks_entry import run_frontmatter_validation
+
+            validation_rc, validation_output = run_frontmatter_validation()
+            if validation_rc != 0:
                 max_frontmatter_retries = 2
-                validation_output = (validation_result.stderr or validation_result.stdout).strip() or "(no validator output)"
                 if frontmatter_retry_count < max_frontmatter_retries:
                     frontmatter_retry_count += 1
                     msg = (
@@ -354,7 +342,7 @@ def _run_subphase(
                 print(C.fail(f"  reason: {finish_warning}"))
             print(f"  finish reason: {last_finish_reason!r}  transcript: {transcript_path.relative_to(ROOT) if transcript_path.name else 'N/A'}")
 
-    return returncode, findings_snapshot
+    return returncode
 
 
 # ---------------------------------------------------------------------------
@@ -370,7 +358,7 @@ def run_phase_1(
 ) -> int:
     """Orchestrate Phase 1 subphases 1a → 1b → 1c with gates."""
     # ---- Phase 1a: Target Profile ----
-    rc, _ = _run_subphase(
+    rc = _run_subphase(
         args=args,
         console=console,
         rendering_ctx=rendering_ctx,
@@ -395,7 +383,7 @@ def run_phase_1(
     findings_snapshot = count_findings_snapshot()
 
     # ---- Phase 1b: CodeQL-assisted Reconnaissance ----
-    rc, _ = _run_subphase(
+    rc = _run_subphase(
         args=args,
         console=console,
         rendering_ctx=rendering_ctx,
@@ -405,7 +393,6 @@ def run_phase_1(
         label="CodeQL-assisted Reconnaissance",
         agent="recon",
         prompt_file="prompts/phase-1b-codeql-recon.md",
-        findings_snapshot=findings_snapshot,
     )
     if rc != 0:
         return rc
@@ -415,7 +402,7 @@ def run_phase_1(
         return gate_rc
 
     # ---- Phase 1c: Sandbox Bootstrap ----
-    rc, _ = _run_subphase(
+    rc = _run_subphase(
         args=args,
         console=console,
         rendering_ctx=rendering_ctx,

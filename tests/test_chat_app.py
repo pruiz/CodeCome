@@ -36,7 +36,7 @@ def test_textual_console_proxy_write_bg_thread(monkeypatch):
     mock_log.write.assert_not_called()
     mock_app.post_message.assert_called_once()
 
-def test_chat_render_and_log(monkeypatch):
+def test_chat_render(monkeypatch):
     mock_transcript = MagicMock()
     mock_args = MagicMock()
     mock_args.debug = True
@@ -65,12 +65,11 @@ def test_chat_render_and_log(monkeypatch):
     
     event = {"type": "message.updated", "info": {"role": "assistant", "modelID": "gpt-5"}}
     
-    app._chat_render_and_log(fake_self, None, "1", "label", event)
+    app._chat_render(fake_self, None, "1", "label", event)
 
     assert len(rendered) == 1
     assert "gpt-5" in fake_self._modeline_meta
     assert fake_self._modeline_state == "busy"
-    mock_transcript.write_event.assert_called()
 
 def test_chat_update_modeline_info():
     class FakeSelf:
