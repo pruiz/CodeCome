@@ -124,7 +124,7 @@ def test_run_single_attempt_consumer_exception(mock_args, mock_console, monkeypa
     def fake_fatal(console, title, msg):
         fatal_errors.append(msg)
         
-    code, session_id, _res, _path = runner._run_single_attempt(
+    code, _session_id, _res, _path = runner._run_single_attempt(
         mock_args, mock_console, "do work", "model", "var",
         "http://base", "auth", "dir", lambda *a: None,
         emit_fatal_error_fn=fake_fatal
