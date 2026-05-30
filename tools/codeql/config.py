@@ -37,8 +37,8 @@ DEFAULTS: dict[str, Any] = {
     "install_managed": True,
     "install_version": "latest",
     "install_path": ".tools/codeql/current/codeql",
-    "output_dir": "./itemdb/evidence/codeql",
-    "database_dir": "./itemdb/evidence/codeql/databases",
+    "output_dir": "./itemdb/codeql",
+    "database_dir": "./itemdb/codeql/databases",
     "cache_dir": "./.cache/codeql",
     "phase_1_enabled": True,
     "phase_2_enabled": True,
@@ -113,8 +113,8 @@ class CodeQLConfig:
     install_version: str = "latest"
     install_path: str = ".tools/codeql/current/codeql"
 
-    output_dir: str = "./itemdb/evidence/codeql"
-    database_dir: str = "./itemdb/evidence/codeql/databases"
+    output_dir: str = "./itemdb/codeql"
+    database_dir: str = "./itemdb/codeql/databases"
     cache_dir: str = "./.cache/codeql"
 
     phase_1_enabled: bool = True

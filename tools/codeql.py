@@ -126,7 +126,7 @@ def build_parser() -> argparse.ArgumentParser:
     resolve.add_argument("--plan", default="itemdb/notes/codeql-plan.yml", help="Path to codeql-plan.yml")
     resolve.add_argument(
         "--output",
-        default="itemdb/evidence/codeql/selected-query-packs.yml",
+        default="itemdb/codeql/selected-query-packs.yml",
         help="Path to write resolved pack selections",
     )
     resolve.add_argument("--format", choices=["text", "json"], default="text", help="Output format")
