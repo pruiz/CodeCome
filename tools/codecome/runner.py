@@ -65,6 +65,8 @@ def _run_single_attempt(
     emit_fatal_error_fn: Callable[..., None] | None = None,
     existing_session_id: str | None = None,
     transcript_phase: str | None = None,
+    phase_override: str | None = None,
+    label_override: str | None = None,
 ) -> tuple[int, str, RunResult, Path]:
 
     transcript: Transcript
@@ -92,7 +94,9 @@ def _run_single_attempt(
             try:
                 run_result_box["result"] = _consume_events(
                     base_url, session_id, console,
-                    str(args.phase), str(args.label), args,
+                    phase_override or str(args.phase),
+                    label_override or str(args.label),
+                    args,
                     transcript,
                     auth_token, workspace_dir,
                     render_event_fn=render_event_fn,

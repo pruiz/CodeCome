@@ -150,6 +150,8 @@ def _run_subphase(
             emit_fatal_error_fn=_emit_fatal_error,
             existing_session_id=last_session_id or None,
             transcript_phase=phase_id,
+            phase_override=phase_id,
+            label_override=label,
         )
 
         if returncode != 0:

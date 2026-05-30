@@ -32,6 +32,7 @@ from rendering.events.server import ServerConnectedRenderer, ServerHeartbeatRend
 from rendering.events.session_diff import SessionDiffRenderer
 from rendering.events.message import MessageUpdatedRenderer
 from rendering.events.subagent import SubagentStatusRenderer
+from rendering.events.patch import PatchRenderer
 from rendering.events.unknown import UnknownEventRenderer
 
 __all__ = [
@@ -53,5 +54,6 @@ __all__ = [
     "SessionDiffRenderer",
     "MessageUpdatedRenderer",
     "SubagentStatusRenderer",
+    "PatchRenderer",
     "UnknownEventRenderer",
 ]
