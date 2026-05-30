@@ -24,7 +24,10 @@ def run_codeql(config: CodeQLConfig) -> dict[str, Any]:
 
     binary_path = config.abs_install_path
     if not binary_path.is_file():
-        return _manifest("failed", now_utc, config, [], [], failures=[f"CodeQL binary not found at {binary_path}"])
+        if config.fail_policy == "hard":
+            return _manifest("failed", now_utc, config, [], [], failures=[f"CodeQL binary not found at {binary_path}"])
+        else:
+            return _manifest("soft-failed", now_utc, config, [], [f"CodeQL binary not found at {binary_path}"])
 
     version = _get_codeql_version(binary_path)
 
@@ -69,9 +72,7 @@ def run_codeql(config: CodeQLConfig) -> dict[str, Any]:
         ok, msg = _create_database(binary_path, language_id, source_path, db_dir, build_mode, build_command, exclude_patterns)
         if not ok:
             failures.append(msg)
-            if config.fail_policy == "hard":
-                return _manifest("failed", now_utc, config, [version], warnings, failures, language_ids)
-            continue
+            return _manifest("failed", now_utc, config, [version], warnings, failures, language_ids)
 
         for profile in profiles:
             packs = profile_packs.get(profile, [])
@@ -80,10 +81,8 @@ def run_codeql(config: CodeQLConfig) -> dict[str, Any]:
             sarif_path = sarif_dir / f"{language_id}.{profile}.sarif"
             ok, msg = _run_analyze(binary_path, db_dir, packs, sarif_path)
             if not ok:
-                if config.fail_policy == "hard":
-                    failures.append(msg)
-                    return _manifest("failed", now_utc, config, [version], warnings, failures, language_ids)
-                warnings.append(msg)
+                failures.append(msg)
+                return _manifest("failed", now_utc, config, [version], warnings, failures, language_ids)
 
     if failures:
         return _manifest("failed", now_utc, config, [version], warnings, failures, language_ids)
@@ -137,9 +136,6 @@ def _create_database(
         cmd += ["-c", build_command]
     elif build_mode == "autobuild":
         pass  # let CodeQL auto-detect
-
-    for pattern in exclude_patterns:
-        cmd += ["--no-source-unpack", "--additional-build-options", f"--exclude={pattern}"]
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)

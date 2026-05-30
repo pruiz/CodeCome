@@ -83,7 +83,12 @@ def _update_existing_entry(entries: list[dict[str, Any]], file_path: str, signal
         if isinstance(boost, (int, float)):
             current = entry.get("score", 1)
             current = int(current) if isinstance(current, (int, float)) else 1
-            entry["score"] = min(5, current + int(boost))
+            new_score = min(5, current + int(boost))
+            if new_score > current:
+                entry["score"] = new_score
+                reasons = entry.setdefault("reasons", [])
+                if isinstance(reasons, list):
+                    reasons.append(f"CodeQL static analysis signal increased score by +{new_score - current}.")
 
         codeql_alerts = signal.get("alerts", {})
         rules = signal.get("rules", [])

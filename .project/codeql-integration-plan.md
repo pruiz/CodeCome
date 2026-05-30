@@ -550,7 +550,7 @@ Default policy:
 ```text
 CodeQL enabled: yes
 Failure policy: soft
-Candidate mode: briefing
+Candidate mode: precreate
 Community packs: enabled
 ```
 
@@ -579,7 +579,7 @@ static_analysis:
 
     phase_2:
       enabled: true
-      candidate_mode: "briefing"
+      candidate_mode: "precreate"
       max_candidates: 10
 
     sweep:
@@ -773,11 +773,11 @@ Candidate modes:
 
 ```text
 off       -> do nothing
-briefing  -> write candidate briefing only
+precreate -> write candidate finding files
 precreate -> create filtered PENDING findings before model runs
 ```
 
-Default: `briefing`.
+Default: `precreate`.
 
 Precreate only when:
 
@@ -1100,7 +1100,7 @@ Required cases:
 - Confirm `tools/codeql.py` vs `tools/codecome.py codeql` decision.
 - Confirm exact CodeQL install source/version policy.
 - Verify package names in `templates/codeql-packs.yml`.
-- Confirm default `CODEQL_CANDIDATES` mode: `briefing` vs `precreate`.
+- Confirm default `CODEQL_CANDIDATES` mode: `precreate`.
 - Confirm whether finding frontmatter schema should accept `origin` / `static_analysis`.
 - Confirm whether `coding-standards` should ever precreate findings by default.
 - Confirm whether Phase 1c sandbox prompt should be copied from current `phase-1-recon.md` or rewritten tighter.
