@@ -1,0 +1,70 @@
+# CodeQL pack catalog used to resolve model-selected pack profiles.
+
+schema_version: 1
+
+packs:
+  python:
+    official:
+      - "codeql/python-queries"
+    github-security-lab:
+      - "githubsecuritylab/codeql-python-queries"
+    local:
+      - "./queries/codeql/python"
+
+  javascript-typescript:
+    official:
+      - "codeql/javascript-queries"
+    github-security-lab:
+      - "githubsecuritylab/codeql-javascript-queries"
+    local:
+      - "./queries/codeql/javascript"
+
+  c-cpp:
+    official:
+      - "codeql/cpp-queries"
+    github-security-lab:
+      - "githubsecuritylab/codeql-cpp-queries"
+    trailofbits:
+      - "trailofbits/cpp-queries"
+    coding-standards:
+      - "codeql/coding-standards-cpp"
+    local:
+      - "./queries/codeql/cpp"
+
+  go:
+    official:
+      - "codeql/go-queries"
+    github-security-lab:
+      - "githubsecuritylab/codeql-go-queries"
+    trailofbits:
+      - "trailofbits/go-queries"
+    local:
+      - "./queries/codeql/go"
+
+  csharp:
+    official:
+      - "codeql/csharp-queries"
+    github-security-lab:
+      - "githubsecuritylab/codeql-csharp-queries"
+    local:
+      - "./queries/codeql/csharp"
+
+  java-kotlin:
+    official:
+      - "codeql/java-queries"
+    github-security-lab:
+      - "githubsecuritylab/codeql-java-queries"
+    local:
+      - "./queries/codeql/java"
+
+candidate_policy:
+  official:
+    allow_precreate: true
+  github-security-lab:
+    allow_precreate: true
+  trailofbits:
+    allow_precreate: true
+  coding-standards:
+    allow_precreate: false
+  local:
+    allow_precreate: true
