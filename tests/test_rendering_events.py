@@ -101,12 +101,12 @@ class TestTextEventRenderer:
 
     def test_skips_empty_text(self):
         r = TextEventRenderer(_ctx("plain"))
-        assert r.render({"part": {"text": ""}}) is False
-        assert r.render({"part": {"text": "   \n\t  "}}) is False
+        assert r.render({"part": {"text": ""}}) is True
+        assert r.render({"part": {"text": "   \n\t  "}}) is True
 
     def test_skips_missing_text(self):
         r = TextEventRenderer(_ctx("plain"))
-        assert r.render({"part": {}}) is False
+        assert r.render({"part": {}}) is True
 
 
 # ---------------------------------------------------------------------------

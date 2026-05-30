@@ -29,8 +29,10 @@ def test_consume_events_renders_and_logs(mock_args, mock_console, monkeypatch):
     class FakePhaseEventLoop:
         def __init__(self, **kwargs):
             pass
-        def run(self, render_and_log_fn):
+        def run(self, render_and_log_fn, record_raw_event_fn=None):
             event = {"type": "text", "content": "hello"}
+            if record_raw_event_fn is not None:
+                record_raw_event_fn(event)
             render_and_log_fn(mock_console, "1", "Recon", event)
             return RunResult()
             
@@ -51,6 +53,33 @@ def test_consume_events_renders_and_logs(mock_args, mock_console, monkeypatch):
     assert len(rendered_events) == 1
     assert rendered_events[0]["content"] == "hello"
     fake_transcript.write_event.assert_called_once()
+
+
+def test_run_single_attempt_uses_explicit_transcript_phase(mock_args, mock_console, monkeypatch):
+    monkeypatch.setattr(runner, "create_session", lambda *a, **kw: "new_session")
+    monkeypatch.setattr(runner, "send_prompt_to_session", lambda *a, **kw: None)
+    monkeypatch.setattr(runner, "_consume_events", lambda *a, **kw: RunResult())
+
+    captured = {}
+    fake_transcript = MagicMock(spec=Transcript)
+    fake_transcript.path = Path("fake-1a.jsonl")
+
+    def fake_for_phase(cls, phase, finding):
+        captured["phase"] = phase
+        captured["finding"] = finding
+        return fake_transcript
+
+    monkeypatch.setattr(Transcript, "for_phase", classmethod(fake_for_phase))
+
+    code, session_id, res, path = runner._run_single_attempt(
+        mock_args, mock_console, "do work", "model", "var",
+        "http://base", "auth", "dir", lambda *a: None,
+        transcript_phase="1a",
+    )
+
+    assert code == 0
+    assert session_id == "new_session"
+    assert captured == {"phase": "1a", "finding": None}
 
 def test_run_single_attempt_success(mock_args, mock_console, monkeypatch):
     monkeypatch.setattr(runner, "create_session", lambda *a, **kw: "new_session")

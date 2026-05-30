@@ -157,6 +157,7 @@ def _run_subphase(
             render_event_fn=render_event,
             emit_fatal_error_fn=_emit_fatal_error,
             existing_session_id=last_session_id or None,
+            transcript_phase=phase_id,
         )
 
         if returncode != 0:

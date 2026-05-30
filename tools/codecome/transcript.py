@@ -55,7 +55,7 @@ class Transcript:
             _ATTEMPT_COUNTER[key] = counter + 1
 
         path = _transcript_dir() / f"last-phase-{phase}-{finding_tag}-attempt-{counter}.jsonl"
-        return cls(path, path.open("w", encoding="utf-8"))
+        return cls(path, path.open("w", encoding="utf-8", buffering=1))
 
     @classmethod
     def for_chat(cls) -> Transcript:
