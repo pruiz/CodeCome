@@ -89,6 +89,7 @@ def _get_rendering_ctx(console: Any, *, root: Path | None = None) -> Any:
         SessionStatusRenderer,
         SessionDiffRenderer,
         SubagentStatusRenderer,
+        PatchRenderer,
     )
     registry.register_event(ServerConnectedRenderer(ctx))
     registry.register_event(ServerHeartbeatRenderer(ctx))
@@ -102,6 +103,7 @@ def _get_rendering_ctx(console: Any, *, root: Path | None = None) -> Any:
     registry.register_event(SessionStatusRenderer(ctx))
     registry.register_event(SessionDiffRenderer(ctx))
     registry.register_event(SubagentStatusRenderer(ctx))
+    registry.register_event(PatchRenderer(ctx))
 
     from rendering.tools import (
         ApplyPatchRenderer,

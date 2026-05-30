@@ -166,8 +166,22 @@ class StateTracker:
                 }
             return None
 
-        # Pass through unknown part types as raw event.
-        return event
+        if part_type == "patch":
+            return {
+                "type": "patch",
+                "timestamp": event.get("timestamp", 0),
+                "sessionID": props.get("sessionID", ""),
+                "part": part,
+            }
+
+        # Pass through unknown part types with a normalized envelope so that
+        # downstream renderers always receive a top-level "part" key.
+        return {
+            "type": "message.part.updated",
+            "timestamp": event.get("timestamp", 0),
+            "sessionID": props.get("sessionID", ""),
+            "part": part,
+        }
 
     def _map_session_diff(self, event: dict[str, Any]) -> dict[str, Any] | None:
         """Map non-empty session.diff into a compact compatibility event."""
