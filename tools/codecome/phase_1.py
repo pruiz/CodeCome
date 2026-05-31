@@ -39,6 +39,7 @@ from phases.completion import (
     check_phase_graceful_completion,
     build_phase_resume_prompt,
     build_frontmatter_resume_prompt,
+    build_codeql_plan_resume_prompt,
 )
 # ---------------------------------------------------------------------------
 # CodeQL analysis (between 1a gate and 1b)
@@ -240,6 +241,27 @@ def _load_codeql_yaml(path: Path) -> dict[str, Any]:
         return {}
 
 
+def _validate_codeql_plan_for_repair() -> tuple[int, str]:
+    """Validate the generated CodeQL plan, returning CLI-style (rc, output)."""
+    plan_path = ROOT / "itemdb" / "notes" / "codeql-plan.yml"
+    if not plan_path.exists():
+        return 0, ""
+
+    try:
+        from codeql.packs import load_codeql_plan
+
+        load_codeql_plan(plan_path)
+    except Exception as exc:
+        return 1, f"itemdb/notes/codeql-plan.yml is invalid: {exc}"
+
+    return 0, ""
+
+
+def _subphase_should_validate_codeql_plan(phase_id: str) -> bool:
+    """Return whether a subphase is responsible for producing/editing codeql-plan.yml."""
+    return phase_id in {"1a", "1-codeql-repair"}
+
+
 def _codeql_repair_needed(output_dir: Path, plan_path: Path) -> bool:
     """Return whether a failed CodeQL run should get one model repair attempt."""
     manifest = _load_codeql_yaml(output_dir / "run-manifest.yml")
@@ -390,6 +412,7 @@ def _run_subphase(
 
     iteration_retry_count = 0
     frontmatter_retry_count = 0
+    codeql_plan_retry_count = 0
     attempt_number = 0
     last_session_id: str = ""
     last_finish_reason: str | None = None
@@ -485,6 +508,50 @@ def _run_subphase(
                 returncode = 2
 
         if returncode == 0:
+            if _subphase_should_validate_codeql_plan(phase_id):
+                validation_rc, validation_output = _validate_codeql_plan_for_repair()
+                if validation_rc != 0:
+                    max_codeql_plan_retries = 2
+                    if codeql_plan_retry_count < max_codeql_plan_retries:
+                        codeql_plan_retry_count += 1
+                        msg = (
+                            "\n[Auto-Correction] The model completed a turn, but itemdb/notes/codeql-plan.yml "
+                            "failed local CodeQL plan validation. CodeCome will resume the same session and ask "
+                            f"for a minimal YAML/plan repair (retry {codeql_plan_retry_count}/{max_codeql_plan_retries})."
+                        )
+                        if HAVE_RICH:
+                            from rich.text import Text
+                            console.print(Text(msg, style="bold yellow"))
+                        else:
+                            import _colors as C
+                            print(C.warn(msg))
+                        if last_session_id and last_session_id != "id":
+                            prompt = build_codeql_plan_resume_prompt(validation_output)
+                            continue
+                        else:
+                            returncode = 2
+                            finish_warning = (
+                                "The model output failed CodeQL plan validation, and CodeCome could not determine "
+                                "a session ID to resume for repair. Treating the subphase as incomplete so the "
+                                "validator output can be reported back with the saved transcript."
+                            )
+                    else:
+                        returncode = 2
+                        finish_warning = (
+                            f"itemdb/notes/codeql-plan.yml still fails validation after {max_codeql_plan_retries} "
+                            "auto-repair attempts. Treating the subphase as incomplete so the validation errors "
+                            "can be reported back."
+                        )
+                        msg = f"\n[Warning] CodeQL plan validation errors persist after {max_codeql_plan_retries} auto-retries."
+                        if HAVE_RICH:
+                            from rich.text import Text
+                            console.print(Text(msg, style="bold red"))
+                        else:
+                            import _colors as C
+                            print(C.fail(msg))
+                        print(validation_output)
+                    break
+
             from findings.checks_entry import run_frontmatter_validation
 
             validation_rc, validation_output = run_frontmatter_validation()
