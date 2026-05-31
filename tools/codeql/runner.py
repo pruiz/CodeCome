@@ -95,7 +95,18 @@ def run_codeql(config: CodeQLConfig, progress: Callable[[str], None] | None = No
             sarif_dir.mkdir(parents=True, exist_ok=True)
 
             _progress(progress, f"CodeQL: creating database {unit_id}:{language_id} ({build_mode})")
-            ok, msg = _create_database(binary_path, language_id, source_path, db_dir, build_mode, build_command, exclude_patterns, timeout=db_timeout, progress=progress)
+            ok, msg = _create_database(
+                binary_path,
+                language_id,
+                source_path,
+                db_dir,
+                build_mode,
+                build_command,
+                exclude_patterns,
+                config.abs_cache_dir,
+                timeout=db_timeout,
+                progress=progress,
+            )
             if not ok:
                 failures.append(msg)
                 if config.fail_policy == "soft":
@@ -122,7 +133,15 @@ def run_codeql(config: CodeQLConfig, progress: Callable[[str], None] | None = No
 
                 sarif_path = sarif_dir / f"{unit_id}.{language_id}.{profile}.sarif"
                 _progress(progress, f"CodeQL: analyzing {unit_id}:{language_id} profile {profile}")
-                ok, msg = _run_analyze(binary_path, db_dir, packs, sarif_path, timeout=analyze_timeout, progress=progress)
+                ok, msg = _run_analyze(
+                    binary_path,
+                    db_dir,
+                    packs,
+                    sarif_path,
+                    config.abs_cache_dir,
+                    timeout=analyze_timeout,
+                    progress=progress,
+                )
                 if not ok:
                     if config.fail_policy == "soft" and profile != "official":
                         warnings.append(msg)
@@ -208,6 +227,7 @@ def _create_database(
     build_mode: str,
     build_command: str | None,
     exclude_patterns: list[str],
+    cache_dir: Path | None = None,
     timeout: int = 600,
     progress: Callable[[str], None] | None = None,
 ) -> tuple[bool, str]:
@@ -222,6 +242,7 @@ def _create_database(
         "--overwrite",
         "--no-run-unnecessary-builds",
     ]
+    _add_common_caches(cmd, cache_dir)
 
     if build_mode == "none":
         cmd += ["--build-mode=none"]
@@ -255,6 +276,7 @@ def _run_analyze(
     db_dir: Path,
     packs: list[str],
     sarif_path: Path,
+    cache_dir: Path | None = None,
     timeout: int = 600,
     progress: Callable[[str], None] | None = None,
 ) -> tuple[bool, str]:
@@ -265,7 +287,9 @@ def _run_analyze(
         "--format=sarif-latest",
         f"--output={sarif_path}",
         "--sarif-include-query-help=never",
-    ] + packs
+    ]
+    _add_common_caches(cmd, cache_dir)
+    cmd += packs
 
     return _run_with_progress(cmd, f"Analyze timed out for {db_dir.name} after {timeout}s",
                               f"Analyze failed for {db_dir.name}", timeout, progress)
@@ -279,20 +303,29 @@ def _ensure_query_packs_available(
     progress: Callable[[str], None] | None = None,
 ) -> tuple[bool, str]:
     """Resolve query packs, downloading registry packs once when missing."""
-    ok, detail = _run_quiet([str(binary), "resolve", "queries", "--format=json", "--", *packs], timeout=120)
+    ok, detail = _run_quiet(
+        _codeql_pack_cmd(binary, config.abs_cache_dir, "resolve", "queries", "--format=json", "--", *packs),
+        timeout=120,
+    )
     if ok:
         return True, ""
 
     downloadable = [pack for pack in packs if _is_registry_pack_ref(pack)]
     for pack in downloadable:
         _progress(progress, f"CodeQL: downloading query pack {pack}")
-        download_ok, download_detail = _run_quiet([str(binary), "pack", "download", pack], timeout=300)
+        download_ok, download_detail = _run_quiet(
+            _codeql_pack_cmd(binary, config.abs_cache_dir, "pack", "download", "--", pack),
+            timeout=300,
+        )
         if not download_ok:
             detail = download_detail or detail
             return False, _pack_failure_message(profile, packs, detail, config)
 
     if downloadable:
-        ok, detail = _run_quiet([str(binary), "resolve", "queries", "--format=json", "--", *packs], timeout=120)
+        ok, detail = _run_quiet(
+            _codeql_pack_cmd(binary, config.abs_cache_dir, "resolve", "queries", "--format=json", "--", *packs),
+            timeout=120,
+        )
         if ok:
             return True, ""
 
@@ -304,6 +337,25 @@ def _is_registry_pack_ref(pack: str) -> bool:
     if pack.startswith((".", "/")):
         return False
     return "/" in pack
+
+
+def _add_common_caches(cmd: list[str], cache_dir: Path | None) -> None:
+    """Append CodeQL's workspace-local common cache option when configured."""
+    if cache_dir is None or str(cache_dir) in {"", "."}:
+        return
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    option = f"--common-caches={cache_dir}"
+    if "--" in cmd:
+        cmd.insert(cmd.index("--"), option)
+    else:
+        cmd.append(option)
+
+
+def _codeql_pack_cmd(binary: Path, cache_dir: Path | None, *args: str) -> list[str]:
+    """Build a CodeQL command that uses the workspace-local common cache."""
+    cmd = [str(binary), *args]
+    _add_common_caches(cmd, cache_dir)
+    return cmd
 
 
 def _pack_failure_message(profile: str, packs: list[str], detail: str, config: CodeQLConfig) -> str:

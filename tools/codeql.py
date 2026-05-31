@@ -68,7 +68,7 @@ def _cmd_check() -> int:
     print("Checking pack resolution …")
     try:
         result = subprocess.run(
-            [str(binary_path), "resolve", "qlpacks"],
+            [str(binary_path), "resolve", "qlpacks", f"--common-caches={config.abs_cache_dir}"],
             capture_output=True,
             text=True,
             timeout=60,
