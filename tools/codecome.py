@@ -481,15 +481,17 @@ def command_check(_: argparse.Namespace) -> int:
 
     check_exit = check_codeql_status()
 
+    print()
+
     # Warn (do not fail) about missing optional recording tools used by Phase 5.
     recording_warnings = check_recording_tools()
     if recording_warnings:
-        print()
-        print(C.header("Optional recording tools (used by phase-5 exploit demonstrations):"))
+        print(C.header("Recording tools:"))
         for message in recording_warnings:
             print(C.warn(message))
     else:
-        print(C.ok("Optional recording tools available (asciinema, agg, ffmpeg, Xvfb)."))
+        print(C.header("Recording tools:"))
+        print(C.ok("all tools available (asciinema, agg, ffmpeg, Xvfb)."))
 
     # Probe only the current helper invocation context; phase-5 may later run
     # from a different shell, container, or PTY wrapper.
