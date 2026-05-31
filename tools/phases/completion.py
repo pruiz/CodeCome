@@ -241,7 +241,7 @@ def build_codeql_plan_resume_prompt(validation_output: str) -> str:
         "Repair only `itemdb/notes/codeql-plan.yml` with the smallest change needed. Do not redo unrelated "
         "reconnaissance or modify target source code. Preserve the existing analysis units, pack selections, "
         "manual build commands, and notes unless a reported validation error requires changing them.\n\n"
-        "Before ending, verify that `itemdb/notes/codeql-plan.yml` is valid YAML and passes CodeQL plan validation."
+        "Before ending, verify that the repaired plan passes local validation by running `rtk python3 tools/codecome.py check-codeql-plan`."
     )
 
 

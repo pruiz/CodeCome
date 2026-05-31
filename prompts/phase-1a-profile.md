@@ -108,3 +108,9 @@ At the end, summarize:
 - Languages selected for CodeQL analysis and their confidence levels
 - Files created: `target-profile.md`, `build-model.md`, `codeql-plan.yml`
 - Key uncertainties or blockers
+
+Before ending, validate that `itemdb/notes/codeql-plan.yml` is valid and follows CodeCome rules by running:
+
+    rtk python3 tools/codecome.py check-codeql-plan
+
+If validation fails, repair only the reported issue before summarizing.

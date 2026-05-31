@@ -699,6 +699,14 @@ def command_next_id(_: argparse.Namespace) -> int:
     return 0
 
 
+def command_check_codeql_plan(_: argparse.Namespace) -> int:
+    from codecome.phase_1 import _validate_codeql_plan_for_repair
+    rc, out = _validate_codeql_plan_for_repair()
+    if out:
+        print(out)
+    return rc
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="codecome",
@@ -715,6 +723,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     next_id_parser = subparsers.add_parser("next-id", help="Print the next available finding id.")
     next_id_parser.set_defaults(func=command_next_id)
+
+    check_plan_parser = subparsers.add_parser("check-codeql-plan", help="Validate itemdb/notes/codeql-plan.yml")
+    check_plan_parser.set_defaults(func=command_check_codeql_plan)
 
     return parser
 
