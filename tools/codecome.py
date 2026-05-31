@@ -540,22 +540,17 @@ def check_sandbox_status() -> None:
     print(C.header("Sandbox:"))
 
     provenance = sb.read_provenance()
-    has_user_content = sb.sandbox_has_user_content()
     last_validation = sb._last_validation_outcome()
     allow_no_sandbox = bool(os.environ.get("CODECOME_ALLOW_NO_SANDBOX"))
-
-    # Determine state
-    if provenance is not None:
-        sandbox_state = "generated"
-    elif has_user_content:
-        sandbox_state = "user-managed"
-    else:
-        sandbox_state = "missing"
+    sandbox_state = sb.classify_sandbox_state()
 
     # Gate logic (mirrors cmd_status)
     if allow_no_sandbox:
         gate_pass = True
         gate_reason = "override (CODECOME_ALLOW_NO_SANDBOX=1)"
+    elif sandbox_state == "pending":
+        gate_pass = False
+        gate_reason = "sandbox bootstrap pending; run make phase-1"
     elif sandbox_state == "missing":
         gate_pass = False
         gate_reason = "sandbox is missing"
@@ -595,7 +590,8 @@ def check_sandbox_status() -> None:
     for name in ("setup", "start", "check", "build", "test", "stop", "shell", "logs", "clean", "reset"):
         status = capability_status[name]
         satisfied = status.get("satisfied", False)
-        state_str = C.ok("ok") if satisfied else C.warn("missing")
+        missing_label = "pending" if sandbox_state == "pending" else "missing"
+        state_str = C.ok("ok") if satisfied else C.warn(missing_label)
         print(f"    {name:<8} {state_str}  {status['path']}")
 
 

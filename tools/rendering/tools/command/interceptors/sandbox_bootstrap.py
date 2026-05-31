@@ -203,6 +203,8 @@ def _sandbox_state_style(state_value: str) -> str:
         return "green"
     if state_value == "user-managed":
         return "yellow"
+    if state_value == "pending":
+        return "yellow"
     if state_value == "missing":
         return "red"
     return "dim"
@@ -379,7 +381,12 @@ def _render_sandbox_status_rich(
     gate_pass = bool(payload.get("phase2_gate_pass"))
     gate_reason = str(payload.get("phase2_gate_reason", ""))
 
-    state_glyph = {"generated": glyphs["ok"], "user-managed": glyphs["warn"], "missing": glyphs["fail"]}.get(state_value, glyphs["info"])
+    state_glyph = {
+        "generated": glyphs["ok"],
+        "user-managed": glyphs["warn"],
+        "pending": glyphs["warn"],
+        "missing": glyphs["fail"],
+    }.get(state_value, glyphs["info"])
     sections.append(Text.assemble(
         ("state: ", "bold"),
         (f"{state_glyph} {state_value}", _sandbox_state_style(state_value)),
@@ -425,6 +432,8 @@ def _render_sandbox_status_rich(
             is_helper = name in _SANDBOX_HELPER_CAPABILITIES
             if satisfied:
                 badge = Text(f"{glyphs['ok']} ok", style="green")
+            elif state_value == "pending":
+                badge = Text(f"{glyphs['warn']} pending", style="yellow")
             elif is_helper and not present:
                 badge = Text(f"{glyphs['skip']} optional", style="dim")
             else:
@@ -716,6 +725,8 @@ def _render_sandbox_status_plain(payload: dict, glyphs: dict, sink) -> None:
             is_helper = name in _SANDBOX_HELPER_CAPABILITIES
             if satisfied:
                 marker = f"{glyphs['ok']} ok"
+            elif state_value == "pending":
+                marker = f"{glyphs['warn']} pending"
             elif is_helper and not present:
                 marker = f"{glyphs['skip']} optional"
             else:
