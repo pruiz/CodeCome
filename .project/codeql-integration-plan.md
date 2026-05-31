@@ -1,8 +1,8 @@
 # CodeQL Integration Plan
 
-Status: WIP planning document  
+Status: Implementation complete  
 Branch: `wip/codeql-integration-plan`  
-Scope: planning + phased implementation (install, config, pack resolver, runner, SARIF normalization).
+Scope: install, config, pack resolver, runner, SARIF normalization, risk import, pipeline orchestration.
 
 ## Goals
 
