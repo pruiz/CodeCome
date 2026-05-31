@@ -350,6 +350,81 @@ def _phase_1_notes_exist() -> bool:
     return (notes_dir / "target-profile.md").is_file() and (notes_dir / "build-model.md").is_file()
 
 
+def check_phase_progress() -> None:
+    """Print a summary of which phases have been run based on durable artifacts."""
+    from phases.phase_1_gates import REQUIRED_NOTES_1B
+
+    notes_dir = ROOT / "itemdb" / "notes"
+    evidence_root = ROOT / "itemdb" / "evidence"
+    counts = count_findings()
+    rows: list[tuple[str, str, str]] = []
+
+    # Phase 1a
+    has_1a = all(
+        (notes_dir / name).is_file()
+        for name in ("target-profile.md", "build-model.md", "codeql-plan.yml")
+    )
+    rows.append(("Phase 1a", "ok" if has_1a else "info", "completed" if has_1a else "not run"))
+
+    # CodeQL
+    manifest_path = ROOT / "itemdb" / "codeql" / "run-manifest.yml"
+    if manifest_path.is_file():
+        try:
+            manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+            status = manifest.get("status", "unknown") if isinstance(manifest, dict) else "unknown"
+        except Exception:
+            status = "unknown"
+        level = "ok" if status == "completed" else "warn" if status == "soft-failed" else "info"
+        rows.append(("CodeQL", level, status))
+    else:
+        rows.append(("CodeQL", "info", "not run"))
+
+    # Phase 1b
+    missing_1b = [n for n in REQUIRED_NOTES_1B if not (notes_dir / n).is_file()]
+    if not missing_1b:
+        rows.append(("Phase 1b", "ok", "completed"))
+    elif len(missing_1b) < len(REQUIRED_NOTES_1B):
+        rows.append(("Phase 1b", "warn", f"{len(missing_1b)} of {len(REQUIRED_NOTES_1B)} notes missing"))
+    else:
+        rows.append(("Phase 1b", "info", "not run"))
+
+    # Phase 1c
+    has_1c = (notes_dir / "sandbox-plan.md").is_file()
+    rows.append(("Phase 1c", "ok" if has_1c else "info", "completed" if has_1c else "not run"))
+
+    # Phase 2
+    pending = counts["PENDING"]
+    rows.append(("Phase 2", "ok" if pending else "info", f"{pending} PENDING findings" if pending else "not run"))
+
+    # Phase 3
+    reviewed = counts["CONFIRMED"] + counts["EXPLOITED"] + counts["REJECTED"] + counts["DUPLICATE"]
+    rows.append(("Phase 3", "ok" if reviewed else "info", f"{reviewed} reviewed" if reviewed else "not run"))
+
+    # Phase 4
+    confirmed = counts["CONFIRMED"] + counts["EXPLOITED"]
+    rows.append(("Phase 4", "ok" if confirmed else "info", f"{confirmed} confirmed" if confirmed else "not run"))
+
+    # Phase 5
+    exploited = counts["EXPLOITED"]
+    rows.append(("Phase 5", "ok" if exploited else "info", f"{exploited} exploited" if exploited else "not run"))
+
+    # Phase 6
+    has_report = (ROOT / "itemdb" / "reports" / "report.md").is_file()
+    rows.append(("Phase 6", "ok" if has_report else "info", "completed" if has_report else "not run"))
+
+    print()
+    print(C.header("Phase progress:"))
+    label_width = max(len(label) for label, _, _ in rows)
+    for label, level, detail in rows:
+        prefix = "  " + label.ljust(label_width)
+        if level == "ok":
+            print(C.ok(f"{prefix}  {detail}"))
+        elif level == "warn":
+            print(C.warn(f"{prefix}  {detail}"))
+        else:
+            print(C.info(f"{prefix}  {detail}"))
+
+
 def check_codeql_status() -> int:
     """Check CodeQL configuration and last recorded artifact state."""
     print()
@@ -479,6 +554,7 @@ def command_check(_: argparse.Namespace) -> int:
     if not has_source:
         print(C.warn("src/ is empty — place your target source code there before running phase-1."))
 
+    check_phase_progress()
     check_exit = check_codeql_status()
 
     print()
