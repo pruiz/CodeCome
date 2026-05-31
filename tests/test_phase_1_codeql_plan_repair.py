@@ -353,3 +353,45 @@ def test_codeql_repair_loop_does_not_block_after_retries_exhausted(tmp_path: Pat
         p1.HAVE_RICH = saved_rich
 
     assert rc == 0
+
+
+def test_phase1c_accepts_no_step_finish_when_artifacts_are_fresh(tmp_path: Path) -> None:
+    import codecome.phase_1 as p1
+
+    transcript = tmp_path / "tmp" / "last-phase-1c-no-finding-attempt-1.jsonl"
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text("", encoding="utf-8")
+
+    args = SimpleNamespace(phase="1", finding=None, label="sandbox", debug=False)
+    calls = []
+
+    def fake_run_single_attempt(*_args, **_kwargs):
+        calls.append(_kwargs)
+        return 0, "session-1", RunResult(any_step_finish_seen=False), transcript
+
+    saved_rich = p1.HAVE_RICH
+    p1.HAVE_RICH = False
+    try:
+        with patch.object(p1, "ROOT", tmp_path), \
+             patch.object(p1, "load_prompt", return_value="prompt"), \
+             patch.object(p1, "resolve_runtime_config", return_value=_runtime_config()), \
+             patch.object(p1, "configure_rendering", return_value=None), \
+             patch.object(p1, "_run_single_attempt", side_effect=fake_run_single_attempt), \
+             patch.object(p1, "check_phase_graceful_completion", return_value=True), \
+             patch("findings.checks_entry.run_frontmatter_validation", return_value=(0, "")):
+            rc = p1._run_subphase(
+                args=args,
+                console=None,
+                rendering_ctx=None,
+                runner=_runner(),
+                base_url="http://127.0.0.1",
+                phase_id="1c",
+                label="Sandbox",
+                agent="recon",
+                prompt_file="prompts/phase-1c-sandbox.md",
+            )
+    finally:
+        p1.HAVE_RICH = saved_rich
+
+    assert rc == 0
+    assert len(calls) == 1
