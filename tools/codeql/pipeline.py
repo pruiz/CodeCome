@@ -79,6 +79,7 @@ def run_full_pipeline(config: CodeQLConfig, progress: Callable[[str], None] | No
                 manifest.setdefault("warnings", []).append(
                     f"SARIF normalization failed: {exc}"
                 )
+                manifest["status"] = "failed" if config.fail_policy == "hard" else "soft-failed"
 
     # Step 4: import risk
     signals_path = normalized_dir / "file-signals.yml"
