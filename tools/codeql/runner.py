@@ -30,7 +30,7 @@ def run_codeql(config: CodeQLConfig, progress: Callable[[str], None] | None = No
         if config.fail_policy == "hard":
             return _manifest("failed", now_utc, config, [], [], failures=[f"CodeQL binary not found at {binary_path}"])
         else:
-            return _manifest("soft-failed", now_utc, config, [], [f"CodeQL binary not found at {binary_path}"])
+            return _manifest("soft-failed", now_utc, config, [], [], failures=[f"CodeQL binary not found at {binary_path}"])
 
     version = _get_codeql_version(binary_path)
     _progress(progress, f"CodeQL: using {version}")
@@ -205,7 +205,9 @@ def _create_database(
     temp_config: Path | None = None
     if exclude_patterns:
         import yaml as _yaml
-        temp_config = Path(tempfile.mkdtemp(prefix="codeql-codescanning-")) / "codescanning-config.yml"
+        workspace_tmp = ROOT / "tmp"
+        workspace_tmp.mkdir(parents=True, exist_ok=True)
+        temp_config = Path(tempfile.mkdtemp(prefix="codeql-codescanning-", dir=str(workspace_tmp))) / "codescanning-config.yml"
         temp_config.parent.mkdir(parents=True, exist_ok=True)
         config_content = {"paths-ignore": exclude_patterns}
         temp_config.write_text(_yaml.dump(config_content, default_flow_style=False), encoding="utf-8")

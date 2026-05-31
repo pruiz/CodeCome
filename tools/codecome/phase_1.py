@@ -11,6 +11,7 @@ reused across all three subphase sessions.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import time
 from pathlib import Path
@@ -263,6 +264,14 @@ def _codeql_repair_needed(output_dir: Path, plan_path: Path) -> bool:
     return False
 
 
+def _file_digest(path: Path) -> str | None:
+    """Return a stable digest for a file, or None when it cannot be read."""
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
 def _run_codeql_repair_if_needed(
     *,
     args: Any,
@@ -291,6 +300,7 @@ def _run_codeql_repair_if_needed(
         import _colors as C
         print(C.warn(msg))
 
+    plan_digest = _file_digest(plan_path)
     for attempt in range(1, max_retries + 1):
         rc = _run_subphase(
             args=args,
@@ -305,7 +315,16 @@ def _run_codeql_repair_if_needed(
         )
         if rc != 0:
             continue
-        return True
+        next_plan_digest = _file_digest(plan_path)
+        if next_plan_digest != plan_digest:
+            return True
+        unchanged_msg = "CodeQL repair completed but did not change itemdb/notes/codeql-plan.yml."
+        if HAVE_RICH:
+            from rich.text import Text
+            console.print(Text(unchanged_msg, style="yellow"))
+        else:
+            import _colors as C
+            print(C.warn(unchanged_msg))
 
     return False
 
