@@ -488,14 +488,13 @@ def _run_codeql_repair_if_needed(
         )
 
     if _codeql_repair_needed(config.abs_output_dir, plan_path):
-        msg = f"CodeQL database creation still fails after {max_retries} repair attempt(s); blocking Phase 1b."
+        msg = f"CodeQL database creation still fails after {max_retries} repair attempt(s); continuing to artifact gate."
         if HAVE_RICH:
             from rich.text import Text
-            console.print(Text(msg, style="bold red"))
+            console.print(Text(msg, style="bold yellow"))
         else:
             import _colors as C
-            print(C.fail(msg))
-        return 1
+            print(C.warn(msg))
 
     return 0
 
