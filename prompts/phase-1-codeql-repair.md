@@ -65,3 +65,5 @@ Make the repair directly in files. At the end, summarize:
 - what changed in `itemdb/notes/codeql-plan.yml`,
 - any helper script created,
 - the exact manual build command CodeQL will run next.
+
+Before ending, validate that `itemdb/notes/codeql-plan.yml` is valid YAML and still follows the CodeQL plan schema. If validation fails, repair only the reported YAML/schema issue before summarizing.

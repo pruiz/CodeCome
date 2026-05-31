@@ -232,6 +232,19 @@ def build_frontmatter_resume_prompt(phase: str, finding: str | None, validation_
     )
 
 
+def build_codeql_plan_resume_prompt(validation_output: str) -> str:
+    return (
+        "Your previous run created or edited `itemdb/notes/codeql-plan.yml`, but the file failed local "
+        "CodeQL plan validation.\n\n"
+        "Validation errors:\n"
+        f"{validation_output}\n\n"
+        "Repair only `itemdb/notes/codeql-plan.yml` with the smallest change needed. Do not redo unrelated "
+        "reconnaissance or modify target source code. Preserve the existing analysis units, pack selections, "
+        "manual build commands, and notes unless a reported validation error requires changing them.\n\n"
+        "Before ending, verify that `itemdb/notes/codeql-plan.yml` is valid YAML and passes CodeQL plan validation."
+    )
+
+
 def build_resume_command(initial_command: list[str], session_id: str, prompt: str) -> list[str]:
     """Preserve connection/runtime flags needed to reach the original session."""
     resume = ["opencode", "run"]
