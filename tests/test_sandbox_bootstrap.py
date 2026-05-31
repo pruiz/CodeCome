@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from conftest import ROOT, load_tool_module
 
 
@@ -78,6 +79,59 @@ def test_opencode_json_allows_src_and_sandbox_env_reads():
     assert read_rules["src/**/.env"] == "allow"
     assert read_rules["src/**/.env.*"] == "allow"
     assert read_rules["sandbox/.env"] == "allow"
+
+
+def test_sandbox_status_is_pending_before_phase_1c(tmp_path, monkeypatch, capsys):
+    module = load_tool_module("sandbox_bootstrap_pending_status", "tools/sandbox-bootstrap.py")
+    root = tmp_path
+    sandbox_root = root / "sandbox"
+    notes_root = root / "itemdb" / "notes"
+    sandbox_root.mkdir(parents=True)
+    notes_root.mkdir(parents=True)
+    (sandbox_root / ".gitkeep").write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(module, "ROOT", root)
+    monkeypatch.setattr(module, "SANDBOX_ROOT", sandbox_root)
+    monkeypatch.setattr(module, "NOTES_ROOT", notes_root)
+    monkeypatch.setattr(module, "PROVENANCE_FILE", sandbox_root / "CODECOME-GENERATED.md")
+
+    assert module.classify_sandbox_state() == "pending"
+
+    rc = module.cmd_status(SimpleNamespace(format="text", gate=False))
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "state:" in out
+    assert "pending" in out
+    assert "sandbox bootstrap pending; run make phase-1" in out
+    assert "setup  pending" in out
+
+
+def test_sandbox_status_is_missing_after_phase_1c_without_sandbox(tmp_path, monkeypatch, capsys):
+    module = load_tool_module("sandbox_bootstrap_missing_status", "tools/sandbox-bootstrap.py")
+    root = tmp_path
+    sandbox_root = root / "sandbox"
+    notes_root = root / "itemdb" / "notes"
+    sandbox_root.mkdir(parents=True)
+    notes_root.mkdir(parents=True)
+    (sandbox_root / ".gitkeep").write_text("", encoding="utf-8")
+    (notes_root / "sandbox-plan.md").write_text("# Sandbox Plan\n", encoding="utf-8")
+
+    monkeypatch.setattr(module, "ROOT", root)
+    monkeypatch.setattr(module, "SANDBOX_ROOT", sandbox_root)
+    monkeypatch.setattr(module, "NOTES_ROOT", notes_root)
+    monkeypatch.setattr(module, "PROVENANCE_FILE", sandbox_root / "CODECOME-GENERATED.md")
+
+    assert module.classify_sandbox_state() == "missing"
+
+    rc = module.cmd_status(SimpleNamespace(format="text", gate=False))
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "state:" in out
+    assert "missing" in out
+    assert "sandbox is missing" in out
+    assert "setup  missing" in out
 
 
 def test_detect_signals_prefers_erlang_otp_for_rebar_targets(tmp_path, monkeypatch):

@@ -404,6 +404,23 @@ def sandbox_has_user_content() -> bool:
     return False
 
 
+def phase_1c_bootstrap_recorded() -> bool:
+    """Return True once Phase 1c has documented a sandbox bootstrap attempt."""
+    return (NOTES_ROOT / "sandbox-plan.md").is_file()
+
+
+def classify_sandbox_state() -> str:
+    """Classify sandbox state using both filesystem and workflow progress."""
+    provenance = read_provenance()
+    if provenance is not None:
+        return "generated"
+    if sandbox_has_user_content():
+        return "user-managed"
+    if phase_1c_bootstrap_recorded():
+        return "missing"
+    return "pending"
+
+
 # --- Output helpers -----------------------------------------------------------
 
 
@@ -594,21 +611,15 @@ def _last_validation_outcome() -> Optional[str]:
 
 def cmd_status(args: argparse.Namespace) -> int:
     provenance = read_provenance()
-    has_user_content = sandbox_has_user_content()
     allow_no_sandbox = bool(os.environ.get("CODECOME_ALLOW_NO_SANDBOX"))
     capability_status = _capability_status()
-
-    if provenance is not None:
-        sandbox_state = "generated"
-    elif has_user_content:
-        sandbox_state = "user-managed"
-    else:
-        sandbox_state = "missing"
+    sandbox_state = classify_sandbox_state()
 
     last_validation = _last_validation_outcome()
 
     # Gate logic:
-    # - missing             -> block (override wins)
+    # - pending             -> block (override wins), but Phase 1c has not run yet
+    # - missing             -> block (override wins), because Phase 1c should have created it
     # - generated + failed  -> block (override wins)
     # - generated + passed  -> pass
     # - generated + mixed   -> pass with warning (some tiers skipped)
@@ -618,6 +629,9 @@ def cmd_status(args: argparse.Namespace) -> int:
     if allow_no_sandbox:
         gate_pass = True
         gate_reason = "override (CODECOME_ALLOW_NO_SANDBOX=1)"
+    elif sandbox_state == "pending":
+        gate_pass = False
+        gate_reason = "sandbox bootstrap pending; run make phase-1"
     elif sandbox_state == "missing":
         gate_pass = False
         gate_reason = "sandbox is missing"
@@ -666,7 +680,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(f"  {C.DIM}capabilities:{C.RESET}")
         for name in ("setup", "start", "check", "build", "test", "stop", "shell", "logs", "clean", "reset"):
             status = capability_status[name]
-            state = "ok" if status.get("satisfied") else "missing"
+            state = "ok" if status.get("satisfied") else "pending" if sandbox_state == "pending" else "missing"
             print(f"    {name:<6} {state:<7} {status['path']}")
         if gate_pass:
             print(C.ok(f"Phase 2 sandbox gate would pass ({gate_reason})."))
