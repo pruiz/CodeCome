@@ -98,7 +98,8 @@ CodeCome runs on top of [OpenCode](https://opencode.ai), an open-source AI codin
 3. **Python 3.10+** — needed for workspace tooling (`make venv` creates a local virtualenv).
 4. **GNU Make** — drives the workflow.
 5. **Docker** — required for the sandboxed validation environment.
-6. **Optional: exploit recording tools** — for Phase 5 visual evidence:
+6. **Optional: CodeQL CLI** — for static analysis integration. Managed install via `make init`, or set `CODEQL_SKIP=1` to skip.
+7. **Optional: exploit recording tools** — for Phase 5 visual evidence:
    - `asciinema` — terminal recordings.
    - `agg` — renders `.cast` files to GIFs (CodeCome falls back to a Docker container if missing).
    - `ffmpeg` and `xvfb` (or `xvfb-run`) — for GUI/browser exploits.
@@ -121,6 +122,7 @@ A few things to know up front about `src/`:
 When you're ready:
 
     make venv                       # set up the local Python virtualenv
+    make init                       # install CodeQL CLI (optional, skip with CODEQL_SKIP=1)
     make check                      # sanity-check the workspace
     make phase-1                    # recon + sandbox bootstrap
     make phase-2                    # generate candidate findings
@@ -135,7 +137,7 @@ There are convenience targets too — `make validate-all`, `make exploit-all`, `
 
 Six phases. Each one is a `make` target. Each one writes to disk.
 
-1. **Recon (`make phase-1`)** — agent reads `src/`, infers the target type, languages, build model, attack surface, and writes notes under `itemdb/notes/`. Also bootstraps a Docker sandbox suited to the stack.
+1. **Recon (`make phase-1`)** — runs as three subphases: (1a) target profiling and CodeQL plan generation, (1b) CodeQL-assisted reconnaissance using static analysis signals, and (1c) sandbox bootstrap. Writes notes under `itemdb/notes/` including a file-risk-index informed by CodeQL findings.
 2. **Hypothesis (`make phase-2`)** — agent writes candidate findings under `itemdb/findings/PENDING/`. Each one points at specific code, sources, sinks, and a trust boundary.
 3. **Counter-analysis (`make phase-3`)** — a reviewer pass tries to disprove or deduplicate findings. Weak ones move to `REJECTED/`, repeats to `DUPLICATE/`.
 4. **Validation (`make phase-4 FINDING=CC-XXXX`)** — one finding at a time, in the sandbox. Build the target, write a small PoC, capture evidence, decide CONFIRMED or REJECTED.
@@ -158,6 +160,16 @@ stateDiagram-v2
 ```
 
 Phases 1–3 are batch operations. Phases 4 and 5 are run **per finding** — that's intentional. One finding at a time keeps evidence traceable and lets you mix model choices, prompt overrides, and rerun loops without polluting the audit.
+
+## CodeQL integration
+
+CodeCome integrates GitHub's [CodeQL](https://codeql.github.com/) as an optional first-class static-analysis capability during Phase 1.
+
+- **Managed install** — `make init` (or `tools/codeql.py install`) downloads and manages the CodeQL CLI bundle under `.tools/codeql/`.
+- **Automatic language detection** — Phase 1a generates `itemdb/notes/codeql-plan.yml` with detected languages and build modes.
+- **SARIF normalization** — raw CodeQL results are normalized into `file-signals.yml`, which feeds into the `file-risk-index.yml` used by Phase 1b recon.
+- **Configuration** — controlled via `codecome.yml` under `audit.static_analysis.codeql` (enable/disable, pack selection, fail policy, timeouts).
+- **Opt-out** — set `CODEQL_SKIP=1` or `enabled: false` in config to skip CodeQL entirely.
 
 ## Who is this for?
 

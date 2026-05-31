@@ -396,6 +396,7 @@ try:
             self.thinking_on = thinking_on
             from codecome.transcript import Transcript
             self.transcript = transcript if transcript is not None else Transcript.null()
+            # TODO: refactor event recording/dedup — consider separate sinks (see GH issue)
             from codecome.recording import EventRecorder
             self.event_recorder = EventRecorder(
                 self.transcript,

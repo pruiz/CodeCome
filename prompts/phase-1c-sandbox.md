@@ -111,7 +111,7 @@ Read the following files (all paths are relative to the project/workspace root):
 ## Important rules
 
 - Do not modify files under `src/`.
-- Do not silently overwrite a `sandbox/` that lacks `CODECOME-GENERATED.md`. If the sandbox already works, move on; if it needs replacement, inform the user, halt with the halt protocol, and let them re-run with `--force` (which moves the prior content to `sandbox/.backup-<timestamp>/`).
+- Do not overwrite a `sandbox/` that lacks `CODECOME-GENERATED.md`. If the sandbox already works, move on; if it needs replacement, halt with the halt protocol and inform the user to re-run with `--force` (which moves the prior content to `sandbox/.backup-<timestamp>/`).
 - Do not generate vulnerability findings.
 
 ## Final response
