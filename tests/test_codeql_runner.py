@@ -9,7 +9,16 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
 from codeql.config import CodeQLConfig
-from codeql.runner import _create_database, _lookup_build, _lookup_timeout, _manifest, run_codeql, write_manifest
+from codeql.runner import (
+    _create_database,
+    _ensure_query_packs_available,
+    _lookup_build,
+    _lookup_timeout,
+    _manifest,
+    _run_analyze,
+    run_codeql,
+    write_manifest,
+)
 
 
 def test_manifest_completed() -> None:
@@ -146,6 +155,111 @@ def test_create_database_creates_parent_dir(tmp_path: Path) -> None:
     assert mock_popen.call_args.args[0][3] == str(db_dir)
     assert "--build-mode=none" in mock_popen.call_args.args[0]
     assert mock_popen.call_args.kwargs["stdout"] == subprocess.DEVNULL
+
+
+def test_create_database_uses_workspace_common_cache(tmp_path: Path) -> None:
+    db_dir = tmp_path / "itemdb" / "codeql" / "databases" / "python"
+    cache_dir = tmp_path / ".cache" / "codeql"
+    mock_process = MagicMock()
+    mock_process.returncode = 0
+    mock_process.wait.return_value = 0
+    mock_process.stderr = []
+
+    with patch("codeql.runner.subprocess.Popen", return_value=mock_process) as mock_popen:
+        ok, msg = _create_database(
+            tmp_path / "codeql",
+            "python",
+            "./src",
+            db_dir,
+            "none",
+            None,
+            [],
+            cache_dir,
+        )
+
+    assert ok is True
+    assert msg == ""
+    assert f"--common-caches={cache_dir}" in mock_popen.call_args.args[0]
+    assert cache_dir.is_dir()
+
+
+def test_run_analyze_uses_workspace_common_cache(tmp_path: Path) -> None:
+    db_dir = tmp_path / "itemdb" / "codeql" / "databases" / "root" / "python"
+    sarif_path = tmp_path / "itemdb" / "codeql" / "sarif" / "root.python.official.sarif"
+    cache_dir = tmp_path / ".cache" / "codeql"
+    mock_process = MagicMock()
+    mock_process.returncode = 0
+    mock_process.wait.return_value = 0
+    mock_process.stderr = []
+
+    with patch("codeql.runner.subprocess.Popen", return_value=mock_process) as mock_popen:
+        ok, msg = _run_analyze(
+            tmp_path / "codeql",
+            db_dir,
+            ["codeql/python-queries"],
+            sarif_path,
+            cache_dir,
+        )
+
+    assert ok is True
+    assert msg == ""
+    cmd = mock_popen.call_args.args[0]
+    assert f"--common-caches={cache_dir}" in cmd
+    assert cmd[-1] == "codeql/python-queries"
+    assert cache_dir.is_dir()
+
+
+def test_query_pack_resolution_uses_workspace_common_cache(tmp_path: Path) -> None:
+    binary = tmp_path / "codeql"
+    cache_dir = tmp_path / ".cache" / "codeql"
+    config = CodeQLConfig(enabled=True, fail_policy="soft", abs_cache_dir=cache_dir)
+    commands: list[list[str]] = []
+
+    def fake_run_quiet(cmd, timeout):
+        commands.append(cmd)
+        return True, ""
+
+    with patch("codeql.runner._run_quiet", side_effect=fake_run_quiet):
+        ok, msg = _ensure_query_packs_available(binary, ["codeql/python-queries"], "official", config)
+
+    assert ok is True
+    assert msg == ""
+    assert commands == [[
+        str(binary),
+        "resolve",
+        "queries",
+        "--format=json",
+        f"--common-caches={cache_dir}",
+        "--",
+        "codeql/python-queries",
+    ]]
+    assert cache_dir.is_dir()
+
+
+def test_query_pack_download_uses_workspace_common_cache(tmp_path: Path) -> None:
+    binary = tmp_path / "codeql"
+    cache_dir = tmp_path / ".cache" / "codeql"
+    config = CodeQLConfig(enabled=True, fail_policy="soft", abs_cache_dir=cache_dir)
+    commands: list[list[str]] = []
+
+    def fake_run_quiet(cmd, timeout):
+        commands.append(cmd)
+        return (False, "pack missing") if len(commands) == 1 else (True, "")
+
+    with patch("codeql.runner._run_quiet", side_effect=fake_run_quiet):
+        ok, msg = _ensure_query_packs_available(binary, ["codeql/python-queries"], "official", config)
+
+    assert ok is True
+    assert msg == ""
+    assert commands[1] == [
+        str(binary),
+        "pack",
+        "download",
+        f"--common-caches={cache_dir}",
+        "--",
+        "codeql/python-queries",
+    ]
+    assert commands[2] == commands[0]
 
 
 def test_create_database_manual_build_mode_and_command(tmp_path: Path) -> None:
