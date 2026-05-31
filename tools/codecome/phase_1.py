@@ -11,6 +11,7 @@ reused across all three subphase sessions.
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -224,6 +225,89 @@ def _check_codeql_artifacts(console: Any) -> int:
             print(C.info(label))
 
     return 0
+
+
+def _load_codeql_yaml(path: Path) -> dict[str, Any]:
+    """Load a CodeQL YAML artifact as a mapping, returning {} on absence/errors."""
+    if not path.is_file():
+        return {}
+    try:
+        from codeql.packs import load_yaml_mapping
+
+        return load_yaml_mapping(path, what=path.name)
+    except Exception:
+        return {}
+
+
+def _codeql_repair_needed(output_dir: Path, plan_path: Path) -> bool:
+    """Return whether a failed CodeQL run should get one model repair attempt."""
+    manifest = _load_codeql_yaml(output_dir / "run-manifest.yml")
+    status = manifest.get("status")
+    if status not in {"soft-failed", "failed"}:
+        return False
+
+    failures = manifest.get("failures", [])
+    if not isinstance(failures, list):
+        return False
+    if not any("Database create failed" in str(failure) for failure in failures):
+        return False
+
+    plan = _load_codeql_yaml(plan_path)
+    for unit in plan.get("analysis_units", []) if isinstance(plan.get("analysis_units"), list) else []:
+        languages = unit.get("languages", []) if isinstance(unit, dict) else []
+        if not isinstance(languages, list):
+            continue
+        for language in languages:
+            if isinstance(language, dict) and language.get("build_mode") == "autobuild":
+                return True
+    return False
+
+
+def _run_codeql_repair_if_needed(
+    *,
+    args: Any,
+    console: Any,
+    rendering_ctx: Any,
+    runner: ServerRunner,
+    base_url: str,
+) -> bool:
+    """Ask the model to repair CodeQL build instructions after autobuild failure."""
+    from codeql.config import resolve_config as _resolve_codeql_config
+
+    max_retries = int(os.environ.get("CODEQL_REPAIR_RETRIES", "1"))
+    if max_retries <= 0:
+        return False
+
+    config = _resolve_codeql_config()
+    plan_path = ROOT / "itemdb" / "notes" / "codeql-plan.yml"
+    if not _codeql_repair_needed(config.abs_output_dir, plan_path):
+        return False
+
+    msg = "CodeQL autobuild failed; asking the model to repair manual build instructions."
+    if HAVE_RICH:
+        from rich.text import Text
+        console.print(Text(msg, style="bold yellow"))
+    else:
+        import _colors as C
+        print(C.warn(msg))
+
+    for attempt in range(1, max_retries + 1):
+        rc = _run_subphase(
+            args=args,
+            console=console,
+            rendering_ctx=rendering_ctx,
+            runner=runner,
+            base_url=base_url,
+            phase_id="1-codeql-repair",
+            label=f"CodeQL Build Repair ({attempt}/{max_retries})",
+            agent="recon",
+            prompt_file="prompts/phase-1-codeql-repair.md",
+        )
+        if rc != 0:
+            continue
+        return True
+
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -546,6 +630,16 @@ def run_phase_1(
     rc = _run_codeql(console)
     if rc != 0:
         return rc
+    if _run_codeql_repair_if_needed(
+        args=args,
+        console=console,
+        rendering_ctx=rendering_ctx,
+        runner=runner,
+        base_url=base_url,
+    ):
+        rc = _run_codeql(console)
+        if rc != 0:
+            return rc
     rc = _check_codeql_artifacts(console)
     if rc != 0:
         return rc

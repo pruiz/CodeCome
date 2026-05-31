@@ -167,3 +167,103 @@ def test_check_codeql_artifacts_failed_hard_policy_returns_1(tmp_path: Path, cap
         p1.HAVE_RICH = saved
 
     assert rc == 1
+
+
+def test_codeql_repair_needed_for_autobuild_database_failure(tmp_path: Path) -> None:
+    _ensure_codecome_package()
+    from codecome.phase_1 import _codeql_repair_needed
+
+    output_dir = tmp_path / "itemdb" / "codeql"
+    output_dir.mkdir(parents=True)
+    (output_dir / "run-manifest.yml").write_text(
+        yaml.safe_dump(
+            {
+                "status": "soft-failed",
+                "failures": ["Database create failed for c-cpp:\nNo supported build system detected."],
+            }
+        ),
+        encoding="utf-8",
+    )
+    plan_path = tmp_path / "itemdb" / "notes" / "codeql-plan.yml"
+    plan_path.parent.mkdir(parents=True)
+    plan_path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 1,
+                "analysis_units": [
+                    {
+                        "id": "native",
+                        "path": "./src/native",
+                        "languages": [
+                            {"id": "c-cpp", "build_mode": "autobuild", "packs": ["official"]}
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert _codeql_repair_needed(output_dir, plan_path) is True
+
+
+def test_codeql_repair_not_needed_after_manual_database_failure(tmp_path: Path) -> None:
+    _ensure_codecome_package()
+    from codecome.phase_1 import _codeql_repair_needed
+
+    output_dir = tmp_path / "itemdb" / "codeql"
+    output_dir.mkdir(parents=True)
+    (output_dir / "run-manifest.yml").write_text(
+        yaml.safe_dump(
+            {
+                "status": "soft-failed",
+                "failures": ["Database create failed for c-cpp:\nmanual build failed."],
+            }
+        ),
+        encoding="utf-8",
+    )
+    plan_path = tmp_path / "itemdb" / "notes" / "codeql-plan.yml"
+    plan_path.parent.mkdir(parents=True)
+    plan_path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 1,
+                "analysis_units": [
+                    {
+                        "id": "native",
+                        "path": "./src/native",
+                        "languages": [
+                            {"id": "c-cpp", "build_mode": "manual", "build_command": "make", "packs": ["official"]}
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert _codeql_repair_needed(output_dir, plan_path) is False
+
+
+def test_phase_1_reruns_codeql_after_repair() -> None:
+    _ensure_codecome_package()
+    import codecome.phase_1 as p1
+
+    saved = p1.HAVE_RICH
+    p1.HAVE_RICH = False
+    try:
+        with patch.object(p1, "count_findings_snapshot", return_value={}), \
+             patch.object(p1, "_run_subphase", return_value=0) as subphase, \
+             patch.object(p1, "check_phase_1a", return_value=0), \
+             patch.object(p1, "check_phase_1b", return_value=0), \
+             patch.object(p1, "check_phase_1c", return_value=0), \
+             patch.object(p1, "_run_codeql", return_value=0) as run_codeql, \
+             patch.object(p1, "_run_codeql_repair_if_needed", return_value=True), \
+             patch.object(p1, "_check_codeql_artifacts", return_value=0):
+            rc = p1.run_phase_1(object(), None, None, object(), "http://127.0.0.1")
+    finally:
+        p1.HAVE_RICH = saved
+
+    assert rc == 0
+    assert run_codeql.call_count == 2
+    assert subphase.call_count == 3

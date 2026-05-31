@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -144,6 +145,7 @@ def test_create_database_creates_parent_dir(tmp_path: Path) -> None:
     assert db_dir.parent.is_dir()
     assert mock_popen.call_args.args[0][3] == str(db_dir)
     assert "--build-mode=none" in mock_popen.call_args.args[0]
+    assert mock_popen.call_args.kwargs["stdout"] == subprocess.DEVNULL
 
 
 def test_create_database_manual_build_mode_and_command(tmp_path: Path) -> None:

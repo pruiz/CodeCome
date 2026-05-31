@@ -164,6 +164,83 @@ def test_pipeline_soft_failed_continues(tmp_path: Path) -> None:
     # Should not raise
 
 
+def test_pipeline_normalize_failure_marks_failed_for_hard_policy(tmp_path: Path) -> None:
+    config = _make_config(tmp_path)
+    config.fail_policy = "hard"
+    (config.abs_output_dir / "selected-query-packs.yml").write_text(
+        "schema_version: 1\nanalysis_units: []\n",
+        encoding="utf-8",
+    )
+    sarif_dir = config.abs_output_dir / "sarif"
+    sarif_dir.mkdir(parents=True)
+    (sarif_dir / "root.python.official.sarif").write_text("{}", encoding="utf-8")
+
+    manifest = {
+        "schema_version": 1,
+        "phase": "phase-1",
+        "status": "completed",
+        "codeql_enabled": True,
+        "codeql_version": "2.18.0",
+        "started_at": "2025-01-01T00:00:00Z",
+        "finished_at": "2025-01-01T00:01:00Z",
+        "plan_file": "itemdb/notes/codeql-plan.yml",
+        "pack_catalog": "codeql-pack-catalog.yml",
+        "fail_policy": "hard",
+        "languages": ["root:python"],
+        "warnings": [],
+        "failures": [],
+    }
+
+    with patch("codeql.runner.run_codeql", return_value=manifest), \
+         patch("codeql.normalize.normalize_all", side_effect=RuntimeError("bad sarif")), \
+         patch("codeql.pipeline.ROOT", tmp_path):
+        from codeql.pipeline import run_full_pipeline
+
+        result = run_full_pipeline(config)
+
+    assert result["status"] == "failed"
+    assert "SARIF normalization failed: bad sarif" in result["warnings"]
+    data = yaml.safe_load((config.abs_output_dir / "run-manifest.yml").read_text())
+    assert data["status"] == "failed"
+
+
+def test_pipeline_normalize_failure_marks_soft_failed_for_soft_policy(tmp_path: Path) -> None:
+    config = _make_config(tmp_path)
+    (config.abs_output_dir / "selected-query-packs.yml").write_text(
+        "schema_version: 1\nanalysis_units: []\n",
+        encoding="utf-8",
+    )
+    sarif_dir = config.abs_output_dir / "sarif"
+    sarif_dir.mkdir(parents=True)
+    (sarif_dir / "root.python.official.sarif").write_text("{}", encoding="utf-8")
+
+    manifest = {
+        "schema_version": 1,
+        "phase": "phase-1",
+        "status": "completed",
+        "codeql_enabled": True,
+        "codeql_version": "2.18.0",
+        "started_at": "2025-01-01T00:00:00Z",
+        "finished_at": "2025-01-01T00:01:00Z",
+        "plan_file": "itemdb/notes/codeql-plan.yml",
+        "pack_catalog": "codeql-pack-catalog.yml",
+        "fail_policy": "soft",
+        "languages": ["root:python"],
+        "warnings": [],
+        "failures": [],
+    }
+
+    with patch("codeql.runner.run_codeql", return_value=manifest), \
+         patch("codeql.normalize.normalize_all", side_effect=RuntimeError("bad sarif")), \
+         patch("codeql.pipeline.ROOT", tmp_path):
+        from codeql.pipeline import run_full_pipeline
+
+        result = run_full_pipeline(config)
+
+    assert result["status"] == "soft-failed"
+    assert "SARIF normalization failed: bad sarif" in result["warnings"]
+
+
 def test_record_skipped_run_writes_manifest_and_summary(tmp_path: Path) -> None:
     config = _make_config(tmp_path)
     config.enabled = False
