@@ -189,6 +189,44 @@ def test_codeql_plan_validation_rejects_absolute_tmp_in_build_command(tmp_path: 
     assert "absolute /tmp/" in output
 
 
+def test_codeql_plan_validation_rejects_shell_operators_in_build_command(tmp_path: Path) -> None:
+    import codecome.phase_1 as p1
+
+    _write_manual_plan(tmp_path, "mkdir -p out && gcc main.c -o out/app")
+
+    with patch.object(p1, "ROOT", tmp_path):
+        rc, output = p1._validate_codeql_plan_for_repair()
+
+    assert rc == 1
+    assert "shell operator" in output
+    assert "helper script" in output
+
+
+def test_codeql_plan_validation_rejects_multiline_and_comments_in_build_command(tmp_path: Path) -> None:
+    import codecome.phase_1 as p1
+
+    _write_manual_plan(tmp_path, "# build\nmkdir -p out\ngcc main.c -o out/app")
+
+    with patch.object(p1, "ROOT", tmp_path):
+        rc, output = p1._validate_codeql_plan_for_repair()
+
+    assert rc == 1
+    assert "multi-line" in output
+    assert "shell comments" in output
+
+
+def test_codeql_plan_validation_rejects_bash_c_build_command(tmp_path: Path) -> None:
+    import codecome.phase_1 as p1
+
+    _write_manual_plan(tmp_path, "bash -c 'mkdir -p out && gcc main.c -o out/app'")
+
+    with patch.object(p1, "ROOT", tmp_path):
+        rc, output = p1._validate_codeql_plan_for_repair()
+
+    assert rc == 1
+    assert "bash -c" in output
+
+
 def test_codeql_plan_validation_checks_helper_from_analysis_root(tmp_path: Path) -> None:
     import codecome.phase_1 as p1
 

@@ -524,6 +524,81 @@ def check_codeql_status() -> int:
     return exit_code
 
 
+def check_sandbox_status() -> None:
+    """Print sandbox state, gate result, and capability summary."""
+    import importlib
+
+    try:
+        sb = importlib.import_module("sandbox-bootstrap")
+    except Exception:
+        print()
+        print(C.header("Sandbox:"))
+        print(C.warn("sandbox-bootstrap module unavailable"))
+        return
+
+    print()
+    print(C.header("Sandbox:"))
+
+    provenance = sb.read_provenance()
+    has_user_content = sb.sandbox_has_user_content()
+    last_validation = sb._last_validation_outcome()
+    allow_no_sandbox = bool(os.environ.get("CODECOME_ALLOW_NO_SANDBOX"))
+
+    # Determine state
+    if provenance is not None:
+        sandbox_state = "generated"
+    elif has_user_content:
+        sandbox_state = "user-managed"
+    else:
+        sandbox_state = "missing"
+
+    # Gate logic (mirrors cmd_status)
+    if allow_no_sandbox:
+        gate_pass = True
+        gate_reason = "override (CODECOME_ALLOW_NO_SANDBOX=1)"
+    elif sandbox_state == "missing":
+        gate_pass = False
+        gate_reason = "sandbox is missing"
+    elif sandbox_state == "generated" and last_validation == "failed":
+        gate_pass = False
+        gate_reason = "last validation failed"
+    elif sandbox_state == "generated" and last_validation == "skipped":
+        gate_pass = False
+        gate_reason = "last validation has no real outcomes (all tiers skipped)"
+    else:
+        gate_pass = True
+        if sandbox_state == "user-managed":
+            gate_reason = "sandbox is user-managed (validation not enforced)"
+        elif last_validation is None:
+            gate_reason = "no validation run on record"
+        elif last_validation == "passed":
+            gate_reason = "last validation passed"
+        elif last_validation == "mixed":
+            gate_reason = "last validation passed (some tiers skipped)"
+        else:
+            gate_reason = f"last validation: {last_validation}"
+
+    # Print summary
+    state_detail = sandbox_state
+    if sandbox_state == "generated" and provenance:
+        state_detail = "generated (provenance present)"
+    print(f"  {C.DIM}state:{C.RESET}            {state_detail}")
+    print(f"  {C.DIM}last validation:{C.RESET}  {last_validation or '-'}")
+    if gate_pass:
+        print(C.ok(f"  Phase 2 gate:     pass ({gate_reason})"))
+    else:
+        print(C.warn(f"  Phase 2 gate:     block ({gate_reason})"))
+
+    # Capabilities
+    capability_status = sb._capability_status()
+    print(f"  {C.DIM}capabilities:{C.RESET}")
+    for name in ("setup", "start", "check", "build", "test", "stop", "shell", "logs", "clean", "reset"):
+        status = capability_status[name]
+        satisfied = status.get("satisfied", False)
+        state_str = C.ok("ok") if satisfied else C.warn("missing")
+        print(f"    {name:<8} {state_str}  {status['path']}")
+
+
 def command_check(_: argparse.Namespace) -> int:
     missing = []
 
@@ -556,6 +631,7 @@ def command_check(_: argparse.Namespace) -> int:
 
     check_phase_progress()
     check_exit = check_codeql_status()
+    check_sandbox_status()
 
     print()
 

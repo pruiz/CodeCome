@@ -63,6 +63,7 @@ def run_codeql(config: CodeQLConfig, progress: Callable[[str], None] | None = No
     failures: list[str] = []
     language_ids: list[str] = []
     analysis_units: list[str] = []
+    analyzed_profiles = 0
 
     for unit_entry in resolved["analysis_units"]:
         unit_id = unit_entry["id"]
@@ -104,12 +105,26 @@ def run_codeql(config: CodeQLConfig, progress: Callable[[str], None] | None = No
                 packs = profile_packs.get(profile, [])
                 if not packs:
                     continue
+                ok, msg = _ensure_query_packs_available(binary_path, packs, profile, config, progress)
+                if not ok:
+                    if config.fail_policy == "soft" and profile != "official":
+                        warnings.append(msg)
+                        _progress(progress, f"CodeQL: {msg}")
+                        continue
+                    failures.append(msg)
+                    return _manifest(_tool_failure_status(config), now_utc, config, [version], warnings, failures, language_ids, analysis_units)
+
                 sarif_path = sarif_dir / f"{unit_id}.{language_id}.{profile}.sarif"
                 _progress(progress, f"CodeQL: analyzing {unit_id}:{language_id} profile {profile}")
                 ok, msg = _run_analyze(binary_path, db_dir, packs, sarif_path, timeout=analyze_timeout, progress=progress)
                 if not ok:
+                    if config.fail_policy == "soft" and profile != "official":
+                        warnings.append(msg)
+                        _progress(progress, f"CodeQL: {msg}")
+                        continue
                     failures.append(msg)
                     return _manifest(_tool_failure_status(config), now_utc, config, [version], warnings, failures, language_ids, analysis_units)
+                analyzed_profiles += 1
                 _progress(progress, f"CodeQL: SARIF written {_rel(sarif_path)}")
 
     if failures:
@@ -119,6 +134,10 @@ def run_codeql(config: CodeQLConfig, progress: Callable[[str], None] | None = No
         return _manifest("skipped", now_utc, config, [version], warnings,
                          failures=["No languages resolved from analysis plan."],
                          languages=language_ids, analysis_units=analysis_units)
+
+    if analyzed_profiles == 0:
+        failures.append("No CodeQL query profiles ran successfully.")
+        return _manifest(_tool_failure_status(config), now_utc, config, [version], warnings, failures, language_ids, analysis_units)
 
     return _manifest("completed", now_utc, config, [version], warnings, failures, language_ids, analysis_units)
 
@@ -236,11 +255,64 @@ def _run_analyze(
         str(db_dir),
         "--format=sarif-latest",
         f"--output={sarif_path}",
-        "--no-sarif-add-query-help",
+        "--sarif-include-query-help=never",
     ] + packs
 
     return _run_with_progress(cmd, f"Analyze timed out for {db_dir.name} after {timeout}s",
                               f"Analyze failed for {db_dir.name}", timeout, progress)
+
+
+def _ensure_query_packs_available(
+    binary: Path,
+    packs: list[str],
+    profile: str,
+    config: CodeQLConfig,
+    progress: Callable[[str], None] | None = None,
+) -> tuple[bool, str]:
+    """Resolve query packs, downloading registry packs once when missing."""
+    ok, detail = _run_quiet([str(binary), "resolve", "queries", "--format=json", "--", *packs], timeout=120)
+    if ok:
+        return True, ""
+
+    downloadable = [pack for pack in packs if _is_registry_pack_ref(pack)]
+    for pack in downloadable:
+        _progress(progress, f"CodeQL: downloading query pack {pack}")
+        download_ok, download_detail = _run_quiet([str(binary), "pack", "download", pack], timeout=300)
+        if not download_ok:
+            detail = download_detail or detail
+            return False, _pack_failure_message(profile, packs, detail, config)
+
+    if downloadable:
+        ok, detail = _run_quiet([str(binary), "resolve", "queries", "--format=json", "--", *packs], timeout=120)
+        if ok:
+            return True, ""
+
+    return False, _pack_failure_message(profile, packs, detail, config)
+
+
+def _is_registry_pack_ref(pack: str) -> bool:
+    """Return whether a pack reference can be downloaded from a registry."""
+    if pack.startswith((".", "/")):
+        return False
+    return "/" in pack
+
+
+def _pack_failure_message(profile: str, packs: list[str], detail: str, config: CodeQLConfig) -> str:
+    policy = "required official profile" if profile == "official" else f"optional profile {profile!r}"
+    action = "failing CodeQL step" if config.fail_policy == "hard" or profile == "official" else "skipping profile"
+    suffix = f":\n{detail}" if detail else ""
+    return f"CodeQL query packs unavailable for {policy} ({', '.join(packs)}); {action}{suffix}"
+
+
+def _run_quiet(cmd: list[str], timeout: int) -> tuple[bool, str]:
+    try:
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=timeout)
+    except Exception as exc:
+        return False, str(exc)
+    if result.returncode == 0:
+        return True, ""
+    detail = (result.stderr or result.stdout).strip()
+    return False, detail
 
 
 def _run_with_progress(

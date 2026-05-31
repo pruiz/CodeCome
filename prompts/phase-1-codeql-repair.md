@@ -52,6 +52,10 @@ If the manual command is simple enough, put it directly in `build_command` inste
 
 - CodeQL runs the manual `build_command` from the analysis unit source path.
 - CodeQL does not run `build_command` from the workspace root or from the helper script directory.
+- CodeQL tokenizes `build_command` as argv; it does not execute it as a shell script.
+- Do not put shell control syntax in `build_command`: no `&&`, `||`, `;`, pipes, comments, multi-line commands, or `bash -c` / `sh -c` snippets.
+- Good direct commands: `make`, `make -C challenge`, `gcc main.c -o app`.
+- If more than one command is needed, create a helper script under workspace-relative `tmp/` and set `build_command` to invoke it from the analysis unit source path, for example `bash ../../tmp/codeql-build.sh`.
 - Prefer commands that are deterministic and non-interactive.
 - Prefer commands that avoid modifying `src/` when possible.
 - If existing target build files naturally write object files or binaries into `src/`, document that limitation in the `notes` field.

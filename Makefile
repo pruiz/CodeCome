@@ -1,7 +1,7 @@
 # Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later OR AGPL-3.0-or-later
 
-.PHONY: help init venv venv-check check status next-id frontmatter tests test-parity itemdb-reset codeql-clean index report
+.PHONY: help init venv env-check check status next-id frontmatter tests test-parity itemdb-reset codeql-clean index report
 .PHONY: findings findings-create findings-move findings-evidence findings-package
 .PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all opencode-raw
 .PHONY: sandbox-setup sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-reset sandbox-build sandbox-test
@@ -138,29 +138,39 @@ init:
 	@$(PYTHON) -m pip install --no-input -r requirements.txt || { printf "$(BOLD)$(RED)[FAIL]$(RESET) requirements install failed\n"; exit 1; }
 	@printf "$(BOLD)$(GREEN)[OK]$(RESET) Python dependencies installed\n\n"
 	@printf "$(BOLD)$(CYAN)==> [4/4] Installing managed CodeQL CLI$(RESET)\n"
+	@rm -f .tools/codeql/.disabled
 	@if [ "$$CODEQL" != "0" ] && [ "$$CODEQL_SKIP_INSTALL" != "1" ]; then \
-		$(PYTHON) tools/codeql.py install || { printf "$(BOLD)$(RED)[FAIL]$(RESET) managed CodeQL install failed\n"; exit 1; }; \
-		printf "$(BOLD)$(GREEN)[OK]$(RESET) Managed CodeQL CLI ready\n"; \
+		if $(PYTHON) -c "import yaml,sys; cfg=yaml.safe_load(open('codecome.yml')); sys.exit(0 if cfg.get('codeql',{}).get('enabled',True) else 1)" 2>/dev/null; then \
+			$(PYTHON) tools/codeql.py install || { printf "$(BOLD)$(RED)[FAIL]$(RESET) managed CodeQL install failed\n"; exit 1; }; \
+			printf "$(BOLD)$(GREEN)[OK]$(RESET) Managed CodeQL CLI ready\n"; \
+		else \
+			mkdir -p .tools/codeql && touch .tools/codeql/.disabled; \
+			printf "$(BOLD)$(YELLOW)[SKIP]$(RESET) CodeQL disabled in codecome.yml\n"; \
+		fi; \
 	else \
+		mkdir -p .tools/codeql && touch .tools/codeql/.disabled; \
 		printf "$(BOLD)$(YELLOW)[SKIP]$(RESET) Managed CodeQL install skipped (CODEQL=0 or CODEQL_SKIP_INSTALL=1)\n"; \
 	fi
 	@printf "\n$(BOLD)$(GREEN)Setup complete.$(RESET)\n"
 
 venv: init
 
-venv-check:
+env-check:
 	@test -x "$(PYTHON)" || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) Missing repo virtualenv at .venv\n\nRun:\n\n    make init\n\n" && exit 1)
 	@$(PYTHON) -c "import yaml, rich" >/dev/null 2>&1 || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) .venv is missing required Python packages\n\nRun:\n\n    make init\n\nIf you updated requirements, rerun the same command to resync .venv.\n\n" && exit 1)
+	@if [ ! -f .tools/codeql/.disabled ]; then \
+		test -x .tools/codeql/current/codeql || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) CodeQL is enabled but the managed binary is missing.\n\nRun:\n\n    make init\n\nOr to explicitly disable CodeQL:\n\n    CODEQL=0 make init\n\n" && exit 1); \
+	fi
 
 # ---------------------------------------------------------------------------
 # Workflow phases
 # ---------------------------------------------------------------------------
 
-phase-1: venv-check
+phase-1: env-check
 	@$(PYTHON) tools/gate-check.py 1
 	@$(PYTHON) tools/run-agent.py --phase 1 --label "Phase 1: Reconnaissance" --agent recon
 
-phase-2: venv-check
+phase-2: env-check
 	@$(PYTHON) tools/gate-check.py 2
 	@$(PYTHON) tools/sandbox-bootstrap.py status --gate || ( \
 		printf "\n$(BOLD)$(YELLOW)[BLOCK]$(RESET) Phase 2 sandbox gate failed.\n" ; \
@@ -169,31 +179,31 @@ phase-2: venv-check
 		exit 1 )
 	@$(PYTHON) tools/run-agent.py --phase 2 --label "Hypothesis Generation" --agent auditor --prompt-file prompts/phase-2-audit.md
 
-phase-3: venv-check
+phase-3: env-check
 	@$(PYTHON) tools/gate-check.py 3
 	@$(PYTHON) tools/run-agent.py --phase 3 --label "Counter-analysis" --agent reviewer --prompt-file prompts/phase-3-review.md
 
-phase-4: venv-check
+phase-4: env-check
 	@test -n "$(FINDING)" || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) Missing required FINDING argument for Phase 4 (Validation).\n\nSpecify which finding you want to validate:\n\n    $(BOLD)make phase-4 FINDING=CC-0001$(RESET)\n\nTo list available pending findings: $(BOLD)make findings STATUS=PENDING$(RESET)\n\n" && exit 1)
 	@$(PYTHON) tools/gate-check.py 4 $(FINDING)
 	@$(PYTHON) tools/run-agent.py --phase 4 --label "Validation" --agent validator --prompt-file prompts/phase-4-validate.md --finding "$(FINDING)"
 
-phase-5: venv-check
+phase-5: env-check
 	@test -n "$(FINDING)" || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) Missing required FINDING argument for Phase 5 (Exploitation).\n\nSpecify which finding you want to exploit:\n\n    $(BOLD)make phase-5 FINDING=CC-0001$(RESET)\n\nTo list available confirmed findings: $(BOLD)make findings STATUS=CONFIRMED$(RESET)\n\n" && exit 1)
 	@$(PYTHON) tools/gate-check.py 5 $(FINDING)
 	@$(PYTHON) tools/run-agent.py --phase 5 --label "Exploit Development" --agent exploiter --prompt-file prompts/phase-5-exploit.md --finding "$(FINDING)"
 
-phase-6: venv-check
+phase-6: env-check
 	@$(PYTHON) tools/gate-check.py 6
 	@$(PYTHON) tools/run-agent.py --phase 6 --label "Reporting" --agent reporter --prompt-file prompts/phase-6-report.md
 
-chat: venv-check
+chat: env-check
 	@$(PYTHON) tools/run-agent.py --chat --label "Interactive Chat" --agent $(or $(AGENT),chat) --prompt-file prompts/chat-initial.md $(if $(DEBUG),--debug,)
 
-list-risk-files: venv-check
+list-risk-files: env-check
 	@$(PYTHON) tools/list-risk-files.py
 
-sweep: venv-check
+sweep: env-check
 	@if [ -n "$(FILE)" ]; then \
 		$(PYTHON) tools/run-sweep.py --file "$(FILE)"; \
 	else \
@@ -209,7 +219,7 @@ opencode-raw:
 	@test -r "$(PROMPT_FILE)" || (echo "PROMPT_FILE must be a readable file. Usage: make opencode-raw AGENT=auditor PROMPT_FILE=prompts/foo.md" && exit 1)
 	@opencode run --agent "$(AGENT)" $(OPENCODE_THINKING_FLAG) "$$(cat "$(PROMPT_FILE)")"
 
-validate-all: venv-check
+validate-all: env-check
 	@ids=$$($(PYTHON) tools/list-findings.py --status PENDING --format ids 2>/dev/null); \
 	if [ -z "$$ids" ]; then \
 		echo "No PENDING findings to validate."; \
@@ -222,7 +232,7 @@ validate-all: venv-check
 		$(MAKE) phase-4 FINDING=$$f; \
 	done
 
-exploit-all: venv-check
+exploit-all: env-check
 	@ids=$$($(PYTHON) tools/list-findings.py --status CONFIRMED --eligible-for-exploit --format ids 2>/dev/null); \
 	if [ -z "$$ids" ]; then \
 		echo "No eligible CONFIRMED findings to exploit."; \
@@ -239,26 +249,26 @@ exploit-all: venv-check
 # Workspace tools
 # ---------------------------------------------------------------------------
 
-check: venv-check
+check: env-check
 	$(PYTHON) tools/codecome.py check
 
-status: venv-check
+status: env-check
 	$(PYTHON) tools/codecome.py status
 
-next-id: venv-check
+next-id: env-check
 	$(PYTHON) tools/codecome.py next-id
 
-frontmatter: venv-check
+frontmatter: env-check
 	$(PYTHON) tools/check-frontmatter.py
 
-tests: venv-check
+tests: env-check
 	$(PYTHON) -m pytest -q tests
 	$(PYTHON) tools/check-frontmatter.py
 
-test-parity: venv-check
+test-parity: env-check
 	$(PYTHON) -m pytest tests/test_mock_llm_parity.py -v
 
-itemdb-reset: venv-check
+itemdb-reset: env-check
 	rm -f itemdb/notes/*.md
 	rm -rf itemdb/evidence/CC-*
 	rm -f itemdb/reports/*.md
@@ -286,27 +296,27 @@ codeql-clean:
 	rm -rf .cache/codeql
 	rm -rf src/_codeql_detected_source_root
 
-index: venv-check
+index: env-check
 	$(PYTHON) tools/render-index.py
 
-report: venv-check
+report: env-check
 	$(PYTHON) tools/render-report.py
 
-findings: venv-check
+findings: env-check
 ifdef STATUS
 	$(PYTHON) tools/list-findings.py --status $(STATUS)
 else
 	$(PYTHON) tools/list-findings.py
 endif
 
-findings-create: venv-check
+findings-create: env-check
 	@test -n "$(strip $(TITLE))" || (printf "TITLE is required. Usage: make findings-create TITLE=\"Short descriptive title\" [ARGS='...']\n" && exit 2)
 	$(PYTHON) tools/create-finding.py "$(TITLE)" $(ARGS)
 
-findings-move: venv-check
+findings-move: env-check
 	$(PYTHON) tools/move-finding.py $(FINDING) $(STATUS)
 
-findings-evidence: venv-check
+findings-evidence: env-check
 	$(PYTHON) tools/create-evidence.py $(FINDING)
 
 findings-package:
@@ -369,32 +379,32 @@ sandbox-test:
 # Sandbox bootstrap (Phase 1c)
 # ---------------------------------------------------------------------------
 
-sandbox-list: venv-check
+sandbox-list: env-check
 	@$(PYTHON) tools/sandbox-bootstrap.py list
 
-sandbox-inspect: venv-check
+sandbox-inspect: env-check
 	@test -n "$(ID)" || (echo "Usage: make sandbox-inspect ID=<example-id>" && exit 1)
 	@$(PYTHON) tools/sandbox-bootstrap.py inspect $(ID)
 
-sandbox-detect: venv-check
+sandbox-detect: env-check
 	@$(PYTHON) tools/sandbox-bootstrap.py detect
 
-sandbox-bootstrap: venv-check
+sandbox-bootstrap: env-check
 	@test -n "$(ID)" || (echo "Usage: make sandbox-bootstrap ID=<example-id>" && exit 1)
 	@$(PYTHON) tools/sandbox-bootstrap.py apply $(ID) $(BOOTSTRAP_ARGS)
 
-sandbox-validate: venv-check
+sandbox-validate: env-check
 	@$(PYTHON) tools/sandbox-bootstrap.py validate $(BOOTSTRAP_ARGS)
 
-sandbox-regenerate: venv-check
+sandbox-regenerate: env-check
 	@$(PYTHON) tools/sandbox-bootstrap.py regenerate $(BOOTSTRAP_ARGS)
 
-sandbox-status: venv-check
+sandbox-status: env-check
 	@$(PYTHON) tools/sandbox-bootstrap.py status
 
 # Print the model that would be picked for a given AGENT (default: recon).
 # Usage:
 #   make show-model
 #   make show-model AGENT=auditor
-show-model: venv-check
+show-model: env-check
 	@$(PYTHON) tools/run-agent.py --show-model --agent $(or $(AGENT),recon)
