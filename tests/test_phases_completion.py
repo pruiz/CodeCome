@@ -101,6 +101,8 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
         try:
             result = completion_mod.check_phase_graceful_completion("1", None, fake_time)
             assert result is True, "Phase 1 should succeed when all artifacts exist under patched NOTES_ROOT"
+            result = completion_mod.check_phase_graceful_completion("1c", None, fake_time)
+            assert result is True, "Phase 1c should use the same artifact gate as Phase 1"
         finally:
             completion_mod.NOTES_ROOT = orig_notes_root
             completion_mod.SANDBOX_PLAN_PATH = orig_sandbox_plan

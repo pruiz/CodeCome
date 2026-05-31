@@ -87,8 +87,12 @@ def _exploitation_status_looks_real(frontmatter: dict[str, Any] | None) -> bool:
 
 
 def check_phase_graceful_completion(phase: str, finding: str | None, run_start_time: float) -> bool:
+    phase_key = str(phase)
+    if phase_key in ("1a", "1b", "1c"):
+        phase_key = "1"
+
     try:
-        if str(phase) == "1":
+        if phase_key == "1":
             required_artifacts = _phase1_required_artifacts()
             if all(path.exists() for path in required_artifacts):
                 fresh_required = any(_path_is_fresh(path, run_start_time) for path in required_artifacts)
@@ -98,21 +102,21 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                 )
                 return fresh_required and sandbox_state_recorded
             return False
-        elif str(phase) in ("2", "sweep"):
+        elif phase_key in ("2", "sweep"):
             pending_dir = finding_status_dir("PENDING")
             if pending_dir.exists():
                 return any(f.name.endswith(".md") and f.name != ".gitkeep" and f.stat().st_mtime >= run_start_time for f in pending_dir.iterdir())
             return False
-        elif str(phase) == "3":
+        elif phase_key == "3":
             findings_dir = FINDINGS_ROOT
             return any(
                 path.suffix == ".md" and path.name != ".gitkeep" and path.stat().st_mtime >= run_start_time
                 for path in _iter_files(findings_dir)
             )
-        elif str(phase) == "4" and finding:
+        elif phase_key == "4" and finding:
             evidence_dir = evidence_dir_for(finding)
             return any(path.stat().st_mtime >= run_start_time for path in _iter_files(evidence_dir))
-        elif str(phase) == "5" and finding:
+        elif phase_key == "5" and finding:
             exploited_file = finding_status_dir("EXPLOITED") / f"{finding}.md"
             if (
                 exploited_file.exists()
@@ -147,7 +151,7 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                     return True
 
             return False
-        elif str(phase) == "6":
+        elif phase_key == "6":
             reports_dir = REPORTS_ROOT
             if reports_dir.exists():
                 return any(f.name.endswith(".md") and f.name != ".gitkeep" and f.stat().st_mtime >= run_start_time for f in reports_dir.iterdir())

@@ -672,13 +672,14 @@ def _run_subphase(
 
         if finish_warning is not None:
             if (
-                last_finish_reason in _FINISH_MID_TURN
+                (not any_step_finish_seen or last_finish_reason in _FINISH_MID_TURN)
                 and last_permission_error is None
                 and check_phase_graceful_completion(phase_id, finding, subphase_start_time)
             ):
                 msg = (
-                    f"CodeCome observed a mid-turn model/provider cutoff for Phase {phase_id} after {step_finish_count} "
-                    "completed loops, but the required durable artifacts were already written. Treating the subphase as complete."
+                    f"CodeCome observed an incomplete model/provider completion signal for Phase {phase_id} after "
+                    f"{step_finish_count} completed loops, but the required durable artifacts were already written. "
+                    "Treating the subphase as complete."
                 )
                 if HAVE_RICH:
                     from rich.text import Text
