@@ -289,6 +289,7 @@ def _validate_codeql_build_command(build_command: str, analysis_root: Path, cont
         errors.append(f"{context}: build_command uses absolute /tmp/; use workspace-relative tmp/ instead")
     if str(ROOT) in build_command:
         errors.append(f"{context}: build_command embeds the absolute workspace path {ROOT}")
+    errors.extend(_validate_codeql_build_command_shape(build_command, context))
 
     try:
         tokens = shlex.split(build_command)
@@ -319,6 +320,38 @@ def _validate_codeql_build_command(build_command: str, analysis_root: Path, cont
             suffix = f": {detail}" if detail else ""
             errors.append(f"{context}: referenced helper script {token} failed bash -n{suffix}")
 
+    return errors
+
+
+def _validate_codeql_build_command_shape(build_command: str, context: str) -> list[str]:
+    """Reject shell-script constructs because CodeQL tokenizes build_command as argv."""
+    errors: list[str] = []
+    if "\n" in build_command:
+        errors.append(
+            f"{context}: build_command is multi-line; CodeQL tokenizes build_command instead of running it as a shell script. "
+            "Move multi-step logic into a helper script under tmp/ and invoke it with a single command such as `bash ../../tmp/codeql-build.sh`."
+        )
+    if re.search(r"(^|\s)#", build_command):
+        errors.append(
+            f"{context}: build_command contains shell comments; CodeQL passes comments as literal argv tokens. "
+            "Move comments and multi-step logic into a helper script under tmp/."
+        )
+    for operator in ("&&", ";", "|", "||"):
+        if operator in build_command:
+            errors.append(
+                f"{context}: build_command contains shell operator {operator!r}; CodeQL tokenizes build_command, it is not shell-interpreted. "
+                "Use a helper script under tmp/ for compound commands."
+            )
+            break
+    try:
+        tokens = shlex.split(build_command)
+    except ValueError:
+        return errors
+    if len(tokens) >= 3 and tokens[0] in {"bash", "sh"} and tokens[1] == "-c":
+        errors.append(
+            f"{context}: build_command uses `{tokens[0]} -c`; CodeQL command tokenization makes nested shell snippets fragile. "
+            "Write the snippet to a helper script under tmp/ and invoke that script instead."
+        )
     return errors
 
 

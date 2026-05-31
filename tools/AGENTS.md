@@ -213,3 +213,19 @@ Avoid circular imports. When two packages need each other, prefer callable injec
 - Event loops are tested with deterministic event generators — not live OpenCode servers.
 - CLI and wrapper compatibility is verified with `--help` and `--show-model` smoke tests.
 - Thin wrappers must remain thin — their only responsibility is delegation.
+
+### 12. No subprocess for internal module communication
+
+CodeCome tools must **never** shell out via `subprocess` to invoke other CodeCome Python scripts. Instead, import the target module's functions directly:
+
+```python
+# BAD — subprocess call to another CodeCome script
+result = subprocess.run([sys.executable, "tools/sandbox-bootstrap.py", "status", "--format", "json"], ...)
+
+# GOOD — direct import (use importlib for hyphenated module names)
+import importlib
+sb = importlib.import_module("sandbox-bootstrap")
+provenance = sb.read_provenance()
+```
+
+Subprocess is acceptable only for invoking **external** tools (codeql, docker, git, asciinema, etc.) that are not part of the CodeCome Python codebase.

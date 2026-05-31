@@ -362,3 +362,213 @@ def test_run_codeql_skips_unsupported_languages_soft_policy(tmp_path: Path) -> N
 
     assert manifest["status"] == "skipped"
     assert "elixir" in manifest["warnings"][0]
+
+
+def test_run_codeql_downloads_and_skips_unavailable_optional_profile_under_soft_policy(tmp_path: Path) -> None:
+    binary = tmp_path / ".tools" / "codeql" / "current" / "codeql"
+    binary.parent.mkdir(parents=True)
+    binary.write_text("", encoding="utf-8")
+    plan_path = tmp_path / "itemdb" / "notes" / "codeql-plan.yml"
+    plan_path.parent.mkdir(parents=True)
+    plan_path.write_text("schema_version: 1\nanalysis_units: []\n", encoding="utf-8")
+    catalog_path = tmp_path / "templates" / "codeql-packs.yml"
+    catalog_path.parent.mkdir(parents=True)
+    catalog_path.write_text("schema_version: 1\npacks:\n  c-cpp:\n    official:\n      - codeql/cpp-queries\n", encoding="utf-8")
+
+    config = CodeQLConfig(
+        enabled=True,
+        fail_policy="soft",
+        abs_install_path=binary,
+        abs_pack_catalog=catalog_path,
+        abs_output_dir=tmp_path / "itemdb" / "codeql",
+        abs_database_dir=tmp_path / "itemdb" / "codeql" / "databases",
+    )
+    resolved = {
+        "analysis_units": [
+            {
+                "id": "root",
+                "path": "./src",
+                "languages": [
+                    {
+                        "id": "c-cpp",
+                        "profiles": ["official", "github-security-lab"],
+                        "profile_packs": {
+                            "official": ["codeql/cpp-queries"],
+                            "github-security-lab": ["githubsecuritylab/codeql-cpp-queries"],
+                        },
+                    }
+                ],
+            }
+        ]
+    }
+
+    def fake_run_quiet(cmd, timeout):
+        joined = " ".join(cmd)
+        if "githubsecuritylab/codeql-cpp-queries" in joined:
+            return False, "pack missing"
+        return True, ""
+
+    with patch("codeql.runner.ROOT", tmp_path), \
+         patch("codeql.runner._get_codeql_version", return_value="2.25.5"), \
+         patch("codeql.runner.load_pack_catalog", return_value={}), \
+         patch("codeql.runner.load_codeql_plan", return_value={"analysis_units": [{"id": "root", "path": "./src", "languages": [{"id": "c-cpp", "build_mode": "autobuild", "packs": ["official", "github-security-lab"]}]}]}), \
+         patch("codeql.runner.resolve_plan_packs", return_value=resolved), \
+         patch("codeql.runner._create_database", return_value=(True, "")), \
+         patch("codeql.runner._run_analyze", return_value=(True, "")) as analyze, \
+         patch("codeql.runner._run_quiet", side_effect=fake_run_quiet):
+        manifest = run_codeql(config)
+
+    assert manifest["status"] == "completed"
+    assert any("githubsecuritylab/codeql-cpp-queries" in warning for warning in manifest["warnings"])
+    assert analyze.call_count == 1
+    assert analyze.call_args.args[2] == ["codeql/cpp-queries"]
+
+
+def test_run_codeql_fails_unavailable_official_profile_under_soft_policy(tmp_path: Path) -> None:
+    binary = tmp_path / ".tools" / "codeql" / "current" / "codeql"
+    binary.parent.mkdir(parents=True)
+    binary.write_text("", encoding="utf-8")
+    plan_path = tmp_path / "itemdb" / "notes" / "codeql-plan.yml"
+    plan_path.parent.mkdir(parents=True)
+    plan_path.write_text("schema_version: 1\nanalysis_units: []\n", encoding="utf-8")
+    catalog_path = tmp_path / "templates" / "codeql-packs.yml"
+    catalog_path.parent.mkdir(parents=True)
+    catalog_path.write_text("schema_version: 1\npacks:\n  c-cpp:\n    official:\n      - codeql/cpp-queries\n", encoding="utf-8")
+
+    config = CodeQLConfig(
+        enabled=True,
+        fail_policy="soft",
+        abs_install_path=binary,
+        abs_pack_catalog=catalog_path,
+        abs_output_dir=tmp_path / "itemdb" / "codeql",
+        abs_database_dir=tmp_path / "itemdb" / "codeql" / "databases",
+    )
+    resolved = {
+        "analysis_units": [
+            {
+                "id": "root",
+                "path": "./src",
+                "languages": [
+                    {
+                        "id": "c-cpp",
+                        "profiles": ["official"],
+                        "profile_packs": {"official": ["codeql/cpp-queries"]},
+                    }
+                ],
+            }
+        ]
+    }
+
+    with patch("codeql.runner.ROOT", tmp_path), \
+         patch("codeql.runner._get_codeql_version", return_value="2.25.5"), \
+         patch("codeql.runner.load_pack_catalog", return_value={}), \
+         patch("codeql.runner.load_codeql_plan", return_value={"analysis_units": [{"id": "root", "path": "./src", "languages": [{"id": "c-cpp", "build_mode": "autobuild", "packs": ["official"]}]}]}), \
+         patch("codeql.runner.resolve_plan_packs", return_value=resolved), \
+         patch("codeql.runner._create_database", return_value=(True, "")), \
+         patch("codeql.runner._run_analyze") as analyze, \
+         patch("codeql.runner._run_quiet", return_value=(False, "pack missing")):
+        manifest = run_codeql(config)
+
+    assert manifest["status"] == "soft-failed"
+    assert "required official profile" in manifest["failures"][0]
+    analyze.assert_not_called()
+
+
+def test_run_codeql_fails_unavailable_optional_profile_under_hard_policy(tmp_path: Path) -> None:
+    binary = tmp_path / ".tools" / "codeql" / "current" / "codeql"
+    binary.parent.mkdir(parents=True)
+    binary.write_text("", encoding="utf-8")
+    plan_path = tmp_path / "itemdb" / "notes" / "codeql-plan.yml"
+    plan_path.parent.mkdir(parents=True)
+    plan_path.write_text("schema_version: 1\nanalysis_units: []\n", encoding="utf-8")
+    catalog_path = tmp_path / "templates" / "codeql-packs.yml"
+    catalog_path.parent.mkdir(parents=True)
+    catalog_path.write_text("schema_version: 1\npacks:\n  c-cpp:\n    github-security-lab:\n      - githubsecuritylab/codeql-cpp-queries\n", encoding="utf-8")
+
+    config = CodeQLConfig(
+        enabled=True,
+        fail_policy="hard",
+        abs_install_path=binary,
+        abs_pack_catalog=catalog_path,
+        abs_output_dir=tmp_path / "itemdb" / "codeql",
+        abs_database_dir=tmp_path / "itemdb" / "codeql" / "databases",
+    )
+    resolved = {
+        "analysis_units": [
+            {
+                "id": "root",
+                "path": "./src",
+                "languages": [
+                    {
+                        "id": "c-cpp",
+                        "profiles": ["github-security-lab"],
+                        "profile_packs": {"github-security-lab": ["githubsecuritylab/codeql-cpp-queries"]},
+                    }
+                ],
+            }
+        ]
+    }
+
+    with patch("codeql.runner.ROOT", tmp_path), \
+         patch("codeql.runner._get_codeql_version", return_value="2.25.5"), \
+         patch("codeql.runner.load_pack_catalog", return_value={}), \
+         patch("codeql.runner.load_codeql_plan", return_value={"analysis_units": [{"id": "root", "path": "./src", "languages": [{"id": "c-cpp", "build_mode": "autobuild", "packs": ["github-security-lab"]}]}]}), \
+         patch("codeql.runner.resolve_plan_packs", return_value=resolved), \
+         patch("codeql.runner._create_database", return_value=(True, "")), \
+         patch("codeql.runner._run_analyze") as analyze, \
+         patch("codeql.runner._run_quiet", return_value=(False, "pack missing")):
+        manifest = run_codeql(config)
+
+    assert manifest["status"] == "failed"
+    assert "optional profile 'github-security-lab'" in manifest["failures"][0]
+    analyze.assert_not_called()
+
+
+def test_run_codeql_soft_fails_when_all_profiles_are_skipped(tmp_path: Path) -> None:
+    binary = tmp_path / ".tools" / "codeql" / "current" / "codeql"
+    binary.parent.mkdir(parents=True)
+    binary.write_text("", encoding="utf-8")
+    plan_path = tmp_path / "itemdb" / "notes" / "codeql-plan.yml"
+    plan_path.parent.mkdir(parents=True)
+    plan_path.write_text("schema_version: 1\nanalysis_units: []\n", encoding="utf-8")
+    catalog_path = tmp_path / "templates" / "codeql-packs.yml"
+    catalog_path.parent.mkdir(parents=True)
+    catalog_path.write_text("schema_version: 1\npacks:\n  c-cpp:\n    github-security-lab:\n      - githubsecuritylab/codeql-cpp-queries\n", encoding="utf-8")
+
+    config = CodeQLConfig(
+        enabled=True,
+        fail_policy="soft",
+        abs_install_path=binary,
+        abs_pack_catalog=catalog_path,
+        abs_output_dir=tmp_path / "itemdb" / "codeql",
+        abs_database_dir=tmp_path / "itemdb" / "codeql" / "databases",
+    )
+    resolved = {
+        "analysis_units": [
+            {
+                "id": "root",
+                "path": "./src",
+                "languages": [
+                    {
+                        "id": "c-cpp",
+                        "profiles": ["github-security-lab"],
+                        "profile_packs": {"github-security-lab": ["githubsecuritylab/codeql-cpp-queries"]},
+                    }
+                ],
+            }
+        ]
+    }
+
+    with patch("codeql.runner.ROOT", tmp_path), \
+         patch("codeql.runner._get_codeql_version", return_value="2.25.5"), \
+         patch("codeql.runner.load_pack_catalog", return_value={}), \
+         patch("codeql.runner.load_codeql_plan", return_value={"analysis_units": [{"id": "root", "path": "./src", "languages": [{"id": "c-cpp", "build_mode": "autobuild", "packs": ["github-security-lab"]}]}]}), \
+         patch("codeql.runner.resolve_plan_packs", return_value=resolved), \
+         patch("codeql.runner._create_database", return_value=(True, "")), \
+         patch("codeql.runner._run_analyze") as analyze, \
+         patch("codeql.runner._run_quiet", return_value=(False, "pack missing")):
+        manifest = run_codeql(config)
+
+    assert manifest["status"] == "soft-failed"
+    assert "No CodeQL query profiles ran successfully" in manifest["failures"][0]
+    analyze.assert_not_called()
