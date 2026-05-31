@@ -98,6 +98,9 @@ def run_codeql(config: CodeQLConfig, progress: Callable[[str], None] | None = No
             ok, msg = _create_database(binary_path, language_id, source_path, db_dir, build_mode, build_command, exclude_patterns, timeout=db_timeout, progress=progress)
             if not ok:
                 failures.append(msg)
+                if config.fail_policy == "soft":
+                    _progress(progress, f"CodeQL: {msg}")
+                    continue
                 return _manifest(_tool_failure_status(config), now_utc, config, [version], warnings, failures, language_ids, analysis_units)
             _progress(progress, f"CodeQL: database ready {unit_id}:{language_id}")
 
@@ -112,6 +115,9 @@ def run_codeql(config: CodeQLConfig, progress: Callable[[str], None] | None = No
                         _progress(progress, f"CodeQL: {msg}")
                         continue
                     failures.append(msg)
+                    if config.fail_policy == "soft":
+                        _progress(progress, f"CodeQL: {msg}")
+                        continue
                     return _manifest(_tool_failure_status(config), now_utc, config, [version], warnings, failures, language_ids, analysis_units)
 
                 sarif_path = sarif_dir / f"{unit_id}.{language_id}.{profile}.sarif"
@@ -123,12 +129,15 @@ def run_codeql(config: CodeQLConfig, progress: Callable[[str], None] | None = No
                         _progress(progress, f"CodeQL: {msg}")
                         continue
                     failures.append(msg)
+                    if config.fail_policy == "soft":
+                        _progress(progress, f"CodeQL: {msg}")
+                        continue
                     return _manifest(_tool_failure_status(config), now_utc, config, [version], warnings, failures, language_ids, analysis_units)
                 analyzed_profiles += 1
                 _progress(progress, f"CodeQL: SARIF written {_rel(sarif_path)}")
 
     if failures:
-        return _manifest("failed", now_utc, config, [version], warnings, failures, language_ids, analysis_units)
+        return _manifest(_tool_failure_status(config), now_utc, config, [version], warnings, failures, language_ids, analysis_units)
 
     if not language_ids:
         return _manifest("skipped", now_utc, config, [version], warnings,
