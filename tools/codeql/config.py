@@ -46,6 +46,8 @@ DEFAULTS: dict[str, Any] = {
     "max_candidates": 10,
     "sweep_enabled": True,
     "sweep_inject_context": True,
+    "db_create_timeout": 600,
+    "analyze_timeout": 600,
 }
 
 
@@ -124,6 +126,9 @@ class CodeQLConfig:
 
     sweep_enabled: bool = True
     sweep_inject_context: bool = True
+
+    db_create_timeout: int = 600
+    analyze_timeout: int = 600
 
     # Absolute paths (resolved from ROOT)
     abs_pack_catalog: Path = field(default_factory=Path)
@@ -217,6 +222,18 @@ def resolve_config() -> CodeQLConfig:
     sweep_inject_context = _get("sweep_inject_context", DEFAULTS["sweep_inject_context"],
                                 coerce=bool)
 
+    # Timeout settings
+    db_create_timeout = _safe_int(
+        _str_env("CODEQL_DB_CREATE_TIMEOUT")
+        or _get("db_create_timeout", DEFAULTS["db_create_timeout"]),
+        DEFAULTS["db_create_timeout"],
+    )
+    analyze_timeout = _safe_int(
+        _str_env("CODEQL_ANALYZE_TIMEOUT")
+        or _get("analyze_timeout", DEFAULTS["analyze_timeout"]),
+        DEFAULTS["analyze_timeout"],
+    )
+
     return CodeQLConfig(
         enabled=enabled,
         fail_policy=fail_policy,
@@ -233,6 +250,8 @@ def resolve_config() -> CodeQLConfig:
         max_candidates=max_candidates,
         sweep_enabled=sweep_enabled,
         sweep_inject_context=sweep_inject_context,
+        db_create_timeout=db_create_timeout,
+        analyze_timeout=analyze_timeout,
         abs_pack_catalog=(ROOT / pack_catalog).resolve(),
         abs_install_path=(ROOT / install_path).resolve(),
         abs_output_dir=(ROOT / output_dir).resolve(),

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -74,6 +75,10 @@ def run_codeql(config: CodeQLConfig, progress: Callable[[str], None] | None = No
             language_ids.append(f"{unit_id}:{language_id}")
 
             build_mode, build_command = _lookup_build(language_id, plan_unit.get("languages", []))
+            plan_languages = plan_unit.get("languages", [])
+            db_timeout = _lookup_timeout("db_create_timeout", language_id, plan_languages, config.db_create_timeout)
+            analyze_timeout = _lookup_timeout("analyze_timeout", language_id, plan_languages, config.analyze_timeout)
+
             supported_modes = supported_build_modes(language_id)
             if build_mode not in supported_modes:
                 failures.append(
@@ -87,7 +92,7 @@ def run_codeql(config: CodeQLConfig, progress: Callable[[str], None] | None = No
             sarif_dir.mkdir(parents=True, exist_ok=True)
 
             _progress(progress, f"CodeQL: creating database {unit_id}:{language_id} ({build_mode})")
-            ok, msg = _create_database(binary_path, language_id, source_path, db_dir, build_mode, build_command, exclude_patterns)
+            ok, msg = _create_database(binary_path, language_id, source_path, db_dir, build_mode, build_command, exclude_patterns, timeout=db_timeout, progress=progress)
             if not ok:
                 failures.append(msg)
                 return _manifest(_tool_failure_status(config), now_utc, config, [version], warnings, failures, language_ids, analysis_units)
@@ -99,7 +104,7 @@ def run_codeql(config: CodeQLConfig, progress: Callable[[str], None] | None = No
                     continue
                 sarif_path = sarif_dir / f"{unit_id}.{language_id}.{profile}.sarif"
                 _progress(progress, f"CodeQL: analyzing {unit_id}:{language_id} profile {profile}")
-                ok, msg = _run_analyze(binary_path, db_dir, packs, sarif_path)
+                ok, msg = _run_analyze(binary_path, db_dir, packs, sarif_path, timeout=analyze_timeout, progress=progress)
                 if not ok:
                     failures.append(msg)
                     return _manifest(_tool_failure_status(config), now_utc, config, [version], warnings, failures, language_ids, analysis_units)
@@ -138,6 +143,16 @@ def _lookup_build(language_id: str, plan_languages: list[dict]) -> tuple[str, st
     return "none", None
 
 
+def _lookup_timeout(field: str, language_id: str, plan_languages: list[dict], default: int) -> int:
+    """Return a per-language timeout, falling back to *default*."""
+    for pl in plan_languages:
+        if pl.get("id") == language_id:
+            value = pl.get(field)
+            if isinstance(value, (int, float)) and value > 0:
+                return int(value)
+    return default
+
+
 def _get_codeql_version(binary: Path) -> str:
     try:
         result = subprocess.run(
@@ -158,6 +173,8 @@ def _create_database(
     build_mode: str,
     build_command: str | None,
     exclude_patterns: list[str],
+    timeout: int = 600,
+    progress: Callable[[str], None] | None = None,
 ) -> tuple[bool, str]:
     """Create a CodeQL database.  Returns (success, message)."""
     db_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -178,17 +195,8 @@ def _create_database(
     elif build_mode == "autobuild":
         cmd += ["--build-mode=autobuild"]
 
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-    except subprocess.TimeoutExpired:
-        return False, f"Database create timed out for {language_id}"
-    except Exception as exc:
-        return False, f"Database create failed for {language_id}: {exc}"
-
-    if result.returncode != 0:
-        return False, f"Database create failed for {language_id}:\n{result.stderr[:2000]}"
-
-    return True, ""
+    return _run_with_progress(cmd, f"Database create timed out for {language_id} after {timeout}s",
+                              f"Database create failed for {language_id}", timeout, progress)
 
 
 def _run_analyze(
@@ -196,6 +204,8 @@ def _run_analyze(
     db_dir: Path,
     packs: list[str],
     sarif_path: Path,
+    timeout: int = 600,
+    progress: Callable[[str], None] | None = None,
 ) -> tuple[bool, str]:
     """Run codeql database analyze.  Returns (success, message)."""
     cmd = [
@@ -206,15 +216,54 @@ def _run_analyze(
         "--no-sarif-add-query-help",
     ] + packs
 
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-    except subprocess.TimeoutExpired:
-        return False, f"Analyze timed out for {db_dir.name} with packs {packs}"
-    except Exception as exc:
-        return False, f"Analyze failed for {db_dir.name} with packs {packs}: {exc}"
+    return _run_with_progress(cmd, f"Analyze timed out for {db_dir.name} after {timeout}s",
+                              f"Analyze failed for {db_dir.name}", timeout, progress)
 
-    if result.returncode != 0:
-        return False, f"Analyze failed for {db_dir.name} with packs {packs}:\n{result.stderr[:2000]}"
+
+def _run_with_progress(
+    cmd: list[str],
+    timeout_msg_prefix: str,
+    failure_msg_prefix: str,
+    timeout: int,
+    progress: Callable[[str], None] | None,
+) -> tuple[bool, str]:
+    """Run a subprocess, streaming stderr line-by-line to *progress*."""
+    try:
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except Exception as exc:
+        return False, f"{failure_msg_prefix}: {exc}"
+
+    stderr_lines: list[str] = []
+
+    def _read_stderr() -> None:
+        for line in process.stderr:
+            stripped = line.rstrip()
+            if stripped:
+                stderr_lines.append(stripped)
+                _progress(progress, f"CodeQL: {stripped}")
+
+    reader = threading.Thread(target=_read_stderr, daemon=True)
+    reader.start()
+
+    try:
+        returncode = process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+        reader.join(timeout=5)
+        detail = "\n".join(stderr_lines[-40:])
+        return False, f"{timeout_msg_prefix}\n{detail}" if detail else timeout_msg_prefix
+
+    reader.join(timeout=5)
+
+    if returncode != 0:
+        detail = "\n".join(stderr_lines[-40:])
+        return False, f"{failure_msg_prefix}:\n{detail}" if detail else failure_msg_prefix
 
     return True, ""
 

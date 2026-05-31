@@ -77,6 +77,12 @@ Rules:
 - Use `manual` only when you identified a concrete build command for that analysis unit.
 - Use `autobuild` only as an explicit choice when build files exist but the exact command is uncertain.
 - Fill in `build_command` when `build_mode` is `manual`.
+- Estimate `db_create_timeout` (seconds) for each language when `build_mode` is `manual` or `autobuild`:
+  - For `none` mode leave it unset; harness default is 600s.
+  - Estimate based on approximate source file count, build complexity, and whether compilation is involved.
+  - Rule of thumb: ~300s for small projects, ~600s for medium, ~1200-1800s for large C/C++ corpora.
+  - Round up to be safe; CodeQL extraction adds significant overhead per compiled file.
+- Estimate `analyze_timeout` (seconds) per profile if query packs are known to be heavy (e.g. security suites on large codebases); otherwise omit to use harness default.
 - Set `recommended: false` if you cannot confidently profile any language.
 - Add relevant `notes` explaining your language choices and any uncertainties.
 - Update `exclude` patterns to match the target's test, fixture, vendor, and generated code directories if different from the defaults.
