@@ -51,10 +51,14 @@ If the manual command is simple enough, put it directly in `build_command` inste
 ## Build Command Rules
 
 - CodeQL runs the manual `build_command` from the analysis unit source path.
+- CodeQL does not run `build_command` from the workspace root or from the helper script directory.
 - Prefer commands that are deterministic and non-interactive.
 - Prefer commands that avoid modifying `src/` when possible.
 - If existing target build files naturally write object files or binaries into `src/`, document that limitation in the `notes` field.
 - Use workspace-relative helper script paths that work from the CodeQL source path.
+- Never use absolute `/tmp/` paths. Use workspace-relative `tmp/` paths for scratch/build output.
+- Do not embed this workspace's absolute path in `build_command`; prefer paths relative to the analysis unit source path.
+- If a helper script changes directory, it must change to the analysis unit source path or to a path explicitly derived from that execution model, not blindly to the helper script directory.
 - Keep the plan schema and existing pack selections intact unless a minimal change requires otherwise.
 
 ## Output Requirements
@@ -66,4 +70,4 @@ Make the repair directly in files. At the end, summarize:
 - any helper script created,
 - the exact manual build command CodeQL will run next.
 
-Before ending, validate that `itemdb/notes/codeql-plan.yml` is valid YAML and still follows the CodeQL plan schema. If validation fails, repair only the reported YAML/schema issue before summarizing.
+Before ending, validate that `itemdb/notes/codeql-plan.yml` is valid YAML and still follows the CodeQL plan schema. Also verify that any referenced helper shell script exists and passes syntax-only validation. If validation fails, repair only the reported YAML/schema/helper issue before summarizing.

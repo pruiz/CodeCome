@@ -245,6 +245,25 @@ def build_codeql_plan_resume_prompt(validation_output: str) -> str:
     )
 
 
+def build_codeql_build_failure_resume_prompt(validation_output: str) -> str:
+    return (
+        "The repaired `itemdb/notes/codeql-plan.yml` was valid, but the next CodeQL database creation run still "
+        "failed. Continue the same narrow CodeQL build repair task.\n\n"
+        "Latest CodeQL failure details:\n"
+        f"{validation_output}\n\n"
+        "Repair only `itemdb/notes/codeql-plan.yml` and any helper scripts under workspace-relative `tmp/` or "
+        "`sandbox/`. Do not modify target source code.\n\n"
+        "Important execution model: CodeQL runs the manual `build_command` with the current working directory set "
+        "to the analysis unit source path (`analysis_units[].path`). It is not run from the workspace root, and it "
+        "is not run from the helper script directory. If a helper script changes directory, it must do so based on "
+        "the analysis source root or explicit paths that work from that source root.\n\n"
+        "Do not use absolute `/tmp/` paths. Use workspace-relative `tmp/` paths. Do not embed this workspace's "
+        "absolute path in `build_command`; prefer paths relative to the analysis unit source path.\n\n"
+        "Before ending, verify that the plan is valid YAML, that referenced helper scripts exist, and that shell "
+        "helpers pass syntax-only validation."
+    )
+
+
 def build_resume_command(initial_command: list[str], session_id: str, prompt: str) -> list[str]:
     """Preserve connection/runtime flags needed to reach the original session."""
     resume = ["opencode", "run"]

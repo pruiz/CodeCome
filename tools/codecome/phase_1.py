@@ -13,7 +13,11 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
+import shlex
+import subprocess
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +44,15 @@ from phases.completion import (
     build_phase_resume_prompt,
     build_frontmatter_resume_prompt,
     build_codeql_plan_resume_prompt,
+    build_codeql_build_failure_resume_prompt,
 )
+
+
+@dataclass(frozen=True)
+class _SubphaseOutcome:
+    returncode: int
+    session_id: str
+    transcript_path: Path
 # ---------------------------------------------------------------------------
 # CodeQL analysis (between 1a gate and 1b)
 # ---------------------------------------------------------------------------
@@ -250,11 +262,81 @@ def _validate_codeql_plan_for_repair() -> tuple[int, str]:
     try:
         from codeql.packs import load_codeql_plan
 
-        load_codeql_plan(plan_path)
+        plan = load_codeql_plan(plan_path)
     except Exception as exc:
         return 1, f"itemdb/notes/codeql-plan.yml is invalid: {exc}"
 
+    errors: list[str] = []
+    for unit in plan.get("analysis_units", []):
+        if not isinstance(unit, dict):
+            continue
+        unit_id = str(unit.get("id", "<unknown>"))
+        unit_path = unit.get("path")
+        analysis_root = ROOT / unit_path if isinstance(unit_path, str) else ROOT
+        languages = unit.get("languages", [])
+        if not isinstance(languages, list):
+            continue
+        for language in languages:
+            if not isinstance(language, dict):
+                continue
+            language_id = str(language.get("id", "<unknown>"))
+            build_command = language.get("build_command")
+            if not isinstance(build_command, str) or not build_command.strip():
+                continue
+            context = f"analysis unit {unit_id!r} language {language_id!r}"
+            errors.extend(_validate_codeql_build_command(build_command, analysis_root, context))
+
+    if errors:
+        return 1, "itemdb/notes/codeql-plan.yml failed CodeQL build-command validation:\n" + "\n".join(
+            f"- {error}" for error in errors
+        )
+
     return 0, ""
+
+
+def _validate_codeql_build_command(build_command: str, analysis_root: Path, context: str) -> list[str]:
+    """Return generic portability/safety validation errors for a manual build command."""
+    errors: list[str] = []
+    if _contains_absolute_tmp(build_command):
+        errors.append(f"{context}: build_command uses absolute /tmp/; use workspace-relative tmp/ instead")
+    if str(ROOT) in build_command:
+        errors.append(f"{context}: build_command embeds the absolute workspace path {ROOT}")
+
+    try:
+        tokens = shlex.split(build_command)
+    except ValueError as exc:
+        return errors + [f"{context}: build_command is not shell-parseable: {exc}"]
+
+    for token in tokens:
+        if not token.endswith(".sh"):
+            continue
+        script_path = Path(token)
+        if not script_path.is_absolute():
+            script_path = analysis_root / script_path
+        if not script_path.is_file():
+            errors.append(f"{context}: referenced helper script does not exist from analysis root: {token}")
+            continue
+        try:
+            content = script_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            errors.append(f"{context}: referenced helper script cannot be read: {token}: {exc}")
+            continue
+        if _contains_absolute_tmp(content):
+            errors.append(f"{context}: referenced helper script {token} uses absolute /tmp/; use workspace-relative tmp/")
+        if str(ROOT) in content:
+            errors.append(f"{context}: referenced helper script {token} embeds the absolute workspace path {ROOT}")
+        result = subprocess.run(["bash", "-n", str(script_path)], capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout).strip()
+            suffix = f": {detail}" if detail else ""
+            errors.append(f"{context}: referenced helper script {token} failed bash -n{suffix}")
+
+    return errors
+
+
+def _contains_absolute_tmp(text: str) -> bool:
+    """Return whether text contains an absolute /tmp path, not a relative tmp/ component."""
+    return re.search(r"(^|[\s\"'=])/(tmp)(/|$)", text) is not None
 
 
 def _subphase_should_validate_codeql_plan(phase_id: str) -> bool:
@@ -281,9 +363,41 @@ def _codeql_repair_needed(output_dir: Path, plan_path: Path) -> bool:
         if not isinstance(languages, list):
             continue
         for language in languages:
-            if isinstance(language, dict) and language.get("build_mode") == "autobuild":
+            if isinstance(language, dict) and language.get("build_mode") in {"autobuild", "manual"}:
                 return True
     return False
+
+
+def _latest_codeql_database_log(output_dir: Path) -> Path | None:
+    logs = [p for p in output_dir.glob("databases/**/log/database-create-*.log") if p.is_file()]
+    if not logs:
+        return None
+    return max(logs, key=lambda p: p.stat().st_mtime)
+
+
+def _codeql_repair_failure_context(output_dir: Path) -> str:
+    """Return target-agnostic failure context for the repair model."""
+    lines: list[str] = []
+    manifest = _load_codeql_yaml(output_dir / "run-manifest.yml")
+    failures = manifest.get("failures", [])
+    if isinstance(failures, list) and failures:
+        lines.append("Manifest failures:")
+        lines.extend(str(failure) for failure in failures[-3:])
+
+    latest_log = _latest_codeql_database_log(output_dir)
+    if latest_log is not None:
+        interesting: list[str] = []
+        try:
+            for line in latest_log.read_text(encoding="utf-8", errors="replace").splitlines():
+                if any(marker in line for marker in ("[build-stderr]", "[build-stdout]", "[ERROR]", "Exception caught", "A fatal error")):
+                    interesting.append(line)
+        except OSError as exc:
+            interesting.append(f"Failed to read latest database log {latest_log}: {exc}")
+        if interesting:
+            lines.append(f"Latest database-create log: {latest_log.relative_to(ROOT) if latest_log.is_relative_to(ROOT) else latest_log}")
+            lines.extend(interesting[-40:])
+
+    return "\n".join(lines) if lines else "CodeQL database creation failed; no additional log details were available."
 
 
 def _file_digest(path: Path) -> str | None:
@@ -301,20 +415,20 @@ def _run_codeql_repair_if_needed(
     rendering_ctx: Any,
     runner: ServerRunner,
     base_url: str,
-) -> bool:
-    """Ask the model to repair CodeQL build instructions after autobuild failure."""
+) -> int:
+    """Ask the model to repair CodeQL build instructions and rerun CodeQL until stable."""
     from codeql.config import resolve_config as _resolve_codeql_config
 
-    max_retries = int(os.environ.get("CODEQL_REPAIR_RETRIES", "1"))
+    max_retries = int(os.environ.get("CODEQL_REPAIR_RETRIES", "2"))
     if max_retries <= 0:
-        return False
+        return 0
 
     config = _resolve_codeql_config()
     plan_path = ROOT / "itemdb" / "notes" / "codeql-plan.yml"
     if not _codeql_repair_needed(config.abs_output_dir, plan_path):
-        return False
+        return 0
 
-    msg = "CodeQL autobuild failed; asking the model to repair manual build instructions."
+    msg = "CodeQL database creation failed; asking the model to repair build instructions."
     if HAVE_RICH:
         from rich.text import Text
         console.print(Text(msg, style="bold yellow"))
@@ -323,8 +437,10 @@ def _run_codeql_repair_if_needed(
         print(C.warn(msg))
 
     plan_digest = _file_digest(plan_path)
+    repair_session_id: str | None = None
+    repair_prompt: str | None = None
     for attempt in range(1, max_retries + 1):
-        rc = _run_subphase(
+        outcome = _run_subphase(
             args=args,
             console=console,
             rendering_ctx=rendering_ctx,
@@ -334,21 +450,46 @@ def _run_codeql_repair_if_needed(
             label=f"CodeQL Build Repair ({attempt}/{max_retries})",
             agent="recon",
             prompt_file="prompts/phase-1-codeql-repair.md",
+            existing_session_id=repair_session_id,
+            initial_prompt=repair_prompt,
+            return_outcome=True,
         )
-        if rc != 0:
+        assert isinstance(outcome, _SubphaseOutcome)
+        repair_session_id = outcome.session_id or repair_session_id
+        if outcome.returncode != 0:
             continue
         next_plan_digest = _file_digest(plan_path)
-        if next_plan_digest != plan_digest:
-            return True
-        unchanged_msg = "CodeQL repair completed but did not change itemdb/notes/codeql-plan.yml."
+        if next_plan_digest == plan_digest:
+            unchanged_msg = "CodeQL repair completed but did not change itemdb/notes/codeql-plan.yml."
+            if HAVE_RICH:
+                from rich.text import Text
+                console.print(Text(unchanged_msg, style="yellow"))
+            else:
+                import _colors as C
+                print(C.warn(unchanged_msg))
+        plan_digest = next_plan_digest
+
+        rc = _run_codeql(console)
+        if rc != 0:
+            return rc
+        if not _codeql_repair_needed(config.abs_output_dir, plan_path):
+            return 0
+
+        repair_prompt = build_codeql_build_failure_resume_prompt(
+            _codeql_repair_failure_context(config.abs_output_dir)
+        )
+
+    if _codeql_repair_needed(config.abs_output_dir, plan_path):
+        msg = f"CodeQL database creation still fails after {max_retries} repair attempt(s); blocking Phase 1b."
         if HAVE_RICH:
             from rich.text import Text
-            console.print(Text(unchanged_msg, style="yellow"))
+            console.print(Text(msg, style="bold red"))
         else:
             import _colors as C
-            print(C.warn(unchanged_msg))
+            print(C.fail(msg))
+        return 1
 
-    return False
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -367,10 +508,13 @@ def _run_subphase(
     agent: str,
     prompt_file: str,
     finding: str | None = None,
-) -> int:
+    existing_session_id: str | None = None,
+    initial_prompt: str | None = None,
+    return_outcome: bool = False,
+) -> int | _SubphaseOutcome:
     """Run a single subphase agent session with retry/resume."""
     prompt_path = ROOT / prompt_file
-    prompt = load_prompt(prompt_path, finding, phase=phase_id)
+    prompt = initial_prompt if initial_prompt is not None else load_prompt(prompt_path, finding, phase=phase_id)
     rc = resolve_runtime_config(agent)
     model = rc.model
     variant = rc.variant
@@ -414,7 +558,7 @@ def _run_subphase(
     frontmatter_retry_count = 0
     codeql_plan_retry_count = 0
     attempt_number = 0
-    last_session_id: str = ""
+    last_session_id: str = existing_session_id or ""
     last_finish_reason: str | None = None
     last_finish_tokens: dict[str, Any] = {}
     last_permission_error: str | None = None
@@ -677,6 +821,8 @@ def _run_subphase(
                 print(C.fail(f"  reason: {finish_warning}"))
             print(f"  finish reason: {last_finish_reason!r}  transcript: {transcript_path.relative_to(ROOT) if transcript_path.name else 'N/A'}")
 
+    if return_outcome:
+        return _SubphaseOutcome(returncode=returncode, session_id=last_session_id, transcript_path=transcript_path)
     return returncode
 
 
@@ -716,16 +862,15 @@ def run_phase_1(
     rc = _run_codeql(console)
     if rc != 0:
         return rc
-    if _run_codeql_repair_if_needed(
+    rc = _run_codeql_repair_if_needed(
         args=args,
         console=console,
         rendering_ctx=rendering_ctx,
         runner=runner,
         base_url=base_url,
-    ):
-        rc = _run_codeql(console)
-        if rc != 0:
-            return rc
+    )
+    if rc != 0:
+        return rc
     rc = _check_codeql_artifacts(console)
     if rc != 0:
         return rc
