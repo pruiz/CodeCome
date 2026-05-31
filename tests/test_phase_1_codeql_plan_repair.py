@@ -247,7 +247,7 @@ def test_codeql_repair_loop_resumes_same_session_after_failed_rerun(tmp_path: Pa
                 yaml.safe_dump({"status": "soft-failed", "failures": ["Database create failed for c-cpp:\nmanual failed"]}),
                 encoding="utf-8",
             )
-        return 0
+        return None
 
     saved_rich = p1.HAVE_RICH
     p1.HAVE_RICH = False

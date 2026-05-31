@@ -57,8 +57,12 @@ class _SubphaseOutcome:
 # CodeQL analysis (between 1a gate and 1b)
 # ---------------------------------------------------------------------------
 
-def _run_codeql(console: Any) -> int:
-    """Run full CodeQL pipeline and report results."""
+def _run_codeql(console: Any) -> None:
+    """Run full CodeQL pipeline and report results.
+
+    This function always succeeds (returns None). Pass/fail enforcement
+    is handled separately by ``_check_codeql_artifacts``.
+    """
     from codeql.config import resolve_config as _resolve_codeql_config
 
     config = _resolve_codeql_config()
@@ -81,7 +85,7 @@ def _run_codeql(console: Any) -> int:
         else:
             import _colors as C
             print(C.warn(msg))
-        return 0
+        return
 
     if not config.phase_1_enabled:
         msg = "CodeQL phase 1 disabled — skipping."
@@ -93,7 +97,7 @@ def _run_codeql(console: Any) -> int:
         else:
             import _colors as C
             print(C.warn(msg))
-        return 0
+        return
 
     if HAVE_RICH:
         from rich.text import Text
@@ -120,7 +124,7 @@ def _run_codeql(console: Any) -> int:
         else:
             import _colors as C
             print(C.fail(msg))
-        return 0
+        return
 
     status = manifest["status"]
     warnings = manifest.get("warnings", [])
@@ -169,8 +173,6 @@ def _run_codeql(console: Any) -> int:
                 console.print(Text(f"  {f}", style="red"))
             else:
                 print(C.fail(f"  {f}"))
-
-    return 0
 
 
 def _check_codeql_artifacts(console: Any) -> int:
@@ -477,9 +479,7 @@ def _run_codeql_repair_if_needed(
                 print(C.warn(unchanged_msg))
         plan_digest = next_plan_digest
 
-        rc = _run_codeql(console)
-        if rc != 0:
-            return rc
+        _run_codeql(console)
         if not _codeql_repair_needed(config.abs_output_dir, plan_path):
             return 0
 
@@ -867,9 +867,7 @@ def run_phase_1(
         return gate_rc
 
     # ---- CodeQL analysis ----
-    rc = _run_codeql(console)
-    if rc != 0:
-        return rc
+    _run_codeql(console)
     rc = _run_codeql_repair_if_needed(
         args=args,
         console=console,
