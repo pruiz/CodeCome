@@ -245,7 +245,7 @@ def test_codeql_repair_needed_after_manual_database_failure(tmp_path: Path) -> N
     assert _codeql_repair_needed(output_dir, plan_path) is True
 
 
-def test_phase_1_reruns_codeql_after_repair() -> None:
+def test_phase_1_pipeline_structure() -> None:
     _ensure_codecome_package()
     import codecome.phase_1 as p1
 
