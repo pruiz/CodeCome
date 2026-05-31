@@ -192,7 +192,7 @@ def _check_codeql_artifacts(console: Any) -> int:
             print(C.fail(msg))
         return 1
 
-    if status == "failed":
+    if status == "failed" and config.fail_policy == "hard":
         msg = "CodeQL artifact gate: FAILED — execution crashed, blocking Phase 1b"
         if HAVE_RICH:
             from rich.text import Text
@@ -201,6 +201,15 @@ def _check_codeql_artifacts(console: Any) -> int:
             import _colors as C
             print(C.fail(msg))
         return 1
+
+    if status == "failed":
+        # fail_policy is soft, so treat as a non-blocking warning
+        if HAVE_RICH:
+            from rich.text import Text
+            console.print(Text("CodeQL artifact gate: execution crashed but fail_policy is soft — continuing", style="yellow"))
+        else:
+            import _colors as C
+            print(C.warn("CodeQL artifact gate: execution crashed but fail_policy is soft — continuing"))
 
     label = f"CodeQL artifact gate: {status}"
     if HAVE_RICH:

@@ -47,9 +47,10 @@ def run_codeql(config: CodeQLConfig, progress: Callable[[str], None] | None = No
         _progress(progress, f"CodeQL: loading plan {_rel(plan_path)}")
         catalog = load_pack_catalog(catalog_path)
         plan = load_codeql_plan(plan_path)
-        resolved = resolve_plan_packs(plan, catalog)
+        skip_unsupported = config.fail_policy == "soft"
+        resolved = resolve_plan_packs(plan, catalog, skip_unsupported=skip_unsupported)
     except PackResolverError as exc:
-        return _manifest("failed", now_utc, config, [version], [], failures=[str(exc)])
+        return _manifest(_tool_failure_status(config), now_utc, config, [version], [], failures=[str(exc)])
 
     resolved_path = config.abs_output_dir / "selected-query-packs.yml"
     resolved_path.parent.mkdir(parents=True, exist_ok=True)
@@ -58,7 +59,7 @@ def run_codeql(config: CodeQLConfig, progress: Callable[[str], None] | None = No
 
     exclude_patterns = plan.get("exclude", [])
 
-    warnings: list[str] = []
+    warnings: list[str] = list(resolved.get("warnings", []))
     failures: list[str] = []
     language_ids: list[str] = []
     analysis_units: list[str] = []

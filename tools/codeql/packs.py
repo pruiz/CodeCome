@@ -167,15 +167,29 @@ def _resolve_profile_packs(language_id: str, profiles: list[str], catalog: dict[
     return result
 
 
-def resolve_plan_packs(plan: dict[str, Any], catalog: dict[str, Any]) -> dict[str, Any]:
-    """Resolve all language entries in a CodeQL plan to concrete pack references."""
+def resolve_plan_packs(plan: dict[str, Any], catalog: dict[str, Any], skip_unsupported: bool = False) -> dict[str, Any]:
+    """Resolve all language entries in a CodeQL plan to concrete pack references.
+
+    If *skip_unsupported* is True, language IDs not found in the catalog are
+    skipped with a warning instead of raising PackResolverError.
+    """
     units_out: list[dict[str, Any]] = []
+    plan_warnings: list[str] = []
 
     for unit in plan.get("analysis_units", []):
         languages_out: list[dict[str, Any]] = []
         for entry in unit.get("languages", []):
             language_id = entry["id"]
             profiles = list(entry.get("packs", []))
+
+            if language_id not in catalog.get("packs", {}):
+                if skip_unsupported:
+                    plan_warnings.append(
+                        f"Skipping unsupported CodeQL language '{language_id}' in analysis unit '{unit['id']}'"
+                    )
+                    continue
+                raise PackResolverError(f"Unsupported CodeQL language id: {language_id!r}.")
+
             languages_out.append(
                 {
                     "id": language_id,
@@ -198,11 +212,14 @@ def resolve_plan_packs(plan: dict[str, Any], catalog: dict[str, Any]) -> dict[st
             }
         )
 
-    return {
+    result: dict[str, Any] = {
         "schema_version": 1,
         "generated_by": "codeql-pack-resolver",
         "analysis_units": units_out,
     }
+    if plan_warnings:
+        result["warnings"] = plan_warnings
+    return result
 
 
 def dump_yaml(data: dict[str, Any]) -> str:
