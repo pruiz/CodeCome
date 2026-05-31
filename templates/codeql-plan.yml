@@ -34,6 +34,8 @@ analysis_units: []
 #         confidence: "HIGH"
 #         build_mode: "manual"
 #         build_command: "make -C src/native"
+#         db_create_timeout: 1800   # optional: seconds, model-estimated from source size
+#         analyze_timeout: 900      # optional: seconds, per query-profile run
 #         packs:
 #           - "official"
 #           - "github-security-lab"
@@ -46,6 +48,11 @@ analysis_units: []
 #   none: python, javascript-typescript, ruby, csharp, java-kotlin
 #   manual/autobuild: c-cpp, go, csharp, java-kotlin, swift
 # Allowed pack profile names: official, github-security-lab, trailofbits, coding-standards, local
+#
+# Optional per-language timeout overrides (seconds):
+#   - db_create_timeout: max seconds for 'codeql database create' (default 600)
+#   - analyze_timeout: max seconds for 'codeql database analyze' per profile (default 600)
+#   Use CODEQL_DB_CREATE_TIMEOUT / CODEQL_ANALYZE_TIMEOUT env vars to override at runtime.
 
 exclude:
   - "src/**/tests/**"

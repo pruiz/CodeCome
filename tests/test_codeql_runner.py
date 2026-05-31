@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
 from codeql.config import CodeQLConfig
-from codeql.runner import _create_database, _lookup_build, _manifest, run_codeql, write_manifest
+from codeql.runner import _create_database, _lookup_build, _lookup_timeout, _manifest, run_codeql, write_manifest
 
 
 def test_manifest_completed() -> None:
@@ -123,9 +123,12 @@ def test_lookup_build_no_match_within_plan() -> None:
 
 def test_create_database_creates_parent_dir(tmp_path: Path) -> None:
     db_dir = tmp_path / "itemdb" / "codeql" / "databases" / "c-cpp"
-    completed = MagicMock(returncode=0, stderr="")
+    mock_process = MagicMock()
+    mock_process.returncode = 0
+    mock_process.wait.return_value = 0
+    mock_process.stderr = []
 
-    with patch("codeql.runner.subprocess.run", return_value=completed) as mock_run:
+    with patch("codeql.runner.subprocess.Popen", return_value=mock_process) as mock_popen:
         ok, msg = _create_database(
             tmp_path / "codeql",
             "c-cpp",
@@ -139,15 +142,18 @@ def test_create_database_creates_parent_dir(tmp_path: Path) -> None:
     assert ok is True
     assert msg == ""
     assert db_dir.parent.is_dir()
-    assert mock_run.call_args.args[0][3] == str(db_dir)
-    assert "--build-mode=none" in mock_run.call_args.args[0]
+    assert mock_popen.call_args.args[0][3] == str(db_dir)
+    assert "--build-mode=none" in mock_popen.call_args.args[0]
 
 
 def test_create_database_manual_build_mode_and_command(tmp_path: Path) -> None:
     db_dir = tmp_path / "itemdb" / "codeql" / "databases" / "root" / "c-cpp"
-    completed = MagicMock(returncode=0, stderr="")
+    mock_process = MagicMock()
+    mock_process.returncode = 0
+    mock_process.wait.return_value = 0
+    mock_process.stderr = []
 
-    with patch("codeql.runner.subprocess.run", return_value=completed) as mock_run:
+    with patch("codeql.runner.subprocess.Popen", return_value=mock_process) as mock_popen:
         ok, msg = _create_database(
             tmp_path / "codeql",
             "c-cpp",
@@ -160,7 +166,7 @@ def test_create_database_manual_build_mode_and_command(tmp_path: Path) -> None:
 
     assert ok is True
     assert msg == ""
-    cmd = mock_run.call_args.args[0]
+    cmd = mock_popen.call_args.args[0]
     assert "--build-mode=manual" in cmd
     assert "-c" in cmd
     assert "make -C src/native" in cmd
@@ -217,3 +223,37 @@ def test_run_codeql_database_failure_honors_soft_policy(tmp_path: Path) -> None:
     assert manifest["failures"] == ["db create failed"]
     assert manifest["analysis_units"] == ["root"]
     assert manifest["languages"] == ["root:c-cpp"]
+
+
+def test_lookup_timeout_plan_takes_priority() -> None:
+    languages = [
+        {"id": "c-cpp", "db_create_timeout": 1800, "analyze_timeout": 900},
+    ]
+    assert _lookup_timeout("db_create_timeout", "c-cpp", languages, 600) == 1800
+    assert _lookup_timeout("analyze_timeout", "c-cpp", languages, 600) == 900
+
+
+def test_lookup_timeout_falls_back_to_default() -> None:
+    languages = [{"id": "c-cpp"}]
+    assert _lookup_timeout("db_create_timeout", "c-cpp", languages, 600) == 600
+    assert _lookup_timeout("analyze_timeout", "c-cpp", [], 600) == 600
+
+
+def test_create_database_streams_stderr_to_progress(tmp_path: Path) -> None:
+    db_dir = tmp_path / "itemdb" / "codeql" / "databases" / "n" / "c-cpp"
+    mock_process = MagicMock()
+    mock_process.returncode = 0
+    mock_process.wait.return_value = 0
+    mock_process.stderr = ["extracting file\n", "compiling done\n"]
+
+    messages: list[str] = []
+
+    with patch("codeql.runner.subprocess.Popen", return_value=mock_process):
+        ok, msg = _create_database(
+            tmp_path / "codeql", "c-cpp", "./src", db_dir,
+            "none", None, [], progress=messages.append,
+        )
+
+    assert ok is True
+    assert "CodeQL: extracting file" in messages
+    assert "CodeQL: compiling done" in messages
