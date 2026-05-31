@@ -20,7 +20,7 @@ BUILD_MODES_BY_LANGUAGE: dict[str, set[str]] = {
 
 def supported_build_modes(language_id: str) -> set[str]:
     """Return supported CodeQL build modes for *language_id*."""
-    return BUILD_MODES_BY_LANGUAGE.get(language_id, set())
+    return set(BUILD_MODES_BY_LANGUAGE.get(language_id, set()))
 
 
 def is_supported_language(language_id: str) -> bool:

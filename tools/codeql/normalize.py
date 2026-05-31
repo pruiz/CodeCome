@@ -99,12 +99,12 @@ def _parse_sarif(
             continue
         rules_lookup = _build_rules_lookup(run)
 
-        for ri, result in enumerate(results):
+        for result in results:
             if not isinstance(result, dict):
                 continue
             alert = _normalize_one_result(
                 result, rules_lookup, analysis_unit_id, language_id, pack_profile,
-                start_index + ri + 1, source_root,
+                start_index + len(alerts) + 1, source_root,
             )
             if alert:
                 alerts.append(alert)

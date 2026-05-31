@@ -64,8 +64,8 @@ def run_full_pipeline(config: CodeQLConfig, progress: Callable[[str], None] | No
     normalized_dir = output_dir / "normalized"
     resolved_path = output_dir / "selected-query-packs.yml"
 
-    # Step 3: normalize SARIF (only if completed and SARIF files exist)
-    if status == "completed" and resolved_path.is_file():
+    # Step 3: normalize SARIF (completed or soft-failed, with SARIF files present)
+    if status in ("completed", "soft-failed") and resolved_path.is_file():
         sarif_dir = output_dir / "sarif"
         if list(sarif_dir.glob("*.sarif")):
             try:
@@ -91,6 +91,9 @@ def run_full_pipeline(config: CodeQLConfig, progress: Callable[[str], None] | No
             manifest.setdefault("warnings", []).append(
                 f"Risk import failed: {exc}"
             )
+
+    # Re-write manifest so any warnings appended above are on disk.
+    write_manifest(manifest, output_dir)
 
     # Step 5: write summary
     write_summary(manifest, normalized_dir, output_dir)

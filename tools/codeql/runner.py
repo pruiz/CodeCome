@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tempfile
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -200,8 +201,22 @@ def _create_database(
     elif build_mode == "autobuild":
         cmd += ["--build-mode=autobuild"]
 
-    return _run_with_progress(cmd, f"Database create timed out for {language_id} after {timeout}s",
-                              f"Database create failed for {language_id}", timeout, progress)
+    temp_config: Path | None = None
+    if exclude_patterns:
+        import yaml as _yaml
+        temp_config = Path(tempfile.mkdtemp(prefix="codeql-codescanning-")) / "codescanning-config.yml"
+        temp_config.parent.mkdir(parents=True, exist_ok=True)
+        config_content = {"paths-ignore": exclude_patterns}
+        temp_config.write_text(_yaml.dump(config_content, default_flow_style=False), encoding="utf-8")
+        cmd += ["--codescanning-config=" + str(temp_config)]
+
+    try:
+        return _run_with_progress(cmd, f"Database create timed out for {language_id} after {timeout}s",
+                                  f"Database create failed for {language_id}", timeout, progress)
+    finally:
+        if temp_config is not None and temp_config.parent.exists():
+            import shutil as _shutil
+            _shutil.rmtree(temp_config.parent, ignore_errors=True)
 
 
 def _run_analyze(
