@@ -108,6 +108,35 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
             completion_mod.SANDBOX_PLAN_PATH = orig_sandbox_plan
             completion_mod.ROOT = orig_root
 
+    def test_phase1c_accepts_fresh_sandbox_state_with_existing_notes(self, tmp_path):
+        import phases.completion as completion_mod
+
+        orig_notes_root = completion_mod.NOTES_ROOT
+        orig_sandbox_plan = completion_mod.SANDBOX_PLAN_PATH
+        orig_root = completion_mod.ROOT
+
+        completion_mod.NOTES_ROOT = tmp_path / "notes"
+        completion_mod.SANDBOX_PLAN_PATH = completion_mod.NOTES_ROOT / "sandbox-plan.md"
+        completion_mod.ROOT = tmp_path / "codecome_workspace"
+
+        for name in completion_mod._PHASE1_REQUIRED_ARTIFACT_NAMES:
+            artifact = completion_mod.NOTES_ROOT / name
+            artifact.parent.mkdir(parents=True, exist_ok=True)
+            artifact.write_text("", encoding="utf-8")
+
+        run_start = time.time()
+        sandbox_generated = completion_mod.ROOT / "sandbox" / "CODECOME-GENERATED.md"
+        sandbox_generated.parent.mkdir(parents=True)
+
+        try:
+            assert completion_mod.check_phase_graceful_completion("1", None, run_start) is False
+            sandbox_generated.write_text("validated", encoding="utf-8")
+            assert completion_mod.check_phase_graceful_completion("1c", None, run_start) is True
+        finally:
+            completion_mod.NOTES_ROOT = orig_notes_root
+            completion_mod.SANDBOX_PLAN_PATH = orig_sandbox_plan
+            completion_mod.ROOT = orig_root
+
     def test_phase2_uses_finding_status_dir_via_ast(self):
         import ast
         source = (ROOT / "tools" / "phases" / "completion.py").read_text()

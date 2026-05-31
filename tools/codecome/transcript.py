@@ -30,6 +30,22 @@ def _transcript_dir() -> Path:
     return d
 
 
+def _unique_transcript_path(path: Path) -> Path:
+    """Return a transcript path that will not truncate an existing file."""
+    if not path.exists():
+        return path
+
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    pid = os.getpid()
+    stem = path.stem
+    suffix = path.suffix
+    for n in range(1, 1000):
+        candidate = path.with_name(f"{stem}-{stamp}-pid{pid}-{n}{suffix}")
+        if not candidate.exists():
+            return candidate
+    raise OSError(f"could not allocate unique transcript path for {path}")
+
+
 class Transcript:
     """JSONL event transcript — handles open, write, close.
 
@@ -54,8 +70,8 @@ class Transcript:
             counter = _ATTEMPT_COUNTER.get(key, 1)
             _ATTEMPT_COUNTER[key] = counter + 1
 
-        path = _transcript_dir() / f"last-phase-{phase}-{finding_tag}-attempt-{counter}.jsonl"
-        return cls(path, path.open("w", encoding="utf-8", buffering=1))
+        path = _unique_transcript_path(_transcript_dir() / f"last-phase-{phase}-{finding_tag}-attempt-{counter}.jsonl")
+        return cls(path, path.open("x", encoding="utf-8", buffering=1))
 
     @classmethod
     def for_chat(cls) -> Transcript:

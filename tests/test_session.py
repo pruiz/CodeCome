@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -167,10 +168,24 @@ class TestSendPromptToSession:
             500,
             "Internal Server Error",
             {},
-            None,
+            BytesIO(b"server says no"),
         )
 
-        with pytest.raises(RuntimeError, match="Failed to send prompt: HTTP 500"):
+        with pytest.raises(RuntimeError, match="Failed to send prompt: HTTP 500: server says no"):
             module.send_prompt_to_session(
                 "http://localhost:8080", "sess-1", "hello", "recon", None, None, None, None
             )
+
+    @patch("urllib.request.urlopen")
+    def test_get_session_status_busy(self, mock_urlopen):
+        module = _load_session_module()
+        mock_resp = MagicMock()
+        mock_resp.__enter__.return_value = mock_resp
+        mock_resp.read.return_value = json.dumps({"status": {"type": "busy"}}).encode("utf-8")
+        mock_urlopen.return_value = mock_resp
+
+        status = module.get_session_status("http://localhost:8080", "sess-1", None, None)
+
+        assert status == "busy"
+        req = mock_urlopen.call_args[0][0]
+        assert req.full_url == "http://localhost:8080/session/sess-1"

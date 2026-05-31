@@ -9,6 +9,7 @@ import argparse
 import os
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -17,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import _colors as C
 from events.phase_loop import PhaseEventLoop, RunResult
 from codecome.config import ROOT
-from codecome.session import create_session, send_prompt_to_session
+from codecome.session import create_session, get_session_status, send_prompt_to_session
 from codecome.transcript import Transcript
 from codecome.recording import EventRecorder
 
@@ -33,6 +34,7 @@ def _consume_events(
     auth_token: str | None,
     workspace_dir: str | None,
     render_event_fn: Callable[..., None],
+    event_loop_box: dict[str, Any] | None = None,
 ) -> RunResult:
     event_loop = PhaseEventLoop(
         base_url=base_url,
@@ -43,6 +45,8 @@ def _consume_events(
         auth_token=auth_token,
         workspace_dir=workspace_dir,
     )
+    if event_loop_box is not None:
+        event_loop_box["loop"] = event_loop
 
     recorder = EventRecorder(transcript, debug=args.debug)
 
@@ -50,6 +54,38 @@ def _consume_events(
         render_event_fn(console_, phase_, label_, event)
 
     return event_loop.run(_handle_event, recorder.record)
+
+
+def _record_codecome_event(transcript: Transcript, event_type: str, **properties: Any) -> None:
+    transcript.write_event({
+        "type": event_type,
+        "timestamp": int(time.time() * 1000),
+        "properties": properties,
+    })
+
+
+def _wait_for_resume_idle(
+    base_url: str,
+    session_id: str,
+    auth_token: str | None,
+    workspace_dir: str | None,
+    transcript: Transcript,
+) -> None:
+    timeout_s = float(os.environ.get("CODECOME_RESUME_IDLE_TIMEOUT", "15"))
+    poll_s = float(os.environ.get("CODECOME_RESUME_IDLE_POLL", "1"))
+    deadline = time.monotonic() + max(timeout_s, 0.0)
+
+    while True:
+        status = get_session_status(base_url, session_id, auth_token, workspace_dir)
+        if status != "busy":
+            if status is not None:
+                _record_codecome_event(transcript, "codecome.resume.status", sessionID=session_id, status=status)
+            return
+
+        _record_codecome_event(transcript, "codecome.resume.blocked_busy", sessionID=session_id, status=status)
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f"session {session_id} is still busy; refusing to send resume prompt")
+        time.sleep(max(poll_s, 0.1))
 
 
 def _run_single_attempt(
@@ -82,13 +118,29 @@ def _run_single_attempt(
             print(C.warn(f"warning: could not open transcript {transcript.path}: {exc}"))
 
     try:
+        _record_codecome_event(
+            transcript,
+            "codecome.attempt.started",
+            phase=transcript_phase or str(args.phase),
+            label=str(args.label),
+            existingSession=bool(existing_session_id),
+        )
         if existing_session_id:
             session_id = existing_session_id
+            _wait_for_resume_idle(base_url, session_id, auth_token, workspace_dir, transcript)
         else:
             session_id = create_session(base_url, str(args.phase), args.agent, model, auth_token, workspace_dir)
 
+        _record_codecome_event(
+            transcript,
+            "codecome.session.ready",
+            sessionID=session_id,
+            existingSession=bool(existing_session_id),
+        )
+
         run_result_box: dict[str, Any] = {}
         consume_error_box: dict[str, Exception] = {}
+        event_loop_box: dict[str, Any] = {}
 
         def _consume() -> None:
             try:
@@ -100,6 +152,7 @@ def _run_single_attempt(
                     transcript,
                     auth_token, workspace_dir,
                     render_event_fn=render_event_fn,
+                    event_loop_box=event_loop_box,
                 )
             except Exception as exc:  # noqa: BLE001
                 consume_error_box["error"] = exc
@@ -107,15 +160,51 @@ def _run_single_attempt(
         consumer = threading.Thread(target=_consume, name=f"codecome-events-{session_id}", daemon=True)
         consumer.start()
 
-        send_prompt_to_session(base_url, session_id, prompt, args.agent, model, variant, auth_token, workspace_dir)
+        _record_codecome_event(transcript, "codecome.prompt.send_started", sessionID=session_id)
+        try:
+            send_prompt_to_session(base_url, session_id, prompt, args.agent, model, variant, auth_token, workspace_dir)
+        except Exception as exc:
+            _record_codecome_event(
+                transcript,
+                "codecome.prompt.send_failed",
+                sessionID=session_id,
+                errorType=type(exc).__name__,
+                message=str(exc),
+            )
+            loop = event_loop_box.get("loop")
+            if loop is not None:
+                try:
+                    loop.stop()
+                except Exception:
+                    pass
+            consumer.join(timeout=5.0)
+            if consumer.is_alive():
+                _record_codecome_event(transcript, "codecome.event_loop.stop_timeout", sessionID=session_id)
+            raise
+        _record_codecome_event(transcript, "codecome.prompt.send_completed", sessionID=session_id)
         consumer.join()
 
         if "error" in consume_error_box:
-            raise consume_error_box["error"]
+            exc = consume_error_box["error"]
+            _record_codecome_event(
+                transcript,
+                "codecome.event_loop.failed",
+                sessionID=session_id,
+                errorType=type(exc).__name__,
+                message=str(exc),
+            )
+            raise exc
         run_result = run_result_box.get("result")
         if not isinstance(run_result, RunResult):
             raise RuntimeError("Event loop ended without a RunResult")
     except Exception as exc:
+        _record_codecome_event(
+            transcript,
+            "codecome.attempt.failed",
+            errorType=type(exc).__name__,
+            message=str(exc),
+            existingSession=bool(existing_session_id),
+        )
         if emit_fatal_error_fn:
             emit_fatal_error_fn(console, "Server Error", str(exc))
         else:
