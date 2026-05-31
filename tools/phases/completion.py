@@ -88,6 +88,7 @@ def _exploitation_status_looks_real(frontmatter: dict[str, Any] | None) -> bool:
 
 def check_phase_graceful_completion(phase: str, finding: str | None, run_start_time: float) -> bool:
     phase_key = str(phase)
+    phase_is_1c = phase_key == "1c"
     if phase_key in ("1a", "1b", "1c"):
         phase_key = "1"
 
@@ -95,11 +96,13 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
         if phase_key == "1":
             required_artifacts = _phase1_required_artifacts()
             if all(path.exists() for path in required_artifacts):
-                fresh_required = any(_path_is_fresh(path, run_start_time) for path in required_artifacts)
                 sandbox_generated = ROOT / "sandbox" / "CODECOME-GENERATED.md"
                 sandbox_state_recorded = _path_is_fresh(sandbox_generated, run_start_time) or _path_is_fresh(
                     SANDBOX_PLAN_PATH, run_start_time
                 )
+                if phase_is_1c:
+                    return sandbox_state_recorded
+                fresh_required = any(_path_is_fresh(path, run_start_time) for path in required_artifacts)
                 return fresh_required and sandbox_state_recorded
             return False
         elif phase_key in ("2", "sweep"):

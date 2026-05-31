@@ -154,3 +154,64 @@ def test_run_single_attempt_existing_session(mock_args, mock_console, monkeypatc
     assert code == 0
     assert session_id == "existing_123"
     assert len(created) == 0
+
+
+def test_run_single_attempt_records_prompt_timeout(mock_args, mock_console, monkeypatch):
+    monkeypatch.setattr(runner, "create_session", lambda *a, **kw: "new_session")
+    monkeypatch.setattr(runner, "_consume_events", lambda *a, **kw: RunResult())
+
+    def fake_send(*_a, **_kw):
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(runner, "send_prompt_to_session", fake_send)
+
+    events = []
+    fake_transcript = MagicMock(spec=Transcript)
+    fake_transcript.path = Path("fake.jsonl")
+    fake_transcript.write_event.side_effect = events.append
+    monkeypatch.setattr(Transcript, "for_phase", classmethod(lambda cls, p, f: fake_transcript))
+
+    fatal_errors = []
+    code, session_id, _res, _path = runner._run_single_attempt(
+        mock_args, mock_console, "do work", "model", "var",
+        "http://base", "auth", "dir", lambda *a: None,
+        emit_fatal_error_fn=lambda _console, _title, msg: fatal_errors.append(msg),
+    )
+
+    assert code == 1
+    assert session_id == ""
+    assert fatal_errors == ["timed out"]
+    event_types = [event["type"] for event in events]
+    assert "codecome.prompt.send_started" in event_types
+    assert "codecome.prompt.send_failed" in event_types
+    assert "codecome.attempt.failed" in event_types
+    failed = next(event for event in events if event["type"] == "codecome.prompt.send_failed")
+    assert failed["properties"]["errorType"] == "TimeoutError"
+    assert failed["properties"]["message"] == "timed out"
+
+
+def test_existing_session_busy_guard_blocks_resume_prompt(mock_args, mock_console, monkeypatch):
+    monkeypatch.setattr(runner, "create_session", lambda *a, **kw: pytest.fail("should not create session"))
+    monkeypatch.setattr(runner, "_consume_events", lambda *a, **kw: pytest.fail("should not consume events"))
+    monkeypatch.setattr(runner, "send_prompt_to_session", lambda *a, **kw: pytest.fail("should not send prompt"))
+    monkeypatch.setattr(runner, "get_session_status", lambda *a, **kw: "busy")
+    monkeypatch.setenv("CODECOME_RESUME_IDLE_TIMEOUT", "0")
+
+    events = []
+    fake_transcript = MagicMock(spec=Transcript)
+    fake_transcript.path = Path("fake.jsonl")
+    fake_transcript.write_event.side_effect = events.append
+    monkeypatch.setattr(Transcript, "for_phase", classmethod(lambda cls, p, f: fake_transcript))
+
+    code, session_id, _res, _path = runner._run_single_attempt(
+        mock_args, mock_console, "resume", "model", "var",
+        "http://base", "auth", "dir", lambda *a: None,
+        existing_session_id="existing_123",
+        emit_fatal_error_fn=lambda *_a: None,
+    )
+
+    assert code == 1
+    assert session_id == "existing_123"
+    event_types = [event["type"] for event in events]
+    assert "codecome.resume.blocked_busy" in event_types
+    assert "codecome.prompt.send_started" not in event_types
