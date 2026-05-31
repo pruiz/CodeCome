@@ -120,8 +120,6 @@ def _run_codeql(console: Any) -> int:
         else:
             import _colors as C
             print(C.fail(msg))
-        if config.fail_policy == "hard":
-            return 1
         return 0
 
     status = manifest["status"]
@@ -171,8 +169,6 @@ def _run_codeql(console: Any) -> int:
                 console.print(Text(f"  {f}", style="red"))
             else:
                 print(C.fail(f"  {f}"))
-        if config.fail_policy == "hard":
-            return 1
 
     return 0
 
@@ -406,7 +402,21 @@ def _run_codeql_repair_if_needed(
     runner: ServerRunner,
     base_url: str,
 ) -> int:
-    """Ask the model to repair CodeQL build instructions and rerun CodeQL until stable."""
+    """
+    Ask the model to repair CodeQL build instructions and rerun CodeQL until stable.
+    
+    Architecture / Retries Logic:
+      1. CodeCome generates a `codeql-plan.yml` in Phase 1a.
+      2. We attempt to run CodeQL using that plan.
+      3. If CodeQL database creation fails (e.g., due to build errors), this function is
+         triggered. It allocates a retry budget (`CODEQL_REPAIR_RETRIES`) to use the model
+         to debug the failure and output a repaired `codeql-plan.yml`.
+      4. If the agent itself fails to produce a valid plan (e.g. gets stuck validating its
+         YAML repeatedly) or the user hits Ctrl+C, we break out of the repair loop.
+      5. We NEVER halt the entire pipeline in this function. We simply exhaust the allocated 
+         budget. Only after all repair attempts finish does `_check_codeql_artifacts` finally 
+         enforce the `fail_policy: hard` gate and halt the pipeline if the database is still missing.
+    """
     from codeql.config import resolve_config as _resolve_codeql_config
 
     max_retries = int(os.environ.get("CODEQL_REPAIR_RETRIES", "2"))
@@ -446,8 +456,16 @@ def _run_codeql_repair_if_needed(
         )
         assert isinstance(outcome, _SubphaseOutcome)
         repair_session_id = outcome.session_id or repair_session_id
+        
+        if outcome.returncode == 130:
+            return 130  # Honor user interrupt immediately
+            
         if outcome.returncode != 0:
-            continue
+            # The agent exhausted its internal validation retries or failed fatally.
+            # Continuing here would just loop the same broken state, so we break
+            # out of the repair loop to let the phase proceed (and potentially halt).
+            break
+            
         next_plan_digest = _file_digest(plan_path)
         if next_plan_digest == plan_digest:
             unchanged_msg = "CodeQL repair completed but did not change itemdb/notes/codeql-plan.yml."
