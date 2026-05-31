@@ -74,4 +74,8 @@ Make the repair directly in files. At the end, summarize:
 - any helper script created,
 - the exact manual build command CodeQL will run next.
 
-Before ending, validate that `itemdb/notes/codeql-plan.yml` is valid YAML and still follows the CodeQL plan schema. Also verify that any referenced helper shell script exists and passes syntax-only validation. If validation fails, repair only the reported YAML/schema/helper issue before summarizing.
+Before ending, validate that `itemdb/notes/codeql-plan.yml` is valid and follows CodeCome rules by running:
+
+    rtk python3 tools/codecome.py check-codeql-plan
+
+If validation fails, repair only the reported issue before summarizing.
