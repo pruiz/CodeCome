@@ -429,12 +429,12 @@ def check_codeql_status() -> int:
     """Check CodeQL configuration and last recorded artifact state."""
     print()
     print(C.header("CodeQL:"))
-
+    # TODO: move CodeQL check logic to tools/codecome/checks.py (see GH issue)
     try:
         from codeql.config import resolve_config
         from codeql.artifacts import check_artifacts
         from codeql.packs import load_codeql_plan
-    except Exception as exc:
+    except ImportError as exc:
         print(C.warn(f"CodeQL checks unavailable: {exc}"))
         return 0
 

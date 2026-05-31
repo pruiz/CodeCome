@@ -246,7 +246,9 @@ def _create_database(
 
     if build_mode == "none":
         cmd += ["--build-mode=none"]
-    elif build_mode == "manual" and build_command:
+    elif build_mode == "manual":
+        if not build_command:
+            return False, f"build_mode is 'manual' for {language_id} but no build_command provided in the plan"
         cmd += ["--build-mode=manual", "-c", build_command]
     elif build_mode == "autobuild":
         cmd += ["--build-mode=autobuild"]

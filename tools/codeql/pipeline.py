@@ -65,6 +65,7 @@ def run_full_pipeline(config: CodeQLConfig, progress: Callable[[str], None] | No
     resolved_path = output_dir / "selected-query-packs.yml"
 
     # Step 3: normalize SARIF (completed or soft-failed, with SARIF files present)
+    normalized_ok = False
     if status in ("completed", "soft-failed") and resolved_path.is_file():
         sarif_dir = output_dir / "sarif"
         if list(sarif_dir.glob("*.sarif")):
@@ -74,6 +75,7 @@ def run_full_pipeline(config: CodeQLConfig, progress: Callable[[str], None] | No
                     sarif_dir, normalized_dir, resolved,
                     manifest.get("codeql_version", "unknown"), ROOT,
                 )
+                normalized_ok = True
                 _progress(progress, "CodeQL: normalized SARIF artifacts")
             except Exception as exc:
                 manifest.setdefault("warnings", []).append(
@@ -81,10 +83,10 @@ def run_full_pipeline(config: CodeQLConfig, progress: Callable[[str], None] | No
                 )
                 manifest["status"] = "failed" if config.fail_policy == "hard" else "soft-failed"
 
-    # Step 4: import risk
+    # Step 4: import risk (only if normalization succeeded — avoid importing stale signals)
     signals_path = normalized_dir / "file-signals.yml"
     risk_path = ROOT / "itemdb/notes/file-risk-index.yml"
-    if signals_path.is_file():
+    if normalized_ok and signals_path.is_file():
         try:
             import_risk(signals_path, risk_path)
             _progress(progress, "CodeQL: imported file risk signals")
