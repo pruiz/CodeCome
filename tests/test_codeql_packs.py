@@ -187,3 +187,58 @@ def test_load_codeql_plan_rejects_invalid_language_entry(tmp_path: Path) -> None
         assert "non-mapping analysis unit" in str(exc)
     else:
         raise AssertionError("expected PackResolverError")
+
+
+def test_resolve_plan_packs_skip_unsupported(tmp_path: Path) -> None:
+    catalog_path = tmp_path / "catalog.yml"
+    _write_catalog(catalog_path)
+    catalog = load_pack_catalog(catalog_path)
+
+    plan = {
+        "schema_version": 1,
+        "analysis_units": [
+            {
+                "id": "gilroy",
+                "path": "./src",
+                "languages": [
+                    {"id": "elixir", "packs": ["official"]},
+                    {"id": "python", "packs": ["official"]},
+                ],
+            },
+        ],
+    }
+
+    resolved = resolve_plan_packs(plan, catalog, skip_unsupported=True)
+
+    languages = resolved["analysis_units"][0]["languages"]
+    assert len(languages) == 1
+    assert languages[0]["id"] == "python"
+    warnings = resolved.get("warnings", [])
+    assert len(warnings) == 1
+    assert "elixir" in warnings[0]
+
+
+def test_resolve_plan_packs_skip_unsupported_raises_by_default(tmp_path: Path) -> None:
+    catalog_path = tmp_path / "catalog.yml"
+    _write_catalog(catalog_path)
+    catalog = load_pack_catalog(catalog_path)
+
+    plan = {
+        "schema_version": 1,
+        "analysis_units": [
+            {
+                "id": "gilroy",
+                "path": "./src",
+                "languages": [
+                    {"id": "elixir", "packs": ["official"]},
+                ],
+            },
+        ],
+    }
+
+    try:
+        resolve_plan_packs(plan, catalog)
+    except PackResolverError as exc:
+        assert "Unsupported CodeQL language id" in str(exc)
+    else:
+        raise AssertionError("expected PackResolverError with skip_unsupported=False")

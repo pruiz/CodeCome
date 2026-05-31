@@ -19,6 +19,11 @@ import _colors as C
 from codecome.config import ROOT
 from codeql.capabilities import is_supported_language, supported_build_modes
 
+try:
+    from codeql.config import resolve_config as _resolve_codeql_config
+except ImportError:
+    _resolve_codeql_config = None  # type: ignore[assignment]
+
 
 REQUIRED_NOTES_1B = [
     "attack-surface.md",
@@ -204,8 +209,18 @@ def check_phase_1a(console=None, findings_snapshot: dict[str, int] | None = None
                         _emit(console, "fail", f"codeql-plan.yml: analysis unit '{unit_id}' language entry {j} missing valid 'id'")
                         return 1
                     if not is_supported_language(language_id):
-                        _emit(console, "fail", f"codeql-plan.yml: unsupported CodeQL language '{language_id}' in analysis unit '{unit_id}'")
-                        return 1
+                        fail_policy = "soft"
+                        if _resolve_codeql_config is not None:
+                            try:
+                                cfg = _resolve_codeql_config()
+                                fail_policy = cfg.fail_policy
+                            except Exception:
+                                pass
+                        if fail_policy == "hard":
+                            _emit(console, "fail", f"codeql-plan.yml: unsupported CodeQL language '{language_id}' in analysis unit '{unit_id}'")
+                            return 1
+                        _emit(console, "warn", f"codeql-plan.yml: unsupported CodeQL language '{language_id}' in analysis unit '{unit_id}' — will be skipped (fail_policy=soft)")
+                        continue
                     db_key = (unit_id, language_id)
                     if db_key in seen_databases:
                         _emit(console, "fail", f"codeql-plan.yml: duplicate language '{language_id}' in analysis unit '{unit_id}'")

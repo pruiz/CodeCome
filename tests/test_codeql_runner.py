@@ -288,3 +288,75 @@ def test_run_codeql_empty_languages_returns_skipped(tmp_path: Path) -> None:
     assert manifest["status"] == "skipped"
     assert manifest["languages"] == []
     assert any("No languages resolved" in f for f in manifest["failures"])
+
+
+def test_run_codeql_pack_resolver_error_soft_policy(tmp_path: Path) -> None:
+    from codeql.packs import PackResolverError
+
+    binary = tmp_path / ".tools" / "codeql" / "current" / "codeql"
+    binary.parent.mkdir(parents=True)
+    binary.write_text("", encoding="utf-8")
+
+    plan_path = tmp_path / "itemdb" / "notes" / "codeql-plan.yml"
+    plan_path.parent.mkdir(parents=True)
+    plan_path.write_text("schema_version: 1\n", encoding="utf-8")
+
+    catalog = tmp_path / "templates" / "codeql-packs.yml"
+    catalog.parent.mkdir(parents=True)
+    catalog.write_text("schema_version: 1\npacks:\n  python:\n    official:\n      - codeql/python-queries\n", encoding="utf-8")
+
+    config = CodeQLConfig(
+        enabled=True,
+        fail_policy="soft",
+        abs_install_path=binary,
+        abs_pack_catalog=catalog,
+        abs_output_dir=tmp_path / "itemdb" / "codeql",
+        abs_database_dir=tmp_path / "itemdb" / "codeql" / "databases",
+    )
+
+    with patch("codeql.runner.ROOT", tmp_path), \
+         patch("codeql.runner._get_codeql_version", return_value="2.25.5"), \
+         patch("codeql.runner.load_pack_catalog", return_value={}), \
+         patch("codeql.runner.load_codeql_plan", side_effect=PackResolverError("boom")):
+        manifest = run_codeql(config)
+
+    assert manifest["status"] == "soft-failed"
+    assert manifest["fail_policy"] == "soft"
+
+
+def test_run_codeql_skips_unsupported_languages_soft_policy(tmp_path: Path) -> None:
+    binary = tmp_path / ".tools" / "codeql" / "current" / "codeql"
+    binary.parent.mkdir(parents=True)
+    binary.write_text("", encoding="utf-8")
+
+    plan_path = tmp_path / "itemdb" / "notes" / "codeql-plan.yml"
+    plan_path.parent.mkdir(parents=True)
+    plan_path.write_text("schema_version: 1\n", encoding="utf-8")
+
+    catalog = tmp_path / "templates" / "codeql-packs.yml"
+    catalog.parent.mkdir(parents=True)
+    catalog.write_text("schema_version: 1\npacks:\n  python:\n    official:\n      - codeql/python-queries\n", encoding="utf-8")
+
+    config = CodeQLConfig(
+        enabled=True,
+        fail_policy="soft",
+        abs_install_path=binary,
+        abs_pack_catalog=catalog,
+        abs_output_dir=tmp_path / "itemdb" / "codeql",
+        abs_database_dir=tmp_path / "itemdb" / "codeql" / "databases",
+    )
+
+    resolved = {
+        "warnings": ["Skipping unsupported CodeQL language 'elixir' in analysis unit 'gilroy'"],
+        "analysis_units": [],
+    }
+
+    with patch("codeql.runner.ROOT", tmp_path), \
+         patch("codeql.runner._get_codeql_version", return_value="2.25.5"), \
+         patch("codeql.runner.load_pack_catalog", return_value={"packs": {"python": {"official": ["codeql/python-queries"]}}}), \
+         patch("codeql.runner.load_codeql_plan", return_value={"analysis_units": [{"id": "gilroy", "path": "./src", "languages": [{"id": "elixir", "packs": ["official"]}]}]}), \
+         patch("codeql.runner.resolve_plan_packs", return_value=resolved):
+        manifest = run_codeql(config)
+
+    assert manifest["status"] == "skipped"
+    assert "elixir" in manifest["warnings"][0]

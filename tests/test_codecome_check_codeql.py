@@ -14,6 +14,19 @@ sys.path.insert(0, str(ROOT / "tools"))
 from codeql.config import CodeQLConfig
 
 
+def _ensure_codecome_package():
+    """Ensure 'codecome' is imported as the package (dir), not the module (.py).
+
+    Some tests (e.g. test_codecome.py) import ``codecome.py`` as a module,
+    which blocks accessing ``codecome.phase_1`` as a submodule. Remove the
+    module from sys.modules so the package can be imported instead.
+    """
+    if "codecome" in sys.modules and not getattr(
+        sys.modules["codecome"], "__path__", None
+    ):
+        del sys.modules["codecome"]
+
+
 def _load_codecome_cli():
     spec = importlib.util.spec_from_file_location("codecome_cli_script", ROOT / "tools" / "codecome.py")
     assert spec is not None
@@ -88,3 +101,69 @@ def test_codeql_check_fails_failed_artifacts(tmp_path: Path, capsys) -> None:
     assert rc == 1
     assert "artifacts: failed" in out
     assert "boom" in out
+
+
+def test_check_codeql_artifacts_failed_soft_policy_returns_0(tmp_path: Path, capsys) -> None:
+    """_check_codeql_artifacts with status=failed and soft fail_policy should return 0."""
+    config = _config(tmp_path, enabled=True, fail_policy="soft")
+    manifest_dir = config.abs_output_dir
+    manifest_dir.mkdir(parents=True)
+    (manifest_dir / "run-manifest.yml").write_text(
+        yaml.safe_dump(
+            {
+                "status": "failed",
+                "codeql_enabled": True,
+                "fail_policy": "soft",
+                "failures": ["boom"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _ensure_codecome_package()
+    from codecome.phase_1 import _check_codeql_artifacts as _check
+    import codecome.phase_1 as p1
+
+    saved = p1.HAVE_RICH
+    p1.HAVE_RICH = False
+    try:
+        with patch("codeql.config.resolve_config", return_value=config):
+            rc = _check(None)
+    finally:
+        p1.HAVE_RICH = saved
+
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "fail_policy is soft" in out
+
+
+def test_check_codeql_artifacts_failed_hard_policy_returns_1(tmp_path: Path, capsys) -> None:
+    """_check_codeql_artifacts with status=failed and hard fail_policy should return 1."""
+    config = _config(tmp_path, enabled=True, fail_policy="hard")
+    manifest_dir = config.abs_output_dir
+    manifest_dir.mkdir(parents=True)
+    (manifest_dir / "run-manifest.yml").write_text(
+        yaml.safe_dump(
+            {
+                "status": "failed",
+                "codeql_enabled": True,
+                "fail_policy": "hard",
+                "failures": ["boom"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _ensure_codecome_package()
+    from codecome.phase_1 import _check_codeql_artifacts as _check
+    import codecome.phase_1 as p1
+
+    saved = p1.HAVE_RICH
+    p1.HAVE_RICH = False
+    try:
+        with patch("codeql.config.resolve_config", return_value=config):
+            rc = _check(None)
+    finally:
+        p1.HAVE_RICH = saved
+
+    assert rc == 1
