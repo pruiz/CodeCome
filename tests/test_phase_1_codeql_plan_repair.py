@@ -272,3 +272,46 @@ def test_codeql_repair_loop_resumes_same_session_after_failed_rerun(tmp_path: Pa
     assert calls[1][0] == "repair-session"
     assert calls[1][1] is not None
     assert "Latest CodeQL failure details" in calls[1][1]
+
+
+def test_codeql_repair_loop_does_not_block_after_retries_exhausted(tmp_path: Path, monkeypatch) -> None:
+    import codecome.phase_1 as p1
+
+    output_dir = tmp_path / "itemdb" / "codeql"
+    output_dir.mkdir(parents=True)
+    (output_dir / "run-manifest.yml").write_text(
+        yaml.safe_dump({"status": "soft-failed", "failures": ["Database create failed for c-cpp:\nautobuild failed"]}),
+        encoding="utf-8",
+    )
+    _write_manual_plan(tmp_path, "make")
+    config = SimpleNamespace(abs_output_dir=output_dir)
+
+    def fake_subphase(**_kwargs):
+        return p1._SubphaseOutcome(0, "repair-session", tmp_path / "repair.jsonl")
+
+    def fake_run_codeql(_console):
+        (output_dir / "run-manifest.yml").write_text(
+            yaml.safe_dump({"status": "soft-failed", "failures": ["Database create failed for c-cpp:\nmanual failed"]}),
+            encoding="utf-8",
+        )
+        return None
+
+    monkeypatch.setenv("CODEQL_REPAIR_RETRIES", "1")
+    saved_rich = p1.HAVE_RICH
+    p1.HAVE_RICH = False
+    try:
+        with patch.object(p1, "ROOT", tmp_path), \
+             patch("codeql.config.resolve_config", return_value=config), \
+             patch.object(p1, "_run_subphase", side_effect=fake_subphase), \
+             patch.object(p1, "_run_codeql", side_effect=fake_run_codeql):
+            rc = p1._run_codeql_repair_if_needed(
+                args=object(),
+                console=None,
+                rendering_ctx=None,
+                runner=_runner(),
+                base_url="http://127.0.0.1",
+            )
+    finally:
+        p1.HAVE_RICH = saved_rich
+
+    assert rc == 0
