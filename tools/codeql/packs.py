@@ -98,6 +98,8 @@ def load_codeql_plan(path: Path) -> dict[str, Any]:
         if not isinstance(unit_path, str) or not unit_path:
             raise PackResolverError(f"CodeQL plan at {path} has analysis unit {unit_id!r} without a valid 'path'.")
         languages = unit.get("languages")
+        if unit.get("recommended") is False and (languages is None or languages == []):
+            continue
         if not isinstance(languages, list) or not languages:
             raise PackResolverError(f"CodeQL plan at {path} must define analysis unit {unit_id!r} languages as a non-empty list.")
         for j, entry in enumerate(languages):
@@ -177,6 +179,10 @@ def resolve_plan_packs(plan: dict[str, Any], catalog: dict[str, Any], skip_unsup
     plan_warnings: list[str] = []
 
     for unit in plan.get("analysis_units", []):
+        if unit.get("recommended") is False:
+            plan_warnings.append(f"Skipping analysis unit '{unit['id']}' because recommended=false")
+            continue
+
         languages_out: list[dict[str, Any]] = []
         for entry in unit.get("languages", []):
             language_id = entry["id"]
