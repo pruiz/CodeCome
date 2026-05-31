@@ -257,7 +257,7 @@ def test_phase_1_reruns_codeql_after_repair() -> None:
              patch.object(p1, "check_phase_1a", return_value=0), \
              patch.object(p1, "check_phase_1b", return_value=0), \
              patch.object(p1, "check_phase_1c", return_value=0), \
-             patch.object(p1, "_run_codeql", return_value=0) as run_codeql, \
+             patch.object(p1, "_run_codeql", return_value=None) as run_codeql, \
              patch.object(p1, "_run_codeql_repair_if_needed", return_value=0), \
              patch.object(p1, "_check_codeql_artifacts", return_value=0):
             rc = p1.run_phase_1(object(), None, None, object(), "http://127.0.0.1")
