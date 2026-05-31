@@ -257,3 +257,34 @@ def test_create_database_streams_stderr_to_progress(tmp_path: Path) -> None:
     assert ok is True
     assert "CodeQL: extracting file" in messages
     assert "CodeQL: compiling done" in messages
+
+
+def test_run_codeql_empty_languages_returns_skipped(tmp_path: Path) -> None:
+    binary = tmp_path / ".tools" / "codeql" / "current" / "codeql"
+    binary.parent.mkdir(parents=True)
+    binary.write_text("", encoding="utf-8")
+
+    plan_path = tmp_path / "itemdb" / "notes" / "codeql-plan.yml"
+    plan_path.parent.mkdir(parents=True)
+    plan_path.write_text("schema_version: 1\nanalysis_units: []\n", encoding="utf-8")
+
+    catalog = tmp_path / "templates" / "codeql-packs.yml"
+    catalog.parent.mkdir(parents=True)
+    catalog.write_text("schema_version: 1\npacks:\n  python:\n    official:\n      - codeql/python-queries\n", encoding="utf-8")
+
+    config = CodeQLConfig(
+        enabled=True,
+        fail_policy="soft",
+        abs_install_path=binary,
+        abs_pack_catalog=catalog,
+        abs_output_dir=tmp_path / "itemdb" / "codeql",
+        abs_database_dir=tmp_path / "itemdb" / "codeql" / "databases",
+    )
+
+    with patch("codeql.runner.ROOT", tmp_path), \
+         patch("codeql.runner._get_codeql_version", return_value="2.25.5"):
+        manifest = run_codeql(config)
+
+    assert manifest["status"] == "skipped"
+    assert manifest["languages"] == []
+    assert any("No languages resolved" in f for f in manifest["failures"])

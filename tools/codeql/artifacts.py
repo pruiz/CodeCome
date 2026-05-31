@@ -46,8 +46,9 @@ def check_artifacts(output_dir: Path) -> tuple[str, list[str]]:
     if isinstance(failures, list):
         warnings.extend(failures)
 
-    # For completed runs, verify normalized outputs exist.
-    if status == "completed":
+    # For completed runs, verify normalized outputs exist (only if languages were analyzed).
+    languages = manifest.get("languages") or manifest.get("language_ids", [])
+    if status == "completed" and languages:
         normalized_dir = output_dir / "normalized"
         for expected in ("alerts.yml", "file-signals.yml"):
             if not (normalized_dir / expected).is_file():

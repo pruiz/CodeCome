@@ -113,6 +113,11 @@ def run_codeql(config: CodeQLConfig, progress: Callable[[str], None] | None = No
     if failures:
         return _manifest("failed", now_utc, config, [version], warnings, failures, language_ids, analysis_units)
 
+    if not language_ids:
+        return _manifest("skipped", now_utc, config, [version], warnings,
+                         failures=["No languages resolved from analysis plan."],
+                         languages=language_ids, analysis_units=analysis_units)
+
     return _manifest("completed", now_utc, config, [version], warnings, failures, language_ids, analysis_units)
 
 
