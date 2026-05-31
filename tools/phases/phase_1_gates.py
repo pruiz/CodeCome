@@ -202,6 +202,9 @@ def _validate_codeql_analysis_unit(
         return 1
 
     languages = unit.get("languages")
+    if unit.get("recommended") is False and (languages is None or languages == []):
+        _emit(console, "info", f"codeql-plan.yml: analysis unit '{unit_id}' is not recommended for CodeQL; skipping language validation")
+        return None
     if not isinstance(languages, list) or len(languages) == 0:
         _emit(console, "fail", f"codeql-plan.yml: analysis unit '{unit_id}' has no languages")
         return 1
