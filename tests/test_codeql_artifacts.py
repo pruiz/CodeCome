@@ -40,7 +40,7 @@ def test_completed_all_present(tmp_path: Path) -> None:
 
 def test_completed_missing_normalized(tmp_path: Path) -> None:
     out = tmp_path / "codeql"
-    _write_manifest(out, {"status": "completed", "failures": []})
+    _write_manifest(out, {"status": "completed", "languages": ["python"], "failures": []})
 
     status, warnings = check_artifacts(out)
     assert status == "completed"
@@ -83,3 +83,12 @@ def test_invalid_status(tmp_path: Path) -> None:
     status, warnings = check_artifacts(out)
     assert status == "unknown"
     assert any("bogus" in w for w in warnings)
+
+
+def test_completed_empty_languages_skips_normalized_check(tmp_path: Path) -> None:
+    out = tmp_path / "codeql"
+    _write_manifest(out, {"status": "completed", "languages": [], "failures": []})
+
+    status, warnings = check_artifacts(out)
+    assert status == "completed"
+    assert warnings == []
