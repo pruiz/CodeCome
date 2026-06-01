@@ -111,11 +111,9 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                 return any(f.name.endswith(".md") and f.name != ".gitkeep" and f.stat().st_mtime >= run_start_time for f in pending_dir.iterdir())
             return False
         elif phase_key == "3":
-            findings_dir = FINDINGS_ROOT
-            return any(
-                path.suffix == ".md" and path.name != ".gitkeep" and path.stat().st_mtime >= run_start_time
-                for path in _iter_files(findings_dir)
-            )
+            import glob as _glob
+            run_summaries = _glob.glob(str(ROOT / "runs" / "phase-3-summary-*.md"))
+            return any(Path(p).stat().st_mtime >= run_start_time for p in run_summaries)
         elif phase_key == "4" and finding:
             evidence_dir = evidence_dir_for(finding)
             return any(path.stat().st_mtime >= run_start_time for path in _iter_files(evidence_dir))
