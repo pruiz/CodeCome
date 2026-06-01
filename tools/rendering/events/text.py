@@ -12,9 +12,22 @@ import _colors as C
 
 
 class TextEventRenderer(EventRenderer):
-    event_types = ("text",)
+    event_types = ("text", "text.loop_warning")
 
     def render(self, event: dict[str, Any]) -> bool:
+        if event.get("type") == "text.loop_warning":
+            props = event.get("properties", {})
+            repeated = repr(props.get("repeatedText", "")[:50])
+            count = props.get("count", 0)
+            msg = f"WARNING: repetitive text loop detected — '{repeated}' repeated {count} times in a single message part. The model may be stuck."
+            if self.rich:
+                from rich.panel import Panel
+                from rich.text import Text as RichText
+                self.sink.write(Panel(RichText(msg, style="bold yellow"), title="Loop Warning", border_style="yellow"))
+            elif self.plain:
+                self.sink.write_text(C.warn(msg))
+            return True
+
         part = event.get("part", {})
         text = str(part.get("text", "")).strip()
         if not text:
