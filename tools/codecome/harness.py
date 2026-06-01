@@ -252,55 +252,70 @@ def run_phase_mode(args: argparse.Namespace) -> int:
                     returncode = 2
 
             if returncode == 0:
-                from findings.checks_entry import run_frontmatter_validation
-
-                validation_rc, validation_output = run_frontmatter_validation()
-                if validation_rc != 0:
-                    max_frontmatter_retries = 2
-                    if frontmatter_retry_count < max_frontmatter_retries:
-                        frontmatter_retry_count += 1
-                        msg = (
-                            "\n[Auto-Correction] The model completed a turn, but its output failed local frontmatter "
-                            f"validation. CodeCome will resume the same session and ask for a minimal repair "
-                            f"(retry {frontmatter_retry_count}/{max_frontmatter_retries})."
+                if last_finish_reason in _FINISH_TERMINAL_OK:
+                    if not check_phase_graceful_completion(str(args.phase), args.finding, RUN_START_TIME):
+                        returncode = 2
+                        finish_warning = (
+                            f"Phase {args.phase} reported terminal finish reason '{last_finish_reason}', "
+                            "but required durable artifacts were not produced. Treating as incomplete."
                         )
-                        if HAVE_RICH:
-                            from rich.text import Text
-                            console.print(Text(msg, style="bold yellow"))
-                        else:
-                            print(C.warn(msg))
-                        if last_session_id and last_session_id != "id":
-                            prompt = build_frontmatter_resume_prompt(args.phase, args.finding, validation_output)
-                            continue
+
+                if returncode == 0:
+                    from findings.checks_entry import run_frontmatter_validation
+
+                    validation_rc, validation_output = run_frontmatter_validation()
+                    if validation_rc != 0:
+                        max_frontmatter_retries = 2
+                        if frontmatter_retry_count < max_frontmatter_retries:
+                            frontmatter_retry_count += 1
+                            msg = (
+                                "\n[Auto-Correction] The model completed a turn, but its output failed local frontmatter "
+                                f"validation. CodeCome will resume the same session and ask for a minimal repair "
+                                f"(retry {frontmatter_retry_count}/{max_frontmatter_retries})."
+                            )
+                            if HAVE_RICH:
+                                from rich.text import Text
+                                console.print(Text(msg, style="bold yellow"))
+                            else:
+                                print(C.warn(msg))
+                            if last_session_id and last_session_id != "id":
+                                prompt = build_frontmatter_resume_prompt(args.phase, args.finding, validation_output)
+                                continue
+                            else:
+                                returncode = 2
+                                finish_warning = (
+                                    "The model output failed local frontmatter validation, and CodeCome could not determine a "
+                                    "session ID to resume for repair. Treating the phase as incomplete so the validator output "
+                                    "can be reported back with the saved transcript."
+                                )
                         else:
                             returncode = 2
                             finish_warning = (
-                                "The model output failed local frontmatter validation, and CodeCome could not determine a "
-                                "session ID to resume for repair. Treating the phase as incomplete so the validator output "
-                                "can be reported back with the saved transcript."
+                                f"The model output still fails local frontmatter validation after {max_frontmatter_retries} "
+                                "auto-repair attempts. Treating the phase as incomplete so the validation errors can be reported back."
                             )
-                    else:
-                        returncode = 2
-                        finish_warning = (
-                            f"The model output still fails local frontmatter validation after {max_frontmatter_retries} "
-                            "auto-repair attempts. Treating the phase as incomplete so the validation errors can be reported back."
-                        )
-                        msg = f"\n[Warning] Frontmatter errors persist after {max_frontmatter_retries} auto-retries."
-                        if HAVE_RICH:
-                            from rich.text import Text
-                            console.print(Text(msg, style="bold red"))
-                        else:
-                            print(C.fail(msg))
-                        print(validation_output)
-                    break
+                            msg = f"\n[Warning] Frontmatter errors persist after {max_frontmatter_retries} auto-retries."
+                            if HAVE_RICH:
+                                from rich.text import Text
+                                console.print(Text(msg, style="bold red"))
+                            else:
+                                print(C.fail(msg))
+                            print(validation_output)
+                        break
                 break
 
-            if returncode == 2 and last_finish_reason in _FINISH_MID_TURN:
+            if returncode == 2 and (
+                last_finish_reason in _FINISH_MID_TURN
+                or (
+                    last_finish_reason in _FINISH_TERMINAL_OK
+                    and not check_phase_graceful_completion(str(args.phase), args.finding, RUN_START_TIME)
+                )
+            ):
                 max_iteration_retries = int(os.environ.get("CODECOME_MAX_ITERATION_RETRIES", "1"))
                 if iteration_retry_count < max_iteration_retries:
                     iteration_retry_count += 1
                     msg = (
-                        "\n[Auto-Resume] CodeCome observed a mid-turn model/provider cutoff and will resume the same "
+                        "\n[Auto-Resume] CodeCome observed an incomplete run and will resume the same "
                         f"session once to let the model finish the interrupted work (retry {iteration_retry_count}/{max_iteration_retries})."
                     )
                     if HAVE_RICH:

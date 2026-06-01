@@ -198,3 +198,11 @@ At the end, summarize:
 - major confidence changes,
 - recommended validation order,
 - files modified.
+
+## Run summary
+
+Write the run summary to:
+
+    runs/phase-3-summary-YYYY-MM-DD-HHMMSS.md
+
+Use the current timestamp (year-month-day-hour-minute-second). Use the structure from `templates/run-summary.md`.
