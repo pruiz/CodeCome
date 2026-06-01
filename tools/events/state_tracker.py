@@ -11,7 +11,32 @@ snapshots when the corresponding `message.part.updated` arrives.
 
 from __future__ import annotations
 
+import os
+from collections import deque
 from typing import Any
+
+
+def _loop_detection_params() -> tuple[int, int]:
+    """Return (window_size, threshold) for loop detection from environment.
+
+    CODECOME_LOOP_WINDOW    — how many recent text-deltas to track (default 50)
+    CODECOME_LOOP_THRESHOLD — repetitions of the same delta in the window that
+                              trigger a warning (default 20)
+
+    Reads directly from ``os.environ`` on every call so that tests using
+    ``monkeypatch.setenv`` work correctly regardless of import order.
+    """
+    try:
+        window = int(os.environ.get("CODECOME_LOOP_WINDOW", "50"))
+        window = max(window, 1)
+    except (ValueError, TypeError):
+        window = 50
+    try:
+        threshold = int(os.environ.get("CODECOME_LOOP_THRESHOLD", "20"))
+        threshold = max(threshold, 1)
+    except (ValueError, TypeError):
+        threshold = 20
+    return window, threshold
 
 
 class StateTracker:
@@ -24,6 +49,14 @@ class StateTracker:
         self._seen_part_ids: set[str] = set()
         # Set of partIDs for which we saw delta but not yet updated.
         self._pending_part_ids: set[str] = set()
+
+        # --- Repetitive text-loop detection ---
+        # Per-part sliding window of recent text delta strings.
+        self._delta_windows: dict[str, deque[str]] = {}
+        # Counts of each delta text within the corresponding window.
+        self._delta_counts: dict[str, dict[str, int]] = {}
+        # Set of partIDs for which a loop warning has already been emitted.
+        self._loop_warned: set[str] = set()
 
     # ------------------------------------------------------------------
     # Ingestion
@@ -38,7 +71,9 @@ class StateTracker:
         """
         event_type = event.get("type", "")
         if event_type == "message.part.delta":
-            self._handle_delta(event)
+            finalized = self._handle_delta(event)
+            if finalized:
+                return finalized
             return []
 
         if event_type == "message.part.updated":
@@ -73,17 +108,62 @@ class StateTracker:
     # Delta accumulation
     # ------------------------------------------------------------------
 
-    def _handle_delta(self, event: dict[str, Any]) -> None:
-        """ Append a text/field delta to the buffer for its partID. """
+    def _handle_delta(self, event: dict[str, Any]) -> list[dict[str, Any]]:
+        """ Append a text/field delta to the buffer for its partID.
+
+        Detects repetitive text loops (same tiny fragment repeated many times)
+        using a per-part sliding window.  When a loop is detected, a
+        ``text.loop_warning`` event is emitted once per part so that:
+        - The console shows a visible warning to the operator
+        - The transcript records the incident for post-hoc diagnosis
+        - The model/provider is not disrupted — the phase continues to run
+        """
         props = event.get("properties", {})
         part_id = props.get("partID")
         field = props.get("field", "text")
         delta = props.get("delta", "")
         if not part_id or field != "text":
-            return
-        if delta:
-            self._delta_buffers[part_id] = self._delta_buffers.get(part_id, "") + delta
-            self._pending_part_ids.add(part_id)
+            return []
+        if not delta:
+            return []
+
+        self._delta_buffers[part_id] = self._delta_buffers.get(part_id, "") + delta
+        self._pending_part_ids.add(part_id)
+
+        # --- Loop detection ---
+        # Skip if we already warned on this part.
+        if part_id in self._loop_warned:
+            return []
+
+        # Get (or initialise) the per-part sliding window and counts.
+        if part_id not in self._delta_windows:
+            window_size, _ = _loop_detection_params()
+            self._delta_windows[part_id] = deque(maxlen=window_size)
+            self._delta_counts[part_id] = {}
+
+        window = self._delta_windows[part_id]
+        counts = self._delta_counts[part_id]
+
+        # Record this delta in the window; update its repetition count.
+        window.append(delta)
+        counts[delta] = counts.get(delta, 0) + 1
+
+        _, threshold = _loop_detection_params()
+        if counts[delta] > threshold:
+            # Mark warned so we emit at most one warning per part.
+            self._loop_warned.add(part_id)
+            return [{
+                "type": "text.loop_warning",
+                "timestamp": event.get("timestamp", 0),
+                "sessionID": props.get("sessionID", ""),
+                "properties": {
+                    "partID": part_id,
+                    "repeatedText": delta[:100],
+                    "count": counts[delta],
+                },
+            }]
+
+        return []
 
     def _handle_updated(self, event: dict[str, Any]) -> list[dict[str, Any]]:
         """ Inject accumulated deltas into the updated part and return finalized event(s). """
@@ -101,10 +181,14 @@ class StateTracker:
             # Track that we've seen this part so we don't re-emit on reconnect.
             if part_id:
                 self._seen_part_ids.add(part_id)
-                # Now it's safe to clear the buffer
                 if part_id in self._delta_buffers:
                     del self._delta_buffers[part_id]
                     self._pending_part_ids.discard(part_id)
+                # Clean up loop detection state — this part is now finalized
+                # and any in-progress loop warning has already been emitted.
+                self._delta_windows.pop(part_id, None)
+                self._delta_counts.pop(part_id, None)
+                self._loop_warned.discard(part_id)
             return [finalized]
             
         return []
