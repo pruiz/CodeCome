@@ -9,9 +9,27 @@ send prompt.
 from __future__ import annotations
 
 import json
+import os
+import time
 import urllib.error
 import urllib.request
 from typing import Any
+
+
+# Retry config for transient failures on prompt submission.
+_PROMPT_MAX_RETRIES = 3
+_PROMPT_BACKOFF_SCHEDULE = (5.0, 15.0, 30.0)  # seconds between retries
+
+
+def _is_retriable_error(exc: Exception) -> bool:
+    """Return True if the error is transient and worth retrying."""
+    if isinstance(exc, urllib.error.HTTPError):
+        return exc.code >= 500 or exc.code == 429
+    if isinstance(exc, urllib.error.URLError):
+        return True
+    if isinstance(exc, (TimeoutError, OSError)):
+        return True
+    return False
 
 
 def _get_headers(auth_token: str | None, workspace_dir: str | None) -> dict[str, str]:
@@ -59,19 +77,39 @@ def send_prompt_to_session(
         headers=_get_headers(auth_token, workspace_dir),
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(req, timeout=30.0) as resp:
-            pass  # 204 expected
-    except urllib.error.HTTPError as exc:
+    max_retries = int(os.environ.get("CODECOME_PROMPT_MAX_RETRIES", str(_PROMPT_MAX_RETRIES)))
+    last_exc: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            with urllib.request.urlopen(req, timeout=30.0) as resp:
+                pass  # 204 expected
+            return  # success
+        except Exception as exc:
+            last_exc = exc
+            if not _is_retriable_error(exc) or attempt == max_retries - 1:
+                break
+            backoff = _PROMPT_BACKOFF_SCHEDULE[min(attempt, len(_PROMPT_BACKOFF_SCHEDULE) - 1)]
+            time.sleep(backoff)
+            # Rebuild the request (urllib consumes it on use)
+            req = urllib.request.Request(
+                url,
+                data=data,
+                headers=_get_headers(auth_token, workspace_dir),
+                method="POST",
+            )
+
+    # All retries exhausted or non-retriable error
+    if isinstance(last_exc, urllib.error.HTTPError):
         body = ""
         try:
-            body = exc.read().decode("utf-8", errors="replace").strip()
+            body = last_exc.read().decode("utf-8", errors="replace").strip()
         except Exception:
             body = ""
-        detail = f"Failed to send prompt: HTTP {exc.code}"
+        detail = f"Failed to send prompt: HTTP {last_exc.code}"
         if body:
             detail = f"{detail}: {body}"
-        raise RuntimeError(detail) from exc
+        raise RuntimeError(detail) from last_exc
+    raise RuntimeError(f"Failed to send prompt: {last_exc}") from last_exc
 
 
 def get_session_status(
