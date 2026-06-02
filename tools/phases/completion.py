@@ -145,37 +145,47 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
             return any(Path(p).stat().st_mtime >= run_start_time for p in run_summaries)
         elif phase_key == "4" and finding:
             evidence_dir = evidence_dir_for(finding)
-            return any(path.stat().st_mtime >= run_start_time for path in _iter_files(evidence_dir))
+            evidence_fresh = any(path.stat().st_mtime >= run_start_time for path in _iter_files(evidence_dir))
+            finding_is_fresh = False
+            for status in ("PENDING", "CONFIRMED", "REJECTED", "DUPLICATE", "EXPLOITED"):
+                if _find_finding_file(finding_status_dir(status), finding, run_start_time):
+                    finding_is_fresh = True
+                    break
+            return evidence_fresh and finding_is_fresh
         elif phase_key == "5" and finding:
-            exploited_dir = finding_status_dir("EXPLOITED")
-            exploited_file = _find_finding_file(exploited_dir, finding, run_start_time)
-            if exploited_file is not None:
-                fm = _load_finding_frontmatter(exploited_file)
-                if (
-                    isinstance(fm, dict)
-                    and fm.get("status") == "EXPLOITED"
-                    and _exploitation_status_looks_real(fm)
-                ):
-                    exploits_dir = exploits_dir_for(finding)
-                    if any(
-                        path.stat().st_mtime >= run_start_time
-                        for path in _iter_files(exploits_dir)
-                    ):
+            exploits_dir = exploits_dir_for(finding)
+            exploits_fresh = any(path.stat().st_mtime >= run_start_time for path in _iter_files(exploits_dir))
+            
+            finding_is_fresh = False
+            status_found = None
+            for status in ("PENDING", "CONFIRMED", "REJECTED", "DUPLICATE", "EXPLOITED"):
+                if _find_finding_file(finding_status_dir(status), finding, run_start_time):
+                    finding_is_fresh = True
+                    status_found = status
+                    break
+                    
+            if not finding_is_fresh:
+                return False
+                
+            if status_found == "EXPLOITED":
+                exploited_file = _find_finding_file(finding_status_dir("EXPLOITED"), finding, run_start_time)
+                if exploited_file:
+                    fm = _load_finding_frontmatter(exploited_file)
+                    if fm and fm.get("status") == "EXPLOITED" and _exploitation_status_looks_real(fm):
+                        return exploits_fresh
+                return False
+
+            if status_found == "CONFIRMED":
+                confirmed_file = _find_finding_file(finding_status_dir("CONFIRMED"), finding, run_start_time)
+                if confirmed_file:
+                    fm = _load_finding_frontmatter(confirmed_file)
+                    if fm and isinstance(fm.get("exploitation"), dict) and str(fm["exploitation"].get("status", "")).upper() == "NOT_FEASIBLE":
                         return True
-
-            confirmed_dir = finding_status_dir("CONFIRMED")
-            confirmed_file = _find_finding_file(confirmed_dir, finding, run_start_time)
-            if confirmed_file is not None:
-                fm = _load_finding_frontmatter(confirmed_file)
-                if (
-                    isinstance(fm, dict)
-                    and fm.get("status") == "CONFIRMED"
-                    and isinstance(fm.get("exploitation"), dict)
-                    and str(fm["exploitation"].get("status", "")).upper()
-                    == "NOT_FEASIBLE"
-                ):
-                    return True
-
+                return exploits_fresh
+                
+            if status_found in ("REJECTED", "DUPLICATE"):
+                return True
+                
             return False
         elif phase_key == "6":
             reports_dir = REPORTS_ROOT
