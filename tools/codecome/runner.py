@@ -71,7 +71,7 @@ def _wait_for_resume_idle(
     workspace_dir: str | None,
     transcript: Transcript,
 ) -> None:
-    timeout_s = float(os.environ.get("CODECOME_RESUME_IDLE_TIMEOUT", "15"))
+    timeout_s = float(os.environ.get("CODECOME_RESUME_IDLE_TIMEOUT", "30"))
     poll_s = float(os.environ.get("CODECOME_RESUME_IDLE_POLL", "1"))
     deadline = time.monotonic() + max(timeout_s, 0.0)
 

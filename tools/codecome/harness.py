@@ -39,6 +39,7 @@ def run_phase_mode(args: argparse.Namespace) -> int:
     """
     RUN_START_TIME = time.time()
     iteration_retry_count = 0
+    fatal_retry_count = 0
     frontmatter_retry_count = 0
 
     color_mode = resolve_color_mode(args.color)
@@ -189,6 +190,28 @@ def run_phase_mode(args: argparse.Namespace) -> int:
             )
 
             if returncode != 0:
+                # Infrastructure/transient failure (timeout, connection error, etc.)
+                # Retry with a separate budget so infra blips don't consume the
+                # "model needs more turns" iteration retry budget.
+                max_fatal_retries = int(os.environ.get("CODECOME_MAX_FATAL_RETRIES", "2"))
+                if fatal_retry_count < max_fatal_retries and last_session_id:
+                    fatal_retry_count += 1
+                    msg = (
+                        f"\n[Auto-Retry] The previous attempt failed with an infrastructure error (exit {returncode}). "
+                        f"CodeCome will retry the same session (fatal retry {fatal_retry_count}/{max_fatal_retries})."
+                    )
+                    if HAVE_RICH:
+                        from rich.text import Text
+                        console.print(Text(msg, style="bold yellow"))
+                    else:
+                        print(C.warn(msg))
+                    # Brief pause before retrying to let transient issues settle.
+                    time.sleep(5.0)
+                    prompt = build_phase_resume_prompt(
+                        str(args.phase), args.finding,
+                        "infrastructure_error", step_finish_count,
+                    )
+                    continue
                 break
 
             last_session_id = session_id
@@ -311,7 +334,7 @@ def run_phase_mode(args: argparse.Namespace) -> int:
                     and not check_phase_graceful_completion(str(args.phase), args.finding, RUN_START_TIME)
                 )
             ):
-                max_iteration_retries = int(os.environ.get("CODECOME_MAX_ITERATION_RETRIES", "1"))
+                max_iteration_retries = int(os.environ.get("CODECOME_MAX_ITERATION_RETRIES", "3"))
                 if iteration_retry_count < max_iteration_retries:
                     iteration_retry_count += 1
                     msg = (

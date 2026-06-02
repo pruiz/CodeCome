@@ -159,8 +159,9 @@ class TestSendPromptToSession:
         assert payload["variant"] == "max"
 
     @patch("urllib.request.urlopen")
-    def test_send_prompt_http_error_raises(self, mock_urlopen):
+    def test_send_prompt_http_error_raises(self, mock_urlopen, monkeypatch):
         module = _load_session_module()
+        monkeypatch.setenv("CODECOME_PROMPT_MAX_RETRIES", "1")
         from urllib.error import HTTPError
 
         mock_urlopen.side_effect = HTTPError(
@@ -175,6 +176,61 @@ class TestSendPromptToSession:
             module.send_prompt_to_session(
                 "http://localhost:8080", "sess-1", "hello", "recon", None, None, None, None
             )
+
+    @patch("time.sleep")
+    @patch("urllib.request.urlopen")
+    def test_send_prompt_retries_on_timeout(self, mock_urlopen, mock_sleep):
+        module = _load_session_module()
+
+        # First two calls timeout, third succeeds.
+        mock_urlopen.side_effect = [
+            TimeoutError("timed out"),
+            TimeoutError("timed out"),
+            MagicMock(),
+        ]
+
+        module.send_prompt_to_session(
+            "http://localhost:8080", "sess-1", "hello", "recon", None, None, None, None
+        )
+
+        assert mock_urlopen.call_count == 3
+        assert mock_sleep.call_count == 2
+
+    @patch("time.sleep")
+    @patch("urllib.request.urlopen")
+    def test_send_prompt_retries_exhausted_raises(self, mock_urlopen, mock_sleep):
+        module = _load_session_module()
+
+        mock_urlopen.side_effect = TimeoutError("timed out")
+
+        with pytest.raises(RuntimeError, match="timed out"):
+            module.send_prompt_to_session(
+                "http://localhost:8080", "sess-1", "hello", "recon", None, None, None, None
+            )
+
+        assert mock_urlopen.call_count == 3  # default max retries
+
+    @patch("time.sleep")
+    @patch("urllib.request.urlopen")
+    def test_send_prompt_no_retry_on_4xx(self, mock_urlopen, mock_sleep):
+        module = _load_session_module()
+        from urllib.error import HTTPError
+
+        mock_urlopen.side_effect = HTTPError(
+            "http://localhost:8080/session/sess-1/prompt_async",
+            400,
+            "Bad Request",
+            {},
+            BytesIO(b"bad"),
+        )
+
+        with pytest.raises(RuntimeError, match="HTTP 400"):
+            module.send_prompt_to_session(
+                "http://localhost:8080", "sess-1", "hello", "recon", None, None, None, None
+            )
+
+        assert mock_urlopen.call_count == 1
+        assert mock_sleep.call_count == 0
 
     @patch("urllib.request.urlopen")
     def test_get_session_status_busy(self, mock_urlopen):
