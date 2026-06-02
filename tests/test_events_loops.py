@@ -121,145 +121,245 @@ def test_finish_reason_unknown_is_mid_turn():
 
 
 # ---------------------------------------------------------------------------
-# Repetitive text-loop detection
+# Repetitive text-loop detection (ratio-based)
 # ---------------------------------------------------------------------------
 
-def test_state_tracker_loop_detection_triggers_warning_at_threshold(monkeypatch):
-    """When the same text delta repeats more than ``threshold`` times, a
-    loop_warning event is emitted (warning fires at count > threshold, i.e.
-    on the (threshold+1)-th occurrence)."""
-    monkeypatch.setenv("CODECOME_LOOP_THRESHOLD", "3")
-    monkeypatch.setenv("CODECOME_LOOP_WINDOW", "10")
-    from events.state_tracker import StateTracker, _loop_detection_params
-    assert _loop_detection_params() == (10, 3)
 
-    tracker = StateTracker()
-    part_id = "part-1"
-
-    # With threshold=3, warning fires when count > 3 (4th occurrence).
-    for i in range(3):
-        result = tracker.ingest({
-            "type": "message.part.delta",
-            "properties": {"partID": part_id, "field": "text", "delta": "abc"},
-            "timestamp": 1000 + i,
-        })
-        assert result == [], f"repeat {i+1}: expected no warning, got {result}"
-
-    result = tracker.ingest({
+def _make_delta(part_id: str, delta: str, timestamp: int = 1000):
+    return {
         "type": "message.part.delta",
-        "properties": {"partID": part_id, "field": "text", "delta": "abc"},
-        "timestamp": 1004,
-    })
-    assert len(result) == 1
-    assert result[0]["type"] == "text.loop_warning"
-    assert result[0]["properties"]["repeatedText"] == "abc"
-    assert result[0]["properties"]["count"] == 4
+        "properties": {"partID": part_id, "field": "text", "delta": delta},
+        "timestamp": timestamp,
+    }
 
 
-def test_state_tracker_loop_warning_emitted_only_once_per_part(monkeypatch):
-    """Once a part emits a loop_warning, subsequent repeats do not re-trigger it."""
-    monkeypatch.setenv("CODECOME_LOOP_THRESHOLD", "2")
-    monkeypatch.setenv("CODECOME_LOOP_WINDOW", "10")
-    from events.state_tracker import StateTracker
-
-    tracker = StateTracker()
-    part_id = "part-2"
-
-    # With threshold=2, warning fires when count > 2 (3rd occurrence).
-    for i in range(5):
-        result = tracker.ingest({
-            "type": "message.part.delta",
-            "properties": {"partID": part_id, "field": "text", "delta": "xyz"},
-            "timestamp": 2000 + i,
-        })
-        if i == 2:
-            assert len(result) == 1 and result[0]["type"] == "text.loop_warning"
-        else:
-            assert result == []
-
-
-def test_state_tracker_loop_state_cleared_on_finalize(monkeypatch):
-    """Finalizing a part (message.part.updated) clears its loop detection state."""
-    monkeypatch.setenv("CODECOME_LOOP_THRESHOLD", "2")
-    monkeypatch.setenv("CODECOME_LOOP_WINDOW", "10")
-    from events.state_tracker import StateTracker
-
-    tracker = StateTracker()
-    part_id = "part-3"
-
-    # With threshold=2, warning fires on 3rd occurrence.
-    for i in range(3):
-        tracker.ingest({
-            "type": "message.part.delta",
-            "properties": {"partID": part_id, "field": "text", "delta": "loop"},
-            "timestamp": 3000 + i,
-        })
-
-    tracker.ingest({
+def _make_updated(part_id: str, text: str, timestamp: int = 2000):
+    return {
         "type": "message.part.updated",
         "properties": {
             "part": {
                 "id": part_id,
                 "type": "text",
-                "text": "looplooploop",
-                "time": {"start": 3000, "end": 3010},
+                "text": text,
+                "time": {"start": 1000, "end": 2000},
             },
             "sessionID": "session-1",
         },
-        "timestamp": 3011,
-    })
-
-    # After finalize, state is cleared — fresh tracker for this part.
-    result = tracker.ingest({
-        "type": "message.part.delta",
-        "properties": {"partID": part_id, "field": "text", "delta": "loop"},
-        "timestamp": 4000,
-    })
-    assert result == []  # only 1 repeat, below threshold=2
-
-
-def test_state_tracker_non_text_deltas_ignored(monkeypatch):
-    """Delta events for non-text fields do not participate in loop detection."""
-    monkeypatch.setenv("CODECOME_LOOP_THRESHOLD", "2")
-    monkeypatch.setenv("CODECOME_LOOP_WINDOW", "10")
-    from events.state_tracker import StateTracker
-
-    tracker = StateTracker()
-    part_id = "part-4"
-
-    # Send 3 repeats of a "reasoning" field delta — none should count.
-    for i in range(3):
-        result = tracker.ingest({
-            "type": "message.part.delta",
-            "properties": {"partID": part_id, "field": "reasoning", "delta": "thinking"},
-            "timestamp": 4000 + i,
-        })
-        assert result == []
-
-    # Now send one text delta — only 1 repeat, threshold=2 → no warning.
-    result = tracker.ingest({
-        "type": "message.part.delta",
-        "properties": {"partID": part_id, "field": "text", "delta": "abc"},
-        "timestamp": 4010,
-    })
-    assert result == []
+        "timestamp": timestamp,
+    }
 
 
 def test_loop_detection_params_defaults(monkeypatch):
     """When env vars are absent, sensible defaults are returned."""
-    monkeypatch.delenv("CODECOME_LOOP_WINDOW", raising=False)
-    monkeypatch.delenv("CODECOME_LOOP_THRESHOLD", raising=False)
+    monkeypatch.delenv("CODECOME_LOOP_MIN_DELTAS", raising=False)
+    monkeypatch.delenv("CODECOME_LOOP_RATIO_WINDOW", raising=False)
+    monkeypatch.delenv("CODECOME_LOOP_RATIO_THRESHOLD", raising=False)
+    monkeypatch.delenv("CODECOME_LOOP_RATIO_STREAK", raising=False)
     from events.state_tracker import _loop_detection_params
-    w, t = _loop_detection_params()
-    assert w == 50
-    assert t == 20
+    min_d, win, ratio, streak = _loop_detection_params()
+    assert min_d == 200
+    assert win == 500
+    assert ratio == 0.10
+    assert streak == 3
 
 
 def test_loop_detection_params_invalid_env(monkeypatch):
-    """Invalid env var values fall back to defaults; negative values clamp to 1."""
-    monkeypatch.setenv("CODECOME_LOOP_WINDOW", "not-an-int")
-    monkeypatch.setenv("CODECOME_LOOP_THRESHOLD", "-5")
+    """Invalid env var values fall back to defaults."""
+    monkeypatch.setenv("CODECOME_LOOP_MIN_DELTAS", "not-an-int")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_WINDOW", "abc")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_THRESHOLD", "bad")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_STREAK", "xyz")
     from events.state_tracker import _loop_detection_params
-    w, t = _loop_detection_params()
-    assert w == 50       # "not-an-int" → ValueError → default 50
-    assert t == 1        # "-5" → int(-5) → max(-5,1)=1
+    min_d, win, ratio, streak = _loop_detection_params()
+    assert min_d == 200
+    assert win == 500
+    assert ratio == 0.10
+    assert streak == 3
+
+
+def test_loop_detection_params_clamp(monkeypatch):
+    """Ratio clamps to [0, 1] range; negative values clamp to 1."""
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_THRESHOLD", "-0.5")
+    monkeypatch.setenv("CODECOME_LOOP_MIN_DELTAS", "-10")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_STREAK", "-2")
+    from events.state_tracker import _loop_detection_params
+    min_d, win, ratio, streak = _loop_detection_params()
+    assert ratio == 0.10   # negative → fallback
+    assert min_d == 1      # max(-10,1)=1
+    assert streak == 1     # max(-2,1)=1
+
+
+def test_state_tracker_low_ratio_triggers_warning(monkeypatch):
+    """Sustained low unique-delta ratio triggers a loop_warning."""
+    # Small window & threshold for fast test.
+    monkeypatch.setenv("CODECOME_LOOP_MIN_DELTAS", "50")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_WINDOW", "20")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_THRESHOLD", "0.30")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_STREAK", "2")
+    from events.state_tracker import StateTracker
+
+    tracker = StateTracker()
+    part_id = "part-loop"
+
+    # Use only 3 unique deltas in a tight cycle → ratio ~ 3/20 = 0.15 < 0.30.
+    # check_interval = window // 4 = 5, so checks happen at deltas 5, 10, 15, ...
+    # We need 2 streaks: at check 1 (delta 55) and check 2 (delta 60).
+    # Wait: min_deltas=50, window=20. First check after 50: at delta 50 % check_interval?
+    # delta 50 % 5 = 0, so first check at delta 50.
+    # We need two consecutive low-ratio windows → fire at the second.
+    deltas = ["aaa", "bbb", "ccc"] * 25  # 75 total, ratio ~ 3/20 = 0.15
+    warnings = []
+    for i, d in enumerate(deltas):
+        result = tracker.ingest(_make_delta(part_id, d, timestamp=1000 + i))
+        if result:
+            warnings.extend(result)
+
+    assert len(warnings) == 1
+    w = warnings[0]
+    assert w["type"] == "text.loop_warning"
+    assert w["properties"]["uniqueRatio"] < 0.30
+    assert w["properties"]["windowSize"] == 20
+
+
+def test_state_tracker_diverse_text_no_false_positive(monkeypatch):
+    """Diverse text with high unique ratio must not trigger a warning."""
+    monkeypatch.setenv("CODECOME_LOOP_MIN_DELTAS", "50")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_WINDOW", "40")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_THRESHOLD", "0.30")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_STREAK", "2")
+    from events.state_tracker import StateTracker
+
+    tracker = StateTracker()
+    part_id = "part-diverse"
+
+    # All-unique deltas — ratio stays 1.0.
+    for i in range(100):
+        result = tracker.ingest(
+            _make_delta(part_id, f"token-{i:04d}", timestamp=1000 + i)
+        )
+        assert result == []
+
+
+def test_state_tracker_loop_warning_emitted_only_once_per_part(monkeypatch):
+    """Once a part emits a loop_warning, subsequent low-ratio windows are ignored."""
+    monkeypatch.setenv("CODECOME_LOOP_MIN_DELTAS", "50")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_WINDOW", "20")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_THRESHOLD", "0.30")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_STREAK", "2")
+    from events.state_tracker import StateTracker
+
+    tracker = StateTracker()
+    part_id = "part-once"
+
+    # Generate enough low-ratio deltas to trigger, then keep going.
+    deltas = ["aaa", "bbb", "ccc"] * 40  # 120 total
+    warning_count = 0
+    for i, d in enumerate(deltas):
+        result = tracker.ingest(_make_delta(part_id, d, timestamp=1000 + i))
+        if result:
+            warning_count += 1
+            for ev in result:
+                assert ev["type"] == "text.loop_warning"
+
+    assert warning_count == 1  # Only one warning, never re-fires.
+
+
+def test_state_tracker_loop_state_cleared_on_finalize(monkeypatch):
+    """Finalizing a part clears its loop detection state."""
+    monkeypatch.setenv("CODECOME_LOOP_MIN_DELTAS", "50")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_WINDOW", "20")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_THRESHOLD", "0.30")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_STREAK", "2")
+    from events.state_tracker import StateTracker
+
+    tracker = StateTracker()
+    part_id = "part-clear"
+
+    # Trigger a warning.
+    deltas = ["xxx", "yyy", "zzz"] * 30
+    for i, d in enumerate(deltas):
+        tracker.ingest(_make_delta(part_id, d, timestamp=1000 + i))
+
+    # Finalize the part.
+    tracker.ingest(_make_updated(part_id, "xxx" * 30))
+
+    # Same part ID re-used — should start fresh, no warning without 2 streaks.
+    for i in range(55):  # enough to hit min_deltas + 1 check, but only 1 streak
+        result = tracker.ingest(
+            _make_delta(part_id, f"fresh-{i:03d}", timestamp=3000 + i)
+        )
+    assert all(not r for r in [tracker.ingest(_make_delta(part_id, f"fresh-{i:03d}", timestamp=3100 + i)) for i in range(10)])
+
+
+def test_state_tracker_non_text_deltas_ignored(monkeypatch):
+    """Delta events for non-text fields do not participate in loop detection."""
+    monkeypatch.setenv("CODECOME_LOOP_MIN_DELTAS", "50")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_WINDOW", "20")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_THRESHOLD", "0.30")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_STREAK", "2")
+    from events.state_tracker import StateTracker
+
+    tracker = StateTracker()
+    part_id = "part-nontext"
+
+    # Send 100 non-text deltas — ignored.
+    for i in range(100):
+        result = tracker.ingest({
+            "type": "message.part.delta",
+            "properties": {"partID": part_id, "field": "reasoning", "delta": "think"},
+            "timestamp": 4000 + i,
+        })
+        assert result == []
+
+    # Text deltas start fresh from zero.
+    from events.state_tracker import _loop_detection_params
+    min_d, _, _, _ = _loop_detection_params()
+    # Re-import to pick up monkeypatched values.
+    assert tracker._total_delta_count.get(part_id, 0) == 0
+
+
+def test_state_tracker_streak_reset_on_recovery(monkeypatch):
+    """When ratio recovers above threshold, the streak resets to 0."""
+    monkeypatch.setenv("CODECOME_LOOP_MIN_DELTAS", "60")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_WINDOW", "20")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_THRESHOLD", "0.30")
+    monkeypatch.setenv("CODECOME_LOOP_RATIO_STREAK", "4")
+    from events.state_tracker import StateTracker
+
+    tracker = StateTracker()
+    part_id = "part-recovery"
+
+    # Phase 1: low ratio for 3 checks (streak=3, not enough to fire with
+    # streak=4).  With min_deltas=60 and check_interval=5, checks happen
+    # at deltas 60, 65, 70.  Sending 70 deltas gives exactly 3 low-ratio
+    # windows.
+    deltas = ["aaa", "bbb", "ccc"] * 24  # 72 total; stop at 70
+    for i, d in enumerate(deltas):
+        if i >= 70:
+            break
+        result = tracker.ingest(_make_delta(part_id, d, timestamp=1000 + i))
+        assert result == []
+
+    assert tracker._low_ratio_streak.get(part_id, 0) >= 1
+
+    # Phase 2: diverse deltas — flush low-ratio window, ratio recovers.
+    for i in range(30):
+        result = tracker.ingest(
+            _make_delta(part_id, f"diversee-{i:04d}", timestamp=2000 + i)
+        )
+        assert result == []
+
+    # After recovery the streak counter must be reset back to 0.
+    assert tracker._low_ratio_streak.get(part_id, 0) == 0
+
+    # Phase 3: low ratio again. Should need 4 fresh streaks to fire.
+    deltas3 = ["xxx", "yyy", "zzz"] * 30  # enough to reach min_deltas+4 checks
+    fired = False
+    for i, d in enumerate(deltas3):
+        result = tracker.ingest(_make_delta(part_id, d, timestamp=3000 + i))
+        if result:
+            fired = True
+            assert result[0]["type"] == "text.loop_warning"
+            break
+    # With streak=4 and fresh start, the warning should eventually fire.
+    assert fired
