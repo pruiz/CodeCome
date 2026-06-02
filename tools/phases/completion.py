@@ -60,6 +60,27 @@ def _iter_files(root: Path) -> Iterator[Path]:
             yield path
 
 
+def _find_finding_file(status_dir: Path, finding_id: str, run_start_time: float) -> Path | None:
+    """Find a finding file matching the ID in the status directory.
+
+    Finding filenames may include a descriptive slug after the ID
+    (e.g. ``CC-0009-file-input-reaches-vprintf.md``).  Use a glob so
+    both ``CC-0009.md`` and ``CC-0009-slug.md`` are discovered.
+
+    If more than one candidate exists, at least one must have been
+    modified after *run_start_time*, and the freshest is returned.
+    """
+    candidates = list(status_dir.glob(f"{finding_id}*.md"))
+    files = [p for p in candidates if p.is_file() and p.name != ".gitkeep"]
+    if not files:
+        return None
+    files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    fresh = files[0]
+    if len(files) == 1:
+        return fresh if fresh.stat().st_mtime >= run_start_time else None
+    return fresh if fresh.stat().st_mtime >= run_start_time else None
+
+
 def _load_finding_frontmatter(path: Path) -> dict[str, Any] | None:
     try:
         content = path.read_text(encoding="utf-8")
@@ -118,11 +139,9 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
             evidence_dir = evidence_dir_for(finding)
             return any(path.stat().st_mtime >= run_start_time for path in _iter_files(evidence_dir))
         elif phase_key == "5" and finding:
-            exploited_file = finding_status_dir("EXPLOITED") / f"{finding}.md"
-            if (
-                exploited_file.exists()
-                and exploited_file.stat().st_mtime >= run_start_time
-            ):
+            exploited_dir = finding_status_dir("EXPLOITED")
+            exploited_file = _find_finding_file(exploited_dir, finding, run_start_time)
+            if exploited_file is not None:
                 fm = _load_finding_frontmatter(exploited_file)
                 if (
                     isinstance(fm, dict)
@@ -136,11 +155,9 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                     ):
                         return True
 
-            confirmed_file = finding_status_dir("CONFIRMED") / f"{finding}.md"
-            if (
-                confirmed_file.exists()
-                and confirmed_file.stat().st_mtime >= run_start_time
-            ):
+            confirmed_dir = finding_status_dir("CONFIRMED")
+            confirmed_file = _find_finding_file(confirmed_dir, finding, run_start_time)
+            if confirmed_file is not None:
                 fm = _load_finding_frontmatter(confirmed_file)
                 if (
                     isinstance(fm, dict)
