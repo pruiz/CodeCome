@@ -350,7 +350,7 @@ Phase 1a:
 - interesting files are listed,
 - uncertainty is documented,
 - no low-quality findings were created,
-- a run summary is written when practical.
+- a run summary is written to `runs/` using `templates/run-summary.md`.
 
 Phase 1b:
 

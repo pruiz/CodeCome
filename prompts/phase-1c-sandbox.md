@@ -123,3 +123,9 @@ At the end, summarize:
 - `itemdb/notes/sandbox-plan.md` created,
 - Key limitations,
 - Halt requirements if sandbox bootstrap is blocked.
+
+## Run summary
+
+Write the run summary using the template at `templates/run-summary.md` to:
+
+    runs/phase-1c-summary.md
