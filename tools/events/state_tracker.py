@@ -16,27 +16,44 @@ from collections import deque
 from typing import Any
 
 
-def _loop_detection_params() -> tuple[int, int]:
-    """Return (window_size, threshold) for loop detection from environment.
+def _loop_detection_params() -> tuple[int, float, int, int]:
+    """Return (min_deltas, window, ratio_threshold, streak) for loop detection.
 
-    CODECOME_LOOP_WINDOW    — how many recent text-deltas to track (default 50)
-    CODECOME_LOOP_THRESHOLD — repetitions of the same delta in the window that
-                              trigger a warning (default 20)
+    CODECOME_LOOP_MIN_DELTAS      — min deltas before detection activates (default 200)
+    CODECOME_LOOP_RATIO_WINDOW    — sliding window size for computing unique ratio
+                                    (default 500)
+    CODECOME_LOOP_RATIO_THRESHOLD — unique/total ratio below which a window is
+                                    considered low-diversity (default 0.10)
+    CODECOME_LOOP_RATIO_STREAK    — consecutive low-ratio windows required to
+                                    trigger a warning (default 3)
 
     Reads directly from ``os.environ`` on every call so that tests using
     ``monkeypatch.setenv`` work correctly regardless of import order.
     """
     try:
-        window = int(os.environ.get("CODECOME_LOOP_WINDOW", "50"))
+        min_deltas = int(os.environ.get("CODECOME_LOOP_MIN_DELTAS", "200"))
+        min_deltas = max(min_deltas, 1)
+    except (ValueError, TypeError):
+        min_deltas = 200
+    try:
+        window = int(os.environ.get("CODECOME_LOOP_RATIO_WINDOW", "500"))
         window = max(window, 1)
     except (ValueError, TypeError):
-        window = 50
+        window = 500
     try:
-        threshold = int(os.environ.get("CODECOME_LOOP_THRESHOLD", "20"))
-        threshold = max(threshold, 1)
+        ratio_threshold = float(os.environ.get("CODECOME_LOOP_RATIO_THRESHOLD", "0.10"))
+        if ratio_threshold <= 0:
+            ratio_threshold = 0.10
+        if ratio_threshold > 1:
+            ratio_threshold = 1.0
     except (ValueError, TypeError):
-        threshold = 20
-    return window, threshold
+        ratio_threshold = 0.10
+    try:
+        streak = int(os.environ.get("CODECOME_LOOP_RATIO_STREAK", "3"))
+        streak = max(streak, 1)
+    except (ValueError, TypeError):
+        streak = 3
+    return (min_deltas, window, ratio_threshold, streak)
 
 
 class StateTracker:
@@ -50,11 +67,13 @@ class StateTracker:
         # Set of partIDs for which we saw delta but not yet updated.
         self._pending_part_ids: set[str] = set()
 
-        # --- Repetitive text-loop detection ---
+        # --- Repetitive text-loop detection (ratio-based) ---
         # Per-part sliding window of recent text delta strings.
         self._delta_windows: dict[str, deque[str]] = {}
-        # Counts of each delta text within the corresponding window.
-        self._delta_counts: dict[str, dict[str, int]] = {}
+        # Running count of total deltas received per part.
+        self._total_delta_count: dict[str, int] = {}
+        # Consecutive low-diversity window count per part.
+        self._low_ratio_streak: dict[str, int] = {}
         # Set of partIDs for which a loop warning has already been emitted.
         self._loop_warned: set[str] = set()
 
@@ -130,38 +149,54 @@ class StateTracker:
         self._delta_buffers[part_id] = self._delta_buffers.get(part_id, "") + delta
         self._pending_part_ids.add(part_id)
 
-        # --- Loop detection ---
+        # --- Loop detection (ratio-based) ---
         # Skip if we already warned on this part.
         if part_id in self._loop_warned:
             return []
 
-        # Get (or initialise) the per-part sliding window and counts.
+        min_deltas, window_size, ratio_threshold, streak_req = _loop_detection_params()
+
+        # Initialize per-part state on first delta.
         if part_id not in self._delta_windows:
-            window_size, _ = _loop_detection_params()
             self._delta_windows[part_id] = deque(maxlen=window_size)
-            self._delta_counts[part_id] = {}
+            self._total_delta_count[part_id] = 0
+            self._low_ratio_streak[part_id] = 0
 
-        window = self._delta_windows[part_id]
-        counts = self._delta_counts[part_id]
+        self._delta_windows[part_id].append(delta)
+        self._total_delta_count[part_id] += 1
+        total = self._total_delta_count[part_id]
 
-        # Record this delta in the window; update its repetition count.
-        window.append(delta)
-        counts[delta] = counts.get(delta, 0) + 1
+        # Do not inspect parts that are too short for a reliable signal.
+        if total < min_deltas:
+            return []
 
-        _, threshold = _loop_detection_params()
-        if counts[delta] > threshold:
-            # Mark warned so we emit at most one warning per part.
-            self._loop_warned.add(part_id)
-            return [{
-                "type": "text.loop_warning",
-                "timestamp": event.get("timestamp", 0),
-                "sessionID": props.get("sessionID", ""),
-                "properties": {
-                    "partID": part_id,
-                    "repeatedText": delta[:100],
-                    "count": counts[delta],
-                },
-            }]
+        # Check every check_interval deltas to avoid per-delta overhead.
+        check_interval = max(1, window_size // 4)
+        if total % check_interval != 0:
+            return []
+
+        recent = list(self._delta_windows[part_id])
+        unique_count = len(set(recent))
+        ratio = unique_count / len(recent) if recent else 1.0
+
+        if ratio < ratio_threshold:
+            self._low_ratio_streak[part_id] += 1
+            if self._low_ratio_streak[part_id] >= streak_req:
+                self._loop_warned.add(part_id)
+                return [{
+                    "type": "text.loop_warning",
+                    "timestamp": event.get("timestamp", 0),
+                    "sessionID": props.get("sessionID", ""),
+                    "properties": {
+                        "partID": part_id,
+                        "uniqueRatio": round(ratio, 4),
+                        "windowSize": len(recent),
+                        "totalDeltas": total,
+                    },
+                }]
+        else:
+            # Ratio went back above threshold — reset streak.
+            self._low_ratio_streak[part_id] = 0
 
         return []
 
@@ -187,7 +222,8 @@ class StateTracker:
                 # Clean up loop detection state — this part is now finalized
                 # and any in-progress loop warning has already been emitted.
                 self._delta_windows.pop(part_id, None)
-                self._delta_counts.pop(part_id, None)
+                self._total_delta_count.pop(part_id, None)
+                self._low_ratio_streak.pop(part_id, None)
                 self._loop_warned.discard(part_id)
             return [finalized]
             

@@ -17,9 +17,17 @@ class TextEventRenderer(EventRenderer):
     def render(self, event: dict[str, Any]) -> bool:
         if event.get("type") == "text.loop_warning":
             props = event.get("properties", {})
-            repeated = repr(props.get("repeatedText", "")[:50])
-            count = props.get("count", 0)
-            msg = f"WARNING: repetitive text loop detected — '{repeated}' repeated {count} times in a single message part. The model may be stuck."
+            ratio = props.get("uniqueRatio", 0)
+            ratio_pct = round(ratio * 100, 1)
+            window = props.get("windowSize", 0)
+            total = props.get("totalDeltas", 0)
+            msg = (
+                f"WARNING: repetitive text loop detected — "
+                f"only {ratio_pct}% unique deltas "
+                f"in last {window}-delta window "
+                f"({total} deltas total in this part). "
+                f"The model may be stuck."
+            )
             if self.rich:
                 from rich.panel import Panel
                 from rich.text import Text as RichText
