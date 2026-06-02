@@ -114,3 +114,9 @@ Before ending, validate that `itemdb/notes/codeql-plan.yml` is valid and follows
     rtk python3 tools/codecome.py check-codeql-plan
 
 If validation fails, repair only the reported issue before summarizing.
+
+## Run summary
+
+Write the run summary using the template at `templates/run-summary.md` to:
+
+    runs/phase-1a-summary.md

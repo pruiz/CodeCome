@@ -200,3 +200,9 @@ At the end, summarize:
 - CodeQL signals incorporated (if any),
 - Files created in this sub-stage,
 - Key limitations and uncertainties.
+
+## Run summary
+
+Write the run summary using the template at `templates/run-summary.md` to:
+
+    runs/phase-1b-summary.md

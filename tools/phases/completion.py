@@ -108,7 +108,8 @@ def _exploitation_status_looks_real(frontmatter: dict[str, Any] | None) -> bool:
 
 
 def check_phase_graceful_completion(phase: str, finding: str | None, run_start_time: float) -> bool:
-    phase_key = str(phase)
+    original_phase = str(phase)
+    phase_key = original_phase
     phase_is_1c = phase_key == "1c"
     if phase_key in ("1a", "1b", "1c"):
         phase_key = "1"
@@ -121,16 +122,23 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                 sandbox_state_recorded = _path_is_fresh(sandbox_generated, run_start_time) or _path_is_fresh(
                     SANDBOX_PLAN_PATH, run_start_time
                 )
+                import glob as _glob
+                run_summaries = _glob.glob(str(ROOT / "runs" / f"phase-{original_phase}-summary*.md"))
+                summary_fresh = any(Path(p).stat().st_mtime >= run_start_time for p in run_summaries)
                 if phase_is_1c:
-                    return sandbox_state_recorded
+                    return sandbox_state_recorded and summary_fresh
                 fresh_required = any(_path_is_fresh(path, run_start_time) for path in required_artifacts)
-                return fresh_required and sandbox_state_recorded
+                return fresh_required and sandbox_state_recorded and summary_fresh
             return False
         elif phase_key in ("2", "sweep"):
             pending_dir = finding_status_dir("PENDING")
+            pending_fresh = False
             if pending_dir.exists():
-                return any(f.name.endswith(".md") and f.name != ".gitkeep" and f.stat().st_mtime >= run_start_time for f in pending_dir.iterdir())
-            return False
+                pending_fresh = any(f.name.endswith(".md") and f.name != ".gitkeep" and f.stat().st_mtime >= run_start_time for f in pending_dir.iterdir())
+            import glob as _glob
+            run_summaries = _glob.glob(str(ROOT / "runs" / "phase-2-summary*.md"))
+            summary_fresh = any(Path(p).stat().st_mtime >= run_start_time for p in run_summaries)
+            return pending_fresh and summary_fresh
         elif phase_key == "3":
             import glob as _glob
             run_summaries = _glob.glob(str(ROOT / "runs" / "phase-3-summary-*.md"))

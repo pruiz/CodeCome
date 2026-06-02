@@ -98,6 +98,12 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
             artifact.parent.mkdir(parents=True, exist_ok=True)
             artifact.write_text("")
 
+        # Create run summaries for each tested phase key
+        for phase_id in ("1", "1c"):
+            summary_dir = completion_mod.ROOT / "runs"
+            summary_dir.mkdir(parents=True, exist_ok=True)
+            (summary_dir / f"phase-{phase_id}-summary.md").write_text("")
+
         try:
             result = completion_mod.check_phase_graceful_completion("1", None, fake_time)
             assert result is True, "Phase 1 should succeed when all artifacts exist under patched NOTES_ROOT"
@@ -131,6 +137,10 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
         try:
             assert completion_mod.check_phase_graceful_completion("1", None, run_start) is False
             sandbox_generated.write_text("validated", encoding="utf-8")
+            # Run summary must also be fresh for phase 1c
+            summary_dir = completion_mod.ROOT / "runs"
+            summary_dir.mkdir(parents=True, exist_ok=True)
+            (summary_dir / "phase-1c-summary.md").write_text("", encoding="utf-8")
             assert completion_mod.check_phase_graceful_completion("1c", None, run_start) is True
         finally:
             completion_mod.NOTES_ROOT = orig_notes_root

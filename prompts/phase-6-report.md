@@ -208,3 +208,9 @@ At the end, summarize:
 - number of rejected findings,
 - number of duplicate findings,
 - recommended next step.
+
+## Run summary
+
+Write the run summary using the template at `templates/run-summary.md` to:
+
+    runs/phase-6-summary.md
