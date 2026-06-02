@@ -12,13 +12,34 @@ import _colors as C
 
 
 class TextEventRenderer(EventRenderer):
-    event_types = ("text",)
+    event_types = ("text", "text.loop_warning")
 
     def render(self, event: dict[str, Any]) -> bool:
+        if event.get("type") == "text.loop_warning":
+            props = event.get("properties", {})
+            ratio = props.get("uniqueRatio", 0)
+            ratio_pct = round(ratio * 100, 1)
+            window = props.get("windowSize", 0)
+            total = props.get("totalDeltas", 0)
+            msg = (
+                f"WARNING: repetitive text loop detected — "
+                f"only {ratio_pct}% unique deltas "
+                f"in last {window}-delta window "
+                f"({total} deltas total in this part). "
+                f"The model may be stuck."
+            )
+            if self.rich:
+                from rich.panel import Panel
+                from rich.text import Text as RichText
+                self.sink.write(Panel(RichText(msg, style="bold yellow"), title="Loop Warning", border_style="yellow"))
+            elif self.plain:
+                self.sink.write_text(C.warn(msg))
+            return True
+
         part = event.get("part", {})
         text = str(part.get("text", "")).strip()
         if not text:
-            return False
+            return True
         _clear_hidden_reasoning_state(self.context)
         if self.rich:
             from rich.markdown import Markdown

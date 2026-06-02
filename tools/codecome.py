@@ -345,6 +345,256 @@ def count_findings() -> Dict[str, int]:
     return counts
 
 
+def _phase_1_notes_exist() -> bool:
+    notes_dir = ROOT / "itemdb" / "notes"
+    return (notes_dir / "target-profile.md").is_file() and (notes_dir / "build-model.md").is_file()
+
+
+def check_phase_progress() -> None:
+    """Print a summary of which phases have been run based on durable artifacts."""
+    from phases.phase_1_gates import REQUIRED_NOTES_1B
+
+    notes_dir = ROOT / "itemdb" / "notes"
+    evidence_root = ROOT / "itemdb" / "evidence"
+    counts = count_findings()
+    rows: list[tuple[str, str, str]] = []
+
+    # Phase 1a
+    has_1a = all(
+        (notes_dir / name).is_file()
+        for name in ("target-profile.md", "build-model.md", "codeql-plan.yml")
+    )
+    rows.append(("Phase 1a", "ok" if has_1a else "info", "completed" if has_1a else "not run"))
+
+    # CodeQL
+    manifest_path = ROOT / "itemdb" / "codeql" / "run-manifest.yml"
+    if manifest_path.is_file():
+        try:
+            manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+            status = manifest.get("status", "unknown") if isinstance(manifest, dict) else "unknown"
+        except Exception:
+            status = "unknown"
+        level = "ok" if status == "completed" else "warn" if status == "soft-failed" else "info"
+        rows.append(("CodeQL", level, status))
+    else:
+        rows.append(("CodeQL", "info", "not run"))
+
+    # Phase 1b
+    missing_1b = [n for n in REQUIRED_NOTES_1B if not (notes_dir / n).is_file()]
+    if not missing_1b:
+        rows.append(("Phase 1b", "ok", "completed"))
+    elif len(missing_1b) < len(REQUIRED_NOTES_1B):
+        rows.append(("Phase 1b", "warn", f"{len(missing_1b)} of {len(REQUIRED_NOTES_1B)} notes missing"))
+    else:
+        rows.append(("Phase 1b", "info", "not run"))
+
+    # Phase 1c
+    has_1c = (notes_dir / "sandbox-plan.md").is_file()
+    rows.append(("Phase 1c", "ok" if has_1c else "info", "completed" if has_1c else "not run"))
+
+    # Phase 2
+    pending = counts["PENDING"]
+    rows.append(("Phase 2", "ok" if pending else "info", f"{pending} PENDING findings" if pending else "not run"))
+
+    # Phase 3
+    reviewed = counts["CONFIRMED"] + counts["EXPLOITED"] + counts["REJECTED"] + counts["DUPLICATE"]
+    rows.append(("Phase 3", "ok" if reviewed else "info", f"{reviewed} reviewed" if reviewed else "not run"))
+
+    # Phase 4
+    confirmed = counts["CONFIRMED"] + counts["EXPLOITED"]
+    rows.append(("Phase 4", "ok" if confirmed else "info", f"{confirmed} confirmed" if confirmed else "not run"))
+
+    # Phase 5
+    exploited = counts["EXPLOITED"]
+    rows.append(("Phase 5", "ok" if exploited else "info", f"{exploited} exploited" if exploited else "not run"))
+
+    # Phase 6
+    has_report = (ROOT / "itemdb" / "reports" / "report.md").is_file()
+    rows.append(("Phase 6", "ok" if has_report else "info", "completed" if has_report else "not run"))
+
+    print()
+    print(C.header("Phase progress:"))
+    label_width = max(len(label) for label, _, _ in rows)
+    for label, level, detail in rows:
+        prefix = "  " + label.ljust(label_width)
+        if level == "ok":
+            print(C.ok(f"{prefix}  {detail}"))
+        elif level == "warn":
+            print(C.warn(f"{prefix}  {detail}"))
+        else:
+            print(C.info(f"{prefix}  {detail}"))
+
+
+def check_codeql_status() -> int:
+    """Check CodeQL configuration and last recorded artifact state."""
+    print()
+    print(C.header("CodeQL:"))
+    # TODO: move CodeQL check logic to tools/codecome/checks.py (see GH issue)
+    try:
+        from codeql.config import resolve_config
+        from codeql.artifacts import check_artifacts
+        from codeql.packs import load_codeql_plan
+    except ImportError as exc:
+        print(C.warn(f"CodeQL checks unavailable: {exc}"))
+        return 0
+
+    config = resolve_config()
+    manifest_path = config.abs_output_dir / "run-manifest.yml"
+    manifest = None
+
+    if manifest_path.is_file() and yaml is not None:
+        try:
+            loaded = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+            manifest = loaded if isinstance(loaded, dict) else None
+        except (OSError, yaml.YAMLError, UnicodeDecodeError):
+            manifest = None
+
+    current_state = "enabled" if config.enabled else "disabled"
+    print(C.ok(f"current config: CodeQL {current_state}"))
+
+    if manifest and manifest.get("status") == "skipped" and manifest.get("codeql_enabled") is False:
+        reason = manifest.get("skip_reason") or "CodeQL disabled during recorded run"
+        print(C.ok(f"last phase-1 CodeQL state: skipped ({reason})"))
+        print(C.info("No CodeQL artifacts are required for that recorded run."))
+        return 0
+
+    if not config.enabled:
+        print(C.ok("CodeQL disabled for current invocation; artifact checks skipped."))
+        return 0
+
+    exit_code = 0
+    if config.phase_1_enabled:
+        print(C.ok("phase-1 integration: enabled"))
+    else:
+        print(C.ok("phase-1 integration: disabled; artifact checks skipped."))
+        return 0
+
+    if config.abs_install_path.is_file():
+        print(C.ok(f"binary: {config.abs_install_path.relative_to(ROOT) if config.abs_install_path.is_relative_to(ROOT) else config.abs_install_path}"))
+    else:
+        print(C.fail(f"binary missing: {config.abs_install_path}"))
+        exit_code = 1
+
+    if config.abs_pack_catalog.is_file():
+        print(C.ok(f"pack catalog: {config.abs_pack_catalog.relative_to(ROOT) if config.abs_pack_catalog.is_relative_to(ROOT) else config.abs_pack_catalog}"))
+    else:
+        print(C.fail(f"pack catalog missing: {config.abs_pack_catalog}"))
+        exit_code = 1
+
+    plan_path = ROOT / "itemdb" / "notes" / "codeql-plan.yml"
+    if plan_path.is_file():
+        try:
+            load_codeql_plan(plan_path)
+            print(C.ok("plan: itemdb/notes/codeql-plan.yml"))
+        except Exception as exc:
+            print(C.fail(f"plan invalid: {exc}"))
+            exit_code = 1
+    elif _phase_1_notes_exist():
+        print(C.warn("plan missing after Phase 1 notes exist: itemdb/notes/codeql-plan.yml"))
+    else:
+        print(C.info("Phase 1 has not produced a CodeQL plan yet; no artifacts expected."))
+        return exit_code
+
+    artifact_status, warnings = check_artifacts(config.abs_output_dir)
+    if artifact_status == "missing":
+        if _phase_1_notes_exist():
+            print(C.warn("artifacts: missing run-manifest.yml; run make phase-1 to refresh CodeQL state."))
+        else:
+            print(C.info("artifacts: not present yet; Phase 1 has not run."))
+    elif artifact_status == "completed" and not warnings:
+        print(C.ok("artifacts: completed"))
+    elif artifact_status == "soft-failed":
+        print(C.warn("artifacts: soft-failed"))
+        for warning in warnings:
+            print(C.warn(f"  {warning}"))
+        if (manifest or {}).get("fail_policy", config.fail_policy) == "hard":
+            exit_code = 1
+    elif artifact_status == "skipped":
+        print(C.ok("artifacts: skipped"))
+        for warning in warnings:
+            print(C.info(f"  {warning}"))
+    else:
+        formatter = C.fail if artifact_status in {"failed", "unknown"} else C.warn
+        print(formatter(f"artifacts: {artifact_status}"))
+        for warning in warnings:
+            print(formatter(f"  {warning}"))
+        if artifact_status in {"completed", "failed", "unknown"}:
+            exit_code = 1
+
+    return exit_code
+
+
+def check_sandbox_status() -> None:
+    """Print sandbox state, gate result, and capability summary."""
+    import importlib
+
+    try:
+        sb = importlib.import_module("sandbox-bootstrap")
+    except Exception:
+        print()
+        print(C.header("Sandbox:"))
+        print(C.warn("sandbox-bootstrap module unavailable"))
+        return
+
+    print()
+    print(C.header("Sandbox:"))
+
+    provenance = sb.read_provenance()
+    last_validation = sb._last_validation_outcome()
+    allow_no_sandbox = bool(os.environ.get("CODECOME_ALLOW_NO_SANDBOX"))
+    sandbox_state = sb.classify_sandbox_state()
+
+    # Gate logic (mirrors cmd_status)
+    if allow_no_sandbox:
+        gate_pass = True
+        gate_reason = "override (CODECOME_ALLOW_NO_SANDBOX=1)"
+    elif sandbox_state == "pending":
+        gate_pass = False
+        gate_reason = "sandbox bootstrap pending; run make phase-1"
+    elif sandbox_state == "missing":
+        gate_pass = False
+        gate_reason = "sandbox is missing"
+    elif sandbox_state == "generated" and last_validation == "failed":
+        gate_pass = False
+        gate_reason = "last validation failed"
+    elif sandbox_state == "generated" and last_validation == "skipped":
+        gate_pass = False
+        gate_reason = "last validation has no real outcomes (all tiers skipped)"
+    else:
+        gate_pass = True
+        if sandbox_state == "user-managed":
+            gate_reason = "sandbox is user-managed (validation not enforced)"
+        elif last_validation is None:
+            gate_reason = "no validation run on record"
+        elif last_validation == "passed":
+            gate_reason = "last validation passed"
+        elif last_validation == "mixed":
+            gate_reason = "last validation passed (some tiers skipped)"
+        else:
+            gate_reason = f"last validation: {last_validation}"
+
+    # Print summary
+    state_detail = sandbox_state
+    if sandbox_state == "generated" and provenance:
+        state_detail = "generated (provenance present)"
+    print(f"  {C.DIM}state:{C.RESET}            {state_detail}")
+    print(f"  {C.DIM}last validation:{C.RESET}  {last_validation or '-'}")
+    if gate_pass:
+        print(C.ok(f"  Phase 2 gate:     pass ({gate_reason})"))
+    else:
+        print(C.warn(f"  Phase 2 gate:     block ({gate_reason})"))
+
+    # Capabilities
+    capability_status = sb._capability_status()
+    print(f"  {C.DIM}capabilities:{C.RESET}")
+    for name in ("setup", "start", "check", "build", "test", "stop", "shell", "logs", "clean", "reset"):
+        status = capability_status[name]
+        satisfied = status.get("satisfied", False)
+        missing_label = "pending" if sandbox_state == "pending" else "missing"
+        state_str = C.ok("ok") if satisfied else C.warn(missing_label)
+        print(f"    {name:<8} {state_str}  {status['path']}")
+
+
 def command_check(_: argparse.Namespace) -> int:
     missing = []
 
@@ -375,15 +625,21 @@ def command_check(_: argparse.Namespace) -> int:
     if not has_source:
         print(C.warn("src/ is empty — place your target source code there before running phase-1."))
 
+    check_phase_progress()
+    check_exit = check_codeql_status()
+    check_sandbox_status()
+
+    print()
+
     # Warn (do not fail) about missing optional recording tools used by Phase 5.
     recording_warnings = check_recording_tools()
     if recording_warnings:
-        print()
-        print(C.header("Optional recording tools (used by phase-5 exploit demonstrations):"))
+        print(C.header("Recording tools:"))
         for message in recording_warnings:
             print(C.warn(message))
     else:
-        print(C.ok("Optional recording tools available (asciinema, agg, ffmpeg, Xvfb)."))
+        print(C.header("Recording tools:"))
+        print(C.ok("all tools available (asciinema, agg, ffmpeg, Xvfb)."))
 
     # Probe only the current helper invocation context; phase-5 may later run
     # from a different shell, container, or PTY wrapper.
@@ -408,7 +664,7 @@ def command_check(_: argparse.Namespace) -> int:
         "and PTY-acquisition guidance."
     )
 
-    return 0
+    return check_exit
 
 
 def command_status(_: argparse.Namespace) -> int:
@@ -439,6 +695,14 @@ def command_next_id(_: argparse.Namespace) -> int:
     return 0
 
 
+def command_check_codeql_plan(_: argparse.Namespace) -> int:
+    from codecome.phase_1 import _validate_codeql_plan_for_repair
+    rc, out = _validate_codeql_plan_for_repair()
+    if out:
+        print(out)
+    return rc
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="codecome",
@@ -455,6 +719,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     next_id_parser = subparsers.add_parser("next-id", help="Print the next available finding id.")
     next_id_parser.set_defaults(func=command_next_id)
+
+    check_plan_parser = subparsers.add_parser("check-codeql-plan", help="Validate itemdb/notes/codeql-plan.yml")
+    check_plan_parser.set_defaults(func=command_check_codeql_plan)
 
     return parser
 

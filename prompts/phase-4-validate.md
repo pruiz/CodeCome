@@ -192,3 +192,11 @@ At the end, summarize:
 - evidence files created,
 - finding file moved or updated,
 - remaining limitations.
+
+## Run summary
+
+Write the run summary using the template at `templates/run-summary.md` to:
+
+    runs/phase-4-FINDING-summary.md
+
+Replace `FINDING` with the validated finding id (e.g. `runs/phase-4-CC-0001-summary.md`).

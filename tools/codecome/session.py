@@ -63,7 +63,42 @@ def send_prompt_to_session(
         with urllib.request.urlopen(req, timeout=30.0) as resp:
             pass  # 204 expected
     except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"Failed to send prompt: HTTP {exc.code}") from exc
+        body = ""
+        try:
+            body = exc.read().decode("utf-8", errors="replace").strip()
+        except Exception:
+            body = ""
+        detail = f"Failed to send prompt: HTTP {exc.code}"
+        if body:
+            detail = f"{detail}: {body}"
+        raise RuntimeError(detail) from exc
+
+
+def get_session_status(
+    base_url: str,
+    session_id: str,
+    auth_token: str | None,
+    workspace_dir: str | None,
+) -> str | None:
+    """Best-effort lookup of an opencode session status type."""
+    req = urllib.request.Request(
+        f"{base_url}/session/{session_id}",
+        headers=_get_headers(auth_token, workspace_dir),
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5.0) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return None
+
+    status = data.get("status") if isinstance(data, dict) else None
+    if isinstance(status, dict):
+        status_type = status.get("type")
+        return status_type if isinstance(status_type, str) else None
+    if isinstance(status, str):
+        return status
+    return None
 
 
 def create_session(

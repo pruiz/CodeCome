@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 from codecome.recording import EventRecorder
 from codecome.transcript import Transcript
+import codecome.transcript as transcript_mod
 
 
 @pytest.fixture
@@ -58,3 +59,22 @@ def test_record_always_forwards_all_events(mock_transcript):
         mock_transcript.write_event.reset_mock()
         recorder.record({"type": event_type})
         mock_transcript.write_event.assert_called_once()
+
+
+def test_phase_transcript_does_not_truncate_existing_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(transcript_mod, "ROOT", tmp_path)
+    transcript_mod._ATTEMPT_COUNTER.clear()
+
+    existing = tmp_path / "tmp" / "last-phase-1c-no-finding-attempt-1.jsonl"
+    existing.parent.mkdir(parents=True)
+    existing.write_text("keep me\n", encoding="utf-8")
+
+    transcript = Transcript.for_phase("1c", None)
+    try:
+        transcript.write_event({"type": "test"})
+    finally:
+        transcript.close()
+
+    assert existing.read_text(encoding="utf-8") == "keep me\n"
+    assert transcript.path != existing
+    assert transcript.path.name.startswith("last-phase-1c-no-finding-attempt-1-")

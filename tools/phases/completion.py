@@ -60,6 +60,27 @@ def _iter_files(root: Path) -> Iterator[Path]:
             yield path
 
 
+def _find_finding_file(status_dir: Path, finding_id: str, run_start_time: float) -> Path | None:
+    """Find a finding file matching the ID in the status directory.
+
+    Finding filenames may include a descriptive slug after the ID
+    (e.g. ``CC-0009-file-input-reaches-vprintf.md``).  Use a glob so
+    both ``CC-0009.md`` and ``CC-0009-slug.md`` are discovered.
+
+    If more than one candidate exists, at least one must have been
+    modified after *run_start_time*, and the freshest is returned.
+    """
+    candidates = list(status_dir.glob(f"{finding_id}*.md"))
+    files = [p for p in candidates if p.is_file() and p.name != ".gitkeep"]
+    if not files:
+        return None
+    files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    fresh = files[0]
+    if len(files) == 1:
+        return fresh if fresh.stat().st_mtime >= run_start_time else None
+    return fresh if fresh.stat().st_mtime >= run_start_time else None
+
+
 def _load_finding_frontmatter(path: Path) -> dict[str, Any] | None:
     try:
         content = path.read_text(encoding="utf-8")
@@ -87,37 +108,48 @@ def _exploitation_status_looks_real(frontmatter: dict[str, Any] | None) -> bool:
 
 
 def check_phase_graceful_completion(phase: str, finding: str | None, run_start_time: float) -> bool:
+    original_phase = str(phase)
+    phase_key = original_phase
+    phase_is_1c = phase_key == "1c"
+    if phase_key in ("1a", "1b", "1c"):
+        phase_key = "1"
+
     try:
-        if str(phase) == "1":
+        if phase_key == "1":
             required_artifacts = _phase1_required_artifacts()
             if all(path.exists() for path in required_artifacts):
-                fresh_required = any(_path_is_fresh(path, run_start_time) for path in required_artifacts)
                 sandbox_generated = ROOT / "sandbox" / "CODECOME-GENERATED.md"
                 sandbox_state_recorded = _path_is_fresh(sandbox_generated, run_start_time) or _path_is_fresh(
                     SANDBOX_PLAN_PATH, run_start_time
                 )
-                return fresh_required and sandbox_state_recorded
+                import glob as _glob
+                run_summaries = _glob.glob(str(ROOT / "runs" / f"phase-{original_phase}-summary*.md"))
+                summary_fresh = any(Path(p).stat().st_mtime >= run_start_time for p in run_summaries)
+                if phase_is_1c:
+                    return sandbox_state_recorded and summary_fresh
+                fresh_required = any(_path_is_fresh(path, run_start_time) for path in required_artifacts)
+                return fresh_required and sandbox_state_recorded and summary_fresh
             return False
-        elif str(phase) in ("2", "sweep"):
+        elif phase_key in ("2", "sweep"):
             pending_dir = finding_status_dir("PENDING")
+            pending_fresh = False
             if pending_dir.exists():
-                return any(f.name.endswith(".md") and f.name != ".gitkeep" and f.stat().st_mtime >= run_start_time for f in pending_dir.iterdir())
-            return False
-        elif str(phase) == "3":
-            findings_dir = FINDINGS_ROOT
-            return any(
-                path.suffix == ".md" and path.name != ".gitkeep" and path.stat().st_mtime >= run_start_time
-                for path in _iter_files(findings_dir)
-            )
-        elif str(phase) == "4" and finding:
+                pending_fresh = any(f.name.endswith(".md") and f.name != ".gitkeep" and f.stat().st_mtime >= run_start_time for f in pending_dir.iterdir())
+            import glob as _glob
+            run_summaries = _glob.glob(str(ROOT / "runs" / "phase-2-summary*.md"))
+            summary_fresh = any(Path(p).stat().st_mtime >= run_start_time for p in run_summaries)
+            return pending_fresh and summary_fresh
+        elif phase_key == "3":
+            import glob as _glob
+            run_summaries = _glob.glob(str(ROOT / "runs" / "phase-3-summary-*.md"))
+            return any(Path(p).stat().st_mtime >= run_start_time for p in run_summaries)
+        elif phase_key == "4" and finding:
             evidence_dir = evidence_dir_for(finding)
             return any(path.stat().st_mtime >= run_start_time for path in _iter_files(evidence_dir))
-        elif str(phase) == "5" and finding:
-            exploited_file = finding_status_dir("EXPLOITED") / f"{finding}.md"
-            if (
-                exploited_file.exists()
-                and exploited_file.stat().st_mtime >= run_start_time
-            ):
+        elif phase_key == "5" and finding:
+            exploited_dir = finding_status_dir("EXPLOITED")
+            exploited_file = _find_finding_file(exploited_dir, finding, run_start_time)
+            if exploited_file is not None:
                 fm = _load_finding_frontmatter(exploited_file)
                 if (
                     isinstance(fm, dict)
@@ -131,11 +163,9 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                     ):
                         return True
 
-            confirmed_file = finding_status_dir("CONFIRMED") / f"{finding}.md"
-            if (
-                confirmed_file.exists()
-                and confirmed_file.stat().st_mtime >= run_start_time
-            ):
+            confirmed_dir = finding_status_dir("CONFIRMED")
+            confirmed_file = _find_finding_file(confirmed_dir, finding, run_start_time)
+            if confirmed_file is not None:
                 fm = _load_finding_frontmatter(confirmed_file)
                 if (
                     isinstance(fm, dict)
@@ -147,7 +177,7 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                     return True
 
             return False
-        elif str(phase) == "6":
+        elif phase_key == "6":
             reports_dir = REPORTS_ROOT
             if reports_dir.exists():
                 return any(f.name.endswith(".md") and f.name != ".gitkeep" and f.stat().st_mtime >= run_start_time for f in reports_dir.iterdir())
@@ -229,6 +259,42 @@ def build_frontmatter_resume_prompt(phase: str, finding: str | None, validation_
         f"Phase {phase} completion checklist:\n"
         f"{checklist}\n\n"
         "After fixing the validation errors, ensure the affected files remain in the correct status/location and are internally consistent."
+    )
+
+
+def build_codeql_plan_resume_prompt(validation_output: str) -> str:
+    return (
+        "Your previous run created or edited `itemdb/notes/codeql-plan.yml`, but the file failed local "
+        "CodeQL plan validation.\n\n"
+        "Validation errors:\n"
+        f"{validation_output}\n\n"
+        "Repair only `itemdb/notes/codeql-plan.yml` with the smallest change needed. Do not redo unrelated "
+        "reconnaissance or modify target source code. Preserve the existing analysis units, pack selections, "
+        "manual build commands, and notes unless a reported validation error requires changing them.\n\n"
+        "Before ending, verify that the repaired plan passes local validation by running `rtk python3 tools/codecome.py check-codeql-plan`."
+    )
+
+
+def build_codeql_build_failure_resume_prompt(validation_output: str) -> str:
+    return (
+        "The repaired `itemdb/notes/codeql-plan.yml` was valid, but the next CodeQL database creation run still "
+        "failed. Continue the same narrow CodeQL build repair task.\n\n"
+        "Latest CodeQL failure details:\n"
+        f"{validation_output}\n\n"
+        "Repair only `itemdb/notes/codeql-plan.yml` and any helper scripts under workspace-relative `tmp/` or "
+        "`sandbox/`. Do not modify target source code.\n\n"
+        "Important execution model: CodeQL runs the manual `build_command` with the current working directory set "
+        "to the analysis unit source path (`analysis_units[].path`). It is not run from the workspace root, and it "
+        "is not run from the helper script directory. If a helper script changes directory, it must do so based on "
+        "the analysis source root or explicit paths that work from that source root.\n\n"
+        "CodeQL tokenizes `build_command` as argv; it does not execute it as a shell script. Do not put shell "
+        "control syntax in `build_command`: no `&&`, `||`, `;`, pipes, comments, multi-line commands, or "
+        "`bash -c` / `sh -c` snippets. If more than one command is needed, create a helper script under "
+        "workspace-relative `tmp/` and set `build_command` to invoke it, for example `bash ../../tmp/codeql-build.sh`.\n\n"
+        "Do not use absolute `/tmp/` paths. Use workspace-relative `tmp/` paths. Do not embed this workspace's "
+        "absolute path in `build_command`; prefer paths relative to the analysis unit source path.\n\n"
+        "Before ending, verify that the plan is valid YAML, that referenced helper scripts exist, and that shell "
+        "helpers pass syntax-only validation."
     )
 
 

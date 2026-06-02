@@ -197,3 +197,9 @@ At the end, summarize:
 - most important assumptions,
 - recommended next phase,
 - files created or modified.
+
+## Run summary
+
+Write the run summary using the template at `templates/run-summary.md` to:
+
+    runs/phase-2-summary.md

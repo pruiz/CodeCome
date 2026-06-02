@@ -72,11 +72,15 @@ class ChatEventLoop(BaseEventLoop):
         """Start the SSE consumer in a background daemon thread."""
         self._consumer_thread = threading.Thread(
             target=self._consumer_worker,
-            args=(render_fn,),
+            args=(render_fn, None),
             name="codecome-chat-consumer",
             daemon=True,
         )
         self._consumer_thread.start()
+
+    def set_raw_event_recorder(self, recorder: Callable[[dict[str, Any]], None] | None) -> None:
+        """Install an optional raw-event recorder for transcript/debug capture."""
+        self._raw_event_recorder = recorder
 
     def send_prompt(
         self,
@@ -131,7 +135,11 @@ class ChatEventLoop(BaseEventLoop):
     # Internal
     # ------------------------------------------------------------------
 
-    def _consumer_worker(self, render_fn: Callable[[Any, str, str, dict[str, Any]], None]) -> None:
+    def _consumer_worker(
+        self,
+        render_fn: Callable[[Any, str, str, dict[str, Any]], None],
+        record_raw_event_fn: Callable[[dict[str, Any]], None] | None,
+    ) -> None:
         """Background thread: consume SSE, render events, signal idle."""
         if self.debug:
             self.debug("_consumer_worker: starting SSE client")
@@ -156,6 +164,10 @@ class ChatEventLoop(BaseEventLoop):
 
                 if not self._belongs_to_session(event):
                     continue
+
+                recorder = record_raw_event_fn or getattr(self, "_raw_event_recorder", None)
+                if recorder is not None:
+                    recorder(event)
 
                 event_count += 1
                 if self.debug and (event_count <= 5 or event_count % 20 == 0):

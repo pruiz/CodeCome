@@ -99,14 +99,16 @@ class TestTextEventRenderer:
         r = TextEventRenderer(_ctx("rich"))
         assert r.render({"part": {"text": "Hello world"}}) is True
 
-    def test_skips_empty_text(self):
+    def test_skips_empty_text(self, capsys):
         r = TextEventRenderer(_ctx("plain"))
-        assert r.render({"part": {"text": ""}}) is False
-        assert r.render({"part": {"text": "   \n\t  "}}) is False
+        assert r.render({"part": {"text": ""}}) is True
+        assert r.render({"part": {"text": "   \n\t  "}}) is True
+        assert capsys.readouterr().out == ""
 
-    def test_skips_missing_text(self):
+    def test_skips_missing_text(self, capsys):
         r = TextEventRenderer(_ctx("plain"))
-        assert r.render({"part": {}}) is False
+        assert r.render({"part": {}}) is True
+        assert capsys.readouterr().out == ""
 
 
 # ---------------------------------------------------------------------------

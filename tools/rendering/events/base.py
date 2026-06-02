@@ -17,8 +17,16 @@ import _colors as C
 # Finish reason classification
 # ---------------------------------------------------------------------------
 
+# Terminal OK — model stopped cleanly with a complete response.
 _FINISH_TERMINAL_OK = {"stop", "end_turn"}
-_FINISH_MID_TURN = {"tool-calls", "tool_use"}
+
+# Mid-turn — model was cut off mid-generation.  The session may still go idle
+# and the attempt may return exit 0, but no final completion signal was produced.
+# "unknown" is emitted by some providers when the stop-token mechanism fails or
+# the stream ends without a canonical reason; it is not a failure mode, just an
+# incomplete signal that warrants retry/resume handling.
+_FINISH_MID_TURN = {"tool-calls", "tool_use", "unknown"}
+
 _FINISH_FAILURE = {"content-filter", "content_filter", "length", "max_tokens", "error"}
 
 # Per-session dedup state for subagent update events.
