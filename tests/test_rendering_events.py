@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -29,6 +30,8 @@ from rendering.events import (
     MessageUpdatedRenderer,
     SubagentStatusRenderer,
     UnknownEventRenderer,
+    FileEditedRenderer,
+    FileWatcherRenderer,
     _reset_subagent_state,
 )
 
@@ -626,3 +629,122 @@ class TestUnknownEventRenderer:
     def test_renders_unknown_rich(self):
         r = UnknownEventRenderer(_ctx("rich"))
         assert r.render({"type": "x"}) is True
+
+
+# ---------------------------------------------------------------------------
+# FileEditedRenderer
+# ---------------------------------------------------------------------------
+
+class TestFileEditedRenderer:
+    def test_renders_edited_line_for_non_inflight_file(self, capsys):
+        ctx = _ctx("plain")
+        ctx.root = Path("/fake")
+        r = FileEditedRenderer(ctx)
+        assert r.render({"properties": {"file": "/fake/src/foo.py"}}) is True
+        out = capsys.readouterr().out
+        assert "edited" in out
+        assert "src/foo.py" in out
+
+    def test_suppresses_output_when_path_in_inflight_write_files(self, capsys):
+        ctx = _ctx("plain")
+        ctx.root = Path("/fake")
+        abs_path = os.path.normpath(os.path.abspath("/fake/src/foo.py"))
+        ctx.inflight_write_files.add(abs_path)
+        r = FileEditedRenderer(ctx)
+        assert r.render({"properties": {"file": "/fake/src/foo.py"}}) is True
+        out = capsys.readouterr().out
+        assert out == ""
+
+    def test_returns_false_for_missing_file_property(self, capsys):
+        r = FileEditedRenderer(_ctx("plain"))
+        assert r.render({"properties": {}}) is False
+        assert r.render({"properties": {"file": ""}}) is False
+        out = capsys.readouterr().out
+        assert out == ""
+
+    def test_rereads_snapshot_cache_for_non_inflight_file(self, tmp_path):
+        ctx = _ctx("plain")
+        ctx.root = tmp_path
+        target = tmp_path / "edited.py"
+        target.write_text("new content", encoding="utf-8")
+        ctx.cache.set(str(target), "stale cached content")
+
+        r = FileEditedRenderer(ctx)
+        assert r.render({"properties": {"file": str(target)}}) is True
+
+        assert ctx.cache.get(str(target)) == "new content"
+
+    def test_reread_noop_when_file_missing(self, capsys):
+        ctx = _ctx("plain")
+        ctx.root = Path("/fake")
+        r = FileEditedRenderer(ctx)
+        assert r.render({"properties": {"file": "/fake/does/not/exist.py"}}) is True
+        out = capsys.readouterr().out
+        assert "edited" in out
+        assert "does/not/exist.py" in out
+
+    def test_falls_back_to_absolute_path_when_outside_root(self, capsys):
+        ctx = _ctx("plain")
+        ctx.root = Path("/fake")
+        r = FileEditedRenderer(ctx)
+        assert r.render({"properties": {"file": "/elsewhere/foo.py"}}) is True
+        out = capsys.readouterr().out
+        assert "edited" in out
+        assert "/elsewhere/foo.py" in out
+
+    def test_renders_edited_rich(self):
+        ctx = _ctx("rich")
+        ctx.root = Path("/fake")
+        r = FileEditedRenderer(ctx)
+        assert r.render({"properties": {"file": "/fake/src/foo.py"}}) is True
+
+
+# ---------------------------------------------------------------------------
+# FileWatcherRenderer
+# ---------------------------------------------------------------------------
+
+class TestFileWatcherRenderer:
+    def test_suppresses_in_normal_mode(self, capsys):
+        ctx = _ctx("plain", debug_unknown_events=False)
+        ctx.root = Path("/fake")
+        r = FileWatcherRenderer(ctx)
+        assert r.render({"properties": {"file": "/fake/src/foo.py", "event": "change"}}) is True
+        out = capsys.readouterr().out
+        assert out == ""
+
+    def test_renders_watcher_line_in_debug_mode(self, capsys):
+        ctx = _ctx("plain", debug_unknown_events=True)
+        ctx.root = Path("/fake")
+        r = FileWatcherRenderer(ctx)
+        assert r.render({"properties": {"file": "/fake/src/foo.py", "event": "change"}}) is True
+        out = capsys.readouterr().out
+        assert "watcher" in out
+        assert "change" in out
+        assert "src/foo.py" in out
+
+    def test_returns_false_for_missing_file_in_debug_mode(self, capsys):
+        r = FileWatcherRenderer(_ctx("plain", debug_unknown_events=True))
+        assert r.render({"properties": {"file": "", "event": "change"}}) is False
+        out = capsys.readouterr().out
+        assert out == ""
+
+    def test_renders_watcher_event_label(self, capsys):
+        ctx = _ctx("plain", debug_unknown_events=True)
+        ctx.root = Path("/fake")
+        r = FileWatcherRenderer(ctx)
+        assert r.render({"properties": {"file": "/fake/foo.py", "event": "create"}}) is True
+        out = capsys.readouterr().out
+        assert "create" in out
+
+    def test_renders_watcher_rich(self):
+        ctx = _ctx("rich", debug_unknown_events=True)
+        ctx.root = Path("/fake")
+        r = FileWatcherRenderer(ctx)
+        assert r.render({"properties": {"file": "/fake/src/foo.py", "event": "change"}}) is True
+
+    def test_renders_watcher_rich_suppressed_in_normal_mode(self):
+        ctx = _ctx("rich", debug_unknown_events=False)
+        ctx.root = Path("/fake")
+        r = FileWatcherRenderer(ctx)
+        assert r.render({"properties": {"file": "/fake/src/foo.py", "event": "change"}}) is True
+
