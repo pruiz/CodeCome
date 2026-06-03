@@ -10,9 +10,11 @@ Related follow-up issue:
 
 ## Goal
 
-Adapt the useful parts of OpenAI's curated `security-threat-model` skill into CodeCome's existing Phase 1 workflow without adding a parallel `security-threat-model` skill.
+Adapt the useful parts of OpenAI's curated `security-threat-model` skill into CodeCome's existing phased workflow without adding a parallel standalone `security-threat-model` skill.
 
-The result should make Phase 1 produce a durable, repo-grounded operational threat model that later phases can consume for better hypothesis generation, counter-analysis, validation, exploitation, and reporting.
+The result should make Phase 1 produce a durable, repository-grounded operational threat model that later phases consume for better hypothesis generation, counter-analysis, validation, exploitation, and reporting.
+
+This plan is intentionally implementation-oriented: it names the files to change, how gates/checkers should behave, how Phase 2/3 should consume the new artifact, and how to keep `CODEQL=0` source-only recon working.
 
 ## Core decisions
 
@@ -34,7 +36,7 @@ Rationale:
 
 - CodeCome already has a Phase 1 recon model.
 - `source-recon` is already the canonical skill for target model extraction.
-- A standalone threat-model skill could accidentally produce a customer-facing threat model report instead of CodeCome's phase artifacts.
+- A standalone threat-model skill could accidentally produce a customer-facing threat model report instead of CodeCome phase artifacts.
 - The threat model should be part of CodeCome's artifact graph, not a separate deliverable.
 
 ### 2. Make `threat-model.md` required in Phase 1b
@@ -51,7 +53,7 @@ Template:
 templates/threat-model.md
 ```
 
-This is not merely a summary of the other Phase 1b files. It is the operational risk model that consolidates:
+This file is not merely a summary of the other Phase 1b files. It is the operational risk model that consolidates:
 
 - scope and runtime/non-runtime separation,
 - primary runtime system model,
@@ -65,7 +67,7 @@ This is not merely a summary of the other Phase 1b files. It is the operational 
 - open questions for the user,
 - re-run prompt hints.
 
-Phase 2 should not read only `threat-model.md`; it should still read the detailed recon artifacts. However, `threat-model.md` should be the first risk-oriented Phase 1b artifact Phase 2 consults.
+Phase 2 and Phase 3 should not read only `threat-model.md`; they should still read the detailed recon artifacts. However, `threat-model.md` should become the first risk-oriented Phase 1b artifact those phases consult.
 
 ### 3. Phase 1b is required even when `CODEQL=0`
 
@@ -81,6 +83,8 @@ Phase 1c: Sandbox bootstrap
 ```
 
 Therefore `threat-model.md` can be a strict Phase 1b gate requirement.
+
+If any current behavior skips Phase 1b when `CODEQL=0`, that should be treated as a bug. Without Phase 1b, CodeCome would also miss `attack-surface.md`, `trust-boundaries.md`, `data-flow.md`, `file-risk-index.yml`, and other required recon outputs.
 
 ### 4. Rename Phase 1b away from CodeQL-specific naming
 
@@ -108,12 +112,12 @@ Phase 1b must complete regardless of CodeQL availability.
 
 Update all references in:
 
-- `tools/codecome/phase_1.py`
+- `tools/codecome/phase_1.py`,
 - docs/workflow docs if present,
 - tests that reference the old filename or label,
-- any README/help text if applicable.
+- README/help text if applicable.
 
-Keep the old prompt file only if backward compatibility is needed. Prefer removing it or replacing it with a short redirect comment only if no code references remain.
+Prefer removing the old file once no active code references it. If backward compatibility is desired, keep only a minimal compatibility note, but avoid maintaining two prompt bodies.
 
 ### 5. Split validation responsibilities cleanly
 
@@ -132,11 +136,11 @@ tools/check-frontmatter.py
 make frontmatter
 ```
 
-But narrow its conceptual role to validating Markdown frontmatter for itemdb Markdown files. It should remain as a user convenience and compatibility wrapper, not the primary phase gate.
+but narrow its conceptual role to validating Markdown frontmatter for itemdb Markdown files. It should remain as a user convenience and compatibility wrapper, not the primary phase-artifact gate.
 
 Update Makefile to call the new command where complete phase validation is intended.
 
-## Current validation relationship target
+## Validation model
 
 ### `tools/gate-check.py`
 
@@ -149,6 +153,21 @@ Examples:
 - Is there a PENDING finding for Phase 4?
 
 It should remain focused on whether a phase is allowed to start.
+
+When checking Phase 2 readiness, it must require the new Phase 1b artifact:
+
+```text
+itemdb/notes/threat-model.md
+```
+
+If the file is missing, the Phase 2 gate should block with a clear message, for example:
+
+```text
+[BLOCK] Missing Phase 1b threat model: itemdb/notes/threat-model.md
+Run: make phase-1
+```
+
+`tools/gate-check.py` may reuse shared artifact helpers, but it should not become the main post-generation quality checker.
 
 ### `tools/codecome.py check-phase-artifacts --phase X`
 
@@ -169,6 +188,41 @@ This command can be used by:
 - manual user checks,
 - future CI.
 
+Eventually support:
+
+```bash
+tools/codecome.py check-phase-artifacts --phase 1a
+tools/codecome.py check-phase-artifacts --phase 1b
+tools/codecome.py check-phase-artifacts --phase 1c
+tools/codecome.py check-phase-artifacts --phase 1
+tools/codecome.py check-phase-artifacts --phase all
+```
+
+### `--allow-missing-runtime-artifacts`
+
+Define a test/development convenience flag:
+
+```bash
+tools/codecome.py check-phase-artifacts --phase all --allow-missing-runtime-artifacts
+```
+
+When enabled, the checker should:
+
+- validate static templates, schemas, prompt references, and any artifacts that exist,
+- skip errors for runtime-generated artifacts that are normally created only after a phase run, such as:
+  - `runs/phase-1a-summary.md`,
+  - `runs/phase-1b-summary.md`,
+  - `runs/phase-1c-summary.md`,
+  - `itemdb/notes/attack-surface.md`,
+  - `itemdb/notes/threat-model.md`,
+  - `itemdb/notes/sandbox-plan.md`,
+- still fail on malformed runtime artifacts if those files do exist,
+- still fail on static configuration/template errors.
+
+This makes it safe to call from `make tests` in a clean checkout.
+
+Non-goal: this flag must not be used by normal post-phase gates after an actual phase run. After Phase 1b completes, missing `itemdb/notes/threat-model.md` must remain a hard failure.
+
 ### `tools/check-frontmatter.py`
 
 Purpose: compatibility/user convenience wrapper for frontmatter-only checks.
@@ -183,13 +237,26 @@ tools/check-frontmatter.py
   -> may internally call a shared validator module
 ```
 
-### Existing in-process validation
+### `file-risk-index.yml` validation ownership
 
-`run_frontmatter_validation()` currently validates finding frontmatter and `file-risk-index.yml`. This should be untangled over time:
+The current in-process frontmatter validation also validates `file-risk-index.yml`. This should be untangled without duplicating validation logic.
 
-- finding frontmatter validation stays in findings validators,
-- `file-risk-index.yml` moves under phase artifact validation,
-- `check-phase-artifacts --phase 1b` calls both as needed.
+Do not add a standalone JSON schema in this PR unless existing code is already close to that shape.
+
+Recommended implementation:
+
+1. Extract or expose the existing `validate_file_risk_index()` logic as a reusable validator if needed.
+2. Keep current validation behavior stable.
+3. Have both compatibility paths call the same validator:
+   - `tools/check-frontmatter.py` while it still validates the risk index for backward compatibility,
+   - `tools/codecome.py check-phase-artifacts --phase 1b` as the new canonical phase-artifact path.
+4. In a later cleanup, decide whether `check-frontmatter.py` should stop validating `file-risk-index.yml` entirely.
+
+Rule:
+
+```text
+There must be one source of truth for file-risk-index schema validation.
+```
 
 ## Interactive/chat vs non-interactive behavior
 
@@ -359,12 +426,12 @@ Add `threat-model.md` to Phase 1b output expectations.
 
 Add sections:
 
-- Evidence anchors
-- User clarification behavior
-- Threat model summary
-- Attacker model
-- Existing controls
-- Abuse-path themes
+- Evidence anchors,
+- User clarification behavior,
+- Threat model summary,
+- Attacker model,
+- Existing controls,
+- Abuse-path themes.
 
 Update completion checklist to require:
 
@@ -387,7 +454,9 @@ Create:
 templates/threat-model.md
 ```
 
-Required headings:
+Avoid dense 5-7 column tables for qualitative content. Use structured subsections and nested bullets instead, because wide tables are fragile for LLM generation and tend to truncate useful reasoning.
+
+Required template shape:
 
 ```markdown
 # Threat Model Summary
@@ -416,8 +485,16 @@ Target path: `./src`
 
 # Assets and security objectives
 
-| Asset | Where observed | Why it matters | Objective (C/I/A) | Evidence |
-|---|---|---|---|---|
+## Asset: <name>
+
+- Where observed:
+- Why it matters:
+- Security objective:
+  - Confidentiality:
+  - Integrity:
+  - Availability:
+- Related attack surfaces:
+- Evidence:
 
 # Attacker model
 
@@ -427,20 +504,43 @@ Target path: `./src`
 
 # Trust boundary summary
 
-| Boundary | Data/control crossing | Channel/protocol | Existing controls | Evidence | Uncertainty |
-|---|---|---|---|---|---|
+## Boundary: <source> -> <destination>
+
+- Data/control crossing:
+- Channel/protocol:
+- Authentication:
+- Authorization:
+- Encryption / transport protection:
+- Validation / normalization / schema enforcement:
+- Rate/resource controls:
+- Existing controls:
+- Evidence:
+- Uncertainty:
 
 # Existing controls
 
-| Control | Location | Protects | Evidence | Gaps/uncertainty |
-|---|---|---|---|---|
+## Control: <name>
+
+- Location:
+- Protects:
+- Evidence:
+- Gaps / uncertainty:
 
 # Abuse-path themes for Phase 2
 
 These are review leads, not findings.
 
-| Theme | Attacker goal | Entrypoint | Boundary | Asset | Existing controls | Suggested Phase 2 focus |
-|---|---|---|---|---|---|---|
+## Theme: <short name>
+
+- Attacker goal:
+- Entrypoint:
+- Boundary crossed:
+- Asset affected:
+- Existing controls:
+- Key assumptions:
+- Relevant files:
+- Suggested Phase 2 focus:
+- Why this is not yet a finding:
 
 # Risk calibration for review focus
 
@@ -452,13 +552,30 @@ These are review leads, not findings.
 
 # Open questions for the user
 
-| Question | Why it matters | Affects | Suggested answer format |
-|---|---|---|---|
+## Question: <short question>
+
+- Why it matters:
+- Affects:
+- Suggested answer format:
 
 # Re-run prompt hints
 ```
 
 Mermaid diagrams are intentionally not required in this first integration.
+
+Artifact validation should require headings, not exact subsection count. Required headings:
+
+- `# Threat Model Summary`,
+- `# Scope`,
+- `# System model`,
+- `# Assets and security objectives`,
+- `# Attacker model`,
+- `# Trust boundary summary`,
+- `# Existing controls`,
+- `# Abuse-path themes for Phase 2`,
+- `# Risk calibration for review focus`,
+- `# Open questions for the user`,
+- `# Re-run prompt hints`.
 
 ## D. Update `templates/target-recon.md`
 
@@ -469,7 +586,7 @@ Add/extend:
 - existing controls,
 - assumptions,
 - detailed trust-boundary fields,
-- assets/security objectives table,
+- assets/security objectives table or structured asset sections,
 - explicit references to `threat-model.md` in recommended audit focus.
 
 ## E. Update `templates/run-summary.md`
@@ -497,7 +614,7 @@ None.
 
 This template change is general, but this PR should only enforce it for Phase 1 summaries. Full harness rendering is tracked in #33.
 
-## F. Rename Phase 1b prompt
+## F. Rename and update Phase 1b prompt
 
 Rename:
 
@@ -547,7 +664,7 @@ Add required output:
 - `threat-model.md`
 ```
 
-Add section for `threat-model.md` explaining the required contents.
+Add a section for `threat-model.md` explaining the required contents.
 
 Add interactive/non-interactive user-context behavior.
 
@@ -588,37 +705,86 @@ Add rule:
 If sandbox bootstrap depends on missing user context, do not ask in non-interactive mode unless bootstrap is blocked. Record the question in `sandbox-plan.md` and `runs/phase-1c-summary.md`. If bootstrap is blocked, use the halt protocol.
 ```
 
-## I. Validation command and gates
+## I. Update Phase 2 prompt
 
-Add command:
+Update:
 
-```bash
-tools/codecome.py check-phase-artifacts --phase 1b
+```text
+prompts/phase-2-audit.md
 ```
 
-Eventually support:
+Current Phase 2 already reads all relevant files under `itemdb/notes/`, but `threat-model.md` should be explicit because it becomes the primary risk-oriented Phase 1b handoff.
+
+Add to Required reading:
+
+```markdown
+- `itemdb/notes/threat-model.md` — operational threat model from Phase 1b: assets, attacker model, trust-boundary summary, existing controls, abuse-path themes, risk calibration, and open assumptions.
+```
+
+Add guidance near the `file-risk-index.yml` paragraph:
+
+```markdown
+Use `itemdb/notes/threat-model.md` to prioritize hypotheses around assets, attacker capabilities, explicit non-capabilities, existing controls, and abuse-path themes. Do not convert an abuse-path theme into a finding unless you identify a concrete, repository-backed vulnerable path with attacker control, trust-boundary crossing, security-relevant impact, and an actionable validation plan.
+```
+
+Update final response requirements to mention:
+
+- threat-model themes consumed,
+- assumptions from `threat-model.md` that materially influenced hypotheses,
+- abuse-path themes not converted into findings and why.
+
+## J. Update Phase 3 prompt
+
+Update:
+
+```text
+prompts/phase-3-review.md
+```
+
+Current Phase 3 also reads all relevant files under `itemdb/notes/`, but it should explicitly use the threat model for counter-analysis.
+
+Add to Required reading:
+
+```markdown
+- `itemdb/notes/threat-model.md` — operational threat model from Phase 1b: assets, attacker model, trust-boundary summary, existing controls, abuse-path themes, risk calibration, and open assumptions.
+```
+
+Add review questions:
+
+```markdown
+- Does the finding align with the attacker capabilities and non-capabilities documented in `threat-model.md`?
+- Does the claimed impact map to an asset and security objective from `threat-model.md`?
+- Do existing controls documented in `threat-model.md` weaken, block, or narrow the finding?
+- Is the finding based on an abuse-path theme from Phase 1b, and if so, has it been grounded into a concrete vulnerable path?
+```
+
+Update final response requirements to mention:
+
+- threat-model assumptions that affected counter-analysis,
+- findings weakened or rejected due to attacker non-capabilities or existing controls,
+- findings kept because they cross a documented trust boundary or affect a documented asset.
+
+## K. Phase artifact checks
+
+Implement:
 
 ```bash
-tools/codecome.py check-phase-artifacts --phase 1a
 tools/codecome.py check-phase-artifacts --phase 1b
-tools/codecome.py check-phase-artifacts --phase 1c
-tools/codecome.py check-phase-artifacts --phase 1
-tools/codecome.py check-phase-artifacts --phase all
 ```
 
 ### Phase 1a artifact checks
 
 Required files:
 
-- `itemdb/notes/target-profile.md`
-- `itemdb/notes/build-model.md`
-- `itemdb/notes/codeql-plan.yml`
-- `runs/phase-1a-summary.md`
+- `itemdb/notes/target-profile.md`,
+- `itemdb/notes/build-model.md`,
+- `itemdb/notes/codeql-plan.yml`,
+- `runs/phase-1a-summary.md`.
 
 Required summary headings:
 
-- `# Open questions for the user`
-- `# Re-run prompt hints`
+- `# Open questions for the user`,
+- `# Re-run prompt hints`.
 
 Negative checks:
 
@@ -629,61 +795,67 @@ Negative checks:
 
 Required files:
 
-- `itemdb/notes/attack-surface.md`
-- `itemdb/notes/execution-model.md`
-- `itemdb/notes/trust-boundaries.md`
-- `itemdb/notes/data-flow.md`
-- `itemdb/notes/threat-model.md`
-- `itemdb/notes/validation-model.md`
-- `itemdb/notes/interesting-files.md`
-- `itemdb/notes/file-risk-index.yml`
-- `itemdb/notes/security-assumptions.md`
-- `runs/phase-1b-summary.md`
+- `itemdb/notes/attack-surface.md`,
+- `itemdb/notes/execution-model.md`,
+- `itemdb/notes/trust-boundaries.md`,
+- `itemdb/notes/data-flow.md`,
+- `itemdb/notes/threat-model.md`,
+- `itemdb/notes/validation-model.md`,
+- `itemdb/notes/interesting-files.md`,
+- `itemdb/notes/file-risk-index.yml`,
+- `itemdb/notes/security-assumptions.md`,
+- `runs/phase-1b-summary.md`.
 
 `threat-model.md` required headings:
 
-- `# Threat Model Summary`
-- `# Scope`
-- `# System model`
-- `# Assets and security objectives`
-- `# Attacker model`
-- `# Trust boundary summary`
-- `# Existing controls`
-- `# Abuse-path themes for Phase 2`
-- `# Risk calibration for review focus`
-- `# Open questions for the user`
-- `# Re-run prompt hints`
+- `# Threat Model Summary`,
+- `# Scope`,
+- `# System model`,
+- `# Assets and security objectives`,
+- `# Attacker model`,
+- `# Trust boundary summary`,
+- `# Existing controls`,
+- `# Abuse-path themes for Phase 2`,
+- `# Risk calibration for review focus`,
+- `# Open questions for the user`,
+- `# Re-run prompt hints`.
 
 Required summary headings:
 
-- `# Open questions for the user`
-- `# Re-run prompt hints`
+- `# Open questions for the user`,
+- `# Re-run prompt hints`.
 
-Also run file-risk-index schema validation.
+Also run `file-risk-index.yml` validation through the shared validator.
 
 ### Phase 1c artifact checks
 
 Required files:
 
-- `itemdb/notes/sandbox-plan.md`
-- `runs/phase-1c-summary.md`
+- `itemdb/notes/sandbox-plan.md`,
+- `runs/phase-1c-summary.md`.
 
 Required summary headings:
 
-- `# Open questions for the user`
-- `# Re-run prompt hints`
+- `# Open questions for the user`,
+- `# Re-run prompt hints`.
 
 Keep existing sandbox gate behavior.
 
-## J. Update existing gates
+## L. Update existing gates
 
 Update `check_phase_1b` to require `threat-model.md` and validate minimum headings.
 
 Update `check_phase_1a` and `check_phase_1c` only as needed to enforce summary sections and prevent phase leakage.
 
+Update Phase 2 readiness in `tools/gate-check.py` to require:
+
+```text
+itemdb/notes/threat-model.md
+```
+
 `tools/gate-check.py` should remain pre-phase readiness. It may call shared artifact validators when checking prerequisites for the next phase, but it should not become the main post-run artifact checker.
 
-## K. Makefile updates
+## M. Makefile updates
 
 Update Makefile so complete validation uses the new command.
 
@@ -713,11 +885,9 @@ tests: env-check
 	$(PYTHON) tools/codecome.py check-phase-artifacts --phase all --allow-missing-runtime-artifacts
 ```
 
-Exact flags can be adjusted during implementation.
-
 Important: `tools/check-frontmatter.py` remains available but should no longer be the full artifact gate.
 
-## L. Tests
+## N. Tests
 
 Add tests:
 
@@ -734,6 +904,10 @@ Assert:
 
 - `templates/threat-model.md` exists.
 - `templates/threat-model.md` has all required headings.
+- `templates/threat-model.md` uses structured subsection markers such as:
+  - `## Boundary: <source> -> <destination>`
+  - `## Theme: <short name>`
+  - `## Question: <short question>`
 - `templates/run-summary.md` has `# Open questions for the user` and `# Re-run prompt hints`.
 - `templates/target-recon.md` mentions attacker model, existing controls, and assets/security objectives.
 
@@ -750,6 +924,10 @@ Assert:
 - Phase 1b prompt mentions attacker capabilities, non-capabilities, existing controls, abuse-path themes, open questions, and re-run prompt hints.
 - Phase 1a prompt explicitly does not produce `threat-model.md`.
 - Phase 1c prompt reads `threat-model.md`.
+- `prompts/phase-2-audit.md` explicitly references `itemdb/notes/threat-model.md`.
+- `prompts/phase-2-audit.md` says abuse-path themes are leads, not findings.
+- `prompts/phase-3-review.md` explicitly references `itemdb/notes/threat-model.md`.
+- `prompts/phase-3-review.md` uses attacker capabilities, non-capabilities, existing controls, and assets/security objectives during counter-analysis.
 
 ### Gate/artifact tests
 
@@ -759,17 +937,37 @@ Assert:
 - Phase 1b artifact checker fails when `threat-model.md` lacks required headings.
 - Phase 1b artifact checker passes with minimal valid threat model plus other required artifacts.
 - Phase 1b artifact checker requires run-summary open questions/re-run hint sections.
+- Phase 2 readiness gate fails when `itemdb/notes/threat-model.md` is missing.
+- Phase 2 readiness gate passes the threat-model prerequisite when the file exists.
+- Phase 2 gate output names the missing file and tells the user to re-run Phase 1.
 - `check-frontmatter.py` remains callable.
 
-## M. Documentation updates
+### `--allow-missing-runtime-artifacts` tests
+
+Assert:
+
+- clean checkout / missing runtime artifacts passes with `--allow-missing-runtime-artifacts`,
+- malformed existing `threat-model.md` still fails even with `--allow-missing-runtime-artifacts`,
+- missing required Phase 1b artifacts fail without the flag.
+
+### `file-risk-index.yml` validation tests
+
+Assert:
+
+- existing valid `file-risk-index.yml` fixtures still pass,
+- malformed `file-risk-index.yml` fails through `check-phase-artifacts --phase 1b`,
+- existing `tools/check-frontmatter.py` compatibility path still reports risk-index errors until deliberately changed.
+
+## O. Documentation updates
 
 Update docs as needed:
 
-- `docs/workflow.md` for Phase 1a/1b/1c naming.
-- `AGENTS.md` phase descriptions if still stale.
-- Any docs mentioning `Phase 1b: CodeQL-assisted Reconnaissance`.
+- `docs/workflow.md` for Phase 1a/1b/1c naming,
+- `AGENTS.md` phase descriptions if still stale,
+- any docs mentioning `Phase 1b: CodeQL-assisted Reconnaissance`,
+- any docs describing `make frontmatter`, `make tests`, or phase validation.
 
-## N. Lightweight attribution note
+## P. Lightweight attribution note
 
 Do not add license blocks to each skill file.
 
@@ -783,16 +981,19 @@ Some Phase 1 threat-modeling guidance was informed by the OpenAI curated
 ## Implementation order
 
 1. Rename Phase 1b prompt and update references.
-2. Add `templates/threat-model.md`.
+2. Add `templates/threat-model.md` using structured subsections, not wide tables.
 3. Add source-recon reference files.
 4. Update `source-recon/SKILL.md`.
 5. Update Phase 1a/1b/1c prompts.
-6. Update `templates/target-recon.md` and `templates/run-summary.md`.
-7. Add phase artifact validator command.
-8. Update `check_phase_1b` gate.
-9. Update Makefile target(s).
-10. Add tests.
-11. Update docs.
+6. Update Phase 2 and Phase 3 prompts to explicitly consume `threat-model.md`.
+7. Update `templates/target-recon.md` and `templates/run-summary.md`.
+8. Add phase artifact validator command and define `--allow-missing-runtime-artifacts`.
+9. Extract/reuse `file-risk-index.yml` validation under the new artifact checker.
+10. Update `check_phase_1b` gate.
+11. Update Phase 2 readiness in `tools/gate-check.py` to require `threat-model.md`.
+12. Update Makefile target(s).
+13. Add tests.
+14. Update docs.
 
 ## Acceptance criteria
 
@@ -801,8 +1002,14 @@ Some Phase 1 threat-modeling guidance was informed by the OpenAI curated
 - `CODEQL=0 make phase-1` still runs Phase 1b as source-only detailed recon.
 - Phase 1b requires `itemdb/notes/threat-model.md`.
 - `threat-model.md` has required headings and is validated by gates/checkers.
+- `templates/threat-model.md` avoids wide 6-7 column tables for qualitative content.
 - Phase 1 summaries include open questions and re-run prompt hints.
+- `prompts/phase-2-audit.md` explicitly reads and uses `itemdb/notes/threat-model.md`.
+- `prompts/phase-3-review.md` explicitly reads and uses `itemdb/notes/threat-model.md`.
+- Phase 2 readiness blocks if `itemdb/notes/threat-model.md` is missing.
 - `tools/codecome.py check-phase-artifacts --phase 1b` exists.
+- `--allow-missing-runtime-artifacts` is defined and tested.
+- `file-risk-index.yml` validation has one reusable source of truth.
 - `tools/check-frontmatter.py` remains available.
 - `make frontmatter` still works.
 - Makefile complete validation path uses the new phase artifact checker where appropriate.
