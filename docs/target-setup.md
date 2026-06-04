@@ -69,7 +69,7 @@ Suggested layout:
 
 After placing Juliet under `src/`, run:
 
-    opencode run --agent recon "$(cat prompts/phase-1-recon.md)"
+    make phase-1
 
 The recon phase should infer that the target is a C/C++ benchmark corpus and create notes under:
 
@@ -139,7 +139,7 @@ After placing a target under `src/`:
 
     make check
     make sandbox-check
-    opencode run --agent recon "$(cat prompts/phase-1-recon.md)"
+    make phase-1
 
 Then review:
 

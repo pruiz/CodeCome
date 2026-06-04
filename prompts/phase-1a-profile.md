@@ -98,6 +98,10 @@ Rules:
 - Be explicit about uncertainty.
 - Prefer useful notes over exhaustive dumps.
 - Focus on what later sub-stages need.
+- Phase 1a does not produce `threat-model.md`.
+- Phase 1a does not produce attack-surface, trust-boundary, or data-flow notes.
+- Phase 1a does not bootstrap sandbox.
+- Non-blocking open questions should go into `runs/phase-1a-summary.md`.
 
 ## Final response
 

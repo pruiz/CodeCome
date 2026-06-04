@@ -107,6 +107,9 @@ Create or update these files:
 - `itemdb/notes/validation-model.md`
 - `itemdb/notes/interesting-files.md`
 - `itemdb/notes/security-assumptions.md`
+- `itemdb/notes/threat-model.md`
+- `itemdb/notes/file-risk-index.yml`
+- `itemdb/notes/sandbox-plan.md`
 
 Do not create findings during reconnaissance unless there is an extremely obvious, high-confidence, security-relevant issue.
 
@@ -337,6 +340,7 @@ Each phase has readiness gates that must be satisfied before it can run:
 
 - `itemdb/notes/target-profile.md` must exist.
 - `itemdb/notes/attack-surface.md` must exist.
+- `itemdb/notes/threat-model.md` must exist.
 - At least one reconnaissance note file must exist under `itemdb/notes/`.
 
 ### Phase 3 readiness

@@ -472,7 +472,9 @@ All `make` targets that invoke Python tools expect a repo-local virtualenv at `.
 
 CodeCome ships reusable phase prompts under `prompts/`:
 
-    prompts/phase-1-recon.md
+    prompts/phase-1a-profile.md
+    prompts/phase-1b-recon.md
+    prompts/phase-1c-sandbox.md
     prompts/phase-2-audit.md
     prompts/phase-3-review.md
     prompts/phase-4-validate.md
@@ -529,7 +531,7 @@ The wrapper currently targets OpenCode 1.14.39 or newer.
 
 If you prefer direct `opencode run` commands instead of `make` targets:
 
-    opencode run --agent recon "$(cat prompts/phase-1-recon.md)"
+    make phase-1
     opencode run --agent auditor "$(cat prompts/phase-2-audit.md)"
     opencode run --agent reviewer "$(cat prompts/phase-3-review.md)"
     opencode run --agent validator "$(sed 's#FINDING_PATH_OR_ID#CC-0001#g' prompts/phase-4-validate.md)"

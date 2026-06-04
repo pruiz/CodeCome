@@ -29,6 +29,7 @@ EVIDENCE_TEMPLATE_MARKERS = [
 REQUIRED_NOTES = [
     "target-profile.md",
     "attack-surface.md",
+    "threat-model.md",
 ]
 
 FINDING_STATUS_DIRS = [

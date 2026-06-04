@@ -13,6 +13,7 @@ Read the following files (all paths are relative to the project/workspace root):
 - `.opencode/skills/finding-format/SKILL.md`
 - `.opencode/skills/source-recon/SKILL.md`
 - all relevant files under `itemdb/notes/`
+- `itemdb/notes/threat-model.md` — operational threat model from Phase 1b: assets, attacker model, trust-boundary summary, existing controls, abuse-path themes, risk calibration, and open assumptions.
 
 Use additional target-specific skills only if they clearly apply.
 
@@ -31,7 +32,9 @@ Use Phase 1 reconnaissance notes under:
 
     itemdb/notes/
 
-If `itemdb/notes/file-risk-index.yml` exists, use it to guide your attention to high-risk areas. **CRITICAL RULE:** In this global Phase 2 pass, focus on **macro-level vulnerabilities**: cross-component trust boundaries, architectural flaws, project-wide logic, and broad attack surfaces. 
+If `itemdb/notes/file-risk-index.yml` exists, use it to guide your attention to high-risk areas. **CRITICAL RULE:** In this global Phase 2 pass, focus on **macro-level vulnerabilities**: cross-component trust boundaries, architectural flaws, project-wide logic, and broad attack surfaces.
+
+Use `itemdb/notes/threat-model.md` to prioritize hypotheses around assets, attacker capabilities, explicit non-capabilities, existing controls, and abuse-path themes. Do not convert an abuse-path theme into a finding unless you identify a concrete, repository-backed vulnerable path with attacker control, trust-boundary crossing, security-relevant impact, and an actionable validation plan. 
 
 Do NOT perform exhaustive line-by-line deep dives of individual files. Leave deep, line-by-line vulnerability hunting for the optional `make sweep` tool. Your goal here is to establish the broad, high-impact hypotheses that span the architecture.
 
@@ -193,6 +196,9 @@ At the end, summarize:
 - number of findings created,
 - ids and titles,
 - highest-risk areas reviewed,
+- threat-model themes consumed,
+- assumptions from `threat-model.md` that materially influenced hypotheses,
+- abuse-path themes not converted into findings and why,
 - high-risk files left for optional deep sweeps,
 - most important assumptions,
 - recommended next phase,

@@ -36,7 +36,7 @@ Run:
 
     make phase-1
 
-(Or, manually: `opencode run --agent recon "$(cat prompts/phase-1-recon.md)"`.)
+(Or, manually: `make phase-1` runs Phase 1a, CodeQL enrichment, Phase 1b, and Phase 1c automatically. Individual subphase prompts are at `prompts/phase-1a-profile.md`, `prompts/phase-1b-recon.md`, and `prompts/phase-1c-sandbox.md`.)
 
 ### Phase 1a: source reconnaissance
 

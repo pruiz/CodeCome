@@ -33,6 +33,8 @@ Create or update these files under `itemdb/notes/`:
     itemdb/notes/validation-model.md
     itemdb/notes/interesting-files.md
     itemdb/notes/security-assumptions.md
+    itemdb/notes/threat-model.md
+    itemdb/notes/file-risk-index.yml
 
 If the target has a specific nature, optional additional notes may be created.
 
@@ -388,4 +390,79 @@ Before finishing reconnaissance, ensure that:
 - `validation-model.md` exists.
 - `interesting-files.md` exists.
 - `security-assumptions.md` exists.
+- `threat-model.md` exists after Phase 1b.
+- `file-risk-index.yml` exists after Phase 1b.
+- architectural claims have evidence anchors.
+- runtime behavior is separated from CI/build/dev/test behavior.
+- attacker-controlled inputs are distinguished from operator/developer inputs.
+- high-priority trust boundaries include source, destination, data/control, channel, controls, and evidence.
+- assets include why they matter and C/I/A objectives.
+- attacker capabilities and non-capabilities are explicit.
+- existing controls are documented with evidence.
+- unresolved user-context questions are present in the run summary.
+- Phase 2 focus follows from assets, boundaries, entrypoints, controls, and sinks.
 - no low-quality findings were created prematurely.
+
+## References
+
+When Phase 1b produces detailed reconnaissance notes, also use:
+
+- `references/threat-model-checklist.md`
+- `references/security-controls-and-assets.md`
+
+Use these references to improve grounding, threat-model quality, assets,
+controls, attacker assumptions, and Phase 2 review focus.
+
+Do not copy checklist categories blindly. Only include repository-specific items
+supported by evidence or explicitly marked assumptions.
+
+## Create-or-update semantics
+
+If `itemdb/notes/threat-model.md` already exists, update it. Do not replace it
+wholesale. Preserve manually refined sections, evidence anchors, user-provided
+answers, and resolved open questions unless new repository evidence contradicts
+them.
+
+## User clarification behavior
+
+### Interactive/chat mode
+You may ask targeted questions when missing context materially affects scope,
+deployment model, internet exposure, authn/authz assumptions, data sensitivity,
+multi-tenancy, risk ranking, or validation strategy. Questions must be few,
+specific, and useful.
+
+### Non-interactive phase execution
+Do not block waiting for answers unless the phase cannot proceed safely or
+meaningfully. Instead: infer conservative assumptions, record assumptions in
+`security-assumptions.md`, record unresolved questions in `threat-model.md`,
+include unresolved questions in the run summary, and provide re-run prompt hints.
+
+## Threat model summary
+
+Produce `threat-model.md` as an operational risk model that consolidates scope,
+system model, assets and security objectives, attacker capabilities and
+non-capabilities, trust-boundary summary, existing controls, abuse-path themes,
+risk calibration, open questions, and re-run prompt hints.
+
+## Evidence anchors
+
+For every architectural or security claim in `threat-model.md`, include an
+evidence anchor: a file path, code reference, configuration key, or observable
+runtime behavior. Mark claims without evidence as assumptions.
+
+## Attacker model
+
+Document realistic attacker capabilities and explicit non-capabilities.
+Non-capabilities prevent inflated severity judgments in later phases.
+
+## Existing controls
+
+Document controls observed in the repository with evidence: what each control
+protects, where it is enforced, what assumptions it relies on, and known gaps.
+
+## Abuse-path themes
+
+Record abuse-path themes in `threat-model.md` as review leads, not findings.
+Each theme should include attacker goal, entrypoint, boundary crossed, impacted
+asset, existing controls, key assumptions, relevant files, and suggested Phase 2
+focus. Explain why each theme is not yet a finding.

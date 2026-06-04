@@ -13,6 +13,7 @@ Read the following files (all paths are relative to the project/workspace root):
 - `.opencode/skills/finding-format/SKILL.md`
 - `.opencode/skills/counter-analysis/SKILL.md`
 - all relevant files under `itemdb/notes/`
+- `itemdb/notes/threat-model.md` — operational threat model from Phase 1b: assets, attacker model, trust-boundary summary, existing controls, abuse-path themes, risk calibration, and open assumptions.
 - all candidate findings under `itemdb/findings/PENDING/`
 - related findings under `itemdb/findings/CONFIRMED/`, `REJECTED/`, and `DUPLICATE/`
 
@@ -48,6 +49,10 @@ For each finding, ask:
 - Is validation performed upstream?
 - Is authorization enforced elsewhere?
 - Is the finding based mostly on labels, filenames, comments, or assumptions?
+- Does the finding align with the attacker capabilities and non-capabilities documented in `threat-model.md`?
+- Does the claimed impact map to an asset and security objective from `threat-model.md`?
+- Do existing controls documented in `threat-model.md` weaken, block, or narrow the finding?
+- Is the finding based on an abuse-path theme from Phase 1b, and if so, has it been grounded into a concrete vulnerable path?
 - Is the finding a duplicate of another finding?
 - Is the validation plan actionable?
 
@@ -194,6 +199,9 @@ At the end, summarize:
 - findings kept in PENDING,
 - findings moved to REJECTED,
 - findings moved to DUPLICATE,
+- findings weakened or rejected due to attacker non-capabilities or existing controls from `threat-model.md`,
+- findings kept because they cross a documented trust boundary or affect a documented asset,
+- threat-model assumptions that affected counter-analysis,
 - semantic duplicate groups identified,
 - major confidence changes,
 - recommended validation order,

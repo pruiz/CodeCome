@@ -45,6 +45,7 @@ from phases.completion import (
     build_frontmatter_resume_prompt,
     build_codeql_plan_resume_prompt,
     build_codeql_build_failure_resume_prompt,
+    build_artifact_repair_resume_prompt,
 )
 
 
@@ -597,6 +598,7 @@ def _run_subphase(
     iteration_retry_count = 0
     frontmatter_retry_count = 0
     codeql_plan_retry_count = 0
+    artifact_retry_count = 0
     attempt_number = 0
     last_session_id: str = existing_session_id or ""
     last_finish_reason: str | None = None
@@ -780,6 +782,56 @@ def _run_subphase(
                         print(C.fail(msg))
                     print(validation_output)
                 break
+
+            if phase_id == "1b":
+                from phases.artifact_checks import check_phase_1b_artifacts as _check_artifacts_1b
+                artifact_errors = _check_artifacts_1b(allow_missing_generated=False)
+                if artifact_errors:
+                    max_artifact_retries = 2
+                    if artifact_retry_count < max_artifact_retries:
+                        artifact_retry_count += 1
+                        validation_output = "\n".join(artifact_errors)
+                        msg = (
+                            "\n[Auto-Correction] The model completed a turn, but Phase 1b artifacts "
+                            f"failed validation. CodeCome will resume the same session and ask for "
+                            f"a minimal repair (retry {artifact_retry_count}/{max_artifact_retries})."
+                        )
+                        if HAVE_RICH:
+                            from rich.text import Text
+                            console.print(Text(msg, style="bold yellow"))
+                        else:
+                            import _colors as C
+                            print(C.warn(msg))
+                        if last_session_id and last_session_id != "id":
+                            prompt = build_artifact_repair_resume_prompt(
+                                phase_id, finding, validation_output
+                            )
+                            continue
+                        else:
+                            returncode = 2
+                            finish_warning = (
+                                "The model output failed Phase 1b artifact validation, and CodeCome "
+                                "could not determine a session ID to resume for repair. Treating the "
+                                "subphase as incomplete so the validation output can be reported back."
+                            )
+                    else:
+                        returncode = 2
+                        finish_warning = (
+                            f"Phase 1b artifact validation still fails after {max_artifact_retries} "
+                            "auto-repair attempts. Treating the subphase as incomplete so the "
+                            "validation errors can be reported back."
+                        )
+                        validation_output = "\n".join(artifact_errors)
+                        msg = f"\n[Warning] Phase 1b artifact errors persist after {max_artifact_retries} auto-retries."
+                        if HAVE_RICH:
+                            from rich.text import Text
+                            console.print(Text(msg, style="bold red"))
+                        else:
+                            import _colors as C
+                            print(C.fail(msg))
+                        print(validation_output)
+                    break
+
             break
 
         if returncode == 2 and last_finish_reason in _FINISH_MID_TURN:
@@ -917,7 +969,7 @@ def run_phase_1(
     # Snapshot findings immediately before 1b so the warning scope matches 1b.
     findings_snapshot = count_findings_snapshot()
 
-    # ---- Phase 1b: CodeQL-assisted Reconnaissance ----
+    # ---- Phase 1b: Detailed Reconnaissance ----
     rc = _run_subphase(
         args=args,
         console=console,
@@ -925,9 +977,9 @@ def run_phase_1(
         runner=runner,
         base_url=base_url,
         phase_id="1b",
-        label="CodeQL-assisted Reconnaissance",
+        label="Detailed Reconnaissance",
         agent="recon",
-        prompt_file="prompts/phase-1b-codeql-recon.md",
+        prompt_file="prompts/phase-1b-recon.md",
     )
     if rc != 0:
         return rc
