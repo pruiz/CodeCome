@@ -274,8 +274,13 @@ def _validate_codeql_plan_for_repair() -> tuple[int, str]:
             context = f"analysis unit {unit_id!r} language {language_id!r}"
 
             # Validate build_mode against known language capabilities
-            build_mode = language.get("build_mode", "none")
-            if is_supported_language(language_id) and isinstance(build_mode, str) and build_mode:
+            build_mode = language.get("build_mode")
+            if not isinstance(build_mode, str) or not build_mode.strip():
+                if is_supported_language(language_id):
+                    errors.append(
+                        f"{context}: missing or invalid build_mode (got {build_mode!r})"
+                    )
+            elif is_supported_language(language_id):
                 allowed = supported_build_modes(language_id)
                 if build_mode not in allowed:
                     modes = ", ".join(sorted(allowed))
@@ -410,12 +415,14 @@ def _codeql_repair_needed(output_dir: Path, plan_path: Path) -> bool:
                 continue
             language_id = language.get("id")
             build_mode = language.get("build_mode")
-            if isinstance(language_id, str) and isinstance(build_mode, str):
-                # Plan-level: unsupported build_mode
-                if build_mode not in supported_build_modes(language_id):
+            if isinstance(language_id, str):
+                # Effective build_mode: the interpretation the runner would use
+                effective = build_mode if isinstance(build_mode, str) and build_mode.strip() else "none"
+                # Plan-level: unsupported effective build_mode
+                if effective not in supported_build_modes(language_id):
                     return True
                 # Runtime: Database create failed with repairable modes
-                if has_db_failure and build_mode in {"autobuild", "manual"}:
+                if has_db_failure and effective in {"autobuild", "manual"}:
                     return True
     return False
 
