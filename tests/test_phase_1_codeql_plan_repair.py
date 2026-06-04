@@ -356,6 +356,67 @@ def test_codeql_repair_loop_does_not_block_after_retries_exhausted(tmp_path: Pat
     assert rc == 0
 
 
+def _write_plan_with_build_mode(root: Path, build_mode: str | None, build_command: str | None = None) -> None:
+    plan = root / "itemdb" / "notes" / "codeql-plan.yml"
+    plan.parent.mkdir(parents=True, exist_ok=True)
+    import yaml as _yaml
+
+    data: dict = {
+        "schema_version": 1,
+        "analysis_units": [
+            {
+                "id": "native",
+                "path": "./src/native",
+                "languages": [
+                    {"id": "c-cpp", "packs": ["official"]},
+                ],
+            }
+        ],
+    }
+    if build_mode is not None:
+        data["analysis_units"][0]["languages"][0]["build_mode"] = build_mode  # type: ignore[index]
+    if build_command is not None:
+        data["analysis_units"][0]["languages"][0]["build_command"] = build_command  # type: ignore[index]
+    plan.write_text(_yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+
+
+def test_codeql_plan_validation_rejects_unsupported_build_mode(tmp_path: Path) -> None:
+    import codecome.phase_1 as p1
+
+    _write_plan_with_build_mode(tmp_path, "none")
+
+    with patch.object(p1, "ROOT", tmp_path):
+        rc, output = p1._validate_codeql_plan_for_repair()
+
+    assert rc == 1
+    assert "unsupported build_mode" in output
+    assert "'none'" in output
+
+
+def test_codeql_plan_validation_rejects_missing_build_mode(tmp_path: Path) -> None:
+    import codecome.phase_1 as p1
+
+    _write_plan_with_build_mode(tmp_path, None)
+
+    with patch.object(p1, "ROOT", tmp_path):
+        rc, output = p1._validate_codeql_plan_for_repair()
+
+    assert rc == 1
+    assert "missing or invalid build_mode" in output
+
+
+def test_codeql_plan_validation_rejects_manual_without_build_command(tmp_path: Path) -> None:
+    import codecome.phase_1 as p1
+
+    _write_plan_with_build_mode(tmp_path, "manual", build_command=None)
+
+    with patch.object(p1, "ROOT", tmp_path):
+        rc, output = p1._validate_codeql_plan_for_repair()
+
+    assert rc == 1
+    assert "no build_command provided" in output
+
+
 def test_phase1c_accepts_no_step_finish_when_artifacts_are_fresh(tmp_path: Path) -> None:
     import codecome.phase_1 as p1
 
