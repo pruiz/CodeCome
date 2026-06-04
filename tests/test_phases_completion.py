@@ -77,6 +77,7 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
         assert "SANDBOX_PLAN_PATH" in imported_names
 
     def test_phase1_check_patches_notes_root_and_sandbox_plan(self, tmp_path):
+        import os
         import phases.completion as completion_mod
 
         orig_notes_root = completion_mod.NOTES_ROOT
@@ -87,22 +88,27 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
         completion_mod.SANDBOX_PLAN_PATH = tmp_path / "sandbox-plan.md"
         completion_mod.ROOT = tmp_path / "codecome_workspace"
 
-        fake_time = time.time() - 2
+        fake_time = time.time()
 
         (completion_mod.ROOT / "sandbox").mkdir(parents=True)
         (completion_mod.ROOT / "sandbox" / "CODECOME-GENERATED.md").write_text("")
+        os.utime(completion_mod.ROOT / "sandbox" / "CODECOME-GENERATED.md", (fake_time + 60, fake_time + 60))
         completion_mod.SANDBOX_PLAN_PATH.write_text("")
+        os.utime(completion_mod.SANDBOX_PLAN_PATH, (fake_time + 60, fake_time + 60))
 
         for name in completion_mod._PHASE1_REQUIRED_ARTIFACT_NAMES:
             artifact = tmp_path / name
             artifact.parent.mkdir(parents=True, exist_ok=True)
             artifact.write_text("")
+            os.utime(artifact, (fake_time + 60, fake_time + 60))
 
         # Create run summaries for each tested phase key
         for phase_id in ("1", "1c"):
             summary_dir = completion_mod.ROOT / "runs"
             summary_dir.mkdir(parents=True, exist_ok=True)
-            (summary_dir / f"phase-{phase_id}-summary.md").write_text("")
+            summary = summary_dir / f"phase-{phase_id}-summary.md"
+            summary.write_text("")
+            os.utime(summary, (fake_time + 60, fake_time + 60))
 
         try:
             result = completion_mod.check_phase_graceful_completion("1", None, fake_time)
@@ -115,6 +121,7 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
             completion_mod.ROOT = orig_root
 
     def test_phase1c_accepts_fresh_sandbox_state_with_existing_notes(self, tmp_path):
+        import os
         import phases.completion as completion_mod
 
         orig_notes_root = completion_mod.NOTES_ROOT
@@ -125,22 +132,26 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
         completion_mod.SANDBOX_PLAN_PATH = completion_mod.NOTES_ROOT / "sandbox-plan.md"
         completion_mod.ROOT = tmp_path / "codecome_workspace"
 
+        run_start = time.time()
+
         for name in completion_mod._PHASE1_REQUIRED_ARTIFACT_NAMES:
             artifact = completion_mod.NOTES_ROOT / name
             artifact.parent.mkdir(parents=True, exist_ok=True)
             artifact.write_text("", encoding="utf-8")
+            os.utime(artifact, (run_start - 60, run_start - 60))
 
-        run_start = time.time()
         sandbox_generated = completion_mod.ROOT / "sandbox" / "CODECOME-GENERATED.md"
         sandbox_generated.parent.mkdir(parents=True)
 
         try:
             assert completion_mod.check_phase_graceful_completion("1", None, run_start) is False
             sandbox_generated.write_text("validated", encoding="utf-8")
-            # Run summary must also be fresh for phase 1c
+            os.utime(sandbox_generated, (run_start + 60, run_start + 60))
             summary_dir = completion_mod.ROOT / "runs"
             summary_dir.mkdir(parents=True, exist_ok=True)
-            (summary_dir / "phase-1c-summary.md").write_text("", encoding="utf-8")
+            summary = summary_dir / "phase-1c-summary.md"
+            summary.write_text("", encoding="utf-8")
+            os.utime(summary, (run_start + 60, run_start + 60))
             assert completion_mod.check_phase_graceful_completion("1c", None, run_start) is True
         finally:
             completion_mod.NOTES_ROOT = orig_notes_root
