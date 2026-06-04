@@ -29,7 +29,9 @@ Examples:
     tools/list-findings.py
     tools/render-index.py
     tools/render-report.py
-    prompts/phase-1-recon.md
+    prompts/phase-1a-profile.md
+    prompts/phase-1b-recon.md
+    prompts/phase-1c-sandbox.md
     docs/target-setup.md
 
 ## Directory responsibilities

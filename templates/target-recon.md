@@ -96,8 +96,12 @@ For each surface, include:
 - type,
 - entrypoints,
 - input sources,
-- likely attacker control,
+- likely attacker control (HIGH / MEDIUM / LOW / NONE),
+- input control classification (unvalidated, partially validated, allowlist-validated, schema-enforced, dependency-injected),
 - relevant files,
+- reachable assets,
+- existing controls or mitigations,
+- assumptions,
 - initial risk notes.
 
 Example surface types:
@@ -125,6 +129,21 @@ Example surface types:
 # Trust boundaries
 
 Describe where untrusted or lower-trust data crosses into higher-trust components.
+
+For each boundary, document:
+
+- source actor/component,
+- destination component,
+- data or control crossing the boundary,
+- channel/protocol,
+- authentication mechanism,
+- authorization mechanism,
+- encryption / transport protection,
+- validation / normalization / schema enforcement,
+- rate or resource controls,
+- existing controls,
+- evidence,
+- uncertainty.
 
 Examples:
 
@@ -208,6 +227,10 @@ For each item, explain why it is interesting.
 # Recommended audit focus
 
 List the vulnerability classes that appear most relevant for this target.
+
+See `itemdb/notes/threat-model.md` for abuse-path themes and risk calibration.
+Cross-reference assets, attacker capabilities, and existing controls before
+creating Phase 2 hypotheses.
 
 # Validation model
 

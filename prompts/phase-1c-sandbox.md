@@ -14,6 +14,9 @@ Read the following files (all paths are relative to the project/workspace root):
 - `.opencode/skills/sandbox-bootstrap/SKILL.md`
 - `itemdb/notes/target-profile.md`
 - `itemdb/notes/build-model.md`
+- `itemdb/notes/threat-model.md`
+- `itemdb/notes/execution-model.md`
+- `itemdb/notes/validation-model.md`
 
 ## Required output
 
@@ -113,6 +116,7 @@ Read the following files (all paths are relative to the project/workspace root):
 - Do not modify files under `src/`.
 - Do not overwrite a `sandbox/` that lacks `CODECOME-GENERATED.md`. If the sandbox already works, move on; if it needs replacement, halt with the halt protocol and inform the user to re-run with `--force` (which moves the prior content to `sandbox/.backup-<timestamp>/`).
 - Do not generate vulnerability findings.
+- If sandbox bootstrap depends on missing user context, do not ask in non-interactive mode unless bootstrap is blocked. Record the question in `sandbox-plan.md` and `runs/phase-1c-summary.md`. If bootstrap is blocked, use the halt protocol.
 
 ## Final response
 

@@ -40,6 +40,7 @@ _PHASE1_REQUIRED_ARTIFACT_NAMES = [
     "interesting-files.md",
     "file-risk-index.yml",
     "security-assumptions.md",
+    "threat-model.md",
     "sandbox-plan.md",
 ]
 
@@ -201,6 +202,7 @@ def phase_checklist_lines(phase: str, finding: str | None) -> list[str]:
     if str(phase) == "1":
         return [
             f"Ensure all required Phase 1 notes exist under {_ITEMDB_NOTES_DIR}.",
+            f"Ensure {NOTES_ROOT.relative_to(ROOT)}/threat-model.md has all required H1 headings: # Threat Model Summary, # Scope, # System model, # Assets and security objectives, # Attacker model, # Trust boundary summary, # Existing controls, # Abuse-path themes for Phase 2, # Risk calibration for review focus, # Open questions for the user, # Re-run prompt hints.",
             f"Ensure {NOTES_ROOT.relative_to(ROOT)}/file-risk-index.yml is present and consistent with interesting-files.md.",
             f"Ensure {NOTES_ROOT.relative_to(ROOT)}/sandbox-plan.md documents the Phase 1b outcome.",
             "If sandbox bootstrap succeeded, ensure sandbox/CODECOME-GENERATED.md exists; otherwise document the halt clearly in sandbox-plan.md.",
@@ -282,6 +284,25 @@ def build_codeql_plan_resume_prompt(validation_output: str) -> str:
         "reconnaissance or modify target source code. Preserve the existing analysis units, pack selections, "
         "manual build commands, and notes unless a reported validation error requires changing them.\n\n"
         "Before ending, verify that the repaired plan passes local validation by running `rtk python3 tools/codecome.py check-codeql-plan`."
+    )
+
+
+def build_artifact_repair_resume_prompt(
+    phase: str, finding: str | None, validation_output: str
+) -> str:
+    """Build a resume prompt for Phase 1b artifact validation failures."""
+    checklist = "\n".join(f"- {line}" for line in phase_checklist_lines(phase, finding))
+    return (
+        "Your previous run produced Phase 1b artifacts that failed local validation.\n\n"
+        "Validation errors:\n"
+        f"{validation_output}\n\n"
+        "Repair only the reported missing or malformed Phase 1b artifacts with minimal changes. "
+        "Do not rewrite unrelated reconnaissance notes and do not modify target source code. "
+        "If threat-model.md is missing required headings, add only the missing H1 headings and "
+        "leave the existing content intact.\n\n"
+        f"Phase {phase} completion checklist:\n"
+        f"{checklist}\n\n"
+        "Before ending, verify that the repaired artifacts pass local validation."
     )
 
 

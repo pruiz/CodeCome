@@ -74,6 +74,25 @@ Mark each assumption as:
 - unknown
 - risky
 
+# Open questions for the user
+
+List questions that would materially improve a later re-run.
+
+## Question: <short question>
+
+- Why it matters:
+- Affects:
+- Suggested answer format:
+
+# Re-run prompt hints
+
+If useful, provide a short copy/paste prompt that the user can pass into a
+future re-run with the missing context.
+
+If there are no useful hints, write:
+
+None.
+
 # Limitations
 
 List anything that could not be completed.

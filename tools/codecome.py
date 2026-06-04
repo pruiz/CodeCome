@@ -51,6 +51,7 @@ REQUIRED_PATHS = [
     "templates",
     "templates/finding.md",
     "templates/target-recon.md",
+    "templates/threat-model.md",
     "templates/evidence-readme.md",
     "templates/report.md",
     "templates/run-summary.md",
@@ -703,6 +704,14 @@ def command_check_codeql_plan(_: argparse.Namespace) -> int:
     return rc
 
 
+def command_check_phase_artifacts(args: argparse.Namespace) -> int:
+    from phases.artifact_checks import check_phase_artifacts
+    return check_phase_artifacts(
+        phase=args.phase,
+        allow_missing_generated=args.allow_missing_generated_artifacts,
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="codecome",
@@ -722,6 +731,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     check_plan_parser = subparsers.add_parser("check-codeql-plan", help="Validate itemdb/notes/codeql-plan.yml")
     check_plan_parser.set_defaults(func=command_check_codeql_plan)
+
+    check_artifacts_parser = subparsers.add_parser(
+        "check-phase-artifacts",
+        help="Validate phase-generated artifacts (post-generation quality).",
+    )
+    check_artifacts_parser.add_argument(
+        "--phase", required=True,
+        help="Phase to validate: 1a, 1b, 1c, 1, all"
+    )
+    check_artifacts_parser.add_argument(
+        "--allow-missing-generated-artifacts", action="store_true",
+        dest="allow_missing_generated_artifacts",
+        help="Skip errors for phase-generated artifacts not yet produced.",
+    )
+    check_artifacts_parser.set_defaults(func=command_check_phase_artifacts)
 
     return parser
 

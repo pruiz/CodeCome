@@ -1,8 +1,8 @@
-# CodeCome Phase 1b: CodeQL-assisted Reconnaissance
+# CodeCome Phase 1b: Detailed Reconnaissance
 
 You are performing CodeCome **Phase 1b** — the second sub-stage of Phase 1.
 
-This sub-stage produces the detailed reconnaissance notes. Phase 1a already created the target profile, build model, and CodeQL plan. If CodeQL analysis has completed (it may not have — treat it as optional), you now have normalized CodeQL artifacts to incorporate as reconnaissance evidence.
+Phase 1b produces detailed reconnaissance notes. If CodeQL artifacts are available, use them as optional enrichment. If they are absent or CodeQL was disabled, continue with source-only reconnaissance. Phase 1b must complete regardless of CodeQL availability.
 
 ## Required reading
 
@@ -12,8 +12,11 @@ Read the following files (all paths are relative to the project/workspace root):
 - `codecome.yml`
 - `templates/target-recon.md`
 - `templates/file-risk-index.yml`
+- `templates/threat-model.md`
 - `.opencode/agents/recon.md`
 - `.opencode/skills/source-recon/SKILL.md`
+- `.opencode/skills/source-recon/references/threat-model-checklist.md`
+- `.opencode/skills/source-recon/references/security-controls-and-assets.md`
 
 Also read the Phase 1a outputs:
 
@@ -57,6 +60,31 @@ Create these files under `itemdb/notes/`:
 - `interesting-files.md`
 - `file-risk-index.yml`
 - `security-assumptions.md`
+- `threat-model.md`
+
+### `threat-model.md`
+
+Use the template at `templates/threat-model.md`.
+
+This file consolidates the operational risk model. It is not merely a summary of the other Phase 1b files. It should contain:
+
+- **Scope**: in-scope and out-of-scope components, runtime vs non-runtime separation.
+- **System model**: primary runtime components, data stores, external integrations, entrypoints.
+- **Assets and security objectives**: for each relevant asset, document where observed, why it matters, C/I/A objectives, related attack surfaces, and evidence.
+- **Attacker model**: realistic attacker capabilities and explicit non-capabilities. Non-capabilities are required to avoid inflated severity.
+- **Trust boundary summary**: for each important boundary, document source/destination, data/control crossing, channel, authn, authz, encryption, validation, rate controls, existing controls, evidence, and uncertainty.
+- **Existing controls**: observed controls with evidence — what the control protects, where enforced, assumptions, gaps.
+- **Abuse-path themes for Phase 2**: review leads, not findings. Each theme includes attacker goal, entrypoint, boundary crossed, impacted asset, existing controls, assumptions, relevant files, and suggested Phase 2 focus.
+- **Risk calibration**: qualitative prioritization into high/medium/low priority review themes.
+- **Open questions for the user**: questions that would materially improve a re-run, with why each matters and what it affects.
+- **Re-run prompt hints**: copy/paste hints the user can pass via `PROMPT_EXTRA` or `PROMPT_EXTRA_FILE` on re-run.
+
+Grounding rules:
+
+- Anchor architectural and security claims to repository evidence.
+- Mark missing context as assumptions.
+- Separate attacker-controlled, operator-controlled, developer-controlled, and trusted internal inputs.
+- If `itemdb/notes/threat-model.md` already exists, update it rather than replacing it. Preserve manually refined sections, evidence anchors, and user-provided answers.
 
 ### `attack-surface.md`
 
@@ -173,6 +201,36 @@ Use external context only as reconnaissance input: distill affected components, 
 
 Distill declared threat model, past CVEs, trust boundaries, and third-party components into the relevant notes; treat author claims as input to verify, not facts.
 
+## User clarification behavior
+
+### Interactive/chat mode
+
+You may ask targeted questions when missing context materially affects:
+
+- scope,
+- deployment model,
+- internet exposure,
+- authn/authz assumptions,
+- data sensitivity,
+- multi-tenancy,
+- risk ranking,
+- validation strategy.
+
+Questions must be few, specific, and useful.
+
+### Non-interactive phase execution
+
+Do not block waiting for answers unless the phase cannot proceed safely or meaningfully.
+
+Instead:
+
+- infer conservative assumptions,
+- record assumptions in `itemdb/notes/security-assumptions.md`,
+- record unresolved questions in `itemdb/notes/threat-model.md`,
+- include unresolved questions in `runs/phase-1b-summary.md`,
+- print unresolved questions in the final model summary,
+- provide copy/paste re-run prompt hints for `PROMPT_EXTRA` or `PROMPT_EXTRA_FILE`.
+
 ## Important rules
 
 - Do not assume the target is a web application.
@@ -195,9 +253,15 @@ At the end, summarize:
 
 - Target type (from Phase 1a),
 - Most important attack surfaces identified,
+- Threat model summary,
+- Highest-risk assets,
+- Attacker capabilities and non-capabilities,
+- Top abuse-path themes for Phase 2,
 - Recommended Phase 2 focus,
 - Highest-risk files from `file-risk-index.yml`,
 - CodeQL signals incorporated (if any),
+- Open questions for the user,
+- Re-run prompt hints,
 - Files created in this sub-stage,
 - Key limitations and uncertainties.
 

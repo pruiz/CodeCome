@@ -29,6 +29,7 @@ from codecome.config import ROOT, resolve_color_mode, load_prompt, resolve_runti
 from phases.completion import (
     check_phase_graceful_completion,
     build_phase_resume_prompt, build_frontmatter_resume_prompt,
+    build_artifact_repair_resume_prompt,
 )
 
 

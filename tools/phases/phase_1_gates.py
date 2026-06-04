@@ -34,6 +34,7 @@ REQUIRED_NOTES_1B = [
     "interesting-files.md",
     "file-risk-index.yml",
     "security-assumptions.md",
+    "threat-model.md",
 ]
 
 FINDING_STATUS_DIRS = [
@@ -305,13 +306,13 @@ def check_phase_1a(console=None, findings_snapshot: dict[str, int] | None = None
             _emit(console, "ok", f"codeql-plan.yml: {len(units)} analysis unit(s) configured")
 
     _emit_separator(console, "green")
-    _emit(console, "ok", "Ready to run Phase 1b (CodeQL-assisted Reconnaissance).")
+    _emit(console, "ok", "Ready to run Phase 1b (Detailed Reconnaissance).")
     return 0
 
 
 def check_phase_1b(console=None, findings_snapshot: dict[str, int] | None = None) -> int:
     """Gate 1b: recon notes and file-risk-index.yml must be valid."""
-    _emit(console, "header", "Gate 1b: CodeQL-assisted Reconnaissance")
+    _emit(console, "header", "Gate 1b: Detailed Reconnaissance")
     _emit_separator(console, "cyan")
 
     missing = _notes_exist(*REQUIRED_NOTES_1B)

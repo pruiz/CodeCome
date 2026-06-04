@@ -1,7 +1,7 @@
 # Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later OR AGPL-3.0-or-later
 
-.PHONY: help init venv env-check check status next-id frontmatter tests test-parity itemdb-reset codeql-clean index report
+.PHONY: help init venv env-check check status next-id frontmatter check-phase-artifacts tests test-parity itemdb-reset codeql-clean index report
 .PHONY: findings findings-create findings-move findings-evidence findings-package
 .PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all opencode-raw
 .PHONY: sandbox-setup sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-reset sandbox-build sandbox-test
@@ -261,9 +261,13 @@ next-id: env-check
 frontmatter: env-check
 	$(PYTHON) tools/check-frontmatter.py
 
+check-phase-artifacts: env-check
+	$(PYTHON) tools/codecome.py check-phase-artifacts --phase $(or $(PHASE),all)
+
 tests: env-check
 	$(PYTHON) -m pytest -q tests
 	$(PYTHON) tools/check-frontmatter.py
+	$(PYTHON) tools/codecome.py check-phase-artifacts --phase all --allow-missing-generated-artifacts
 
 test-parity: env-check
 	$(PYTHON) -m pytest tests/test_mock_llm_parity.py -v
