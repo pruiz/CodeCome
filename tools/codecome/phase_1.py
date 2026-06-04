@@ -255,6 +255,8 @@ def _validate_codeql_plan_for_repair() -> tuple[int, str]:
     except Exception as exc:
         return 1, f"itemdb/notes/codeql-plan.yml is invalid: {exc}"
 
+    from codeql.capabilities import is_supported_language, supported_build_modes
+
     errors: list[str] = []
     for unit in plan.get("analysis_units", []):
         if not isinstance(unit, dict):
@@ -269,11 +271,29 @@ def _validate_codeql_plan_for_repair() -> tuple[int, str]:
             if not isinstance(language, dict):
                 continue
             language_id = str(language.get("id", "<unknown>"))
-            build_command = language.get("build_command")
-            if not isinstance(build_command, str) or not build_command.strip():
-                continue
             context = f"analysis unit {unit_id!r} language {language_id!r}"
-            errors.extend(_validate_codeql_build_command(build_command, analysis_root, context))
+
+            # Validate build_mode against known language capabilities
+            build_mode = language.get("build_mode", "none")
+            if is_supported_language(language_id) and isinstance(build_mode, str) and build_mode:
+                allowed = supported_build_modes(language_id)
+                if build_mode not in allowed:
+                    modes = ", ".join(sorted(allowed))
+                    errors.append(
+                        f"{context}: unsupported build_mode '{build_mode}' (allowed: {modes})"
+                    )
+                if build_mode == "manual" and not (
+                    isinstance(language.get("build_command"), str)
+                    and str(language.get("build_command", "")).strip()
+                ):
+                    errors.append(
+                        f"{context}: build_mode is 'manual' but no build_command provided"
+                    )
+
+            # Validate build_command portability (existing logic)
+            build_command = language.get("build_command")
+            if isinstance(build_command, str) and build_command.strip():
+                errors.extend(_validate_codeql_build_command(build_command, analysis_root, context))
 
     if errors:
         return 1, "itemdb/notes/codeql-plan.yml failed CodeQL build-command validation:\n" + "\n".join(
@@ -376,17 +396,27 @@ def _codeql_repair_needed(output_dir: Path, plan_path: Path) -> bool:
     failures = manifest.get("failures", [])
     if not isinstance(failures, list):
         return False
-    if not any("Database create failed" in str(failure) for failure in failures):
-        return False
+
+    from codeql.capabilities import supported_build_modes
 
     plan = _load_codeql_yaml(plan_path)
+    has_db_failure = any("Database create failed" in str(f) for f in failures)
     for unit in plan.get("analysis_units", []) if isinstance(plan.get("analysis_units"), list) else []:
         languages = unit.get("languages", []) if isinstance(unit, dict) else []
         if not isinstance(languages, list):
             continue
         for language in languages:
-            if isinstance(language, dict) and language.get("build_mode") in {"autobuild", "manual"}:
-                return True
+            if not isinstance(language, dict):
+                continue
+            language_id = language.get("id")
+            build_mode = language.get("build_mode")
+            if isinstance(language_id, str) and isinstance(build_mode, str):
+                # Plan-level: unsupported build_mode
+                if build_mode not in supported_build_modes(language_id):
+                    return True
+                # Runtime: Database create failed with repairable modes
+                if has_db_failure and build_mode in {"autobuild", "manual"}:
+                    return True
     return False
 
 

@@ -41,6 +41,7 @@ def _write_valid_plan(root: Path) -> None:
         "    path: ./src/native\n"
         "    languages:\n"
         "      - id: c-cpp\n"
+        "        build_mode: autobuild\n"
         "        packs:\n"
         "          - official\n"
         "notes:\n"
