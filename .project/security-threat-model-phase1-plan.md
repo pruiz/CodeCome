@@ -2,7 +2,7 @@
 
 ## Status
 
-WIP planning document only. This PR intentionally does not implement the changes yet.
+Implemented — 609 tests passing (48 new). PR #34.
 
 Related follow-up issues:
 

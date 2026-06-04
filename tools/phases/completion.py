@@ -199,7 +199,10 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
 
 
 def phase_checklist_lines(phase: str, finding: str | None) -> list[str]:
-    if str(phase) == "1":
+    phase_key = str(phase)
+    if phase_key in ("1a", "1b", "1c"):
+        phase_key = "1"
+    if phase_key == "1":
         return [
             f"Ensure all required Phase 1 notes exist under {_ITEMDB_NOTES_DIR}.",
             f"Ensure {NOTES_ROOT.relative_to(ROOT)}/threat-model.md has all required H1 headings: # Threat Model Summary, # Scope, # System model, # Assets and security objectives, # Attacker model, # Trust boundary summary, # Existing controls, # Abuse-path themes for Phase 2, # Risk calibration for review focus, # Open questions for the user, # Re-run prompt hints.",

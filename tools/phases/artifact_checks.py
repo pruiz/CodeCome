@@ -47,8 +47,6 @@ VALID_PHASES = frozenset({"1a", "1b", "1c", "1", "2", "3", "4", "5", "6", "all"}
 
 # -- Heading helpers ------------------------------------------------------------
 
-_H1_RE = re.compile(r"^# (?!\s)", re.MULTILINE)
-
 # Equivalent strict H1 regex: starts with "# " and is NOT followed by whitespace
 _STRICT_H1_RE = re.compile(r"^# [^\s]", re.MULTILINE)
 
@@ -332,7 +330,10 @@ def check_phase_artifacts(
     all_errors: list[str] = []
     for p in phases_to_check:
         func = _CHECKERS[p]
-        errors = func(allow_missing_generated=allow_missing_generated)
+        errors = func(
+            allow_missing_generated=allow_missing_generated,
+            phase_1a_start_time=phase_1a_start_time,
+        )
         if errors:
             print(C.fail(f"Phase {p} artifact errors ({len(errors)}):"))
             for err in errors:
@@ -349,15 +350,27 @@ def check_phase_artifacts(
     return 0
 
 
-def _check_phase_1a_with_ct(allow_missing_generated: bool = False) -> list[str]:
-    return check_phase_1a_artifacts(allow_missing_generated=allow_missing_generated)
+def _check_phase_1a_with_ct(
+    allow_missing_generated: bool = False,
+    phase_1a_start_time: float | None = None,
+) -> list[str]:
+    return check_phase_1a_artifacts(
+        allow_missing_generated=allow_missing_generated,
+        phase_1a_start_time=phase_1a_start_time,
+    )
 
 
-def _check_phase_1b_with_ct(allow_missing_generated: bool = False) -> list[str]:
+def _check_phase_1b_with_ct(
+    allow_missing_generated: bool = False,
+    phase_1a_start_time: float | None = None,
+) -> list[str]:
     return check_phase_1b_artifacts(allow_missing_generated=allow_missing_generated)
 
 
-def _check_phase_1c_with_ct(allow_missing_generated: bool = False) -> list[str]:
+def _check_phase_1c_with_ct(
+    allow_missing_generated: bool = False,
+    phase_1a_start_time: float | None = None,
+) -> list[str]:
     return check_phase_1c_artifacts(allow_missing_generated=allow_missing_generated)
 
 
