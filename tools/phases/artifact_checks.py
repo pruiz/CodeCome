@@ -173,18 +173,7 @@ def _check_phase_1a_no_leak(
 
 # -- Phase 1b ------------------------------------------------------------------
 
-
-PHASE_1B_REQUIRED_NOTES: list[str] = [
-    "attack-surface.md",
-    "execution-model.md",
-    "trust-boundaries.md",
-    "data-flow.md",
-    "threat-model.md",
-    "validation-model.md",
-    "interesting-files.md",
-    "file-risk-index.yml",
-    "security-assumptions.md",
-]
+from phases.completion import PHASE_1B_REQUIRED_NOTES  # noqa: E402
 
 
 def check_phase_1b_artifacts(

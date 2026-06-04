@@ -680,8 +680,8 @@ def _run_subphase(
             ):
                 msg = (
                     f"CodeCome observed an incomplete model/provider completion signal for Phase {phase_id} after "
-                    f"{step_finish_count} completed loops, but the required durable artifacts were already written. "
-                    "Treating the subphase as complete."
+                    f"{step_finish_count} completed loops, but expected durable artifacts were written during "
+                    "the run. Treating the subphase as complete enough to run validation and auto-repair."
                 )
                 if HAVE_RICH:
                     from rich.text import Text
