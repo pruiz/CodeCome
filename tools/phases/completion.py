@@ -44,6 +44,23 @@ _PHASE1_REQUIRED_ARTIFACT_NAMES = [
     "sandbox-plan.md",
 ]
 
+# Subphase-specific artifact sets.  Phase 1b uses its own list (the canonical
+# source of truth consumed by artifact_checks.py as well).  Phase 1a and 1c
+# lists are defined here alongside the monolith set.
+_PHASE_1A_ARTIFACT_NAMES = ("target-profile.md", "build-model.md", "codeql-plan.yml")
+
+PHASE_1B_REQUIRED_NOTES: list[str] = [
+    "attack-surface.md",
+    "execution-model.md",
+    "trust-boundaries.md",
+    "data-flow.md",
+    "threat-model.md",
+    "validation-model.md",
+    "interesting-files.md",
+    "file-risk-index.yml",
+    "security-assumptions.md",
+]
+
 
 def _phase1_required_artifacts() -> list[Path]:
     return [NOTES_ROOT / name for name in _PHASE1_REQUIRED_ARTIFACT_NAMES]
@@ -124,15 +141,21 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
 
             if original_phase == "1a":
                 notes_dir = ROOT / "itemdb" / "notes"
-                paths_1a = [notes_dir / n for n in ("target-profile.md", "build-model.md", "codeql-plan.yml")]
+                paths_1a = [notes_dir / n for n in _PHASE_1A_ARTIFACT_NAMES]
                 return any(_path_is_fresh(p, run_start_time) for p in paths_1a)
 
             if original_phase == "1b":
                 notes_dir = ROOT / "itemdb" / "notes"
-                _SKIP_1B = frozenset({"target-profile.md", "build-model.md", "codeql-plan.yml", "sandbox-plan.md"})
-                names_1b = [n for n in _PHASE1_REQUIRED_ARTIFACT_NAMES if n not in _SKIP_1B]
-                paths_1b = [notes_dir / n for n in names_1b]
+                paths_1b = [notes_dir / n for n in PHASE_1B_REQUIRED_NOTES]
                 return any(_path_is_fresh(p, run_start_time) for p in paths_1b)
+
+            if original_phase == "1c":
+                notes_dir = ROOT / "itemdb" / "notes"
+                sandbox_generated = ROOT / "sandbox" / "CODECOME-GENERATED.md"
+                return (
+                    _path_is_fresh(notes_dir / "sandbox-plan.md", run_start_time)
+                    or _path_is_fresh(sandbox_generated, run_start_time)
+                )
 
             # Phase 1c and bare "1": require the full monolith set.
             required_artifacts = _phase1_required_artifacts()

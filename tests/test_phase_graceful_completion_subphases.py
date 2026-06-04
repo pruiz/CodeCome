@@ -79,7 +79,7 @@ def test_phase_1b_graceful_completion_fails_if_no_1b_artifacts_fresh(tmp_path: P
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
 
-    # Create only Phase 1a artifacts — which are excluded from 1b check
+    # Create only non-1b artifacts (1a + 1c) — excluded from 1b check
     now = time.time()
     (notes / "target-profile.md").write_text("", encoding="utf-8")
     (notes / "target-profile.md").touch()
@@ -111,8 +111,26 @@ def test_phase_1b_excludes_sandbox_plan_from_check(tmp_path: Path) -> None:
     assert result is False
 
 
-def test_phase_1c_still_requires_sandbox_state(tmp_path: Path) -> None:
-    """Phase 1c should require sandbox-plan.md and sandbox state."""
+def test_phase_1c_passes_with_fresh_sandbox_plan(tmp_path: Path) -> None:
+    """Phase 1c should return True when sandbox-plan.md is fresh, no monolith check needed."""
+    from phases.completion import check_phase_graceful_completion
+
+    notes = tmp_path / "itemdb" / "notes"
+    notes.mkdir(parents=True)
+    (tmp_path / "sandbox").mkdir()
+
+    now = time.time()
+    (notes / "sandbox-plan.md").write_text("content", encoding="utf-8")
+    (notes / "sandbox-plan.md").touch()
+
+    with patch("phases.completion.ROOT", tmp_path):
+        result = check_phase_graceful_completion("1c", None, now - 1)
+
+    assert result is True
+
+
+def test_phase_1c_fails_without_sandbox_artifacts(tmp_path: Path) -> None:
+    """Phase 1c should return False when neither sandbox-plan.md nor CODECOME-GENERATED.md is fresh."""
     from phases.completion import check_phase_graceful_completion
 
     notes = tmp_path / "itemdb" / "notes"
@@ -121,14 +139,13 @@ def test_phase_1c_still_requires_sandbox_state(tmp_path: Path) -> None:
 
     now = time.time()
 
-    # Write all Phase 1 notes — needed because the monolith path requires all
+    # Write all Phase 1 notes except sandbox-plan.md so the old files exist but aren't fresh
     from phases.completion import _PHASE1_REQUIRED_ARTIFACT_NAMES
     for name in _PHASE1_REQUIRED_ARTIFACT_NAMES:
-        (notes / name).write_text("content", encoding="utf-8")
-        (notes / name).touch()
+        if name != "sandbox-plan.md":
+            (notes / name).write_text("content", encoding="utf-8")
 
-    # No CODECOME-GENERATED.md, no run summary — should fail for 1c
     with patch("phases.completion.ROOT", tmp_path):
-        result = check_phase_graceful_completion("1c", None, now - 1)
+        result = check_phase_graceful_completion("1c", None, now)
 
     assert result is False

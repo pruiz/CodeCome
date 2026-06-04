@@ -263,7 +263,8 @@ def run_phase_mode(args: argparse.Namespace) -> int:
                 ):
                     msg = (
                         f"CodeCome observed a mid-turn model/provider cutoff for Phase {args.phase} after {step_finish_count} "
-                        "completed loops, but the required durable artifacts were already written. Treating the phase as complete."
+                        "completed loops, but expected durable artifacts were written during "
+                        "the run. Treating the phase as complete enough to run validation and auto-repair."
                     )
                     if HAVE_RICH:
                         from rich.text import Text
