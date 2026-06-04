@@ -117,6 +117,24 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
 
     try:
         if phase_key == "1":
+            # -- Subphase-specific graceful-completion checks --
+            # Phase 1a and 1b should not require artifacts owned by other subphases
+            # (sandbox-plan.md from 1c, or sandbox/CODECOME-GENERATED.md).
+            # Bare "1" (full Phase 1) and 1c keep the existing monolith check below.
+
+            if original_phase == "1a":
+                notes_dir = ROOT / "itemdb" / "notes"
+                paths_1a = [notes_dir / n for n in ("target-profile.md", "build-model.md", "codeql-plan.yml")]
+                return any(_path_is_fresh(p, run_start_time) for p in paths_1a)
+
+            if original_phase == "1b":
+                notes_dir = ROOT / "itemdb" / "notes"
+                _SKIP_1B = frozenset({"target-profile.md", "build-model.md", "codeql-plan.yml", "sandbox-plan.md"})
+                names_1b = [n for n in _PHASE1_REQUIRED_ARTIFACT_NAMES if n not in _SKIP_1B]
+                paths_1b = [notes_dir / n for n in names_1b]
+                return any(_path_is_fresh(p, run_start_time) for p in paths_1b)
+
+            # Phase 1c and bare "1": require the full monolith set.
             required_artifacts = _phase1_required_artifacts()
             if all(path.exists() for path in required_artifacts):
                 sandbox_generated = ROOT / "sandbox" / "CODECOME-GENERATED.md"

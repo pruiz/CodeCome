@@ -17,11 +17,16 @@ def test_check_phase_artifacts_invalid_phase(capsys) -> None:
     assert "Invalid phase" in out
 
 
-def test_allow_missing_generated_skips_missing_artifacts(capsys) -> None:
+def test_allow_missing_generated_skips_missing_artifacts(capsys, tmp_path: Path) -> None:
     """Clean checkout (no generated artifacts) should pass."""
     from phases.artifact_checks import check_phase_artifacts
 
-    rc = check_phase_artifacts("all", allow_missing_generated=True)
+    (tmp_path / "itemdb" / "notes").mkdir(parents=True)
+    (tmp_path / "runs").mkdir()
+
+    with patch("phases.artifact_checks.ROOT", tmp_path):
+        rc = check_phase_artifacts("all", allow_missing_generated=True)
+
     out = capsys.readouterr().out
     assert rc == 0
     assert "passed" in out
@@ -70,19 +75,29 @@ def test_malformed_threat_model_fails_even_with_flag(tmp_path: Path) -> None:
     assert any("missing headings" in e for e in errors)
 
 
-def test_phase_1_runs_all_subphase_checks(capsys) -> None:
+def test_phase_1_runs_all_subphase_checks(capsys, tmp_path: Path) -> None:
     from phases.artifact_checks import check_phase_artifacts
 
-    rc = check_phase_artifacts("1", allow_missing_generated=True)
+    (tmp_path / "itemdb" / "notes").mkdir(parents=True)
+    (tmp_path / "runs").mkdir()
+
+    with patch("phases.artifact_checks.ROOT", tmp_path):
+        rc = check_phase_artifacts("1", allow_missing_generated=True)
+
     out = capsys.readouterr().out
     assert rc == 0
     assert "passed" in out
 
 
-def test_phase_all_runs_all_implemented(capsys) -> None:
+def test_phase_all_runs_all_implemented(capsys, tmp_path: Path) -> None:
     from phases.artifact_checks import check_phase_artifacts
 
-    rc = check_phase_artifacts("all", allow_missing_generated=True)
+    (tmp_path / "itemdb" / "notes").mkdir(parents=True)
+    (tmp_path / "runs").mkdir()
+
+    with patch("phases.artifact_checks.ROOT", tmp_path):
+        rc = check_phase_artifacts("all", allow_missing_generated=True)
+
     out = capsys.readouterr().out
     assert rc == 0
     assert "passed" in out
