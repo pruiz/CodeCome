@@ -4,9 +4,12 @@
 
 WIP planning document only. This PR intentionally does not implement the changes yet.
 
-Related follow-up issue:
+Related follow-up issues:
 
 - #33 Track reusable open questions and re-run hints across all phases
+- #35 Use threat-model.md in Phase 4 validation planning
+- #36 Use threat-model.md in Phase 5 exploitation planning
+- #37 Use threat-model.md in Phase 6 reporting context
 
 ## Goal
 
@@ -15,6 +18,8 @@ Adapt the useful parts of OpenAI's curated `security-threat-model` skill into Co
 The result should make Phase 1 produce a durable, repository-grounded operational threat model that later phases consume for better hypothesis generation, counter-analysis, validation, exploitation, and reporting.
 
 This plan is intentionally implementation-oriented: it names the files to change, how gates/checkers should behave, how Phase 2/3 should consume the new artifact, and how to keep `CODEQL=0` source-only recon working.
+
+Phase 4/5/6 consumption of `threat-model.md` is intentionally deferred to follow-up issues #35, #36, and #37.
 
 ## Core decisions
 
@@ -206,15 +211,24 @@ This command can be used by:
 - manual user checks,
 - future CI.
 
-Eventually support:
+Supported phases:
 
 ```bash
 tools/codecome.py check-phase-artifacts --phase 1a
 tools/codecome.py check-phase-artifacts --phase 1b
 tools/codecome.py check-phase-artifacts --phase 1c
 tools/codecome.py check-phase-artifacts --phase 1
+tools/codecome.py check-phase-artifacts --phase 2
+tools/codecome.py check-phase-artifacts --phase 3
+tools/codecome.py check-phase-artifacts --phase 4
+tools/codecome.py check-phase-artifacts --phase 5
+tools/codecome.py check-phase-artifacts --phase 6
 tools/codecome.py check-phase-artifacts --phase all
 ```
+
+`--phase 1` runs checks for 1a, 1b, and 1c in sequence and fails on the first failure. It does not implicitly allow missing generated artifacts; all three sub-phases must have run for `--phase 1` to pass. If a subset is desired, use `--phase 1a`, `--phase 1b`, or `--phase 1c` individually.
+
+`--phase all` runs every implemented phase artifact check in sequence and fails on the first failure. It does not implicitly allow missing generated artifacts.
 
 The CLI implementation should be thin. Suggested shape:
 
@@ -238,19 +252,47 @@ tools/codecome.py check-phase-artifacts --phase all --allow-missing-generated-ar
 When enabled, the checker should:
 
 - validate static templates, schemas, prompt references, and any artifacts that exist,
-- skip errors for phase-generated artifacts that are normally created only after a phase run, such as:
-  - `runs/phase-1a-summary.md`,
-  - `runs/phase-1b-summary.md`,
-  - `runs/phase-1c-summary.md`,
-  - `itemdb/notes/attack-surface.md`,
-  - `itemdb/notes/threat-model.md`,
-  - `itemdb/notes/sandbox-plan.md`,
+- skip errors for phase-generated artifacts that are normally created only after a phase run,
 - still fail on malformed generated artifacts if those files do exist,
 - still fail on static configuration/template errors.
+
+Artifact classification:
+
+Generated artifacts, skipped if missing but validated if present:
+
+- everything under `itemdb/`,
+- everything under `runs/`,
+- `sandbox/CODECOME-GENERATED.md`.
+
+Static artifacts, always required and always validated:
+
+- everything under `templates/`,
+- everything under `.opencode/`,
+- everything under `prompts/`,
+- everything under `tools/`,
+- `codecome.yml`,
+- `AGENTS.md`,
+- `Makefile`,
+- `README.md`.
+
+Rule: generated artifacts are files that only exist after a phase run. Static artifacts must be present in a clean checkout.
 
 This makes it safe to call from `make tests` in a clean checkout.
 
 Non-goal: this flag must not be used by normal post-phase gates after an actual phase run. After Phase 1b completes, missing `itemdb/notes/threat-model.md` must remain a hard failure.
+
+### Heading validation rules
+
+`threat-model.md` heading validation should be strict and deterministic:
+
+- match H1 headings only,
+- strip leading/trailing whitespace from each line before matching,
+- require exact case-sensitive text,
+- require exactly one space after `#`, for example `# Scope`,
+- do not accept malformed variants such as `#Scope`,
+- do not validate subsection count or subsection content in the heading checker.
+
+If the model produces malformed headings, the Phase 1b artifact auto-repair loop should repair them.
 
 ### `tools/check-frontmatter.py`
 
@@ -337,6 +379,15 @@ Create:
 ### `threat-model-checklist.md`
 
 Purpose: compact checklist adapted for CodeCome Phase 1b.
+
+Add this comment at the top of the file:
+
+```markdown
+<!--
+Some guidance in this reference was informed by OpenAI's curated
+security-threat-model skill and adapted for CodeCome's phased workflow.
+-->
+```
 
 Required content:
 
@@ -473,6 +524,7 @@ Add sections:
 Update completion checklist to require:
 
 - `threat-model.md` exists after Phase 1b,
+- `file-risk-index.yml` exists after Phase 1b,
 - architectural claims have evidence anchors,
 - runtime behavior is separated from CI/build/dev/test behavior,
 - attacker-controlled inputs are distinguished from operator/developer inputs,
@@ -743,6 +795,12 @@ Delete it as part of this integration and update active references in:
 - `docs/development.md`,
 - `prompts/README.md`.
 
+Update `prompts/README.md` explicitly:
+
+- remove `phase-1-recon.md` from the prompt inventory,
+- replace manual Phase 1 invocation examples with subphase examples or a reference to `make phase-1`,
+- ensure the Phase 1b prompt is listed as `phase-1b-recon.md`.
+
 Leave `.project/` references alone because they are historical planning records.
 
 ## G. Update Phase 1a prompt
@@ -845,6 +903,12 @@ Expose it through a thin wrapper command:
 tools/codecome.py check-phase-artifacts --phase 1b
 ```
 
+Update `tools/codecome.py::REQUIRED_PATHS` to include:
+
+```text
+templates/threat-model.md
+```
+
 ### Phase 1a artifact checks
 
 Required files:
@@ -861,8 +925,10 @@ Required summary headings:
 
 Negative checks:
 
-- Phase 1a should not produce `itemdb/notes/threat-model.md`.
-- Phase 1a should not produce `itemdb/notes/sandbox-plan.md`.
+- Phase 1a should not create or modify `itemdb/notes/threat-model.md`.
+- Phase 1a should not create or modify `itemdb/notes/sandbox-plan.md`.
+
+These negative checks must be based on mtime or a pre-run snapshot, not mere existence. If `threat-model.md` already exists from a previous Phase 1b run, Phase 1a must not fail unless the file was created or modified after the Phase 1a run started.
 
 ### Phase 1b artifact checks
 
@@ -914,7 +980,13 @@ Required summary headings:
 
 Keep existing sandbox gate behavior.
 
-## L. Update existing gates and auto-repair
+### Phase 2-6 artifact checks
+
+Implement checks for all phases where current artifacts are already well-defined. Keep them compatible with existing workflows and avoid introducing new threat-model requirements beyond Phase 2/3 in this PR.
+
+Phase 4/5/6 integration with `threat-model.md` is deferred to #35, #36, and #37.
+
+## L. Update existing gates, completion helpers, and auto-repair
 
 Update `check_phase_1b` to require `threat-model.md` and validate minimum headings via the shared validator from `tools/phases/artifact_checks.py`. Avoid duplicating heading-check logic in multiple places.
 
@@ -928,15 +1000,39 @@ Update Phase 2 readiness in `tools/phases/gates.py`:
 
 - `tools/phases/gates.py::REQUIRED_NOTES`: add `"threat-model.md"`. This is the list actually consumed by `gate_phase_2()`.
 
+Update `tools/phases/completion.py`:
+
+- `_PHASE1_REQUIRED_ARTIFACT_NAMES`: add `"threat-model.md"`.
+- `phase_checklist_lines()` for Phase 1: add a checklist line requiring `itemdb/notes/threat-model.md` with all required headings.
+- Add `build_artifact_repair_resume_prompt(phase: str, finding: str | None, validation_output: str) -> str`.
+
+`build_artifact_repair_resume_prompt()` should:
+
+- include the validation output from `check_phase_1b_artifacts()`,
+- instruct the model to repair only missing or malformed Phase 1b artifacts,
+- include the Phase 1 completion checklist from `phase_checklist_lines()`,
+- explicitly tell the model not to rewrite unrelated files.
+
 Update `check_phase_1a` and `check_phase_1c` only as needed to enforce summary sections and prevent phase leakage.
 
-Add a Phase 1b artifact auto-repair loop in `tools/codecome/phase_1.py::_run_subphase()` after the existing frontmatter retry loop. It should:
+Add a Phase 1b artifact auto-repair loop in `tools/codecome/phase_1.py::_run_subphase()`.
 
-- run only when `phase_id == "1b"`,
-- call `check_phase_1b_artifacts()` from `tools/phases/artifact_checks.py`,
-- allow up to 2 repair attempts,
-- resume the same session with a targeted repair prompt,
-- ask the model to repair only missing or malformed Phase 1b artifacts and avoid rewriting unrelated files.
+Validation sequence inside the existing retry loop should be:
+
+1. CodeQL plan validation.
+   - On failure with retries remaining: resume with `build_codeql_plan_resume_prompt()` and `continue`.
+   - On exhausted retries: set `returncode = 2` and `break`.
+2. Frontmatter validation.
+   - On failure with retries remaining: resume with `build_frontmatter_resume_prompt()` and `continue`.
+   - On exhausted retries: set `returncode = 2` and `break`.
+3. Phase 1b artifact validation.
+   - Run only when `phase_id == "1b"`.
+   - Call `check_phase_1b_artifacts()` from `tools/phases/artifact_checks.py`.
+   - On failure with retries remaining: resume with `build_artifact_repair_resume_prompt()` and `continue`.
+   - On exhausted retries: set `returncode = 2`, emit validation output, and `break`.
+4. All validations passed: `break`.
+
+The artifact repair prompt should ask the model to repair only missing or malformed Phase 1b artifacts and avoid rewriting unrelated files.
 
 This keeps `threat-model.md` validation consistent with the existing harness behavior for CodeQL plan validation and frontmatter validation.
 
@@ -983,6 +1079,7 @@ tests/test_phase_1_threat_model_templates.py
 tests/test_phase_1_prompts_threat_model.py
 tests/test_phase_1_gates_threat_model.py
 tests/test_phase_artifacts_cli.py
+tests/test_phase_completion_threat_model.py
 ```
 
 ### Template tests
@@ -1006,6 +1103,7 @@ Assert:
 - `prompts/phase-1b-recon.md` exists.
 - old `prompts/phase-1b-codeql-recon.md` is not referenced by active code.
 - `prompts/phase-1-recon.md` is removed and active documentation references subphase prompts instead.
+- `prompts/README.md` no longer references the deleted monolithic Phase 1 prompt and uses the renamed Phase 1b prompt.
 - `tools/codecome/phase_1.py` uses `prompts/phase-1b-recon.md`.
 - Phase 1b prompt says CodeQL artifacts are optional enrichment.
 - Phase 1b prompt requires `threat-model.md`.
@@ -1027,17 +1125,22 @@ Assert:
 - Phase 1b artifact checker passes with minimal valid threat model plus other required artifacts.
 - Phase 1b artifact checker still fails when `threat-model.md` exists but another required Phase 1b recon note is missing.
 - Phase 1b artifact checker requires run-summary open questions/re-run hint sections.
+- Phase 1a negative checks do not fail on pre-existing `threat-model.md`; they fail only if Phase 1a creates or modifies it.
 - Phase 2 readiness gate fails when `itemdb/notes/threat-model.md` is missing.
 - Phase 2 readiness gate passes the threat-model prerequisite when the file exists.
 - Phase 2 gate output names the missing file and tells the user to re-run Phase 1.
 - Phase 1b gate labels say `Detailed Reconnaissance`, not `CodeQL-assisted Reconnaissance`.
+- `tools/codecome.py::REQUIRED_PATHS` includes `templates/threat-model.md`.
 - `check-frontmatter.py` remains callable.
 
-### Auto-repair tests
+### Completion/auto-resume tests
 
 Assert:
 
-- Phase 1b invokes artifact validation after the model turn.
+- `completion.py::_PHASE1_REQUIRED_ARTIFACT_NAMES` includes `threat-model.md`.
+- `completion.py::phase_checklist_lines("1")` mentions `threat-model.md`.
+- `build_artifact_repair_resume_prompt()` includes validation output and the Phase 1 checklist.
+- Phase 1b invokes artifact validation after CodeQL plan and frontmatter validation pass.
 - Phase 1b retries when `threat-model.md` is missing required headings.
 - Phase 1b repair prompt asks for minimal repair and avoids unrelated rewrites.
 - Phase 1b stops after the configured max artifact repair attempts.
@@ -1048,7 +1151,9 @@ Assert:
 
 - clean checkout / missing generated artifacts passes with `--allow-missing-generated-artifacts`,
 - malformed existing `threat-model.md` still fails even with `--allow-missing-generated-artifacts`,
-- missing required Phase 1b artifacts fail without the flag.
+- missing required Phase 1b artifacts fail without the flag,
+- `--phase 1` runs 1a/1b/1c checks in sequence,
+- `--phase all` runs all implemented phase checks.
 
 ### `file-risk-index.yml` validation tests
 
@@ -1063,40 +1168,62 @@ Assert:
 Update docs as needed:
 
 - `docs/workflow.md` for Phase 1a/1b/1c naming,
-- `AGENTS.md` phase descriptions if still stale,
 - any docs mentioning `Phase 1b: CodeQL-assisted Reconnaissance`,
 - docs that still reference `prompts/phase-1-recon.md`,
 - any docs describing `make frontmatter`, `make tests`, or phase validation.
 
-## P. Lightweight attribution note
+Specific `AGENTS.md` changes:
 
-Do not add license blocks to each skill file.
+1. Phase 1 artifact list: add:
+   - `itemdb/notes/threat-model.md`,
+   - `itemdb/notes/file-risk-index.yml`,
+   - `itemdb/notes/sandbox-plan.md`.
+2. Phase 2 readiness: add:
+   - `itemdb/notes/threat-model.md` must exist.
 
-Add a short note in this plan or a broader curated-skills adaptation plan:
+Specific `prompts/README.md` changes:
 
-```text
-Some Phase 1 threat-modeling guidance was informed by the OpenAI curated
-`security-threat-model` skill and adapted for CodeCome's phased workflow.
-```
+- remove `phase-1-recon.md` from the prompt inventory,
+- replace monolithic manual Phase 1 invocation examples with subphase examples or a reference to `make phase-1`,
+- update references from `phase-1b-codeql-recon.md` to `phase-1b-recon.md`.
+
+## P. Deferred Phase 4/5/6 threat-model consumption
+
+This PR intentionally wires `threat-model.md` into Phase 2 and Phase 3 only.
+
+Deferred follow-ups:
+
+- #35: Phase 4 validation planning should use `threat-model.md`.
+- #36: Phase 5 exploitation planning should use `threat-model.md`.
+- #37: Phase 6 reporting context should use `threat-model.md`.
+
+Do not expand this PR to implement Phase 4/5/6 threat-model consumption.
 
 ## Implementation order
 
+Several work streams can be implemented in parallel, but shared validators should land before gates consume them.
+
+Recommended order:
+
 1. Add `tools/phases/artifact_checks.py` and define shared Phase 1 artifact validation, including `threat-model.md` headings and `file-risk-index.yml` validation reuse.
-2. Rename Phase 1b prompt and update references.
-3. Delete `prompts/phase-1-recon.md` and update active docs that reference it.
-4. Add `templates/threat-model.md` using structured subsections, not wide tables.
-5. Add source-recon reference files.
-6. Update `source-recon/SKILL.md`.
-7. Update Phase 1a/1b/1c prompts.
-8. Update Phase 2 and Phase 3 prompts to explicitly consume `threat-model.md`.
-9. Update `templates/target-recon.md` and `templates/run-summary.md`.
-10. Add the thin `tools/codecome.py check-phase-artifacts` wrapper and define `--allow-missing-generated-artifacts`.
-11. Update `check_phase_1b` gate to call the shared validator rather than duplicating heading-check logic.
-12. Add the Phase 1b artifact auto-repair loop in `tools/codecome/phase_1.py`.
-13. Update Phase 2 readiness in `tools/phases/gates.py` to require `threat-model.md`.
-14. Update Makefile target(s).
-15. Add tests.
-16. Update docs.
+2. Update `tools/phases/completion.py` with `threat-model.md` required artifacts, Phase 1 checklist changes, and `build_artifact_repair_resume_prompt()`.
+3. Rename Phase 1b prompt and update references.
+4. Delete `prompts/phase-1-recon.md` and update active docs that reference it.
+5. Add `templates/threat-model.md` using structured subsections, not wide tables.
+6. Add source-recon reference files.
+7. Update `source-recon/SKILL.md`.
+8. Update Phase 1a/1b/1c prompts.
+9. Update Phase 2 and Phase 3 prompts to explicitly consume `threat-model.md`.
+10. Update `templates/target-recon.md` and `templates/run-summary.md`.
+11. Add the thin `tools/codecome.py check-phase-artifacts` wrapper and define `--allow-missing-generated-artifacts`.
+12. Update `tools/codecome.py::REQUIRED_PATHS` with `templates/threat-model.md`.
+13. Update `check_phase_1b` gate to call the shared validator rather than duplicating heading-check logic.
+14. Add the Phase 1b artifact auto-repair loop in `tools/codecome/phase_1.py`.
+15. Update Phase 2 readiness in `tools/phases/gates.py` to require `threat-model.md`.
+16. Update `AGENTS.md`.
+17. Update Makefile target(s).
+18. Add tests.
+19. Update docs.
 
 ## Acceptance criteria
 
@@ -1104,21 +1231,30 @@ Some Phase 1 threat-modeling guidance was informed by the OpenAI curated
 - Phase 1b no longer appears to be CodeQL-only.
 - `CODEQL=0 make phase-1` still runs Phase 1b as source-only detailed recon.
 - Phase 1b requires `itemdb/notes/threat-model.md`.
-- `threat-model.md` has required headings and is validated by shared gates/checkers.
+- `completion.py::_PHASE1_REQUIRED_ARTIFACT_NAMES` includes `threat-model.md`.
+- `completion.py::phase_checklist_lines("1")` mentions `threat-model.md`.
+- `build_artifact_repair_resume_prompt()` exists and is used by the Phase 1b artifact repair loop.
+- `threat-model.md` has required strict H1 headings and is validated by shared gates/checkers.
 - Phase 1b auto-repairs malformed `threat-model.md` headings up to the configured retry limit.
 - `templates/threat-model.md` avoids wide 6-7 column tables for qualitative content.
 - `templates/run-summary.md` uses structured open-question subsections.
 - Phase 1 summaries include open questions and re-run prompt hints.
 - `prompts/phase-1-recon.md` is removed and active docs point to subphase prompts.
+- `prompts/README.md` reflects the Phase 1b rename and monolithic Phase 1 prompt deletion.
+- `AGENTS.md` lists `threat-model.md`, `file-risk-index.yml`, and `sandbox-plan.md` as Phase 1 artifacts.
+- `AGENTS.md` Phase 2 readiness requires `threat-model.md`.
 - `prompts/phase-2-audit.md` explicitly reads and uses `itemdb/notes/threat-model.md`.
 - `prompts/phase-3-review.md` explicitly reads and uses `itemdb/notes/threat-model.md`.
 - Phase 2 readiness blocks if `itemdb/notes/threat-model.md` is missing.
 - `tools/codecome.py check-phase-artifacts --phase 1b` exists as a thin wrapper.
 - Artifact validation implementation lives under `tools/phases/artifact_checks.py`.
+- `tools/codecome.py::REQUIRED_PATHS` includes `templates/threat-model.md`.
 - `--allow-missing-generated-artifacts` is defined and tested.
+- `--phase 1` and `--phase all` behavior is defined and tested.
 - `file-risk-index.yml` validation has one reusable source of truth.
 - `templates/file-risk-index.yml` requires no structural threat-model changes in this integration.
 - `tools/check-frontmatter.py` remains available.
 - `make frontmatter` still works.
 - Makefile complete validation path uses the new phase artifact checker where appropriate.
+- Phase 4/5/6 threat-model consumption is tracked by issues #35, #36, and #37.
 - Future harness-level open-question rendering is tracked by issue #33.
