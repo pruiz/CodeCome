@@ -11,6 +11,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
+import rendering.dispatch as rendering_dispatch
 from events.phase_loop import RunResult
 
 
@@ -114,8 +115,9 @@ def test_subphase_resumes_same_session_to_repair_invalid_codeql_plan(tmp_path: P
         _write_valid_plan(tmp_path)
         return 0, "sess-1", _ok_result(), transcript
 
-    saved_rich = p1.HAVE_RICH
-    p1.HAVE_RICH = False
+    saved_rich = rendering_dispatch.HAVE_RICH
+    rendering_dispatch.HAVE_RICH = False
+    rendering_dispatch.reset_rendering_context_cache()
     try:
         with patch.object(p1, "ROOT", tmp_path), \
              patch.object(p1, "load_prompt", return_value="initial prompt"), \
@@ -135,7 +137,8 @@ def test_subphase_resumes_same_session_to_repair_invalid_codeql_plan(tmp_path: P
                 prompt_file="prompts/phase-1a-profile.md",
             )
     finally:
-        p1.HAVE_RICH = saved_rich
+        rendering_dispatch.HAVE_RICH = saved_rich
+    rendering_dispatch.reset_rendering_context_cache()
 
     assert rc == 0
     assert len(calls) == 2
@@ -151,8 +154,9 @@ def test_subphase_fails_after_codeql_plan_auto_repair_retries_exhausted(tmp_path
         _write_invalid_plan(tmp_path)
         return 0, "sess-1", _ok_result(), transcript
 
-    saved_rich = p1.HAVE_RICH
-    p1.HAVE_RICH = False
+    saved_rich = rendering_dispatch.HAVE_RICH
+    rendering_dispatch.HAVE_RICH = False
+    rendering_dispatch.reset_rendering_context_cache()
     try:
         with patch.object(p1, "ROOT", tmp_path), \
              patch.object(p1, "load_prompt", return_value="initial prompt"), \
@@ -172,7 +176,8 @@ def test_subphase_fails_after_codeql_plan_auto_repair_retries_exhausted(tmp_path
                 prompt_file="prompts/phase-1-codeql-repair.md",
             )
     finally:
-        p1.HAVE_RICH = saved_rich
+        rendering_dispatch.HAVE_RICH = saved_rich
+    rendering_dispatch.reset_rendering_context_cache()
 
     assert rc == 2
     assert run_attempt.call_count == 3
@@ -288,8 +293,9 @@ def test_codeql_repair_loop_resumes_same_session_after_failed_rerun(tmp_path: Pa
             )
         return None
 
-    saved_rich = p1.HAVE_RICH
-    p1.HAVE_RICH = False
+    saved_rich = rendering_dispatch.HAVE_RICH
+    rendering_dispatch.HAVE_RICH = False
+    rendering_dispatch.reset_rendering_context_cache()
     try:
         with patch.object(p1, "ROOT", tmp_path), \
              patch("codeql.config.resolve_config", return_value=config), \
@@ -303,7 +309,8 @@ def test_codeql_repair_loop_resumes_same_session_after_failed_rerun(tmp_path: Pa
                 base_url="http://127.0.0.1",
             )
     finally:
-        p1.HAVE_RICH = saved_rich
+        rendering_dispatch.HAVE_RICH = saved_rich
+    rendering_dispatch.reset_rendering_context_cache()
 
     assert rc == 0
     assert len(calls) == 2
@@ -336,8 +343,9 @@ def test_codeql_repair_loop_does_not_block_after_retries_exhausted(tmp_path: Pat
         return None
 
     monkeypatch.setenv("CODEQL_REPAIR_RETRIES", "1")
-    saved_rich = p1.HAVE_RICH
-    p1.HAVE_RICH = False
+    saved_rich = rendering_dispatch.HAVE_RICH
+    rendering_dispatch.HAVE_RICH = False
+    rendering_dispatch.reset_rendering_context_cache()
     try:
         with patch.object(p1, "ROOT", tmp_path), \
              patch("codeql.config.resolve_config", return_value=config), \
@@ -351,7 +359,8 @@ def test_codeql_repair_loop_does_not_block_after_retries_exhausted(tmp_path: Pat
                 base_url="http://127.0.0.1",
             )
     finally:
-        p1.HAVE_RICH = saved_rich
+        rendering_dispatch.HAVE_RICH = saved_rich
+    rendering_dispatch.reset_rendering_context_cache()
 
     assert rc == 0
 
@@ -431,8 +440,9 @@ def test_phase1c_accepts_no_step_finish_when_artifacts_are_fresh(tmp_path: Path)
         calls.append(_kwargs)
         return 0, "session-1", RunResult(any_step_finish_seen=False), transcript
 
-    saved_rich = p1.HAVE_RICH
-    p1.HAVE_RICH = False
+    saved_rich = rendering_dispatch.HAVE_RICH
+    rendering_dispatch.HAVE_RICH = False
+    rendering_dispatch.reset_rendering_context_cache()
     try:
         with patch.object(p1, "ROOT", tmp_path), \
              patch.object(p1, "load_prompt", return_value="prompt"), \
@@ -453,7 +463,8 @@ def test_phase1c_accepts_no_step_finish_when_artifacts_are_fresh(tmp_path: Path)
                 prompt_file="prompts/phase-1c-sandbox.md",
             )
     finally:
-        p1.HAVE_RICH = saved_rich
+        rendering_dispatch.HAVE_RICH = saved_rich
+    rendering_dispatch.reset_rendering_context_cache()
 
     assert rc == 0
     assert len(calls) == 1

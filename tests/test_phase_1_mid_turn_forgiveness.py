@@ -46,7 +46,7 @@ def test_mid_turn_cutoff_with_forgiveness_reaches_validation():
     ), patch(
         "codecome.phase_1.configure_rendering"
     ), patch(
-        "codecome.phase_1.HAVE_RICH", False
+        "rendering.dispatch.HAVE_RICH", False
     ):
 
         runner = MagicMock()
@@ -84,7 +84,7 @@ def test_mid_turn_cutoff_without_forgiveness_fails():
     ), patch(
         "codecome.phase_1.configure_rendering"
     ), patch(
-        "codecome.phase_1.HAVE_RICH", False
+        "rendering.dispatch.HAVE_RICH", False
     ):
 
         runner = MagicMock()
