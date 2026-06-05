@@ -10,11 +10,13 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 
 def test_phase_1a_graceful_completion_only_checks_1a_artifacts(tmp_path: Path) -> None:
-    """Phase 1a should return True when 1a artifacts are fresh, even if 1b/1c artifacts are missing."""
+    """Phase 1a should return True when 1a artifacts and a fresh run summary are present."""
     from phases.completion import check_phase_graceful_completion
 
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
+    runs = tmp_path / "runs"
+    runs.mkdir(parents=True)
 
     now = time.time()
     (notes / "target-profile.md").write_text("content", encoding="utf-8")
@@ -25,6 +27,10 @@ def test_phase_1a_graceful_completion_only_checks_1a_artifacts(tmp_path: Path) -
     (notes / "target-profile.md").touch()
     (notes / "build-model.md").touch()
     (notes / "codeql-plan.yml").touch()
+
+    summary = runs / "phase-1a-summary.md"
+    summary.write_text("", encoding="utf-8")
+    summary.touch()
 
     with patch("phases.completion.ROOT", tmp_path):
         ok, failures = check_phase_graceful_completion("1a", None, now - 1)
@@ -40,6 +46,7 @@ def test_phase_1a_graceful_completion_fails_if_no_1a_artifacts_fresh(tmp_path: P
 
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
+    (tmp_path / "runs").mkdir(parents=True, exist_ok=True)
 
     now = time.time()
 
@@ -59,14 +66,19 @@ def test_phase_1a_graceful_completion_fails_if_no_1a_artifacts_fresh(tmp_path: P
     assert any("itemdb/notes" in f for f in failures), (
         f"Expected failure detail to mention itemdb/notes, got {failures!r}"
     )
+    assert any("runs/phase-1a-summary*.md" in f for f in failures), (
+        f"Expected phase-1a summary failure, got {failures!r}"
+    )
 
 
 def test_phase_1b_graceful_completion_only_checks_1b_artifacts(tmp_path: Path) -> None:
-    """Phase 1b should return True when 1b artifacts are fresh, even if sandbox-plan.md is missing."""
+    """Phase 1b should return True when 1b artifacts and a fresh run summary are present."""
     from phases.completion import check_phase_graceful_completion
 
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
+    runs = tmp_path / "runs"
+    runs.mkdir(parents=True)
 
     now = time.time()
 
@@ -79,6 +91,10 @@ def test_phase_1b_graceful_completion_only_checks_1b_artifacts(tmp_path: Path) -
     for name in names_1b:
         (notes / name).write_text("content", encoding="utf-8")
         (notes / name).touch()
+
+    summary = runs / "phase-1b-summary.md"
+    summary.write_text("", encoding="utf-8")
+    summary.touch()
 
     with patch("phases.completion.ROOT", tmp_path):
         ok, failures = check_phase_graceful_completion("1b", None, now - 1)
@@ -110,10 +126,12 @@ def test_phase_1b_graceful_completion_fails_if_no_1b_artifacts_fresh(tmp_path: P
 
 def test_phase_1b_excludes_sandbox_plan_from_check(tmp_path: Path) -> None:
     """Fresh sandbox-plan.md should not count towards Phase 1b graceful completion."""
+    import phases.completion as completion_mod
     from phases.completion import check_phase_graceful_completion
 
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
+    (tmp_path / "runs").mkdir(parents=True, exist_ok=True)
 
     now = time.time()
 
@@ -121,24 +139,41 @@ def test_phase_1b_excludes_sandbox_plan_from_check(tmp_path: Path) -> None:
     (notes / "sandbox-plan.md").write_text("content", encoding="utf-8")
     (notes / "sandbox-plan.md").touch()
 
-    with patch("phases.completion.ROOT", tmp_path):
-        ok, failures = check_phase_graceful_completion("1b", None, now - 1)
+    orig_root = completion_mod.ROOT
+    orig_notes_root = completion_mod.NOTES_ROOT
+    completion_mod.ROOT = tmp_path
+    completion_mod.NOTES_ROOT = tmp_path / "itemdb" / "notes"
+    try:
+        with patch("phases.completion.ROOT", tmp_path):
+            ok, failures = check_phase_graceful_completion("1b", None, now - 1)
+    finally:
+        completion_mod.ROOT = orig_root
+        completion_mod.NOTES_ROOT = orig_notes_root
 
     assert ok is False
     assert failures, "Expected failure details when only sandbox-plan.md is fresh for 1b"
+    assert any("runs/phase-1b-summary*.md" in f for f in failures), (
+        f"Expected phase-1b summary failure, got {failures!r}"
+    )
 
 
 def test_phase_1c_passes_with_fresh_sandbox_plan(tmp_path: Path) -> None:
-    """Phase 1c should return True when sandbox-plan.md is fresh, no monolith check needed."""
+    """Phase 1c should return True when sandbox-plan.md and a fresh run summary are present."""
     from phases.completion import check_phase_graceful_completion
 
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
     (tmp_path / "sandbox").mkdir()
+    runs = tmp_path / "runs"
+    runs.mkdir(parents=True)
 
     now = time.time()
     (notes / "sandbox-plan.md").write_text("content", encoding="utf-8")
     (notes / "sandbox-plan.md").touch()
+
+    summary = runs / "phase-1c-summary.md"
+    summary.write_text("", encoding="utf-8")
+    summary.touch()
 
     with patch("phases.completion.ROOT", tmp_path):
         ok, failures = check_phase_graceful_completion("1c", None, now - 1)
@@ -155,6 +190,7 @@ def test_phase_1c_fails_without_sandbox_artifacts(tmp_path: Path) -> None:
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
     (tmp_path / "sandbox").mkdir()
+    (tmp_path / "runs").mkdir(parents=True, exist_ok=True)
 
     now = time.time()
 
@@ -179,4 +215,7 @@ def test_phase_1c_fails_without_sandbox_artifacts(tmp_path: Path) -> None:
     assert failures, "Expected failure details when no 1c artifacts are fresh"
     assert any("sandbox-plan.md" in f or "CODECOME-GENERATED.md" in f for f in failures), (
         f"Expected failure detail to mention sandbox artifacts, got {failures!r}"
+    )
+    assert any("runs/phase-1c-summary*.md" in f for f in failures), (
+        f"Expected phase-1c summary failure, got {failures!r}"
     )

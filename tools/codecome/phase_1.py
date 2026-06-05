@@ -550,6 +550,8 @@ def _run_subphase(
     step_finish_count = 0
     transcript_path: Path = Path()
     finish_warning: str | None = None
+    phase_failures: list[str] = []
+    phase_ok: bool = False  # defensive default; assigned in graceful-completion branch
     subphase_start_time = time.time()
 
     password = runner.info.password if runner.info else ""
