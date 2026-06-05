@@ -344,9 +344,9 @@ self.sink.write(Rule(style=_rich_tone(tone)))
 
 Plain:
 
-No-op for v1.
+Prints a dashed line (``C.SYM_DASH`` repeated 62 times).  The ``tone`` parameter is intentionally ignored — ANSI-coloured dashes are visually noisy.
 
-Rationale: current plain branches generally do not print bare separator lines. Adding dashed lines may increase noise.
+Rationale: plain output benefits from a lightweight visual separator even though the current branches do not print one consistently.
 
 ### `line(text, tone=T.PLAIN)`
 
@@ -616,7 +616,7 @@ Plain tests:
 - `test_detail_plain_includes_message`
 - `test_line_plain_includes_message`
 - `test_segments_plain_preserves_order`
-- `test_separator_plain_is_noop`
+- `test_separator_plain_prints_dashes`
 - `test_unknown_tone_plain_falls_back_to_unstyled_if_runtime_allows`
 
 Rich tests:
@@ -937,14 +937,14 @@ Mitigation: use one local `out` per function. If needed later, attach an output 
 ## Open Decisions
 
 1. Whether `section()` should be included in v1.
-2. Whether `separator()` in plain mode should remain a no-op or print a dashed line.
+2. ~~Whether `separator()` in plain mode should remain a no-op or print a dashed line.~~ **Resolved:** prints a dashed line.
 3. Whether `RenderOutput` should eventually be exposed as `ctx.output`.
 4. Whether root CLI tools should migrate in the same PR or a follow-up.
 
 Recommendations:
 
 - Include `section()` only if an immediate migration site needs text-only headings.
-- Keep plain `separator()` as a no-op in v1.
+- ~~Keep plain `separator()` as a no-op in v1.~~ Resolved: prints a dashed line. The `tone` parameter is intentionally ignored in plain mode.
 - Use `get_output(console)` in v1; consider `ctx.output` later.
 - Migrate root CLI tools in a follow-up after runner/harness behavior is stable.
 

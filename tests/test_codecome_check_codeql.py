@@ -133,7 +133,7 @@ def test_check_codeql_artifacts_failed_soft_policy_returns_0(tmp_path: Path, cap
             rc = _check(None)
     finally:
         rendering_dispatch.HAVE_RICH = saved
-    rendering_dispatch.reset_rendering_context_cache()
+        rendering_dispatch.reset_rendering_context_cache()
 
     out = capsys.readouterr().out
     assert rc == 0
@@ -169,7 +169,7 @@ def test_check_codeql_artifacts_failed_hard_policy_returns_1(tmp_path: Path, cap
             rc = _check(None)
     finally:
         rendering_dispatch.HAVE_RICH = saved
-    rendering_dispatch.reset_rendering_context_cache()
+        rendering_dispatch.reset_rendering_context_cache()
 
     assert rc == 1
 
@@ -269,7 +269,7 @@ def test_phase_1_pipeline_structure() -> None:
             rc = p1.run_phase_1(object(), None, None, object(), "http://127.0.0.1")
     finally:
         rendering_dispatch.HAVE_RICH = saved
-    rendering_dispatch.reset_rendering_context_cache()
+        rendering_dispatch.reset_rendering_context_cache()
 
     assert rc == 0
     assert run_codeql.call_count == 1

@@ -138,7 +138,7 @@ def test_subphase_resumes_same_session_to_repair_invalid_codeql_plan(tmp_path: P
             )
     finally:
         rendering_dispatch.HAVE_RICH = saved_rich
-    rendering_dispatch.reset_rendering_context_cache()
+        rendering_dispatch.reset_rendering_context_cache()
 
     assert rc == 0
     assert len(calls) == 2
@@ -177,7 +177,7 @@ def test_subphase_fails_after_codeql_plan_auto_repair_retries_exhausted(tmp_path
             )
     finally:
         rendering_dispatch.HAVE_RICH = saved_rich
-    rendering_dispatch.reset_rendering_context_cache()
+        rendering_dispatch.reset_rendering_context_cache()
 
     assert rc == 2
     assert run_attempt.call_count == 3
@@ -310,7 +310,7 @@ def test_codeql_repair_loop_resumes_same_session_after_failed_rerun(tmp_path: Pa
             )
     finally:
         rendering_dispatch.HAVE_RICH = saved_rich
-    rendering_dispatch.reset_rendering_context_cache()
+        rendering_dispatch.reset_rendering_context_cache()
 
     assert rc == 0
     assert len(calls) == 2
@@ -360,7 +360,7 @@ def test_codeql_repair_loop_does_not_block_after_retries_exhausted(tmp_path: Pat
             )
     finally:
         rendering_dispatch.HAVE_RICH = saved_rich
-    rendering_dispatch.reset_rendering_context_cache()
+        rendering_dispatch.reset_rendering_context_cache()
 
     assert rc == 0
 
@@ -464,7 +464,7 @@ def test_phase1c_accepts_no_step_finish_when_artifacts_are_fresh(tmp_path: Path)
             )
     finally:
         rendering_dispatch.HAVE_RICH = saved_rich
-    rendering_dispatch.reset_rendering_context_cache()
+        rendering_dispatch.reset_rendering_context_cache()
 
     assert rc == 0
     assert len(calls) == 1
