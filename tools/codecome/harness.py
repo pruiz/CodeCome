@@ -190,6 +190,15 @@ def run_phase_mode(args: argparse.Namespace) -> int:
                 existing_session_id=last_session_id or None
             )
 
+            if returncode == 2 and run_result.last_finish_reason == "resume_not_ready":
+                last_session_id = session_id or last_session_id
+                last_finish_reason = run_result.last_finish_reason
+                finish_warning = (
+                    "CodeCome waited for the existing session to become idle before sending a resume/repair prompt, "
+                    "but the session never reported a ready status. No resume prompt was sent."
+                )
+                break
+
             if returncode != 0:
                 # Infrastructure/transient failure (timeout, connection error, etc.)
                 # Retry with a separate budget so infra blips don't consume the

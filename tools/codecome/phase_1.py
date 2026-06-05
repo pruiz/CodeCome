@@ -666,6 +666,15 @@ def _run_subphase(
             label_override=label,
         )
 
+        if returncode == 2 and run_result.last_finish_reason == "resume_not_ready":
+            last_session_id = session_id or last_session_id
+            last_finish_reason = run_result.last_finish_reason
+            finish_warning = (
+                "CodeCome waited for the existing session to become idle before sending a resume/repair prompt, "
+                "but the session never reported a ready status. No resume prompt was sent."
+            )
+            break
+
         if returncode != 0:
             break
 
