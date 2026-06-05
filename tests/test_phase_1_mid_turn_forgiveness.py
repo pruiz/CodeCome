@@ -38,7 +38,7 @@ def test_mid_turn_cutoff_with_forgiveness_reaches_validation():
     ), patch("codecome.config.load_prompt", return_value="# test prompt"), patch(
         "codecome.config.resolve_runtime_config", return_value=_FakeRuntimeConfig()
     ), patch(
-        "codecome.phase_1.check_phase_graceful_completion", return_value=True
+        "codecome.phase_1.check_phase_graceful_completion", return_value=(True, [])
     ), patch(
         "findings.checks_entry.run_frontmatter_validation", return_value=(0, "")
     ), patch(
@@ -80,7 +80,7 @@ def test_mid_turn_cutoff_without_forgiveness_fails():
     ), patch("codecome.config.load_prompt", return_value="# test prompt"), patch(
         "codecome.config.resolve_runtime_config", return_value=_FakeRuntimeConfig()
     ), patch(
-        "codecome.phase_1.check_phase_graceful_completion", return_value=False
+        "codecome.phase_1.check_phase_graceful_completion", return_value=(False, ["missing artifact"])
     ), patch(
         "codecome.phase_1.configure_rendering"
     ), patch(

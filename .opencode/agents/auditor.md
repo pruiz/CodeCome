@@ -40,10 +40,6 @@ Use target-specific skills when they apply, for example:
 - `.opencode/skills/c-cpp-security/SKILL.md`
 - `.opencode/skills/juliet-benchmark/SKILL.md`
 
-Also reference when writing run summaries:
-
-- `templates/run-summary.md`
-
 ## Mission
 
 Create concrete vulnerability hypotheses.
@@ -240,11 +236,11 @@ If the target contains C/C++:
 
 Before finishing:
 
+- The phase prompt specifies required durable artifacts. Follow it precisely.
 - each finding is in `itemdb/findings/PENDING/`,
 - each finding uses valid frontmatter,
 - each finding has a unique id,
 - each finding has a specific validation plan,
 - no finding is marked confirmed,
 - no vague findings were created,
-- duplicates were considered,
-- a short run summary is written when practical.
+- duplicates were considered.

@@ -208,4 +208,4 @@ At the end, summarize:
 
 Write the run summary using the template at `templates/run-summary.md` to:
 
-    runs/phase-2-summary.md
+    runs/phase-2-summary-YYYY-MM-DD-HHMMSS.md

@@ -134,6 +134,8 @@ def run_phase_mode(args: argparse.Namespace) -> int:
     step_finish_count = 0
     transcript_path: Path = Path()
     finish_warning: Optional[str] = None
+    phase_failures: list[str] = []
+    phase_ok: bool = False  # defensive default; assigned in D.2 or D.3 before use in D.3b
 
     os.environ["_CODECOME_INSIDE_HARNESS"] = "1"
 
@@ -249,22 +251,28 @@ def run_phase_mode(args: argparse.Namespace) -> int:
                 if (
                     last_finish_reason in _FINISH_MID_TURN
                     and last_permission_error is None
-                    and check_phase_graceful_completion(args.phase, args.finding, RUN_START_TIME)
                 ):
-                    msg = (
-                        f"CodeCome observed a mid-turn model/provider cutoff for Phase {args.phase} after {step_finish_count} "
-                        "completed loops, but expected durable artifacts were written during "
-                        "the run. Treating the phase as complete enough to run validation and auto-repair."
-                    )
-                    out.success(msg)
-                    finish_warning = None
-                    last_finish_reason = "graceful_forgiveness"
+                    phase_ok, phase_failures = check_phase_graceful_completion(
+                        args.phase, args.finding, RUN_START_TIME)
+                    if phase_ok:
+                        msg = (
+                            f"CodeCome observed a mid-turn model/provider cutoff for Phase {args.phase} after {step_finish_count} "
+                            "completed loops, but expected durable artifacts were written during "
+                            "the run. Treating the phase as complete enough to run validation and auto-repair."
+                        )
+                        out.success(msg)
+                        finish_warning = None
+                        last_finish_reason = "graceful_forgiveness"
+                    else:
+                        returncode = 2
                 else:
                     returncode = 2
 
             if returncode == 0:
                 if last_finish_reason in _FINISH_TERMINAL_OK:
-                    if not check_phase_graceful_completion(str(args.phase), args.finding, RUN_START_TIME):
+                    phase_ok, phase_failures = check_phase_graceful_completion(
+                        str(args.phase), args.finding, RUN_START_TIME)
+                    if not phase_ok:
                         returncode = 2
                         finish_warning = (
                             f"Phase {args.phase} reported terminal finish reason '{last_finish_reason}', "
@@ -309,10 +317,7 @@ def run_phase_mode(args: argparse.Namespace) -> int:
 
             if returncode == 2 and (
                 last_finish_reason in _FINISH_MID_TURN
-                or (
-                    last_finish_reason in _FINISH_TERMINAL_OK
-                    and not check_phase_graceful_completion(str(args.phase), args.finding, RUN_START_TIME)
-                )
+                or (last_finish_reason in _FINISH_TERMINAL_OK and not phase_ok)
             ):
                 max_iteration_retries = int(os.environ.get("CODECOME_MAX_ITERATION_RETRIES", "3"))
                 if iteration_retry_count < max_iteration_retries:
@@ -324,7 +329,8 @@ def run_phase_mode(args: argparse.Namespace) -> int:
                     out.warn(msg)
                     if last_session_id and last_session_id != "id":
                         prompt = build_phase_resume_prompt(
-                            args.phase, args.finding, last_finish_reason, step_finish_count
+                            args.phase, args.finding, last_finish_reason, step_finish_count,
+                            failure_details=phase_failures if phase_failures else None,
                         )
                         continue
                     else:

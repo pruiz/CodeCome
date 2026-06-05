@@ -197,6 +197,7 @@ At the end, summarize:
 
 Write the run summary using the template at `templates/run-summary.md` to:
 
-    runs/phase-4-FINDING-summary.md
+    runs/phase-4-FINDING-summary-YYYY-MM-DD-HHMMSS.md
 
-Replace `FINDING` with the validated finding id (e.g. `runs/phase-4-CC-0001-summary.md`).
+Replace `FINDING` with the validated finding id
+(e.g. `runs/phase-4-CC-0001-summary-2026-06-05-143022.md`).

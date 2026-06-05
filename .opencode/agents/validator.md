@@ -28,7 +28,6 @@ Before validating a finding, read:
 - the assigned finding
 - relevant source files under `src/`
 - `templates/evidence-readme.md`
-- `templates/run-summary.md`
 - sandbox documentation under `sandbox/`
 
 Use target-specific skills when they apply, for example:
@@ -387,6 +386,7 @@ For benchmark targets:
 
 Before finishing:
 
+- The phase prompt specifies required durable artifacts. Follow it precisely.
 - evidence directory exists if validation was attempted,
 - commands are recorded,
 - observed results are recorded,
@@ -394,5 +394,4 @@ Before finishing:
 - validation result section is updated,
 - evidence section references files,
 - finding is moved to the correct status directory,
-- unresolved limitations are documented,
-- a run summary is written when practical.
+- unresolved limitations are documented.

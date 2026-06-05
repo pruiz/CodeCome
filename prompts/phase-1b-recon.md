@@ -227,7 +227,7 @@ Instead:
 - infer conservative assumptions,
 - record assumptions in `itemdb/notes/security-assumptions.md`,
 - record unresolved questions in `itemdb/notes/threat-model.md`,
-- include unresolved questions in `runs/phase-1b-summary.md`,
+- include unresolved questions in the run summary file,
 - print unresolved questions in the final model summary,
 - provide copy/paste re-run prompt hints for `PROMPT_EXTRA` or `PROMPT_EXTRA_FILE`.
 
@@ -269,4 +269,4 @@ At the end, summarize:
 
 Write the run summary using the template at `templates/run-summary.md` to:
 
-    runs/phase-1b-summary.md
+    runs/phase-1b-summary-YYYY-MM-DD-HHMMSS.md

@@ -101,7 +101,7 @@ Rules:
 - Phase 1a does not produce `threat-model.md`.
 - Phase 1a does not produce attack-surface, trust-boundary, or data-flow notes.
 - Phase 1a does not bootstrap sandbox.
-- Non-blocking open questions should go into `runs/phase-1a-summary.md`.
+- Non-blocking open questions should go into the run summary file.
 
 ## Final response
 
@@ -123,4 +123,4 @@ If validation fails, repair only the reported issue before summarizing.
 
 Write the run summary using the template at `templates/run-summary.md` to:
 
-    runs/phase-1a-summary.md
+    runs/phase-1a-summary-YYYY-MM-DD-HHMMSS.md

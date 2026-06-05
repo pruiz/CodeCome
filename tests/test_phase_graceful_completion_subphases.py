@@ -27,13 +27,15 @@ def test_phase_1a_graceful_completion_only_checks_1a_artifacts(tmp_path: Path) -
     (notes / "codeql-plan.yml").touch()
 
     with patch("phases.completion.ROOT", tmp_path):
-        result = check_phase_graceful_completion("1a", None, now - 1)
+        ok, failures = check_phase_graceful_completion("1a", None, now - 1)
 
-    assert result is True
+    assert ok is True
+    assert failures == []
 
 
 def test_phase_1a_graceful_completion_fails_if_no_1a_artifacts_fresh(tmp_path: Path) -> None:
     """Phase 1a should return False when no 1a artifacts are fresh."""
+    import phases.completion as completion_mod
     from phases.completion import check_phase_graceful_completion
 
     notes = tmp_path / "itemdb" / "notes"
@@ -41,10 +43,22 @@ def test_phase_1a_graceful_completion_fails_if_no_1a_artifacts_fresh(tmp_path: P
 
     now = time.time()
 
-    with patch("phases.completion.ROOT", tmp_path):
-        result = check_phase_graceful_completion("1a", None, now)
+    orig_root = completion_mod.ROOT
+    orig_notes_root = completion_mod.NOTES_ROOT
+    completion_mod.ROOT = tmp_path
+    completion_mod.NOTES_ROOT = tmp_path / "itemdb" / "notes"
+    try:
+        with patch("phases.completion.ROOT", tmp_path):
+            ok, failures = check_phase_graceful_completion("1a", None, now)
+    finally:
+        completion_mod.ROOT = orig_root
+        completion_mod.NOTES_ROOT = orig_notes_root
 
-    assert result is False
+    assert ok is False
+    assert failures, "Expected failure details when no 1a artifacts are fresh"
+    assert any("itemdb/notes" in f for f in failures), (
+        f"Expected failure detail to mention itemdb/notes, got {failures!r}"
+    )
 
 
 def test_phase_1b_graceful_completion_only_checks_1b_artifacts(tmp_path: Path) -> None:
@@ -67,9 +81,10 @@ def test_phase_1b_graceful_completion_only_checks_1b_artifacts(tmp_path: Path) -
         (notes / name).touch()
 
     with patch("phases.completion.ROOT", tmp_path):
-        result = check_phase_graceful_completion("1b", None, now - 1)
+        ok, failures = check_phase_graceful_completion("1b", None, now - 1)
 
-    assert result is True
+    assert ok is True
+    assert failures == []
 
 
 def test_phase_1b_graceful_completion_fails_if_no_1b_artifacts_fresh(tmp_path: Path) -> None:
@@ -87,9 +102,10 @@ def test_phase_1b_graceful_completion_fails_if_no_1b_artifacts_fresh(tmp_path: P
     (notes / "sandbox-plan.md").touch()
 
     with patch("phases.completion.ROOT", tmp_path):
-        result = check_phase_graceful_completion("1b", None, now - 1)
+        ok, failures = check_phase_graceful_completion("1b", None, now - 1)
 
-    assert result is False
+    assert ok is False
+    assert failures, "Expected failure details when no 1b artifacts are fresh"
 
 
 def test_phase_1b_excludes_sandbox_plan_from_check(tmp_path: Path) -> None:
@@ -106,9 +122,10 @@ def test_phase_1b_excludes_sandbox_plan_from_check(tmp_path: Path) -> None:
     (notes / "sandbox-plan.md").touch()
 
     with patch("phases.completion.ROOT", tmp_path):
-        result = check_phase_graceful_completion("1b", None, now - 1)
+        ok, failures = check_phase_graceful_completion("1b", None, now - 1)
 
-    assert result is False
+    assert ok is False
+    assert failures, "Expected failure details when only sandbox-plan.md is fresh for 1b"
 
 
 def test_phase_1c_passes_with_fresh_sandbox_plan(tmp_path: Path) -> None:
@@ -124,13 +141,15 @@ def test_phase_1c_passes_with_fresh_sandbox_plan(tmp_path: Path) -> None:
     (notes / "sandbox-plan.md").touch()
 
     with patch("phases.completion.ROOT", tmp_path):
-        result = check_phase_graceful_completion("1c", None, now - 1)
+        ok, failures = check_phase_graceful_completion("1c", None, now - 1)
 
-    assert result is True
+    assert ok is True
+    assert failures == []
 
 
 def test_phase_1c_fails_without_sandbox_artifacts(tmp_path: Path) -> None:
     """Phase 1c should return False when neither sandbox-plan.md nor CODECOME-GENERATED.md is fresh."""
+    import phases.completion as completion_mod
     from phases.completion import check_phase_graceful_completion
 
     notes = tmp_path / "itemdb" / "notes"
@@ -145,7 +164,19 @@ def test_phase_1c_fails_without_sandbox_artifacts(tmp_path: Path) -> None:
         if name != "sandbox-plan.md":
             (notes / name).write_text("content", encoding="utf-8")
 
-    with patch("phases.completion.ROOT", tmp_path):
-        result = check_phase_graceful_completion("1c", None, now)
+    orig_root = completion_mod.ROOT
+    orig_notes_root = completion_mod.NOTES_ROOT
+    completion_mod.ROOT = tmp_path
+    completion_mod.NOTES_ROOT = tmp_path / "itemdb" / "notes"
+    try:
+        with patch("phases.completion.ROOT", tmp_path):
+            ok, failures = check_phase_graceful_completion("1c", None, now)
+    finally:
+        completion_mod.ROOT = orig_root
+        completion_mod.NOTES_ROOT = orig_notes_root
 
-    assert result is False
+    assert ok is False
+    assert failures, "Expected failure details when no 1c artifacts are fresh"
+    assert any("sandbox-plan.md" in f or "CODECOME-GENERATED.md" in f for f in failures), (
+        f"Expected failure detail to mention sandbox artifacts, got {failures!r}"
+    )

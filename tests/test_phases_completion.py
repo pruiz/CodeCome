@@ -111,10 +111,12 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
             os.utime(summary, (fake_time + 60, fake_time + 60))
 
         try:
-            result = completion_mod.check_phase_graceful_completion("1", None, fake_time)
-            assert result is True, "Phase 1 should succeed when all artifacts exist under patched NOTES_ROOT"
-            result = completion_mod.check_phase_graceful_completion("1c", None, fake_time)
-            assert result is True, "Phase 1c should use the same artifact gate as Phase 1"
+            ok, failures = completion_mod.check_phase_graceful_completion("1", None, fake_time)
+            assert ok is True, f"Phase 1 should succeed when all artifacts exist; failures={failures!r}"
+            assert failures == []
+            ok, failures = completion_mod.check_phase_graceful_completion("1c", None, fake_time)
+            assert ok is True, f"Phase 1c should use the same artifact gate as Phase 1; failures={failures!r}"
+            assert failures == []
         finally:
             completion_mod.NOTES_ROOT = orig_notes_root
             completion_mod.SANDBOX_PLAN_PATH = orig_sandbox_plan
@@ -144,7 +146,9 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
         sandbox_generated.parent.mkdir(parents=True)
 
         try:
-            assert completion_mod.check_phase_graceful_completion("1", None, run_start) is False
+            ok, failures = completion_mod.check_phase_graceful_completion("1", None, run_start)
+            assert ok is False
+            assert failures, "Expected failure details for phase 1 with no fresh artifacts"
             sandbox_generated.write_text("validated", encoding="utf-8")
             os.utime(sandbox_generated, (run_start + 60, run_start + 60))
             summary_dir = completion_mod.ROOT / "runs"
@@ -152,11 +156,150 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
             summary = summary_dir / "phase-1c-summary.md"
             summary.write_text("", encoding="utf-8")
             os.utime(summary, (run_start + 60, run_start + 60))
-            assert completion_mod.check_phase_graceful_completion("1c", None, run_start) is True
+            ok, failures = completion_mod.check_phase_graceful_completion("1c", None, run_start)
+            assert ok is True, f"Phase 1c should pass; failures={failures!r}"
+            assert failures == []
         finally:
             completion_mod.NOTES_ROOT = orig_notes_root
             completion_mod.SANDBOX_PLAN_PATH = orig_sandbox_plan
             completion_mod.ROOT = orig_root
+
+    def test_phase2_accepts_summary_with_no_new_findings(self, tmp_path):
+        """Phase 2 should pass when only the run summary is fresh (no new findings)."""
+        import os
+        import phases.completion as completion_mod
+
+        orig_root = completion_mod.ROOT
+        orig_findings_root = completion_mod.FINDINGS_ROOT
+        completion_mod.ROOT = tmp_path
+        completion_mod.FINDINGS_ROOT = tmp_path / "itemdb" / "findings"
+        (tmp_path / "runs").mkdir(parents=True, exist_ok=True)
+        summary = tmp_path / "runs" / "phase-2-summary-2026-06-05-143022.md"
+        summary.write_text("", encoding="utf-8")
+        run_start = time.time() - 60
+        os.utime(summary, (run_start + 60, run_start + 60))
+
+        try:
+            ok, failures = completion_mod.check_phase_graceful_completion("2", None, run_start)
+            assert ok is True, f"Phase 2 should pass with fresh summary alone; failures={failures!r}"
+            assert failures == []
+        finally:
+            completion_mod.ROOT = orig_root
+            completion_mod.FINDINGS_ROOT = orig_findings_root
+
+    def test_phase2_failure_details_mention_run_summary(self, tmp_path):
+        """Phase 2 should report missing run summary when nothing is freshened."""
+        import phases.completion as completion_mod
+
+        orig_root = completion_mod.ROOT
+        orig_findings_root = completion_mod.FINDINGS_ROOT
+        completion_mod.ROOT = tmp_path
+        completion_mod.FINDINGS_ROOT = tmp_path / "itemdb" / "findings"
+        (tmp_path / "runs").mkdir(parents=True, exist_ok=True)
+
+        try:
+            ok, failures = completion_mod.check_phase_graceful_completion("2", None, time.time())
+            assert ok is False
+            assert any("runs/phase-2-summary" in f for f in failures), (
+                f"Expected failure detail to mention runs/phase-2-summary, got {failures!r}"
+            )
+        finally:
+            completion_mod.ROOT = orig_root
+            completion_mod.FINDINGS_ROOT = orig_findings_root
+
+    def test_phase4_failure_details_mention_evidence_dir(self, tmp_path):
+        """Phase 4 should report missing evidence dir and finding file when nothing is freshened."""
+        import phases.completion as completion_mod
+
+        orig_root = completion_mod.ROOT
+        orig_findings_root = completion_mod.FINDINGS_ROOT
+        orig_evidence_root = completion_mod.EVIDENCE_ROOT
+        orig_reports_root = completion_mod.REPORTS_ROOT
+
+        completion_mod.ROOT = tmp_path
+        completion_mod.FINDINGS_ROOT = tmp_path / "itemdb" / "findings"
+        completion_mod.EVIDENCE_ROOT = tmp_path / "itemdb" / "evidence"
+        completion_mod.REPORTS_ROOT = tmp_path / "itemdb" / "reports"
+
+        try:
+            ok, failures = completion_mod.check_phase_graceful_completion("4", "CC-0001", time.time())
+            assert ok is False
+            assert any("itemdb/evidence/CC-0001" in f for f in failures), (
+                f"Expected failure detail to mention evidence dir, got {failures!r}"
+            )
+            assert any("CC-0001" in f for f in failures), (
+                f"Expected failure detail to mention finding id, got {failures!r}"
+            )
+        finally:
+            completion_mod.ROOT = orig_root
+            completion_mod.FINDINGS_ROOT = orig_findings_root
+            completion_mod.EVIDENCE_ROOT = orig_evidence_root
+            completion_mod.REPORTS_ROOT = orig_reports_root
+
+    def test_phase6_failure_details_mention_reports_dir(self, tmp_path):
+        """Phase 6 should report missing reports dir when nothing is freshened."""
+        import phases.completion as completion_mod
+
+        orig_root = completion_mod.ROOT
+        orig_reports_root = completion_mod.REPORTS_ROOT
+        completion_mod.ROOT = tmp_path
+        completion_mod.REPORTS_ROOT = tmp_path / "itemdb" / "reports"
+
+        try:
+            ok, failures = completion_mod.check_phase_graceful_completion("6", None, time.time())
+            assert ok is False
+            assert any("itemdb/reports" in f for f in failures), (
+                f"Expected failure detail to mention itemdb/reports, got {failures!r}"
+            )
+        finally:
+            completion_mod.ROOT = orig_root
+            completion_mod.REPORTS_ROOT = orig_reports_root
+
+    def test_unknown_phase_returns_descriptive_failure(self):
+        """Unknown phases should return a descriptive failure rather than bare (False, [])."""
+        from phases.completion import check_phase_graceful_completion
+
+        ok, failures = check_phase_graceful_completion("7", None, 0.0)
+        assert ok is False
+        assert failures, "Unknown phase should report a failure message"
+        assert any("No completion gate defined" in f for f in failures), (
+            f"Expected 'No completion gate defined' message, got {failures!r}"
+        )
+
+    def test_phase2_checklist_mentions_run_summary_and_no_new_findings(self):
+        """The phase-2 checklist should make the run-summary obligation visible to resumed models."""
+        from phases.completion import phase_checklist_lines
+
+        lines = phase_checklist_lines("2", None)
+        joined = "\n".join(lines)
+        assert "phase-2-summary-YYYY-MM-DD-HHMMSS" in joined, (
+            f"Expected checklist to mention timestamped summary path, got: {lines!r}"
+        )
+        assert "no new vulnerabilities" in joined.lower() or "no new finding" in joined.lower(), (
+            f"Expected checklist to mention the no-new-findings guidance, got: {lines!r}"
+        )
+
+    def test_resume_prompt_with_failure_details_lists_missing_artifacts(self):
+        """Resume prompt should include a 'Missing required artifacts:' block when given details."""
+        from phases.completion import build_phase_resume_prompt
+
+        prompt = build_phase_resume_prompt(
+            "2", None, "stop", 1,
+            failure_details=[
+                "Missing: runs/phase-2-summary-*.md — run summary was not created or updated",
+            ],
+        )
+        assert "Missing required artifacts:" in prompt
+        assert "runs/phase-2-summary-*.md" in prompt
+        assert "Fix only these missing items." in prompt
+
+    def test_resume_prompt_without_failure_details_uses_generic_wording(self):
+        """Resume prompt should use the generic reassess wording when no failure details given."""
+        from phases.completion import build_phase_resume_prompt
+
+        prompt = build_phase_resume_prompt("2", None, "stop", 1)
+        assert "Missing required artifacts:" not in prompt
+        assert "briefly reassess" in prompt
 
     def test_phase2_uses_finding_status_dir_via_ast(self):
         import ast

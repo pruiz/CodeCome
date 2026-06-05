@@ -22,10 +22,6 @@ Before starting reconnaissance, read:
 - `.opencode/skills/source-recon/SKILL.md`
 - `.opencode/skills/sandbox-bootstrap/SKILL.md`
 
-Also reference when writing run summaries:
-
-- `templates/run-summary.md`
-
 Do not load target-specific security skills before first mapping the source
 tree broadly. After broad structural mapping, you may consult target-specific
 skills only for reconnaissance checklists, not for vulnerability deep dives or
@@ -342,6 +338,7 @@ Before finishing:
 
 Phase 1a:
 
+- The phase prompt specifies required durable artifacts. Follow it precisely.
 - all required notes exist,
 - target type is stated with confidence,
 - attack surfaces are listed,
@@ -349,8 +346,7 @@ Phase 1a:
 - validation model is documented,
 - interesting files are listed,
 - uncertainty is documented,
-- no low-quality findings were created,
-- a run summary is written to `runs/` using `templates/run-summary.md`.
+- no low-quality findings were created.
 
 Phase 1b:
 
