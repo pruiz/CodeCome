@@ -44,7 +44,7 @@ def test_cli_tunables_propagate_to_render_settings(monkeypatch):
     monkeypatch.setattr(harness_mod, "resolve_runtime_config",
                         lambda agent: _FakeRuntimeConfig())
     monkeypatch.setattr(harness_mod, "check_phase_graceful_completion",
-                        lambda *a, **kw: True)
+                        lambda *a, **kw: (True, []))
     import subprocess
     monkeypatch.setattr(subprocess, "run", lambda *a, **kw: MagicMock(returncode=0))
 
@@ -92,7 +92,7 @@ def test_thinking_off_propagates_render_reasoning_false(monkeypatch):
     monkeypatch.setattr(harness_mod, "resolve_runtime_config",
                         lambda agent: _FakeRuntimeConfig(thinking_on=False))
     monkeypatch.setattr(harness_mod, "check_phase_graceful_completion",
-                        lambda *a, **kw: True)
+                        lambda *a, **kw: (True, []))
     import subprocess
     monkeypatch.setattr(subprocess, "run", lambda *a, **kw: MagicMock(returncode=0))
 

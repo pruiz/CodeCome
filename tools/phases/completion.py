@@ -125,12 +125,14 @@ def _exploitation_status_looks_real(frontmatter: dict[str, Any] | None) -> bool:
     return bool(status and status not in ("", "pending.", "todo.", "tbd."))
 
 
-def check_phase_graceful_completion(phase: str, finding: str | None, run_start_time: float) -> bool:
+def check_phase_graceful_completion(phase: str, finding: str | None, run_start_time: float) -> tuple[bool, list[str]]:
     original_phase = str(phase)
     phase_key = original_phase
     phase_is_1c = phase_key == "1c"
     if phase_key in ("1a", "1b", "1c"):
         phase_key = "1"
+
+    failures: list[str] = []
 
     try:
         if phase_key == "1":
@@ -142,20 +144,40 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
             if original_phase == "1a":
                 notes_dir = ROOT / "itemdb" / "notes"
                 paths_1a = [notes_dir / n for n in _PHASE_1A_ARTIFACT_NAMES]
-                return any(_path_is_fresh(p, run_start_time) for p in paths_1a)
+                fresh_1a = any(_path_is_fresh(p, run_start_time) for p in paths_1a)
+                if not fresh_1a:
+                    failures.append(
+                        f"Missing: {NOTES_ROOT.relative_to(ROOT)}/ — no phase-1a required notes "
+                        f"({', '.join(_PHASE_1A_ARTIFACT_NAMES)}) "
+                        "created or updated during this run"
+                    )
+                return (len(failures) == 0, failures)
 
             if original_phase == "1b":
                 notes_dir = ROOT / "itemdb" / "notes"
                 paths_1b = [notes_dir / n for n in PHASE_1B_REQUIRED_NOTES]
-                return any(_path_is_fresh(p, run_start_time) for p in paths_1b)
+                fresh_1b = any(_path_is_fresh(p, run_start_time) for p in paths_1b)
+                if not fresh_1b:
+                    failures.append(
+                        f"Missing: {NOTES_ROOT.relative_to(ROOT)}/ — no phase-1b required notes "
+                        f"({', '.join(PHASE_1B_REQUIRED_NOTES)}) "
+                        "created or updated during this run"
+                    )
+                return (len(failures) == 0, failures)
 
             if original_phase == "1c":
                 notes_dir = ROOT / "itemdb" / "notes"
                 sandbox_generated = ROOT / "sandbox" / "CODECOME-GENERATED.md"
-                return (
+                fresh_1c = (
                     _path_is_fresh(notes_dir / "sandbox-plan.md", run_start_time)
                     or _path_is_fresh(sandbox_generated, run_start_time)
                 )
+                if not fresh_1c:
+                    failures.append(
+                        "Missing: itemdb/notes/sandbox-plan.md or sandbox/CODECOME-GENERATED.md "
+                        "— neither sandbox state artifact was created or updated during this run"
+                    )
+                return (len(failures) == 0, failures)
 
             # Phase 1c and bare "1": require the full monolith set.
             required_artifacts = _phase1_required_artifacts()
@@ -168,23 +190,60 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                 run_summaries = _glob.glob(str(ROOT / "runs" / f"phase-{original_phase}-summary*.md"))
                 summary_fresh = any(Path(p).stat().st_mtime >= run_start_time for p in run_summaries)
                 if phase_is_1c:
-                    return sandbox_state_recorded and summary_fresh
+                    if not sandbox_state_recorded:
+                        failures.append(
+                            "Missing: sandbox/CODECOME-GENERATED.md or itemdb/notes/sandbox-plan.md "
+                            "— sandbox state was not recorded during this run"
+                        )
+                    if not summary_fresh:
+                        failures.append(
+                            f"Missing: runs/phase-{original_phase}-summary*.md — run summary "
+                            "was not created or updated during this run"
+                        )
+                    return (len(failures) == 0, failures)
                 fresh_required = any(_path_is_fresh(path, run_start_time) for path in required_artifacts)
-                return fresh_required and sandbox_state_recorded and summary_fresh
-            return False
+                if not fresh_required:
+                    failures.append(
+                        f"Missing: {NOTES_ROOT.relative_to(ROOT)}/ — no phase-1 required notes "
+                        f"({', '.join(_PHASE1_REQUIRED_ARTIFACT_NAMES)}) "
+                        "created or updated during this run"
+                    )
+                if not sandbox_state_recorded:
+                    failures.append(
+                        "Missing: sandbox/CODECOME-GENERATED.md or itemdb/notes/sandbox-plan.md "
+                        "— sandbox state was not recorded during this run"
+                    )
+                if not summary_fresh:
+                    failures.append(
+                        f"Missing: runs/phase-{original_phase}-summary*.md — run summary "
+                        "was not created or updated during this run"
+                    )
+                return (len(failures) == 0, failures)
+            failures.append(
+                f"Missing: {NOTES_ROOT.relative_to(ROOT)}/ — required phase-1 notes "
+                f"({', '.join(_PHASE1_REQUIRED_ARTIFACT_NAMES)}) are not all present"
+            )
+            return (len(failures) == 0, failures)
         elif phase_key in ("2", "sweep"):
-            pending_dir = finding_status_dir("PENDING")
-            pending_fresh = False
-            if pending_dir.exists():
-                pending_fresh = any(f.name.endswith(".md") and f.name != ".gitkeep" and f.stat().st_mtime >= run_start_time for f in pending_dir.iterdir())
             import glob as _glob
             run_summaries = _glob.glob(str(ROOT / "runs" / "phase-2-summary*.md"))
             summary_fresh = any(Path(p).stat().st_mtime >= run_start_time for p in run_summaries)
-            return pending_fresh and summary_fresh
+            if not summary_fresh:
+                failures.append(
+                    "Missing: runs/phase-2-summary-*.md — run summary was not "
+                    "created or updated"
+                )
+            return (len(failures) == 0, failures)
         elif phase_key == "3":
             import glob as _glob
             run_summaries = _glob.glob(str(ROOT / "runs" / "phase-3-summary-*.md"))
-            return any(Path(p).stat().st_mtime >= run_start_time for p in run_summaries)
+            summary_fresh = any(Path(p).stat().st_mtime >= run_start_time for p in run_summaries)
+            if not summary_fresh:
+                failures.append(
+                    "Missing: runs/phase-3-summary-*.md — run summary was not "
+                    "created or updated"
+                )
+            return (len(failures) == 0, failures)
         elif phase_key == "4" and finding:
             evidence_dir = evidence_dir_for(finding)
             evidence_fresh = any(path.stat().st_mtime >= run_start_time for path in _iter_files(evidence_dir))
@@ -193,11 +252,21 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                 if _find_finding_file(finding_status_dir(status), finding, run_start_time):
                     finding_is_fresh = True
                     break
-            return evidence_fresh and finding_is_fresh
+            if not evidence_fresh:
+                failures.append(
+                    f"Missing: {EVIDENCE_ROOT.relative_to(ROOT)}/{finding}/ — no evidence files "
+                    "created or updated during this run"
+                )
+            if not finding_is_fresh:
+                failures.append(
+                    f"Missing: {FINDINGS_ROOT.relative_to(ROOT)}/*/{finding}*.md — finding file "
+                    "not created or updated during this run"
+                )
+            return (len(failures) == 0, failures)
         elif phase_key == "5" and finding:
             exploits_dir = exploits_dir_for(finding)
             exploits_fresh = any(path.stat().st_mtime >= run_start_time for path in _iter_files(exploits_dir))
-            
+
             finding_is_fresh = False
             status_found = None
             for status in ("PENDING", "CONFIRMED", "REJECTED", "DUPLICATE", "EXPLOITED"):
@@ -205,38 +274,71 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                     finding_is_fresh = True
                     status_found = status
                     break
-                    
+
             if not finding_is_fresh:
-                return False
-                
+                failures.append(
+                    f"Missing: {FINDINGS_ROOT.relative_to(ROOT)}/*/{finding}*.md — finding file "
+                    "not created or updated during this run"
+                )
+                return (len(failures) == 0, failures)
+
             if status_found == "EXPLOITED":
                 exploited_file = _find_finding_file(finding_status_dir("EXPLOITED"), finding, run_start_time)
                 if exploited_file:
                     fm = _load_finding_frontmatter(exploited_file)
                     if fm and fm.get("status") == "EXPLOITED" and _exploitation_status_looks_real(fm):
-                        return exploits_fresh
-                return False
+                        if not exploits_fresh:
+                            failures.append(
+                                f"Missing: {EVIDENCE_ROOT.relative_to(ROOT)}/{finding}/exploits/ "
+                                "— no exploit artifacts created or updated during this run"
+                            )
+                        return (len(failures) == 0, failures)
+                failures.append(
+                    f"Missing: exploitation frontmatter on {FINDINGS_ROOT.relative_to(ROOT)}/EXPLOITED/{finding}*.md "
+                    "— exploitation status block is missing or invalid"
+                )
+                return (len(failures) == 0, failures)
 
             if status_found == "CONFIRMED":
                 confirmed_file = _find_finding_file(finding_status_dir("CONFIRMED"), finding, run_start_time)
                 if confirmed_file:
                     fm = _load_finding_frontmatter(confirmed_file)
                     if fm and isinstance(fm.get("exploitation"), dict) and str(fm["exploitation"].get("status", "")).upper() == "NOT_FEASIBLE":
-                        return True
-                return exploits_fresh
-                
+                        return (True, [])
+                if not exploits_fresh:
+                    failures.append(
+                        f"Missing: {EVIDENCE_ROOT.relative_to(ROOT)}/{finding}/exploits/ "
+                        "— no exploit artifacts created or updated during this run"
+                    )
+                return (len(failures) == 0, failures)
+
             if status_found in ("REJECTED", "DUPLICATE"):
-                return True
-                
-            return False
+                return (True, [])
+
+            failures.append(
+                f"Missing: exploitation outcome for {FINDINGS_ROOT.relative_to(ROOT)}/{finding}*.md "
+                "— finding is in an unexpected status for Phase 5"
+            )
+            return (len(failures) == 0, failures)
         elif phase_key == "6":
             reports_dir = REPORTS_ROOT
             if reports_dir.exists():
-                return any(f.name.endswith(".md") and f.name != ".gitkeep" and f.stat().st_mtime >= run_start_time for f in reports_dir.iterdir())
-            return False
+                fresh_report = any(
+                    f.name.endswith(".md") and f.name != ".gitkeep"
+                    and f.stat().st_mtime >= run_start_time
+                    for f in reports_dir.iterdir()
+                )
+                if fresh_report:
+                    return (True, [])
+            failures.append(
+                f"Missing: {REPORTS_ROOT.relative_to(ROOT)}/ — no report files created "
+                "or updated during this run"
+            )
+            return (len(failures) == 0, failures)
     except Exception:
-        pass
-    return False
+        return (False, [f"Internal error during artifact check for phase '{original_phase}'"])
+    # No phase_key branch matched (e.g., unknown phase like "7", or phase="4" with finding=None)
+    return (False, [f"No completion gate defined for phase '{original_phase}'"])
 
 
 def phase_checklist_lines(phase: str, finding: str | None) -> list[str]:
@@ -255,7 +357,9 @@ def phase_checklist_lines(phase: str, finding: str | None) -> list[str]:
         return [
             f"Create or update precise findings under {FINDINGS_ROOT.relative_to(ROOT)}/PENDING/.",
             "Each finding must identify affected code, trust-boundary/source-to-sink reasoning, attackability, impact, validation plan, and counter-analysis placeholder.",
-            "Do not stop until the new or updated findings are durable on disk.",
+            "If no new vulnerabilities are found, document this in the run summary rather than creating placeholder findings.",
+            f"Write a run summary to runs/phase-2-summary-YYYY-MM-DD-HHMMSS.md using templates/run-summary.md.",
+            "Do not stop until the run summary is durable on disk.",
         ]
     if str(phase) == "3":
         return [
@@ -291,18 +395,45 @@ def build_phase_resume_prompt(
     finding: str | None,
     reason: str,
     step_finish_count: int,
+    failure_details: list[str] | None = None,
 ) -> str:
     checklist = "\n".join(f"- {line}" for line in phase_checklist_lines(phase, finding))
-    return (
-        "Your previous response was cut off by the model/provider before you produced a final completion signal.\n\n"
-        f"Observed finish reason: {reason}.\n"
-        f"Completed loops before cutoff: {step_finish_count}.\n\n"
-        "Treat your prior work as partial. First, briefly reassess what remains unfinished for this phase. "
-        "Then complete only the remaining required work. Do not restart from scratch unless necessary.\n\n"
-        f"Phase {phase} completion checklist:\n"
-        f"{checklist}\n\n"
-        "Before ending, verify that the required durable artifacts for this phase exist, are updated, and are internally consistent."
+
+    lines = [
+        "Your previous run completed but did not produce all required artifacts.",
+        "",
+        f"Observed finish reason: {reason}.",
+        f"Completed loops before cutoff: {step_finish_count}.",
+    ]
+
+    if failure_details:
+        lines.append("")
+        lines.append("Missing required artifacts:")
+        for detail in failure_details:
+            lines.append(f"- {detail}")
+        lines.append("")
+        lines.append(
+            "Fix only these missing items. Do not redo completed work."
+        )
+    else:
+        lines.append("")
+        lines.append(
+            "Treat your prior work as partial. First, briefly reassess "
+            "what remains unfinished for this phase. Then complete only "
+            "the remaining required work. Do not restart from scratch "
+            "unless necessary."
+        )
+
+    lines.append("")
+    lines.append(f"Phase {phase} completion checklist:")
+    lines.append(checklist)
+    lines.append("")
+    lines.append(
+        "Before ending, verify that the required durable artifacts for "
+        "this phase exist, are updated, and are internally consistent."
     )
+
+    return "\n".join(lines)
 
 
 def build_frontmatter_resume_prompt(phase: str, finding: str | None, validation_output: str) -> str:

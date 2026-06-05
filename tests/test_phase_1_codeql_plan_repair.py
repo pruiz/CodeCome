@@ -449,7 +449,7 @@ def test_phase1c_accepts_no_step_finish_when_artifacts_are_fresh(tmp_path: Path)
              patch.object(p1, "resolve_runtime_config", return_value=_runtime_config()), \
              patch.object(p1, "configure_rendering", return_value=None), \
              patch.object(p1, "_run_single_attempt", side_effect=fake_run_single_attempt), \
-             patch.object(p1, "check_phase_graceful_completion", return_value=True), \
+             patch.object(p1, "check_phase_graceful_completion", return_value=(True, [])), \
              patch("findings.checks_entry.run_frontmatter_validation", return_value=(0, "")):
             rc = p1._run_subphase(
                 args=args,

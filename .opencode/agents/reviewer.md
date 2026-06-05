@@ -26,10 +26,6 @@ Before reviewing findings, read:
 - all findings under `itemdb/findings/PENDING/`
 - related findings under `itemdb/findings/CONFIRMED/`, `REJECTED/`, and `DUPLICATE/`
 
-Also reference when writing run summaries:
-
-- `templates/run-summary.md`
-
 Use target-specific skills when they apply, for example:
 
 - `.opencode/skills/c-cpp-security/SKILL.md`
@@ -209,11 +205,11 @@ For C/C++ findings:
 
 Before finishing:
 
+- The phase prompt specifies required durable artifacts. Follow it precisely.
 - every reviewed finding has an updated `# Counter-analysis`,
 - each finding is in the correct status directory,
 - confidence is adjusted when appropriate,
 - validation plans are improved where needed,
 - rejected findings have clear rejection reasons,
 - duplicate findings reference canonical ids,
-- no finding is marked CONFIRMED (confirmation belongs to Phase 4 validator),
-- a run summary is written when practical.
+- no finding is marked CONFIRMED (confirmation belongs to Phase 4 validator).

@@ -627,16 +627,20 @@ def _run_subphase(
             if (
                 (not any_step_finish_seen or last_finish_reason in _FINISH_MID_TURN)
                 and last_permission_error is None
-                and check_phase_graceful_completion(phase_id, finding, subphase_start_time)
             ):
-                msg = (
-                    f"CodeCome observed an incomplete model/provider completion signal for Phase {phase_id} after "
-                    f"{step_finish_count} completed loops, but expected durable artifacts were written during "
-                    "the run. Treating the subphase as complete enough to run validation and auto-repair."
-                )
-                out.success(msg)
-                finish_warning = None
-                last_finish_reason = "graceful_forgiveness"
+                phase_ok, phase_failures = check_phase_graceful_completion(
+                    phase_id, finding, subphase_start_time)
+                if phase_ok:
+                    msg = (
+                        f"CodeCome observed an incomplete model/provider completion signal for Phase {phase_id} after "
+                        f"{step_finish_count} completed loops, but expected durable artifacts were written during "
+                        "the run. Treating the subphase as complete enough to run validation and auto-repair."
+                    )
+                    out.success(msg)
+                    finish_warning = None
+                    last_finish_reason = "graceful_forgiveness"
+                else:
+                    returncode = 2
             else:
                 returncode = 2
 
@@ -763,6 +767,7 @@ def _run_subphase(
                 if last_session_id and last_session_id != "id":
                     prompt = build_phase_resume_prompt(
                         phase_id, finding, last_finish_reason, step_finish_count,
+                        failure_details=phase_failures if phase_failures else None,
                     )
                     continue
                 else:
