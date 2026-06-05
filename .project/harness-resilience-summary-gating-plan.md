@@ -962,3 +962,76 @@ All changes are additive or backward-compatible:
 - Agent file changes are cosmetic (remove one line, add one line).  No
   behavioral change for phase mode since the phase prompt already contains
   the requirements.
+
+---
+
+## 8. Follow-up: source-of-truth alignment (review feedback)
+
+After the initial implementation, the owner review (and a Copilot pass)
+flagged that the "phase prompt is the source of truth" rule was not
+fully enforced by the completion gates.  The original plan explicitly
+deferred subphase summary gating as a non-goal and did not gate
+phases 4/5/6 on summary either; the review pushed back on that decision.
+
+This follow-up closes the gap:
+
+- Subphase gates (1a, 1b, 1c) now also check for a fresh
+  `runs/phase-X-summary*.md` via the new helper
+  `_append_run_summary_check` in `tools/phases/completion.py`.
+- Phase 4 and 5 gates now also check for a fresh
+  `runs/phase-{4|5}-<finding>-summary*.md`.
+- Phase 6 gate now also checks for a fresh `runs/phase-6-summary*.md`.
+- Phase 3 resume checklist now includes a run-summary line in
+  `phase_checklist_lines`, matching the already-enforced gate check.
+- The phase-2 diagnostic message and glob now use the same pattern
+  (no mandatory hyphen after `summary`).  Both are
+  `runs/phase-2-summary*.md`.
+- The `build_phase_resume_prompt` opening line is no longer a
+  universal "Your previous run completed".  A private helper
+  `_resume_opener_for_reason` classifies the recorded reason
+  (`"infrastructure_error"`, mid-turn cutoffs, finish failures,
+  `graceful_forgiveness`, terminal-OK with missing artifacts, or
+  unknown) and renders a context-specific opener.
+- `tools/codecome/phase_1.py` defensively initializes
+  `phase_failures: list[str] = []` and `phase_ok: bool = False` at
+  the top of `_run_subphase`, mirroring the pattern already
+  established in `tools/codecome/harness.py:137-138`.  This eliminates
+  the `UnboundLocalError` risk on the path that builds the resume
+  prompt when the run was set to `returncode = 2` without ever
+  entering the graceful-completion branch.
+
+The expansion is deliberately conservative: summary checks were
+already implied by the prompts; the gates simply now enforce them.
+The behavior change for subphases (1a/1b/1c) is the only
+user-visible addition — those subphases now fail the auto-resume if
+no summary is written.  This matches the contract documented in each
+subphase prompt.
+
+### Files affected
+
+- `tools/phases/completion.py` — added `_run_summary_is_fresh` and
+  `_append_run_summary_check` helpers, expanded 1a/1b/1c/4/5/6 gates,
+  added phase-3 checklist summary lines, fixed phase-2 diagnostic
+  string, added `_resume_opener_for_reason` helper, replaced the
+  hardcoded opener in `build_phase_resume_prompt`.
+- `tools/codecome/phase_1.py` — defensive init of `phase_failures`
+  and `phase_ok`.
+- `tests/test_phases_completion.py` — new tests:
+  `TestPhase2GlobStringMatchesDiagnostic`,
+  `TestResumePromptOpenerDistinguishesReasons`,
+  `TestSubphaseGatesRequireRunSummary`,
+  `TestPhase45And6GatesRequireRunSummary`,
+  `TestPhase3ChecklistMentionsRunSummary`.  Existing test fixture
+  for the phase-2 resume prompt updated to use the unhyphenated
+  glob.
+- `tests/test_phase_graceful_completion_subphases.py` — positive
+  tests now create a fresh `runs/phase-1{a,b,c}-summary.md` to keep
+  passing under the stricter gate; negative tests additionally
+  assert the new summary failure fragment.
+
+### Verification
+
+`make tests`: 676 → 691 tests pass (15 new).  The pre-existing
+`itemdb/notes/threat-model.md` heading-set warning from
+`check-phase-artifacts` is unrelated to this change (verified by
+re-running the check with the changes stashed).
