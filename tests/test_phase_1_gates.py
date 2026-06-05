@@ -8,14 +8,22 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
-from phases.phase_1_gates import _emit
+from rendering.output import RenderOutput
+from rendering.context import RenderContext
+from rendering.sink import PlainSink
+from rendering.settings import RenderSettings
+from rendering.cache import SnapshotCache
 
 
-def test_emit_plain_fallback_prints_formatted_text(capsys) -> None:
-    _emit(None, "ok", "plain gate output")
-
-    out = capsys.readouterr().out
-    assert "plain gate output" in out
+def test_output_success_plain_prints_message(capsys) -> None:
+    out = RenderOutput(
+        RenderContext(
+            root=Path("/fake"), sink=PlainSink(), settings=RenderSettings(), cache=SnapshotCache()
+        )
+    )
+    out.success("plain gate output")
+    out_text = capsys.readouterr().out
+    assert "plain gate output" in out_text
 
 
 def test_unsupported_language_soft_policy_warns_not_fails(tmp_path: Path, capsys) -> None:

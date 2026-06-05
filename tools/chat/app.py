@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from chat.debug import _chat_debug  # noqa: E402
 from rendering.dispatch import render_event  # noqa: E402
+from rendering.output import get_output  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Rich imports — same fallback pattern as run-agent.py
@@ -459,29 +460,23 @@ try:
             _chat_debug("on_mount: heartbeat installed")
 
             # Write banner (main thread, direct write).
-            if HAVE_RICH:
-                from rich.rule import Rule
-
-                self.rich_log.write(Rule(title="Chat: Interactive Harness", style="bold cyan"), expand=True)
-                model_label = self.model or "(unknown)"
-                variant_label = self.variant or "(unknown)"
-                parts = [f"agent={self.args.agent if self.args else '?'}", f"model={model_label}"]
-                if self.variant is not None:
-                    parts.append(f"variant={variant_label}")
-                parts.append(f"thinking={'on' if self.thinking_on else 'off'}")
-                self.rich_log.write(Text("  ".join(parts), style="dim"), expand=True)
-                # Hint about selection: RichLog doesn't support in-app
-                # mouse selection upstream; document the terminal-native
-                # path so users can copy output.
-                self.rich_log.write(
-                    Text(
-                        "Tip: hold Option/Alt (macOS) or Shift (most terminals) "
-                        "while dragging to select text, or press Ctrl+S to toggle "
-                        "terminal-select mode (disables Textual mouse).",
-                        style="dim italic",
-                    ),
-                    expand=True,
-                )
+            out = get_output(self.console_proxy)
+            out.header("Chat: Interactive Harness")
+            model_label = self.model or "(unknown)"
+            variant_label = self.variant or "(unknown)"
+            parts = [f"agent={self.args.agent if self.args else '?'}", f"model={model_label}"]
+            if self.variant is not None:
+                parts.append(f"variant={variant_label}")
+            parts.append(f"thinking={'on' if self.thinking_on else 'off'}")
+            out.detail("  ".join(parts))
+            # Hint about selection: RichLog doesn't support in-app
+            # mouse selection upstream; document the terminal-native
+            # path so users can copy output.
+            out.detail(
+                "Tip: hold Option/Alt (macOS) or Shift (most terminals) "
+                "while dragging to select text, or press Ctrl+S to toggle "
+                "terminal-select mode (disables Textual mouse)."
+            )
             _chat_debug("on_mount: banner written")
 
             # Construct the chat event loop.

@@ -17,9 +17,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import _colors as C  # noqa: E402
 from chat.debug import _setup_chat_debug, _chat_debug, _close_chat_debug  # noqa: E402
-from chat.app import ChatApp, HAVE_RICH  # noqa: E402
+from chat.app import ChatApp  # noqa: E402
 from codecome.console import build_console, _emit_fatal_error  # noqa: E402
 from opencode.serve import ServerRunner, ServerRunnerError  # noqa: E402
 from codecome.config import (  # noqa: E402
@@ -31,6 +30,7 @@ from codecome.config import (  # noqa: E402
 from codecome.session import create_chat_session  # noqa: E402
 from codecome.transcript import Transcript  # noqa: E402
 from rendering import dispatch as rendering_dispatch  # noqa: E402
+from rendering.output import get_output, T  # noqa: E402
 
 
 def run_harness(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
@@ -136,16 +136,10 @@ def run_harness(parser: argparse.ArgumentParser, args: argparse.Namespace) -> in
         rel_path = transcript.path.relative_to(ROOT)
     except ValueError:
         rel_path = transcript.path
-    if HAVE_RICH:
-        from rich.rule import Rule  # noqa: E402
-        from rich.text import Text  # noqa: E402
-
-        console.print(Rule(style="green"))
-        console.print(Text(f"{C.SYM_OK} Chat session ended", style="green"))
-        console.print(Text(f"  transcript: {rel_path}", style="dim"))
-    else:
-        print(C.ok("Chat session ended"))
-        print(f"  transcript: {rel_path}")
+    out = get_output(console)
+    out.separator(tone=T.SUCCESS)
+    out.success("Chat session ended", symbol=True)
+    out.detail(f"  transcript: {rel_path}")
 
     _close_chat_debug()
     return 0
