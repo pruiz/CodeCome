@@ -171,6 +171,8 @@ class RenderOutput:
 
             self.sink.write(Rule(style=_rich_tone(tone)))
         elif self.plain:
+            # tone is intentionally ignored in plain mode;
+            # ANSI-coloured dashed lines are visually noisy.
             self.sink.write_text(C.SYM_DASH * _SEPARATOR_WIDTH)
 
     # -- line output -------------------------------------------------------

@@ -122,8 +122,6 @@ def run_phase_mode(args: argparse.Namespace) -> int:
     out.detail(main_line)
     if args.finding:
         out.detail(f"finding={args.finding}")
-    if str(args.phase) == "1":
-        out.info("Phase 1 has two sub-stages: 1a recon notes, 1b sandbox bootstrap.")
     if console is None:
         out.warn("rich is not installed; using plain structured output fallback")
 
