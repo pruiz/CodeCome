@@ -32,7 +32,8 @@ from phases.phase_1_gates import (
     check_phase_1c,
     count_findings_snapshot,
 )
-from rendering.dispatch import HAVE_RICH, _get_rendering_ctx, configure_rendering, render_event
+from rendering.dispatch import _get_rendering_ctx, configure_rendering, render_event
+from rendering.output import get_output, T
 from rendering.events import (
     _FINISH_TERMINAL_OK,
     _FINISH_MID_TURN,
@@ -67,64 +68,36 @@ def _run_codeql(console: Any) -> None:
     from codeql.config import resolve_config as _resolve_codeql_config
 
     config = _resolve_codeql_config()
+    out = get_output(console)
 
-    if HAVE_RICH:
-        from rich.rule import Rule
-        from rich.text import Text
-        console.print(Rule(title="CodeQL", style="cyan"))
-    else:
-        import _colors as C
-        print(C.header("CodeQL"))
+    out.header("CodeQL")
 
     if not config.enabled:
         msg = "CodeQL disabled — skipping."
         from codeql.pipeline import record_skipped_run
         record_skipped_run(config, "CodeQL disabled for Phase 1")
-        if HAVE_RICH:
-            from rich.text import Text
-            console.print(Text(msg, style="yellow"))
-        else:
-            import _colors as C
-            print(C.warn(msg))
+        out.warn(msg)
         return
 
     if not config.phase_1_enabled:
         msg = "CodeQL phase 1 disabled — skipping."
         from codeql.pipeline import record_skipped_run
         record_skipped_run(config, "CodeQL phase 1 disabled")
-        if HAVE_RICH:
-            from rich.text import Text
-            console.print(Text(msg, style="yellow"))
-        else:
-            import _colors as C
-            print(C.warn(msg))
+        out.warn(msg)
         return
 
-    if HAVE_RICH:
-        from rich.text import Text
-        console.print(Text("Running CodeQL analysis…", style="dim"))
-    else:
-        print("Running CodeQL analysis…")
+    out.detail("Running CodeQL analysis…")
 
     from codeql.pipeline import run_full_pipeline
 
     def progress(message: str) -> None:
-        if HAVE_RICH:
-            from rich.text import Text
-            console.print(Text(message, style="dim"))
-        else:
-            print(message, flush=True)
+        out.detail(message)
 
     try:
         manifest = run_full_pipeline(config, progress=progress)
     except Exception as exc:
         msg = f"CodeQL: FAILED — {exc}"
-        if HAVE_RICH:
-            from rich.text import Text
-            console.print(Text(msg, style="bold red"))
-        else:
-            import _colors as C
-            print(C.fail(msg))
+        out.error(msg)
         return
 
     status = manifest["status"]
@@ -133,47 +106,21 @@ def _run_codeql(console: Any) -> None:
 
     if status == "completed":
         msg = f"CodeQL: analysis completed ({len(manifest.get('languages', []))} language(s))"
-        if HAVE_RICH:
-            from rich.text import Text
-            console.print(Text(msg, style="green"))
-        else:
-            import _colors as C
-            print(C.ok(msg))
+        out.success(msg)
     elif status == "skipped":
         reason = failures[0] if failures else "no plan"
         msg = f"CodeQL: skipped — {reason}"
-        if HAVE_RICH:
-            from rich.text import Text
-            console.print(Text(msg, style="yellow"))
-        else:
-            import _colors as C
-            print(C.warn(msg))
+        out.warn(msg)
     elif status == "soft-failed":
         msg = "CodeQL: soft-failed — continuing"
-        if HAVE_RICH:
-            from rich.text import Text
-            console.print(Text(msg, style="yellow"))
-        else:
-            import _colors as C
-            print(C.warn(msg))
+        out.warn(msg)
         for w in warnings + failures:
-            if HAVE_RICH:
-                console.print(Text(f"  {w}", style="yellow"))
-            else:
-                print(C.warn(f"  {w}"))
+            out.warn(f"  {w}")
     elif status == "failed":
         msg = "CodeQL: FAILED"
-        if HAVE_RICH:
-            from rich.text import Text
-            console.print(Text(msg, style="bold red"))
-        else:
-            import _colors as C
-            print(C.fail(msg))
+        out.error(msg)
         for f in failures:
-            if HAVE_RICH:
-                console.print(Text(f"  {f}", style="red"))
-            else:
-                print(C.fail(f"  {f}"))
+            out.error(f"  {f}")
 
 
 def _check_codeql_artifacts(console: Any) -> int:
@@ -182,6 +129,7 @@ def _check_codeql_artifacts(console: Any) -> int:
     from codeql.artifacts import check_artifacts
 
     config = _resolve_codeql_config()
+    out = get_output(console)
 
     if not config.enabled or not config.phase_1_enabled:
         return 0
@@ -189,43 +137,22 @@ def _check_codeql_artifacts(console: Any) -> int:
     status, warnings = check_artifacts(config.abs_output_dir)
 
     for w in warnings:
-        if HAVE_RICH:
-            from rich.text import Text
-            console.print(Text(f"  WARN: {w}", style="yellow"))
-        else:
-            import _colors as C
-            print(C.warn(f"  WARN: {w}"))
+        out.warn(f"  WARN: {w}")
 
     if config.fail_policy == "hard" and status == "failed":
         msg = "CodeQL artifact gate: FAILED — blocking Phase 1b"
-        if HAVE_RICH:
-            from rich.text import Text
-            console.print(Text(msg, style="bold red"))
-        else:
-            import _colors as C
-            print(C.fail(msg))
+        out.error(msg)
         return 1
 
     if status == "failed":
         # fail_policy is soft, so treat as a non-blocking warning
-        if HAVE_RICH:
-            from rich.text import Text
-            console.print(Text("CodeQL artifact gate: execution crashed but fail_policy is soft — continuing", style="yellow"))
-        else:
-            import _colors as C
-            print(C.warn("CodeQL artifact gate: execution crashed but fail_policy is soft — continuing"))
+        out.warn("CodeQL artifact gate: execution crashed but fail_policy is soft — continuing")
 
     label = f"CodeQL artifact gate: {status}"
-    if HAVE_RICH:
-        from rich.text import Text
-        style = "green" if status == "completed" else "yellow"
-        console.print(Text(label, style=style))
+    if status == "completed":
+        out.success(label)
     else:
-        import _colors as C
-        if status == "completed":
-            print(C.ok(label))
-        else:
-            print(C.info(label))
+        out.info(label)
 
     return 0
 
@@ -501,13 +428,9 @@ def _run_codeql_repair_if_needed(
     if not _codeql_repair_needed(config.abs_output_dir, plan_path):
         return 0
 
+    out = get_output(console)
     msg = "CodeQL database creation failed; asking the model to repair build instructions."
-    if HAVE_RICH:
-        from rich.text import Text
-        console.print(Text(msg, style="bold yellow"))
-    else:
-        import _colors as C
-        print(C.warn(msg))
+    out.warn(msg)
 
     plan_digest = _file_digest(plan_path)
     repair_session_id: str | None = None
@@ -542,12 +465,7 @@ def _run_codeql_repair_if_needed(
         next_plan_digest = _file_digest(plan_path)
         if next_plan_digest == plan_digest:
             unchanged_msg = "CodeQL repair completed but did not change itemdb/notes/codeql-plan.yml."
-            if HAVE_RICH:
-                from rich.text import Text
-                console.print(Text(unchanged_msg, style="yellow"))
-            else:
-                import _colors as C
-                print(C.warn(unchanged_msg))
+            out.warn(unchanged_msg)
         plan_digest = next_plan_digest
 
         _run_codeql(console)
@@ -560,12 +478,7 @@ def _run_codeql_repair_if_needed(
 
     if _codeql_repair_needed(config.abs_output_dir, plan_path):
         msg = f"CodeQL database creation still fails after {max_retries} repair attempt(s); continuing to artifact gate."
-        if HAVE_RICH:
-            from rich.text import Text
-            console.print(Text(msg, style="bold yellow"))
-        else:
-            import _colors as C
-            print(C.warn(msg))
+        out.warn(msg)
 
     return 0
 
@@ -598,6 +511,7 @@ def _run_subphase(
     variant = rc.variant
     thinking_on = rc.thinking_on
     configure_rendering(console, render_reasoning=thinking_on)
+    out = get_output(console)
 
     model_label = model or "(unknown)"
     variant_label = variant or "(unknown)"
@@ -618,19 +532,10 @@ def _run_subphase(
 
     main_line = "  ".join(parts) + "  " + sources_tail
 
-    if HAVE_RICH:
-        from rich.rule import Rule
-        from rich.text import Text
-        console.print(Rule(title=f"Phase {phase_id}: {label}", style="bold cyan"))
-        console.print(Text(main_line, style="dim"))
-        if finding:
-            console.print(Text(f"finding={finding}", style="dim"))
-    else:
-        import _colors as C
-        print(C.header(f"Phase {phase_id}: {label}"))
-        print(C.info(main_line))
-        if finding:
-            print(C.info(f"finding={finding}"))
+    out.header(f"Phase {phase_id}: {label}")
+    out.detail(main_line)
+    if finding:
+        out.detail(f"finding={finding}")
 
     iteration_retry_count = 0
     frontmatter_retry_count = 0
@@ -729,12 +634,7 @@ def _run_subphase(
                     f"{step_finish_count} completed loops, but expected durable artifacts were written during "
                     "the run. Treating the subphase as complete enough to run validation and auto-repair."
                 )
-                if HAVE_RICH:
-                    from rich.text import Text
-                    console.print(Text(msg, style="bold green"))
-                else:
-                    import _colors as C
-                    print(C.ok(msg))
+                out.success(msg)
                 finish_warning = None
                 last_finish_reason = "graceful_forgiveness"
             else:
@@ -752,12 +652,7 @@ def _run_subphase(
                             "failed local CodeQL plan validation. CodeCome will resume the same session and ask "
                             f"for a minimal YAML/plan repair (retry {codeql_plan_retry_count}/{max_codeql_plan_retries})."
                         )
-                        if HAVE_RICH:
-                            from rich.text import Text
-                            console.print(Text(msg, style="bold yellow"))
-                        else:
-                            import _colors as C
-                            print(C.warn(msg))
+                        out.warn(msg)
                         if last_session_id and last_session_id != "id":
                             prompt = build_codeql_plan_resume_prompt(validation_output)
                             continue
@@ -776,12 +671,7 @@ def _run_subphase(
                             "can be reported back."
                         )
                         msg = f"\n[Warning] CodeQL plan validation errors persist after {max_codeql_plan_retries} auto-retries."
-                        if HAVE_RICH:
-                            from rich.text import Text
-                            console.print(Text(msg, style="bold red"))
-                        else:
-                            import _colors as C
-                            print(C.fail(msg))
+                        out.error(msg)
                         print(validation_output)
                     break
 
@@ -797,12 +687,7 @@ def _run_subphase(
                         f"validation. CodeCome will resume the same session and ask for a minimal repair "
                         f"(retry {frontmatter_retry_count}/{max_frontmatter_retries})."
                     )
-                    if HAVE_RICH:
-                        from rich.text import Text
-                        console.print(Text(msg, style="bold yellow"))
-                    else:
-                        import _colors as C
-                        print(C.warn(msg))
+                    out.warn(msg)
                     if last_session_id and last_session_id != "id":
                         prompt = build_frontmatter_resume_prompt(phase_id, finding, validation_output)
                         continue
@@ -820,12 +705,7 @@ def _run_subphase(
                         "auto-repair attempts. Treating the subphase as incomplete so the validation errors can be reported back."
                     )
                     msg = f"\n[Warning] Frontmatter errors persist after {max_frontmatter_retries} auto-retries."
-                    if HAVE_RICH:
-                        from rich.text import Text
-                        console.print(Text(msg, style="bold red"))
-                    else:
-                        import _colors as C
-                        print(C.fail(msg))
+                    out.error(msg)
                     print(validation_output)
                 break
 
@@ -842,12 +722,7 @@ def _run_subphase(
                             f"failed validation. CodeCome will resume the same session and ask for "
                             f"a minimal repair (retry {artifact_retry_count}/{max_artifact_retries})."
                         )
-                        if HAVE_RICH:
-                            from rich.text import Text
-                            console.print(Text(msg, style="bold yellow"))
-                        else:
-                            import _colors as C
-                            print(C.warn(msg))
+                        out.warn(msg)
                         if last_session_id and last_session_id != "id":
                             prompt = build_artifact_repair_resume_prompt(
                                 phase_id, finding, validation_output
@@ -869,12 +744,7 @@ def _run_subphase(
                         )
                         validation_output = "\n".join(artifact_errors)
                         msg = f"\n[Warning] Phase 1b artifact errors persist after {max_artifact_retries} auto-retries."
-                        if HAVE_RICH:
-                            from rich.text import Text
-                            console.print(Text(msg, style="bold red"))
-                        else:
-                            import _colors as C
-                            print(C.fail(msg))
+                        out.error(msg)
                         print(validation_output)
                     break
 
@@ -889,12 +759,7 @@ def _run_subphase(
                     "\n[Auto-Resume] CodeCome observed a mid-turn model/provider cutoff and will resume the same "
                     f"session once to let the model finish the interrupted work (retry {iteration_retry_count}/{max_iteration_retries})."
                 )
-                if HAVE_RICH:
-                    from rich.text import Text
-                    console.print(Text(msg, style="bold yellow"))
-                else:
-                    import _colors as C
-                    print(C.warn(msg))
+                out.warn(msg)
                 if last_session_id and last_session_id != "id":
                     prompt = build_phase_resume_prompt(
                         phase_id, finding, last_finish_reason, step_finish_count,
@@ -905,12 +770,7 @@ def _run_subphase(
                         "CodeCome correctly detected that the model/provider stopped mid-turn, but it could not determine "
                         "a session ID for automatic continuation. Treating the subphase as incomplete."
                     )
-                    if HAVE_RICH:
-                        from rich.text import Text
-                        console.print(Text("Could not determine session ID to resume.", style="red"))
-                    else:
-                        import _colors as C
-                        print(C.fail("Could not determine session ID to resume."))
+                    out.error("Could not determine session ID to resume.", strong=False)
             break
 
         break
@@ -918,47 +778,21 @@ def _run_subphase(
 
     # Report subphase outcome
     if returncode == 0:
-        if HAVE_RICH:
-            from rich.rule import Rule
-            from rich.text import Text
-            console.print(Rule(style="green"))
-            console.print(Text(f"{'OK' if not HAVE_RICH else ''}Phase {phase_id} completed successfully", style="green"))
-            console.print(Text(
-                f"  finish reason: {last_finish_reason!r}  "
-                f"transcript: {transcript_path.relative_to(ROOT) if transcript_path.name else 'N/A'}",
-                style="dim",
-            ))
-        else:
-            import _colors as C
-            print(C.ok(f"Phase {phase_id} completed successfully"))
-            print(f"  finish reason: {last_finish_reason!r}  transcript: {transcript_path.relative_to(ROOT) if transcript_path.name else 'N/A'}")
+        out.separator(tone=T.SUCCESS)
+        out.success(f"Phase {phase_id} completed successfully", symbol=True)
+        out.detail(
+            f"  finish reason: {last_finish_reason!r}  "
+            f"transcript: {transcript_path.relative_to(ROOT) if transcript_path.name else 'N/A'}"
+        )
     elif returncode == 130:
-        if HAVE_RICH:
-            from rich.rule import Rule
-            from rich.text import Text
-            console.print(Rule(style="yellow"))
-            console.print(Text(f"Phase {phase_id} interrupted", style="yellow"))
-        else:
-            import _colors as C
-            print(C.warn(f"Phase {phase_id} interrupted"))
+        out.separator(tone=T.WARNING)
+        out.warn(f"Phase {phase_id} interrupted")
     else:
-        if HAVE_RICH:
-            from rich.rule import Rule
-            from rich.text import Text
-            console.print(Rule(style="red"))
-            console.print(Text(
-                f"Phase {phase_id} did not complete cleanly (exit code {returncode})",
-                style="red",
-            ))
-            if finish_warning:
-                console.print(Text(f"  reason: {finish_warning}", style="red"))
-            console.print(Text(f"  transcript: {transcript_path.relative_to(ROOT) if transcript_path.name else 'N/A'}", style="dim"))
-        else:
-            import _colors as C
-            print(C.fail(f"Phase {phase_id} did not complete cleanly (exit code {returncode})"))
-            if finish_warning:
-                print(C.fail(f"  reason: {finish_warning}"))
-            print(f"  finish reason: {last_finish_reason!r}  transcript: {transcript_path.relative_to(ROOT) if transcript_path.name else 'N/A'}")
+        out.separator(tone=T.ERROR)
+        out.error(f"Phase {phase_id} did not complete cleanly (exit code {returncode})", symbol=True)
+        if finish_warning:
+            out.error(f"  reason: {finish_warning}", strong=False)
+        out.detail(f"  transcript: {transcript_path.relative_to(ROOT) if transcript_path.name else 'N/A'}")
 
     if return_outcome:
         return _SubphaseOutcome(returncode=returncode, session_id=last_session_id, transcript_path=transcript_path)
@@ -977,6 +811,7 @@ def run_phase_1(
     base_url: str,
 ) -> int:
     """Orchestrate Phase 1 subphases 1a → 1b → 1c with gates."""
+    out = get_output(console)
     # ---- Phase 1a: Target Profile ----
     findings_snapshot_1a = count_findings_snapshot()
     rc = _run_subphase(
@@ -1054,14 +889,7 @@ def run_phase_1(
         return gate_rc
 
     # ---- Phase 1 complete ----
-    if HAVE_RICH:
-        from rich.rule import Rule
-        from rich.text import Text
-        console.print(Rule(style="bold green"))
-        console.print(Text("Phase 1 complete — all subphases passed.", style="bold green"))
-    else:
-        import _colors as C
-        print()
-        print(C.ok("Phase 1 complete — all subphases passed."))
+    out.separator(tone=T.SUCCESS)
+    out.success("Phase 1 complete — all subphases passed.", symbol=True)
 
     return 0

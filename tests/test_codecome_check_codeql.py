@@ -11,6 +11,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
+import rendering.dispatch as rendering_dispatch
 from codeql.config import CodeQLConfig
 
 
@@ -124,13 +125,15 @@ def test_check_codeql_artifacts_failed_soft_policy_returns_0(tmp_path: Path, cap
     from codecome.phase_1 import _check_codeql_artifacts as _check
     import codecome.phase_1 as p1
 
-    saved = p1.HAVE_RICH
-    p1.HAVE_RICH = False
+    saved = rendering_dispatch.HAVE_RICH
+    rendering_dispatch.HAVE_RICH = False
+    rendering_dispatch.reset_rendering_context_cache()
     try:
         with patch("codeql.config.resolve_config", return_value=config):
             rc = _check(None)
     finally:
-        p1.HAVE_RICH = saved
+        rendering_dispatch.HAVE_RICH = saved
+    rendering_dispatch.reset_rendering_context_cache()
 
     out = capsys.readouterr().out
     assert rc == 0
@@ -158,13 +161,15 @@ def test_check_codeql_artifacts_failed_hard_policy_returns_1(tmp_path: Path, cap
     from codecome.phase_1 import _check_codeql_artifacts as _check
     import codecome.phase_1 as p1
 
-    saved = p1.HAVE_RICH
-    p1.HAVE_RICH = False
+    saved = rendering_dispatch.HAVE_RICH
+    rendering_dispatch.HAVE_RICH = False
+    rendering_dispatch.reset_rendering_context_cache()
     try:
         with patch("codeql.config.resolve_config", return_value=config):
             rc = _check(None)
     finally:
-        p1.HAVE_RICH = saved
+        rendering_dispatch.HAVE_RICH = saved
+    rendering_dispatch.reset_rendering_context_cache()
 
     assert rc == 1
 
@@ -249,8 +254,9 @@ def test_phase_1_pipeline_structure() -> None:
     _ensure_codecome_package()
     import codecome.phase_1 as p1
 
-    saved = p1.HAVE_RICH
-    p1.HAVE_RICH = False
+    saved = rendering_dispatch.HAVE_RICH
+    rendering_dispatch.HAVE_RICH = False
+    rendering_dispatch.reset_rendering_context_cache()
     try:
         with patch.object(p1, "count_findings_snapshot", return_value={}), \
              patch.object(p1, "_run_subphase", return_value=0) as subphase, \
@@ -262,7 +268,8 @@ def test_phase_1_pipeline_structure() -> None:
              patch.object(p1, "_check_codeql_artifacts", return_value=0):
             rc = p1.run_phase_1(object(), None, None, object(), "http://127.0.0.1")
     finally:
-        p1.HAVE_RICH = saved
+        rendering_dispatch.HAVE_RICH = saved
+    rendering_dispatch.reset_rendering_context_cache()
 
     assert rc == 0
     assert run_codeql.call_count == 1

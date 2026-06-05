@@ -19,11 +19,11 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-import _colors as C
 from opencode.serve import ServerRunner, ServerRunnerError
 
 from codecome.console import build_console, _emit_fatal_error
-from rendering.dispatch import HAVE_RICH, _get_rendering_ctx, configure_rendering, render_event
+from rendering.dispatch import _get_rendering_ctx, configure_rendering, render_event
+from rendering.output import get_output, T
 from rendering.events import _FINISH_TERMINAL_OK, _FINISH_MID_TURN, _FINISH_FAILURE
 from codecome.config import ROOT, resolve_color_mode, load_prompt, resolve_runtime_config
 from phases.completion import (
@@ -97,6 +97,7 @@ def run_phase_mode(args: argparse.Namespace) -> int:
     variant = rc.variant
     thinking_on = rc.thinking_on
     configure_rendering(console, render_reasoning=thinking_on)
+    out = get_output(console)
 
     model_label = model or "(unknown)"
     variant_label = variant or "(unknown)"
@@ -117,28 +118,14 @@ def run_phase_mode(args: argparse.Namespace) -> int:
 
     main_line = "  ".join(parts) + "  " + sources_tail
 
-    if HAVE_RICH:
-        from rich.rule import Rule
-        from rich.text import Text
-        console.print(Rule(title=f"Phase {args.phase}: {args.label}", style="bold cyan"))
-        console.print(Text(main_line, style="dim"))
-        if args.finding:
-            console.print(Text(f"finding={args.finding}", style="dim"))
-        if str(args.phase) == "1":
-            console.print(Text(
-                "Phase 1 has two sub-stages: 1a recon notes, 1b sandbox bootstrap.",
-                style="cyan",
-            ))
-    else:
-        print(C.header(f"Phase {args.phase}: {args.label}"))
-        print(C.info(main_line))
-        if args.finding:
-            print(C.info(f"finding={args.finding}"))
-        if str(args.phase) == "1":
-            print(C.info(
-                "Phase 1 has two sub-stages: 1a recon notes, 1b sandbox bootstrap."
-            ))
-        print(C.warn("rich is not installed; using plain structured output fallback"))
+    out.header(f"Phase {args.phase}: {args.label}")
+    out.detail(main_line)
+    if args.finding:
+        out.detail(f"finding={args.finding}")
+    if str(args.phase) == "1":
+        out.info("Phase 1 has two sub-stages: 1a recon notes, 1b sandbox bootstrap.")
+    if console is None:
+        out.warn("rich is not installed; using plain structured output fallback")
 
     attempt_number = 0
     last_session_id: str = ""
@@ -210,11 +197,7 @@ def run_phase_mode(args: argparse.Namespace) -> int:
                         f"\n[Auto-Retry] The previous attempt failed with an infrastructure error (exit {returncode}). "
                         f"CodeCome will retry the same session (fatal retry {fatal_retry_count}/{max_fatal_retries})."
                     )
-                    if HAVE_RICH:
-                        from rich.text import Text
-                        console.print(Text(msg, style="bold yellow"))
-                    else:
-                        print(C.warn(msg))
+                    out.warn(msg)
                     # Brief pause before retrying to let transient issues settle.
                     time.sleep(5.0)
                     prompt = build_phase_resume_prompt(
@@ -275,11 +258,7 @@ def run_phase_mode(args: argparse.Namespace) -> int:
                         "completed loops, but expected durable artifacts were written during "
                         "the run. Treating the phase as complete enough to run validation and auto-repair."
                     )
-                    if HAVE_RICH:
-                        from rich.text import Text
-                        console.print(Text(msg, style="bold green"))
-                    else:
-                        print(C.ok(msg))
+                    out.success(msg)
                     finish_warning = None
                     last_finish_reason = "graceful_forgiveness"
                 else:
@@ -307,11 +286,7 @@ def run_phase_mode(args: argparse.Namespace) -> int:
                                 f"validation. CodeCome will resume the same session and ask for a minimal repair "
                                 f"(retry {frontmatter_retry_count}/{max_frontmatter_retries})."
                             )
-                            if HAVE_RICH:
-                                from rich.text import Text
-                                console.print(Text(msg, style="bold yellow"))
-                            else:
-                                print(C.warn(msg))
+                            out.warn(msg)
                             if last_session_id and last_session_id != "id":
                                 prompt = build_frontmatter_resume_prompt(args.phase, args.finding, validation_output)
                                 continue
@@ -329,11 +304,7 @@ def run_phase_mode(args: argparse.Namespace) -> int:
                                 "auto-repair attempts. Treating the phase as incomplete so the validation errors can be reported back."
                             )
                             msg = f"\n[Warning] Frontmatter errors persist after {max_frontmatter_retries} auto-retries."
-                            if HAVE_RICH:
-                                from rich.text import Text
-                                console.print(Text(msg, style="bold red"))
-                            else:
-                                print(C.fail(msg))
+                            out.error(msg)
                             print(validation_output)
                         break
                 break
@@ -352,11 +323,7 @@ def run_phase_mode(args: argparse.Namespace) -> int:
                         "\n[Auto-Resume] CodeCome observed an incomplete run and will resume the same "
                         f"session once to let the model finish the interrupted work (retry {iteration_retry_count}/{max_iteration_retries})."
                     )
-                    if HAVE_RICH:
-                        from rich.text import Text
-                        console.print(Text(msg, style="bold yellow"))
-                    else:
-                        print(C.warn(msg))
+                    out.warn(msg)
                     if last_session_id and last_session_id != "id":
                         prompt = build_phase_resume_prompt(
                             args.phase, args.finding, last_finish_reason, step_finish_count
@@ -367,11 +334,7 @@ def run_phase_mode(args: argparse.Namespace) -> int:
                             "CodeCome correctly detected that the model/provider stopped mid-turn, but it could not determine "
                             "a session ID for automatic continuation. Treating the phase as incomplete."
                         )
-                        if HAVE_RICH:
-                            from rich.text import Text
-                            console.print(Text("Could not determine session ID to resume.", style="red"))
-                        else:
-                            print(C.fail("Could not determine session ID to resume."))
+                        out.error("Could not determine session ID to resume.", strong=False)
                 break
 
             break
@@ -381,52 +344,27 @@ def run_phase_mode(args: argparse.Namespace) -> int:
         runner.stop()
 
     if returncode == 0:
-        if HAVE_RICH:
-            from rich.rule import Rule
-            from rich.text import Text
-            console.print(Rule(style="green"))
-            console.print(Text(f"{C.SYM_OK} Phase {args.phase} completed successfully", style="green"))
-            console.print(Text(
-                f"  finish reason: {last_finish_reason!r}  "
-                f"transcript: {transcript_path.relative_to(ROOT)}",
-                style="dim",
-            ))
-        else:
-            print(C.ok(f"Phase {args.phase} completed successfully"))
-            print(f"  finish reason: {last_finish_reason!r}  transcript: {transcript_path.relative_to(ROOT)}")
+        out.separator(tone=T.SUCCESS)
+        out.success(f"Phase {args.phase} completed successfully", symbol=True)
+        out.detail(
+            f"  finish reason: {last_finish_reason!r}  "
+            f"transcript: {transcript_path.relative_to(ROOT)}"
+        )
     elif returncode == 130:
-        if HAVE_RICH:
-            from rich.rule import Rule
-            from rich.text import Text
-            console.print(Rule(style="yellow"))
-            console.print(Text(f"{C.SYM_WARN} Phase {args.phase} interrupted", style="yellow"))
-        else:
-            print(C.warn(f"Phase {args.phase} interrupted"))
+        out.separator(tone=T.WARNING)
+        out.warn(f"Phase {args.phase} interrupted")
     else:
-        if HAVE_RICH:
-            from rich.rule import Rule
-            from rich.text import Text
-            console.print(Rule(style="red"))
-            console.print(Text(
-                f"{C.SYM_FAIL} Phase {args.phase} did not complete cleanly (exit code {returncode})",
-                style="red",
-            ))
-            if finish_warning:
-                console.print(Text(f"  reason: {finish_warning}", style="red"))
-            console.print(Text(f"  transcript: {transcript_path.relative_to(ROOT)}", style="dim"))
-            console.print(Text(
-                "  hint: the run is likely partial; rerun the phase or "
-                "switch to a different model/provider before retrying",
-                style="yellow",
-            ))
-        else:
-            print(C.fail(f"Phase {args.phase} did not complete cleanly (exit code {returncode})"))
-            if finish_warning:
-                print(C.fail(f"  reason: {finish_warning}"))
-            print(f"  finish reason: {last_finish_reason!r}  transcript: {transcript_path.relative_to(ROOT)}")
-            print(C.warn(
-                "  hint: the run is likely partial; rerun the phase or "
-                "switch to a different model/provider before retrying"
-            ))
+        out.separator(tone=T.ERROR)
+        out.error(
+            f"Phase {args.phase} did not complete cleanly (exit code {returncode})",
+            symbol=True,
+        )
+        if finish_warning:
+            out.error(f"  reason: {finish_warning}", strong=False)
+        out.detail(f"  transcript: {transcript_path.relative_to(ROOT)}")
+        out.warn(
+            "  hint: the run is likely partial; rerun the phase or "
+            "switch to a different model/provider before retrying"
+        )
 
     return returncode
