@@ -23,6 +23,10 @@ from codecome.transcript import Transcript
 from codecome.recording import EventRecorder
 
 
+class ResumeSessionNotReady(RuntimeError):
+    """Raised when an existing session is not ready for a resume prompt."""
+
+
 def _consume_events(
     base_url: str,
     session_id: str,
@@ -71,20 +75,31 @@ def _wait_for_resume_idle(
     workspace_dir: str | None,
     transcript: Transcript,
 ) -> None:
-    timeout_s = float(os.environ.get("CODECOME_RESUME_IDLE_TIMEOUT", "30"))
+    timeout_s = float(os.environ.get("CODECOME_RESUME_IDLE_TIMEOUT", "120"))
     poll_s = float(os.environ.get("CODECOME_RESUME_IDLE_POLL", "1"))
     deadline = time.monotonic() + max(timeout_s, 0.0)
 
     while True:
         status = get_session_status(base_url, session_id, auth_token, workspace_dir)
-        if status != "busy":
-            if status is not None:
-                _record_codecome_event(transcript, "codecome.resume.status", sessionID=session_id, status=status)
+        if status == "idle":
+            _record_codecome_event(transcript, "codecome.resume.status_ready", sessionID=session_id, status=status)
             return
 
-        _record_codecome_event(transcript, "codecome.resume.blocked_busy", sessionID=session_id, status=status)
+        event_type = "codecome.resume.blocked_busy" if status == "busy" else "codecome.resume.blocked_unknown"
+        _record_codecome_event(transcript, event_type, sessionID=session_id, status=status)
         if time.monotonic() >= deadline:
-            raise RuntimeError(f"session {session_id} is still busy; refusing to send resume prompt")
+            _record_codecome_event(
+                transcript,
+                "codecome.resume.timeout",
+                sessionID=session_id,
+                status=status,
+                timeoutSeconds=timeout_s,
+            )
+            detail = status if status is not None else "unknown"
+            raise ResumeSessionNotReady(
+                f"session {session_id} is not ready for resume after {timeout_s:g}s "
+                f"(last status: {detail}); refusing to send resume prompt"
+            )
         time.sleep(max(poll_s, 0.1))
 
 
@@ -197,6 +212,18 @@ def _run_single_attempt(
         run_result = run_result_box.get("result")
         if not isinstance(run_result, RunResult):
             raise RuntimeError("Event loop ended without a RunResult")
+    except ResumeSessionNotReady as exc:
+        _record_codecome_event(
+            transcript,
+            "codecome.attempt.incomplete",
+            errorType=type(exc).__name__,
+            message=str(exc),
+            existingSession=bool(existing_session_id),
+        )
+        return 2, existing_session_id or "", RunResult(
+            last_finish_reason="resume_not_ready",
+            last_session_id=existing_session_id,
+        ), transcript.path
     except Exception as exc:
         _record_codecome_event(
             transcript,
