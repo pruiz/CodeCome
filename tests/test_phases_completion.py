@@ -286,11 +286,11 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
         prompt = build_phase_resume_prompt(
             "2", None, "stop", 1,
             failure_details=[
-                "Missing: runs/phase-2-summary-*.md — run summary was not created or updated",
+                "Missing: runs/phase-2-summary*.md — run summary was not created or updated",
             ],
         )
         assert "Missing required artifacts:" in prompt
-        assert "runs/phase-2-summary-*.md" in prompt
+        assert "runs/phase-2-summary*.md" in prompt
         assert "Fix only these missing items." in prompt
 
     def test_resume_prompt_without_failure_details_uses_generic_wording(self):
@@ -408,3 +408,338 @@ class TestNoReintroductionOfHardcodedPaths:
             if '"/itemdb/notes"' in line or "'/itemdb/notes'" in line:
                 lines_with_itemdb.append(f"  line {i}: {line.strip()}")
         assert not lines_with_itemdb, "Found hardcoded /itemdb/notes paths:\n" + "\n".join(lines_with_itemdb)
+
+
+class TestPhase2GlobStringMatchesDiagnostic:
+    def test_phase2_failure_detail_uses_unhyphenated_glob(self, tmp_path):
+        """The phase-2 diagnostic must match the actual glob (no mandatory hyphen)."""
+        import phases.completion as completion_mod
+
+        orig_root = completion_mod.ROOT
+        orig_findings_root = completion_mod.FINDINGS_ROOT
+        completion_mod.ROOT = tmp_path
+        completion_mod.FINDINGS_ROOT = tmp_path / "itemdb" / "findings"
+        (tmp_path / "runs").mkdir(parents=True, exist_ok=True)
+
+        try:
+            ok, failures = completion_mod.check_phase_graceful_completion(
+                "2", None, time.time()
+            )
+            assert ok is False
+            assert "runs/phase-2-summary*.md" in " ".join(failures), (
+                f"Expected unhyphenated glob in failure detail, got {failures!r}"
+            )
+            assert "runs/phase-2-summary-*.md" not in " ".join(failures), (
+                f"Diagnostic must not use a mandatory hyphen, got {failures!r}"
+            )
+        finally:
+            completion_mod.ROOT = orig_root
+            completion_mod.FINDINGS_ROOT = orig_findings_root
+
+
+class TestResumePromptOpenerDistinguishesReasons:
+    def test_infrastructure_error_opener(self):
+        from phases.completion import build_phase_resume_prompt
+
+        prompt = build_phase_resume_prompt("2", None, "infrastructure_error", 0)
+        assert "infrastructure error" in prompt
+        assert "completed" not in prompt.split("\n")[0].lower() or (
+            "infrastructure" in prompt.split("\n")[0].lower()
+        )
+
+    def test_mid_turn_opener(self):
+        from phases.completion import build_phase_resume_prompt
+
+        prompt = build_phase_resume_prompt("2", None, "tool_use", 1)
+        assert "cut off mid-turn" in prompt
+        assert "'tool_use'" in prompt
+
+    def test_failure_opener(self):
+        from phases.completion import build_phase_resume_prompt
+
+        prompt = build_phase_resume_prompt("2", None, "error", 1)
+        assert "failure finish reason" in prompt
+        assert "'error'" in prompt
+
+    def test_terminal_ok_but_missing_opener(self):
+        from phases.completion import build_phase_resume_prompt
+
+        prompt = build_phase_resume_prompt("2", None, "stop", 2)
+        assert "terminal finish reason 'stop'" in prompt
+        assert "did not find the required durable artifacts" in prompt
+
+    def test_graceful_forgiveness_opener(self):
+        from phases.completion import build_phase_resume_prompt
+
+        prompt = build_phase_resume_prompt("2", None, "graceful_forgiveness", 1)
+        assert "treated as incomplete by CodeCome" in prompt
+        assert "some expected artifacts" in prompt
+
+
+class TestSubphaseGatesRequireRunSummary:
+    def _patch_workspace(self, tmp_path, completion_mod):
+        orig_root = completion_mod.ROOT
+        orig_notes_root = completion_mod.NOTES_ROOT
+        orig_findings_root = completion_mod.FINDINGS_ROOT
+        orig_evidence_root = completion_mod.EVIDENCE_ROOT
+        orig_reports_root = completion_mod.REPORTS_ROOT
+        orig_sandbox_plan = completion_mod.SANDBOX_PLAN_PATH
+
+        completion_mod.ROOT = tmp_path
+        completion_mod.NOTES_ROOT = tmp_path / "itemdb" / "notes"
+        completion_mod.FINDINGS_ROOT = tmp_path / "itemdb" / "findings"
+        completion_mod.EVIDENCE_ROOT = tmp_path / "itemdb" / "evidence"
+        completion_mod.REPORTS_ROOT = tmp_path / "itemdb" / "reports"
+        completion_mod.SANDBOX_PLAN_PATH = completion_mod.NOTES_ROOT / "sandbox-plan.md"
+
+        return (
+            orig_root, orig_notes_root, orig_findings_root,
+            orig_evidence_root, orig_reports_root, orig_sandbox_plan,
+        )
+
+    def _restore(self, completion_mod, originals):
+        (
+            completion_mod.ROOT, completion_mod.NOTES_ROOT, completion_mod.FINDINGS_ROOT,
+            completion_mod.EVIDENCE_ROOT, completion_mod.REPORTS_ROOT,
+            completion_mod.SANDBOX_PLAN_PATH,
+        ) = originals
+
+    def test_phase1a_requires_run_summary(self, tmp_path):
+        """Phase 1a should report missing summary when only notes were freshened."""
+        import os
+        import phases.completion as completion_mod
+
+        notes = tmp_path / "itemdb" / "notes"
+        notes.mkdir(parents=True)
+        run_start = time.time() - 60
+        for name in ("target-profile.md", "build-model.md", "codeql-plan.yml"):
+            (notes / name).write_text("", encoding="utf-8")
+            os.utime(notes / name, (run_start + 60, run_start + 60))
+
+        originals = self._patch_workspace(tmp_path, completion_mod)
+        try:
+            ok, failures = completion_mod.check_phase_graceful_completion(
+                "1a", None, run_start
+            )
+            assert ok is False
+            assert any("runs/phase-1a-summary*.md" in f for f in failures), (
+                f"Expected phase-1a summary failure, got {failures!r}"
+            )
+        finally:
+            self._restore(completion_mod, originals)
+
+    def test_phase1b_requires_run_summary(self, tmp_path):
+        """Phase 1b should report missing summary when only notes were freshened."""
+        import os
+        import phases.completion as completion_mod
+
+        notes = tmp_path / "itemdb" / "notes"
+        notes.mkdir(parents=True)
+        run_start = time.time() - 60
+        for name in (
+            "attack-surface.md", "execution-model.md", "trust-boundaries.md",
+            "data-flow.md", "threat-model.md", "validation-model.md",
+            "interesting-files.md", "file-risk-index.yml", "security-assumptions.md",
+        ):
+            (notes / name).write_text("", encoding="utf-8")
+            os.utime(notes / name, (run_start + 60, run_start + 60))
+
+        originals = self._patch_workspace(tmp_path, completion_mod)
+        try:
+            ok, failures = completion_mod.check_phase_graceful_completion(
+                "1b", None, run_start
+            )
+            assert ok is False
+            assert any("runs/phase-1b-summary*.md" in f for f in failures), (
+                f"Expected phase-1b summary failure, got {failures!r}"
+            )
+        finally:
+            self._restore(completion_mod, originals)
+
+    def test_phase1c_requires_run_summary(self, tmp_path):
+        """Phase 1c should report missing summary when only sandbox artifacts were freshened."""
+        import os
+        import phases.completion as completion_mod
+
+        notes = tmp_path / "itemdb" / "notes"
+        notes.mkdir(parents=True)
+        sandbox = tmp_path / "sandbox"
+        sandbox.mkdir(parents=True)
+        run_start = time.time() - 60
+        (notes / "sandbox-plan.md").write_text("", encoding="utf-8")
+        os.utime(notes / "sandbox-plan.md", (run_start + 60, run_start + 60))
+
+        originals = self._patch_workspace(tmp_path, completion_mod)
+        try:
+            ok, failures = completion_mod.check_phase_graceful_completion(
+                "1c", None, run_start
+            )
+            assert ok is False
+            assert any("runs/phase-1c-summary*.md" in f for f in failures), (
+                f"Expected phase-1c summary failure, got {failures!r}"
+            )
+        finally:
+            self._restore(completion_mod, originals)
+
+    def test_phase1a_passes_with_fresh_notes_and_summary(self, tmp_path):
+        """Phase 1a should pass when both 1a notes and a fresh summary are present."""
+        import os
+        import phases.completion as completion_mod
+
+        notes = tmp_path / "itemdb" / "notes"
+        notes.mkdir(parents=True)
+        runs = tmp_path / "runs"
+        runs.mkdir(parents=True)
+        run_start = time.time() - 60
+        for name in ("target-profile.md", "build-model.md", "codeql-plan.yml"):
+            (notes / name).write_text("", encoding="utf-8")
+            os.utime(notes / name, (run_start + 60, run_start + 60))
+        summary = runs / "phase-1a-summary.md"
+        summary.write_text("", encoding="utf-8")
+        os.utime(summary, (run_start + 60, run_start + 60))
+
+        originals = self._patch_workspace(tmp_path, completion_mod)
+        try:
+            ok, failures = completion_mod.check_phase_graceful_completion(
+                "1a", None, run_start
+            )
+            assert ok is True, f"Expected ok, got failures={failures!r}"
+        finally:
+            self._restore(completion_mod, originals)
+
+
+class TestPhase45And6GatesRequireRunSummary:
+    def _patch_workspace(self, tmp_path, completion_mod):
+        orig_root = completion_mod.ROOT
+        orig_notes_root = completion_mod.NOTES_ROOT
+        orig_findings_root = completion_mod.FINDINGS_ROOT
+        orig_evidence_root = completion_mod.EVIDENCE_ROOT
+        orig_reports_root = completion_mod.REPORTS_ROOT
+        orig_sandbox_plan = completion_mod.SANDBOX_PLAN_PATH
+
+        completion_mod.ROOT = tmp_path
+        completion_mod.NOTES_ROOT = tmp_path / "itemdb" / "notes"
+        completion_mod.FINDINGS_ROOT = tmp_path / "itemdb" / "findings"
+        completion_mod.EVIDENCE_ROOT = tmp_path / "itemdb" / "evidence"
+        completion_mod.REPORTS_ROOT = tmp_path / "itemdb" / "reports"
+        completion_mod.SANDBOX_PLAN_PATH = completion_mod.NOTES_ROOT / "sandbox-plan.md"
+
+        return (
+            orig_root, orig_notes_root, orig_findings_root,
+            orig_evidence_root, orig_reports_root, orig_sandbox_plan,
+        )
+
+    def _restore(self, completion_mod, originals):
+        (
+            completion_mod.ROOT, completion_mod.NOTES_ROOT, completion_mod.FINDINGS_ROOT,
+            completion_mod.EVIDENCE_ROOT, completion_mod.REPORTS_ROOT,
+            completion_mod.SANDBOX_PLAN_PATH,
+        ) = originals
+
+    def test_phase4_requires_run_summary(self, tmp_path):
+        """Phase 4 should report missing summary when no summary is written."""
+        import os
+        import phases.completion as completion_mod
+
+        evidence_dir = tmp_path / "itemdb" / "evidence" / "CC-0001"
+        evidence_dir.mkdir(parents=True)
+        (evidence_dir / "README.md").write_text("x", encoding="utf-8")
+        run_start = time.time() - 60
+        os.utime(evidence_dir / "README.md", (run_start + 60, run_start + 60))
+
+        originals = self._patch_workspace(tmp_path, completion_mod)
+        try:
+            ok, failures = completion_mod.check_phase_graceful_completion(
+                "4", "CC-0001", run_start
+            )
+            assert ok is False
+            assert any(
+                "runs/phase-4-CC-0001-summary*.md" in f for f in failures
+            ), f"Expected phase-4 summary failure, got {failures!r}"
+        finally:
+            self._restore(completion_mod, originals)
+
+    def test_phase5_requires_run_summary(self, tmp_path):
+        """Phase 5 should report missing summary when no summary is written."""
+        import os
+        import phases.completion as completion_mod
+
+        exploits_dir = tmp_path / "itemdb" / "evidence" / "CC-0001" / "exploits"
+        exploits_dir.mkdir(parents=True)
+        (exploits_dir / "README.md").write_text("x", encoding="utf-8")
+        run_start = time.time() - 60
+        os.utime(exploits_dir / "README.md", (run_start + 60, run_start + 60))
+
+        originals = self._patch_workspace(tmp_path, completion_mod)
+        try:
+            ok, failures = completion_mod.check_phase_graceful_completion(
+                "5", "CC-0001", run_start
+            )
+            assert ok is False
+            assert any(
+                "runs/phase-5-CC-0001-summary*.md" in f for f in failures
+            ), f"Expected phase-5 summary failure, got {failures!r}"
+        finally:
+            self._restore(completion_mod, originals)
+
+    def test_phase6_requires_run_summary(self, tmp_path):
+        """Phase 6 should report missing summary when only a report was written."""
+        import os
+        import phases.completion as completion_mod
+
+        reports_dir = tmp_path / "itemdb" / "reports"
+        reports_dir.mkdir(parents=True)
+        (reports_dir / "report.md").write_text("x", encoding="utf-8")
+        run_start = time.time() - 60
+        os.utime(reports_dir / "report.md", (run_start + 60, run_start + 60))
+
+        originals = self._patch_workspace(tmp_path, completion_mod)
+        try:
+            ok, failures = completion_mod.check_phase_graceful_completion(
+                "6", None, run_start
+            )
+            assert ok is False
+            assert any("runs/phase-6-summary*.md" in f for f in failures), (
+                f"Expected phase-6 summary failure, got {failures!r}"
+            )
+        finally:
+            self._restore(completion_mod, originals)
+
+    def test_phase6_passes_with_report_and_summary(self, tmp_path):
+        """Phase 6 should pass when both a fresh report and a fresh summary are present."""
+        import os
+        import phases.completion as completion_mod
+
+        reports_dir = tmp_path / "itemdb" / "reports"
+        reports_dir.mkdir(parents=True)
+        runs_dir = tmp_path / "runs"
+        runs_dir.mkdir(parents=True)
+        run_start = time.time() - 60
+        (reports_dir / "report.md").write_text("x", encoding="utf-8")
+        os.utime(reports_dir / "report.md", (run_start + 60, run_start + 60))
+        summary = runs_dir / "phase-6-summary.md"
+        summary.write_text("", encoding="utf-8")
+        os.utime(summary, (run_start + 60, run_start + 60))
+
+        originals = self._patch_workspace(tmp_path, completion_mod)
+        try:
+            ok, failures = completion_mod.check_phase_graceful_completion(
+                "6", None, run_start
+            )
+            assert ok is True, f"Expected ok, got failures={failures!r}"
+        finally:
+            self._restore(completion_mod, originals)
+
+
+class TestPhase3ChecklistMentionsRunSummary:
+    def test_phase3_checklist_mentions_summary(self):
+        from phases.completion import phase_checklist_lines
+
+        lines = phase_checklist_lines("3", None)
+        joined = "\n".join(lines)
+        assert "phase-3-summary-YYYY-MM-DD-HHMMSS" in joined, (
+            f"Expected phase-3 checklist to mention timestamped summary path, got: {lines!r}"
+        )
+        assert "Do not stop until the run summary" in joined, (
+            f"Expected phase-3 checklist to require durable summary, got: {lines!r}"
+        )

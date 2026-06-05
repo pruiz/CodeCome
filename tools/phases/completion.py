@@ -70,6 +70,30 @@ def _path_is_fresh(path: Path, run_start_time: float) -> bool:
     return path.exists() and path.stat().st_mtime >= run_start_time
 
 
+def _run_summary_is_fresh(phase_id: str, run_start_time: float) -> bool:
+    """Return whether any fresh run-summary file exists for *phase_id*.
+
+    The glob is intentionally unhyphenated after ``summary`` to match the
+    timestamped path convention ``runs/phase-<phase>-summary-YYYY-MM-DD-HHMMSS.md``
+    and to accept older ad-hoc filenames.
+    """
+    import glob as _glob
+    matches = _glob.glob(str(ROOT / "runs" / f"phase-{phase_id}-summary*.md"))
+    return any(Path(p).stat().st_mtime >= run_start_time for p in matches)
+
+
+def _append_run_summary_check(
+    failures: list[str], phase_id: str, run_start_time: float
+) -> None:
+    """Append a missing-summary failure detail if no fresh summary exists."""
+    if _run_summary_is_fresh(phase_id, run_start_time):
+        return
+    failures.append(
+        f"Missing: runs/phase-{phase_id}-summary*.md — run summary "
+        "was not created or updated during this run"
+    )
+
+
 def _iter_files(root: Path) -> Iterator[Path]:
     if not root.exists():
         return
@@ -151,6 +175,7 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                         f"({', '.join(_PHASE_1A_ARTIFACT_NAMES)}) "
                         "created or updated during this run"
                     )
+                _append_run_summary_check(failures, original_phase, run_start_time)
                 return (len(failures) == 0, failures)
 
             if original_phase == "1b":
@@ -163,6 +188,7 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                         f"({', '.join(PHASE_1B_REQUIRED_NOTES)}) "
                         "created or updated during this run"
                     )
+                _append_run_summary_check(failures, original_phase, run_start_time)
                 return (len(failures) == 0, failures)
 
             if original_phase == "1c":
@@ -177,6 +203,7 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                         "Missing: itemdb/notes/sandbox-plan.md or sandbox/CODECOME-GENERATED.md "
                         "— neither sandbox state artifact was created or updated during this run"
                     )
+                _append_run_summary_check(failures, original_phase, run_start_time)
                 return (len(failures) == 0, failures)
 
             # Phase 1c and bare "1": require the full monolith set.
@@ -230,7 +257,7 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
             summary_fresh = any(Path(p).stat().st_mtime >= run_start_time for p in run_summaries)
             if not summary_fresh:
                 failures.append(
-                    "Missing: runs/phase-2-summary-*.md — run summary was not "
+                    "Missing: runs/phase-2-summary*.md — run summary was not "
                     "created or updated"
                 )
             return (len(failures) == 0, failures)
@@ -262,11 +289,13 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                     f"Missing: {FINDINGS_ROOT.relative_to(ROOT)}/*/{finding}*.md — finding file "
                     "not created or updated during this run"
                 )
+            _append_run_summary_check(failures, f"4-{finding}", run_start_time)
             return (len(failures) == 0, failures)
         elif phase_key == "5" and finding:
             exploits_dir = exploits_dir_for(finding)
             exploits_fresh = any(path.stat().st_mtime >= run_start_time for path in _iter_files(exploits_dir))
 
+            _append_run_summary_check(failures, f"5-{finding}", run_start_time)
             finding_is_fresh = False
             status_found = None
             for status in ("PENDING", "CONFIRMED", "REJECTED", "DUPLICATE", "EXPLOITED"):
@@ -322,18 +351,19 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
             return (len(failures) == 0, failures)
         elif phase_key == "6":
             reports_dir = REPORTS_ROOT
+            fresh_report = False
             if reports_dir.exists():
                 fresh_report = any(
                     f.name.endswith(".md") and f.name != ".gitkeep"
                     and f.stat().st_mtime >= run_start_time
                     for f in reports_dir.iterdir()
                 )
-                if fresh_report:
-                    return (True, [])
-            failures.append(
-                f"Missing: {REPORTS_ROOT.relative_to(ROOT)}/ — no report files created "
-                "or updated during this run"
-            )
+            if not fresh_report:
+                failures.append(
+                    f"Missing: {REPORTS_ROOT.relative_to(ROOT)}/ — no report files created "
+                    "or updated during this run"
+                )
+            _append_run_summary_check(failures, "6", run_start_time)
             return (len(failures) == 0, failures)
     except Exception:
         return (False, [f"Internal error during artifact check for phase '{original_phase}'"])
@@ -366,6 +396,8 @@ def phase_checklist_lines(phase: str, finding: str | None) -> list[str]:
             f"Review all candidate findings under {FINDINGS_ROOT.relative_to(ROOT)}/PENDING/.",
             "Move clearly invalid findings to REJECTED and duplicates to DUPLICATE.",
             "Leave surviving findings reviewable, deduplicated, and updated with counter-analysis.",
+            f"Write a run summary to runs/phase-3-summary-YYYY-MM-DD-HHMMSS.md using templates/run-summary.md.",
+            "Do not stop until the run summary is durable on disk.",
         ]
     if str(phase) == "4":
         finding_ref = finding or "<finding-id>"
@@ -390,6 +422,54 @@ def phase_checklist_lines(phase: str, finding: str | None) -> list[str]:
     return ["Finish the remaining required work for the current phase before ending."]
 
 
+def _resume_opener_for_reason(reason: str) -> str:
+    """Return a context-specific opener for the resume prompt.
+
+    The ``reason`` is whatever the harness recorded for why the run was
+    treated as incomplete:
+
+    - ``"infrastructure_error"`` — harness fatal-retry path.
+    - A finish reason from ``rendering.events._FINISH_MID_TURN`` (e.g.
+      ``"length"``, ``"tool_use"``) — the model/provider cut off mid-turn.
+    - A finish reason from ``rendering.events._FINISH_FAILURE`` — the
+      model/provider reported a failure finish reason.
+    - ``"graceful_forgiveness"`` — synthesized by the harness when the
+      mid-turn cutoff happened but partial artifacts were written.
+    - A finish reason from ``rendering.events._FINISH_TERMINAL_OK`` (e.g.
+      ``"stop"``) or any other value — the model reported completion but
+      the gate still failed, so required artifacts are missing.
+    """
+    from rendering.events import (
+        _FINISH_FAILURE,
+        _FINISH_MID_TURN,
+        _FINISH_TERMINAL_OK,
+    )
+
+    if reason == "infrastructure_error":
+        return "Your previous attempt failed with an infrastructure error and was retried."
+    if reason in _FINISH_MID_TURN:
+        return (
+            f"Your previous run was cut off mid-turn (finish reason '{reason}') "
+            "before completing all required artifacts."
+        )
+    if reason in _FINISH_FAILURE:
+        return (
+            f"Your previous run stopped with a failure finish reason '{reason}' "
+            "before completing all required artifacts."
+        )
+    if reason == "graceful_forgiveness":
+        return (
+            "Your previous run was treated as incomplete by CodeCome even though "
+            "some expected artifacts were written."
+        )
+    if reason in _FINISH_TERMINAL_OK:
+        return (
+            f"Your previous run reported a terminal finish reason '{reason}', but "
+            "CodeCome's completion gate did not find the required durable artifacts."
+        )
+    return "Your previous run was treated as incomplete by CodeCome."
+
+
 def build_phase_resume_prompt(
     phase: str,
     finding: str | None,
@@ -400,7 +480,7 @@ def build_phase_resume_prompt(
     checklist = "\n".join(f"- {line}" for line in phase_checklist_lines(phase, finding))
 
     lines = [
-        "Your previous run completed but did not produce all required artifacts.",
+        _resume_opener_for_reason(reason),
         "",
         f"Observed finish reason: {reason}.",
         f"Completed loops before cutoff: {step_finish_count}.",
