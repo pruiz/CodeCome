@@ -225,13 +225,10 @@ def check_phase_1a(console=None, findings_snapshot: dict[str, int] | None = None
         out.warn("Cannot validate codeql-plan.yml: PyYAML not available")
     else:
         try:
-            plan = yaml.safe_load(plan_path.read_text(encoding="utf-8"))
-        except (yaml.YAMLError, OSError, UnicodeDecodeError) as exc:
-            out.error(f"codeql-plan.yml is not valid YAML: {exc}")
-            return 1
-
-        if not isinstance(plan, dict):
-            out.error("codeql-plan.yml is not a mapping")
+            from codeql.packs import load_codeql_plan
+            plan = load_codeql_plan(plan_path)
+        except Exception as exc:
+            out.error(f"codeql-plan.yml: {exc}")
             return 1
 
         if plan.get("recommended") is True:

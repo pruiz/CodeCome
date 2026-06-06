@@ -43,7 +43,7 @@ def _write_catalog(path: Path) -> None:
 def _write_plan(path: Path) -> None:
     path.write_text(
         (
-            "schema_version: 1\n"
+            "schema_version: 2\n"
             "analysis_units:\n"
             "  - id: root\n"
             "    path: ./src\n"
@@ -179,7 +179,12 @@ def test_resolve_plan_packs_candidate_policy(tmp_path: Path) -> None:
 
 def test_load_codeql_plan_rejects_invalid_language_entry(tmp_path: Path) -> None:
     plan_path = tmp_path / "bad-plan.yml"
-    plan_path.write_text("analysis_units:\n  - nope\n", encoding="utf-8")
+    plan_path.write_text(
+        "schema_version: 2\n"
+        "analysis_units:\n"
+        "  - nope\n",
+        encoding="utf-8",
+    )
 
     try:
         load_codeql_plan(plan_path)
@@ -193,7 +198,7 @@ def test_load_codeql_plan_allows_non_recommended_unit_without_languages(tmp_path
     plan_path = tmp_path / "plan.yml"
     plan_path.write_text(
         (
-            "schema_version: 1\n"
+            "schema_version: 2\n"
             "analysis_units:\n"
             "  - id: api\n"
             "    path: ./src/api\n"
