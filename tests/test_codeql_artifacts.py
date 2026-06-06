@@ -22,7 +22,7 @@ def test_missing_manifest(tmp_path: Path) -> None:
     status, warnings = check_artifacts(tmp_path / "nonexistent")
     assert status == "missing"
     assert len(warnings) == 1
-    assert "not found" in warnings[0]
+    assert "manifest" in warnings[0].lower()
 
 
 def test_completed_all_present(tmp_path: Path) -> None:

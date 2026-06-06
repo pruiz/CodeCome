@@ -266,3 +266,4 @@ itemdb/findings/DUPLICATE/*
 
 runs/*
 !runs/.gitkeep
+token-usage-output.txt

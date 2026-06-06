@@ -18,12 +18,20 @@ from codeql.config import ROOT, CodeQLConfig
 from codeql.packs import PackResolverError, dump_yaml, load_codeql_plan, load_pack_catalog, resolve_plan_packs
 
 
-def run_codeql(config: CodeQLConfig, progress: Callable[[str], None] | None = None) -> dict[str, Any]:
+def run_codeql(config: CodeQLConfig, *, run_dir: Path | None = None, progress: Callable[[str], None] | None = None) -> dict[str, Any]:
     """Run CodeQL analysis for every language in the plan.
+
+    If *run_dir* is given, all per-run artifacts (SARIF, databases, logs,
+    normalized, manifests) are written under that directory.  If omitted,
+    paths from *config* are used directly (legacy mode).
 
     Returns the run manifest as a dict.
     """
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    output_dir = run_dir if run_dir is not None else config.abs_output_dir
+    database_dir = output_dir / "databases" if run_dir is not None else config.abs_database_dir
+    sarif_dir = output_dir / "sarif"
 
     binary_path = config.abs_install_path
     if not binary_path.is_file():
@@ -52,7 +60,7 @@ def run_codeql(config: CodeQLConfig, progress: Callable[[str], None] | None = No
     except PackResolverError as exc:
         return _manifest(_tool_failure_status(config), now_utc, config, [version], [], failures=[str(exc)])
 
-    resolved_path = config.abs_output_dir / "selected-query-packs.yml"
+    resolved_path = output_dir / "selected-query-packs.yml"
     resolved_path.parent.mkdir(parents=True, exist_ok=True)
     resolved_path.write_text(dump_yaml(resolved), encoding="utf-8")
     _progress(progress, f"CodeQL: resolved packs for {len(resolved['analysis_units'])} analysis unit(s)")
@@ -90,8 +98,7 @@ def run_codeql(config: CodeQLConfig, progress: Callable[[str], None] | None = No
                 )
                 return _manifest(_tool_failure_status(config), now_utc, config, [version], warnings, failures, language_ids, analysis_units)
 
-            db_dir = config.abs_database_dir / unit_id / language_id
-            sarif_dir = config.abs_output_dir / "sarif"
+            db_dir = database_dir / unit_id / language_id
             sarif_dir.mkdir(parents=True, exist_ok=True)
 
             _progress(progress, f"CodeQL: creating database {unit_id}:{language_id} ({build_mode})")
