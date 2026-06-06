@@ -14,7 +14,6 @@ BUILD_MODES_BY_LANGUAGE: dict[str, set[str]] = {
     "go": {"manual", "autobuild"},
     "csharp": {"none", "manual", "autobuild"},
     "java-kotlin": {"none", "manual", "autobuild"},
-    "swift": {"manual", "autobuild"},
 }
 
 
