@@ -85,7 +85,7 @@ def run_codeql(config: CodeQLConfig, *, run_dir: Path | None = None, progress: C
             profile_packs = lang_entry.get("profile_packs", {})
             language_ids.append(f"{unit_id}:{language_id}")
 
-            build_mode, build_command = _lookup_build(language_id, plan_unit.get("languages", []))
+            build_mode, build_command = _lookup_build(language_id, plan_unit)
             plan_languages = plan_unit.get("languages", [])
             db_timeout = _lookup_timeout("db_create_timeout", language_id, plan_languages, config.db_create_timeout)
             analyze_timeout = _lookup_timeout("analyze_timeout", language_id, plan_languages, config.analyze_timeout)
@@ -194,14 +194,47 @@ def _lookup_unit(unit_id: str, plan_units: list[dict]) -> dict:
     return {}
 
 
-def _lookup_build(language_id: str, plan_languages: list[dict]) -> tuple[str, str | None]:
+def _lookup_build(language_id: str, plan_unit: dict[str, Any]) -> tuple[str, str | None]:
     """Return (build_mode, build_command) for a language entry."""
+    plan_languages = plan_unit.get("languages", [])
+    if not isinstance(plan_languages, list):
+        return "none", None
     for pl in plan_languages:
         if pl.get("id") == language_id:
             mode = pl.get("build_mode", "none")
             cmd = pl.get("build_command")
+            if not (isinstance(cmd, str) and cmd.strip()) and pl.get("build_provider") == "sandbox-recipe":
+                cmd = _lookup_recipe_build_command(plan_unit)
             return mode if isinstance(mode, str) and mode else "none", cmd if isinstance(cmd, str) and cmd else None
     return "none", None
+
+
+def _lookup_recipe_build_command(plan_unit: dict[str, Any]) -> str | None:
+    """Resolve a build command from itemdb/notes/sandbox-recipe.yml."""
+    target_id = plan_unit.get("sandbox_build_target") or plan_unit.get("id")
+    if not isinstance(target_id, str) or not target_id:
+        return None
+
+    recipe_path = ROOT / "itemdb" / "notes" / "sandbox-recipe.yml"
+    if not recipe_path.exists():
+        return None
+
+    try:
+        from sandbox.recipe import load_recipe
+
+        recipe = load_recipe(recipe_path)
+    except Exception:
+        return None
+
+    build_targets = recipe.get("build_targets")
+    if not isinstance(build_targets, list):
+        return None
+    for target in build_targets:
+        if not isinstance(target, dict) or target.get("id") != target_id:
+            continue
+        command = target.get("build_command")
+        return command if isinstance(command, str) and command.strip() else None
+    return None
 
 
 def _lookup_timeout(field: str, language_id: str, plan_languages: list[dict], default: int) -> int:

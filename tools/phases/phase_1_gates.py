@@ -101,7 +101,9 @@ def _validate_codeql_language_entry(
         out.error(f"codeql-plan.yml: language '{language_id}' in analysis unit '{unit_id}' has unsupported build_mode '{build_mode}' (allowed: {allowed})")
         return 1
     build_command = lang.get("build_command")
-    if build_mode == "manual" and not (isinstance(build_command, str) and build_command.strip()):
+    build_provider = lang.get("build_provider")
+    recipe_backed = build_provider == "sandbox-recipe"
+    if build_mode == "manual" and not recipe_backed and not (isinstance(build_command, str) and build_command.strip()):
         out.error(f"codeql-plan.yml: language '{language_id}' in analysis unit '{unit_id}' uses manual build without build_command")
         return 1
     if "packs" not in lang:

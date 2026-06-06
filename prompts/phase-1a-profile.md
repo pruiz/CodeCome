@@ -65,7 +65,7 @@ Rules:
 - Set `analysis_units[].path` to the real source path under `./src` for that unit. Do not use CodeQL-generated helper paths such as `_codeql_detected_source_root`.
 - Use one `analysis_units` entry for a single-project repository and multiple entries for monorepos or mixed stacks.
 - Only include languages you have detected with **HIGH** or **MEDIUM** confidence.
-- For compiled languages (c-cpp, go, csharp, java-kotlin, swift) set `analysis_units[].sandbox_build_target` to the `build_targets[].id` from `sandbox-recipe.yml` that provides the build command for this unit. If the recipe has not been generated yet (this is Phase 1a), pick a sensible id such as `root` — Phase 1b will flesh out the recipe and the id can be updated if needed.
+- For compiled languages (c-cpp, go, csharp, java-kotlin) set `analysis_units[].sandbox_build_target` to the `build_targets[].id` from `sandbox-recipe.yml` that provides the build command for this unit. If the recipe has not been generated yet (this is Phase 1a), pick a sensible id such as `root` — Phase 1b will flesh out the recipe and the id can be updated if needed.
 - For each language, set `build_provider`:
   - `"sandbox-recipe"` — for compiled languages whose build command should be resolved from `sandbox-recipe.yml` after Phase 1b. Leave `build_command` empty (the runner resolves it from the recipe).
   - `"none"` — for no-build languages (python, javascript-typescript, ruby).
@@ -78,8 +78,9 @@ Rules:
   - `local` — include if custom queries exist under `queries/codeql/<language>/`.
 - Set `build_mode` according to CodeQL language support:
   - `none`: python, javascript-typescript, ruby, csharp, java-kotlin.
-  - `manual` or `autobuild`: c-cpp, go, csharp, java-kotlin, swift.
-- Do not set `build_mode: none` for C/C++, Go, or Swift.
+  - `manual` or `autobuild`: c-cpp, go, csharp, java-kotlin.
+- Do not set `build_mode: none` for C/C++ or Go.
+- Do not include Swift or Rust as CodeQL languages for now. If detected, mention them in `notes` as manually reviewed or future-tooling candidates instead of adding them to `analysis_units[].languages`.
 - Use `manual` only when you identified a concrete build command for that analysis unit.
 - Use `autobuild` only as an explicit choice when build files exist but the exact command is uncertain.
 - Fill in `build_command` when `build_mode` is `manual`.

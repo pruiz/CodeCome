@@ -55,11 +55,11 @@ analysis_units: []
 #     (the runner resolves it from the recipe).  Only provide build_command directly
 #     when the build cannot be expressed through the recipe.
 #
-# Allowed language IDs: python, javascript-typescript, ruby, c-cpp, go, csharp, java-kotlin, swift
+# Allowed language IDs: python, javascript-typescript, ruby, c-cpp, go, csharp, java-kotlin
 # Allowed confidence values: HIGH, MEDIUM, LOW
 # Allowed build_mode values by language:
 #   none: python, javascript-typescript, ruby, csharp, java-kotlin
-#   manual/autobuild: c-cpp, go, csharp, java-kotlin, swift
+#   manual/autobuild: c-cpp, go, csharp, java-kotlin
 # Allowed pack profile names: official, github-security-lab, trailofbits, coding-standards, local
 #
 # Optional per-language timeout overrides (seconds):

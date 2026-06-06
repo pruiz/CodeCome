@@ -108,27 +108,59 @@ def test_write_manifest(tmp_path: Path) -> None:
 
 
 def test_lookup_build_match() -> None:
-    languages = [
-        {"id": "python", "build_mode": "none", "build_command": None},
-        {"id": "c-cpp", "build_mode": "manual", "build_command": "make -C src"},
-    ]
-    mode, cmd = _lookup_build("c-cpp", languages)
+    plan_unit = {
+        "languages": [
+            {"id": "python", "build_mode": "none", "build_command": None},
+            {"id": "c-cpp", "build_mode": "manual", "build_command": "make -C src"},
+        ]
+    }
+    mode, cmd = _lookup_build("c-cpp", plan_unit)
     assert mode == "manual"
     assert cmd == "make -C src"
 
 
 def test_lookup_build_fallback() -> None:
-    languages: list = []
-    mode, cmd = _lookup_build("python", languages)
+    plan_unit = {"languages": []}
+    mode, cmd = _lookup_build("python", plan_unit)
     assert mode == "none"
     assert cmd is None
 
 
 def test_lookup_build_no_match_within_plan() -> None:
-    languages = [{"id": "go", "build_mode": "autobuild"}]
-    mode, cmd = _lookup_build("python", languages)
+    plan_unit = {"languages": [{"id": "go", "build_mode": "autobuild"}]}
+    mode, cmd = _lookup_build("python", plan_unit)
     assert mode == "none"
     assert cmd is None
+
+
+def test_lookup_build_resolves_sandbox_recipe_command(tmp_path: Path) -> None:
+    notes = tmp_path / "itemdb" / "notes"
+    notes.mkdir(parents=True)
+    (notes / "sandbox-recipe.yml").write_text(
+        "schema_version: 1\n"
+        "validation_model: docker\n"
+        "sandbox:\n"
+        "  path: ./sandbox\n"
+        "build_targets:\n"
+        "  - id: native\n"
+        "    source_path: ./src\n"
+        "    workdir: /workspace/src\n"
+        "    build_command: ./sandbox/scripts/build.sh\n",
+        encoding="utf-8",
+    )
+    plan_unit = {
+        "id": "root",
+        "sandbox_build_target": "native",
+        "languages": [
+            {"id": "c-cpp", "build_mode": "manual", "build_provider": "sandbox-recipe"},
+        ],
+    }
+
+    with patch("codeql.runner.ROOT", tmp_path):
+        mode, cmd = _lookup_build("c-cpp", plan_unit)
+
+    assert mode == "manual"
+    assert cmd == "./sandbox/scripts/build.sh"
 
 
 def test_create_database_creates_parent_dir(tmp_path: Path) -> None:
