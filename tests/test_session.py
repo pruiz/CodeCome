@@ -233,15 +233,48 @@ class TestSendPromptToSession:
         assert mock_sleep.call_count == 0
 
     @patch("urllib.request.urlopen")
-    def test_get_session_status_busy(self, mock_urlopen):
+    def test_get_session_status_busy_from_status_map(self, mock_urlopen):
         module = _load_session_module()
         mock_resp = MagicMock()
         mock_resp.__enter__.return_value = mock_resp
-        mock_resp.read.return_value = json.dumps({"status": {"type": "busy"}}).encode("utf-8")
+        mock_resp.read.return_value = json.dumps({"sess-1": {"type": "busy"}}).encode("utf-8")
         mock_urlopen.return_value = mock_resp
 
         status = module.get_session_status("http://localhost:8080", "sess-1", None, None)
 
         assert status == "busy"
         req = mock_urlopen.call_args[0][0]
-        assert req.full_url == "http://localhost:8080/session/sess-1"
+        assert req.full_url == "http://localhost:8080/session/status"
+
+    @patch("urllib.request.urlopen")
+    def test_get_session_status_retry_from_status_map(self, mock_urlopen):
+        module = _load_session_module()
+        mock_resp = MagicMock()
+        mock_resp.__enter__.return_value = mock_resp
+        mock_resp.read.return_value = json.dumps({"sess-1": {"type": "retry", "attempt": 1}}).encode("utf-8")
+        mock_urlopen.return_value = mock_resp
+
+        status = module.get_session_status("http://localhost:8080", "sess-1", None, None)
+
+        assert status == "retry"
+
+    @patch("urllib.request.urlopen")
+    def test_get_session_status_missing_entry_is_idle(self, mock_urlopen):
+        module = _load_session_module()
+        mock_resp = MagicMock()
+        mock_resp.__enter__.return_value = mock_resp
+        mock_resp.read.return_value = json.dumps({}).encode("utf-8")
+        mock_urlopen.return_value = mock_resp
+
+        status = module.get_session_status("http://localhost:8080", "sess-1", None, None)
+
+        assert status == "idle"
+
+    @patch("urllib.request.urlopen")
+    def test_get_session_status_request_failure_is_unknown(self, mock_urlopen):
+        module = _load_session_module()
+        mock_urlopen.side_effect = OSError("server unavailable")
+
+        status = module.get_session_status("http://localhost:8080", "sess-1", None, None)
+
+        assert status is None
