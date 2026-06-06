@@ -11,11 +11,7 @@ reused across all three subphase sessions.
 
 from __future__ import annotations
 
-import hashlib
 import os
-import re
-import shlex
-import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -44,8 +40,6 @@ from phases.completion import (
     check_phase_graceful_completion,
     build_phase_resume_prompt,
     build_frontmatter_resume_prompt,
-    build_codeql_plan_resume_prompt,
-    build_codeql_build_failure_resume_prompt,
     build_artifact_repair_resume_prompt,
 )
 
@@ -157,332 +151,6 @@ def _check_codeql_artifacts(console: Any) -> int:
     return 0
 
 
-def _load_codeql_yaml(path: Path) -> dict[str, Any]:
-    """Load a CodeQL YAML artifact as a mapping, returning {} on absence/errors."""
-    if not path.is_file():
-        return {}
-    try:
-        from codeql.packs import load_yaml_mapping
-
-        return load_yaml_mapping(path, what=path.name)
-    except Exception:
-        return {}
-
-
-def _validate_codeql_plan_for_repair() -> tuple[int, str]:
-    """Validate the generated CodeQL plan, returning CLI-style (rc, output)."""
-    plan_path = ROOT / "itemdb" / "notes" / "codeql-plan.yml"
-    if not plan_path.exists():
-        return 0, ""
-
-    try:
-        from codeql.packs import load_codeql_plan
-
-        plan = load_codeql_plan(plan_path)
-    except Exception as exc:
-        return 1, f"itemdb/notes/codeql-plan.yml is invalid: {exc}"
-
-    from codeql.capabilities import is_supported_language, supported_build_modes
-
-    errors: list[str] = []
-    for unit in plan.get("analysis_units", []):
-        if not isinstance(unit, dict):
-            continue
-        unit_id = str(unit.get("id", "<unknown>"))
-        unit_path = unit.get("path")
-        analysis_root = ROOT / unit_path if isinstance(unit_path, str) else ROOT
-        languages = unit.get("languages", [])
-        if not isinstance(languages, list):
-            continue
-        for language in languages:
-            if not isinstance(language, dict):
-                continue
-            language_id = str(language.get("id", "<unknown>"))
-            context = f"analysis unit {unit_id!r} language {language_id!r}"
-
-            # Validate build_mode against known language capabilities
-            build_mode = language.get("build_mode")
-            if not isinstance(build_mode, str) or not build_mode.strip():
-                if is_supported_language(language_id):
-                    errors.append(
-                        f"{context}: missing or invalid build_mode (got {build_mode!r})"
-                    )
-            elif is_supported_language(language_id):
-                allowed = supported_build_modes(language_id)
-                if build_mode not in allowed:
-                    modes = ", ".join(sorted(allowed))
-                    errors.append(
-                        f"{context}: unsupported build_mode '{build_mode}' (allowed: {modes})"
-                    )
-                if build_mode == "manual" and not (
-                    isinstance(language.get("build_command"), str)
-                    and str(language.get("build_command", "")).strip()
-                ):
-                    errors.append(
-                        f"{context}: build_mode is 'manual' but no build_command provided"
-                    )
-
-            # Validate build_command portability (existing logic)
-            build_command = language.get("build_command")
-            if isinstance(build_command, str) and build_command.strip():
-                errors.extend(_validate_codeql_build_command(build_command, analysis_root, context))
-
-    if errors:
-        return 1, "itemdb/notes/codeql-plan.yml failed CodeQL build-command validation:\n" + "\n".join(
-            f"- {error}" for error in errors
-        )
-
-    return 0, ""
-
-
-def _validate_codeql_build_command(build_command: str, analysis_root: Path, context: str) -> list[str]:
-    """Return generic portability/safety validation errors for a manual build command."""
-    errors: list[str] = []
-    if _contains_absolute_tmp(build_command):
-        errors.append(f"{context}: build_command uses absolute /tmp/; use workspace-relative tmp/ instead")
-    if str(ROOT) in build_command:
-        errors.append(f"{context}: build_command embeds the absolute workspace path {ROOT}")
-    errors.extend(_validate_codeql_build_command_shape(build_command, context))
-
-    try:
-        tokens = shlex.split(build_command)
-    except ValueError as exc:
-        return errors + [f"{context}: build_command is not shell-parseable: {exc}"]
-
-    for token in tokens:
-        if not token.endswith(".sh"):
-            continue
-        script_path = Path(token)
-        if not script_path.is_absolute():
-            script_path = analysis_root / script_path
-        if not script_path.is_file():
-            errors.append(f"{context}: referenced helper script does not exist from analysis root: {token}")
-            continue
-        try:
-            content = script_path.read_text(encoding="utf-8")
-        except OSError as exc:
-            errors.append(f"{context}: referenced helper script cannot be read: {token}: {exc}")
-            continue
-        if _contains_absolute_tmp(content):
-            errors.append(f"{context}: referenced helper script {token} uses absolute /tmp/; use workspace-relative tmp/")
-        if str(ROOT) in content:
-            errors.append(f"{context}: referenced helper script {token} embeds the absolute workspace path {ROOT}")
-        result = subprocess.run(["bash", "-n", str(script_path)], capture_output=True, text=True, timeout=30)
-        if result.returncode != 0:
-            detail = (result.stderr or result.stdout).strip()
-            suffix = f": {detail}" if detail else ""
-            errors.append(f"{context}: referenced helper script {token} failed bash -n{suffix}")
-
-    return errors
-
-
-def _validate_codeql_build_command_shape(build_command: str, context: str) -> list[str]:
-    """Reject shell-script constructs because CodeQL tokenizes build_command as argv."""
-    errors: list[str] = []
-    if "\n" in build_command:
-        errors.append(
-            f"{context}: build_command is multi-line; CodeQL tokenizes build_command instead of running it as a shell script. "
-            "Move multi-step logic into a helper script under tmp/ and invoke it with a single command such as `bash ../../tmp/codeql-build.sh`."
-        )
-    if re.search(r"(^|\s)#", build_command):
-        errors.append(
-            f"{context}: build_command contains shell comments; CodeQL passes comments as literal argv tokens. "
-            "Move comments and multi-step logic into a helper script under tmp/."
-        )
-    for operator in ("&&", ";", "|", "||"):
-        if operator in build_command:
-            errors.append(
-                f"{context}: build_command contains shell operator {operator!r}; CodeQL tokenizes build_command, it is not shell-interpreted. "
-                "Use a helper script under tmp/ for compound commands."
-            )
-            break
-    try:
-        tokens = shlex.split(build_command)
-    except ValueError:
-        return errors
-    if len(tokens) >= 3 and tokens[0] in {"bash", "sh"} and tokens[1] == "-c":
-        errors.append(
-            f"{context}: build_command uses `{tokens[0]} -c`; CodeQL command tokenization makes nested shell snippets fragile. "
-            "Write the snippet to a helper script under tmp/ and invoke that script instead."
-        )
-    return errors
-
-
-def _contains_absolute_tmp(text: str) -> bool:
-    """Return whether text contains an absolute /tmp path, not a relative tmp/ component."""
-    return re.search(r"(^|[\s\"'=])/(tmp)(/|$)", text) is not None
-
-
-def _subphase_should_validate_codeql_plan(phase_id: str) -> bool:
-    """Return whether a subphase is responsible for producing/editing codeql-plan.yml."""
-    return phase_id in {"1a", "1-codeql-repair"}
-
-
-def _codeql_repair_needed(output_dir: Path, plan_path: Path) -> bool:
-    """Return whether a failed CodeQL run should get one model repair attempt."""
-    manifest = _load_codeql_yaml(output_dir / "run-manifest.yml")
-    status = manifest.get("status")
-    if status not in {"soft-failed", "failed"}:
-        return False
-
-    failures = manifest.get("failures", [])
-    if not isinstance(failures, list):
-        return False
-
-    from codeql.capabilities import supported_build_modes
-
-    plan = _load_codeql_yaml(plan_path)
-    has_db_failure = any("Database create failed" in str(f) for f in failures)
-    for unit in plan.get("analysis_units", []) if isinstance(plan.get("analysis_units"), list) else []:
-        languages = unit.get("languages", []) if isinstance(unit, dict) else []
-        if not isinstance(languages, list):
-            continue
-        for language in languages:
-            if not isinstance(language, dict):
-                continue
-            language_id = language.get("id")
-            build_mode = language.get("build_mode")
-            if isinstance(language_id, str):
-                # Effective build_mode: the interpretation the runner would use
-                effective = build_mode if isinstance(build_mode, str) and build_mode.strip() else "none"
-                # Plan-level: unsupported effective build_mode
-                if effective not in supported_build_modes(language_id):
-                    return True
-                # Runtime: Database create failed with repairable modes
-                if has_db_failure and effective in {"autobuild", "manual"}:
-                    return True
-    return False
-
-
-def _latest_codeql_database_log(output_dir: Path) -> Path | None:
-    logs = [p for p in output_dir.glob("databases/**/log/database-create-*.log") if p.is_file()]
-    if not logs:
-        return None
-    return max(logs, key=lambda p: p.stat().st_mtime)
-
-
-def _codeql_repair_failure_context(output_dir: Path) -> str:
-    """Return target-agnostic failure context for the repair model."""
-    lines: list[str] = []
-    manifest = _load_codeql_yaml(output_dir / "run-manifest.yml")
-    failures = manifest.get("failures", [])
-    if isinstance(failures, list) and failures:
-        lines.append("Manifest failures:")
-        lines.extend(str(failure) for failure in failures[-3:])
-
-    latest_log = _latest_codeql_database_log(output_dir)
-    if latest_log is not None:
-        interesting: list[str] = []
-        try:
-            for line in latest_log.read_text(encoding="utf-8", errors="replace").splitlines():
-                if any(marker in line for marker in ("[build-stderr]", "[build-stdout]", "[ERROR]", "Exception caught", "A fatal error")):
-                    interesting.append(line)
-        except OSError as exc:
-            interesting.append(f"Failed to read latest database log {latest_log}: {exc}")
-        if interesting:
-            lines.append(f"Latest database-create log: {latest_log.relative_to(ROOT) if latest_log.is_relative_to(ROOT) else latest_log}")
-            lines.extend(interesting[-40:])
-
-    return "\n".join(lines) if lines else "CodeQL database creation failed; no additional log details were available."
-
-
-def _file_digest(path: Path) -> str | None:
-    """Return a stable digest for a file, or None when it cannot be read."""
-    try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
-    except OSError:
-        return None
-
-
-def _run_codeql_repair_if_needed(
-    *,
-    args: Any,
-    console: Any,
-    rendering_ctx: Any,
-    runner: ServerRunner,
-    base_url: str,
-) -> int:
-    """
-    Ask the model to repair CodeQL build instructions and rerun CodeQL until stable.
-    
-    Architecture / Retries Logic:
-      1. CodeCome generates a `codeql-plan.yml` in Phase 1a.
-      2. We attempt to run CodeQL using that plan.
-      3. If CodeQL database creation fails (e.g., due to build errors), this function is
-         triggered. It allocates a retry budget (`CODEQL_REPAIR_RETRIES`) to use the model
-         to debug the failure and output a repaired `codeql-plan.yml`.
-      4. If the agent itself fails to produce a valid plan (e.g. gets stuck validating its
-         YAML repeatedly) or the user hits Ctrl+C, we break out of the repair loop.
-      5. We NEVER halt the entire pipeline in this function. We simply exhaust the allocated 
-         budget. Only after all repair attempts finish does `_check_codeql_artifacts` finally 
-         enforce the `fail_policy: hard` gate and halt the pipeline if the database is still missing.
-    """
-    from codeql.config import resolve_config as _resolve_codeql_config
-
-    max_retries = int(os.environ.get("CODEQL_REPAIR_RETRIES", "2"))
-    if max_retries <= 0:
-        return 0
-
-    config = _resolve_codeql_config()
-    plan_path = ROOT / "itemdb" / "notes" / "codeql-plan.yml"
-    if not _codeql_repair_needed(config.abs_output_dir, plan_path):
-        return 0
-
-    out = get_output(console)
-    msg = "CodeQL database creation failed; asking the model to repair build instructions."
-    out.warn(msg)
-
-    plan_digest = _file_digest(plan_path)
-    repair_session_id: str | None = None
-    repair_prompt: str | None = None
-    for attempt in range(1, max_retries + 1):
-        outcome = _run_subphase(
-            args=args,
-            console=console,
-            rendering_ctx=rendering_ctx,
-            runner=runner,
-            base_url=base_url,
-            phase_id="1-codeql-repair",
-            label=f"CodeQL Build Repair ({attempt}/{max_retries})",
-            agent="recon",
-            prompt_file="prompts/phase-1-codeql-repair.md",
-            existing_session_id=repair_session_id,
-            initial_prompt=repair_prompt,
-            return_outcome=True,
-        )
-        assert isinstance(outcome, _SubphaseOutcome)
-        repair_session_id = outcome.session_id or repair_session_id
-        
-        if outcome.returncode == 130:
-            return 130  # Honor user interrupt immediately
-            
-        if outcome.returncode != 0:
-            # The agent exhausted its internal validation retries or failed fatally.
-            # Continuing here would just loop the same broken state, so we break
-            # out of the repair loop to let the phase proceed (and potentially halt).
-            break
-            
-        next_plan_digest = _file_digest(plan_path)
-        if next_plan_digest == plan_digest:
-            unchanged_msg = "CodeQL repair completed but did not change itemdb/notes/codeql-plan.yml."
-            out.warn(unchanged_msg)
-        plan_digest = next_plan_digest
-
-        _run_codeql(console)
-        if not _codeql_repair_needed(config.abs_output_dir, plan_path):
-            return 0
-
-        repair_prompt = build_codeql_build_failure_resume_prompt(
-            _codeql_repair_failure_context(config.abs_output_dir)
-        )
-
-    if _codeql_repair_needed(config.abs_output_dir, plan_path):
-        msg = f"CodeQL database creation still fails after {max_retries} repair attempt(s); continuing to artifact gate."
-        out.warn(msg)
-
-    return 0
-
-
 # ---------------------------------------------------------------------------
 # Subphase runner
 # ---------------------------------------------------------------------------
@@ -539,7 +207,6 @@ def _run_subphase(
 
     iteration_retry_count = 0
     frontmatter_retry_count = 0
-    codeql_plan_retry_count = 0
     artifact_retry_count = 0
     attempt_number = 0
     last_session_id: str = existing_session_id or ""
@@ -649,40 +316,6 @@ def _run_subphase(
                 returncode = 2
 
         if returncode == 0:
-            if _subphase_should_validate_codeql_plan(phase_id):
-                validation_rc, validation_output = _validate_codeql_plan_for_repair()
-                if validation_rc != 0:
-                    max_codeql_plan_retries = 2
-                    if codeql_plan_retry_count < max_codeql_plan_retries:
-                        codeql_plan_retry_count += 1
-                        msg = (
-                            "\n[Auto-Correction] The model completed a turn, but itemdb/notes/codeql-plan.yml "
-                            "failed local CodeQL plan validation. CodeCome will resume the same session and ask "
-                            f"for a minimal YAML/plan repair (retry {codeql_plan_retry_count}/{max_codeql_plan_retries})."
-                        )
-                        out.warn(msg)
-                        if last_session_id and last_session_id != "id":
-                            prompt = build_codeql_plan_resume_prompt(validation_output)
-                            continue
-                        else:
-                            returncode = 2
-                            finish_warning = (
-                                "The model output failed CodeQL plan validation, and CodeCome could not determine "
-                                "a session ID to resume for repair. Treating the subphase as incomplete so the "
-                                "validator output can be reported back with the saved transcript."
-                            )
-                    else:
-                        returncode = 2
-                        finish_warning = (
-                            f"itemdb/notes/codeql-plan.yml still fails validation after {max_codeql_plan_retries} "
-                            "auto-repair attempts. Treating the subphase as incomplete so the validation errors "
-                            "can be reported back."
-                        )
-                        msg = f"\n[Warning] CodeQL plan validation errors persist after {max_codeql_plan_retries} auto-retries."
-                        out.error(msg)
-                        print(validation_output)
-                    break
-
             from findings.checks_entry import run_frontmatter_validation
 
             validation_rc, validation_output = run_frontmatter_validation()
@@ -841,25 +474,7 @@ def run_phase_1(
     if gate_rc != 0:
         return gate_rc
 
-    # ---- CodeQL analysis ----
-    _run_codeql(console)
-    rc = _run_codeql_repair_if_needed(
-        args=args,
-        console=console,
-        rendering_ctx=rendering_ctx,
-        runner=runner,
-        base_url=base_url,
-    )
-    if rc != 0:
-        return rc
-    rc = _check_codeql_artifacts(console)
-    if rc != 0:
-        return rc
-
-    # Snapshot findings immediately before 1b so the warning scope matches 1b.
-    findings_snapshot = count_findings_snapshot()
-
-    # ---- Phase 1b: Detailed Reconnaissance ----
+    # ---- Phase 1b: Sandbox Bootstrap ----
     rc = _run_subphase(
         args=args,
         console=console,
@@ -867,18 +482,27 @@ def run_phase_1(
         runner=runner,
         base_url=base_url,
         phase_id="1b",
-        label="Detailed Reconnaissance",
+        label="Sandbox Bootstrap",
         agent="recon",
-        prompt_file="prompts/phase-1b-recon.md",
+        prompt_file="prompts/phase-1b-sandbox.md",
     )
     if rc != 0:
         return rc
 
-    gate_rc = check_phase_1b(console, findings_snapshot=findings_snapshot)
+    gate_rc = check_phase_1c(console)
     if gate_rc != 0:
         return gate_rc
 
-    # ---- Phase 1c: Sandbox Bootstrap ----
+    # ---- CodeQL analysis (post-sandbox) ----
+    _run_codeql(console)
+    rc = _check_codeql_artifacts(console)
+    if rc != 0:
+        return rc
+
+    # Snapshot findings immediately before 1c so the warning scope matches 1c.
+    findings_snapshot = count_findings_snapshot()
+
+    # ---- Phase 1c: Detailed Reconnaissance ----
     rc = _run_subphase(
         args=args,
         console=console,
@@ -886,14 +510,14 @@ def run_phase_1(
         runner=runner,
         base_url=base_url,
         phase_id="1c",
-        label="Sandbox Bootstrap",
+        label="Detailed Reconnaissance",
         agent="recon",
-        prompt_file="prompts/phase-1c-sandbox.md",
+        prompt_file="prompts/phase-1c-recon.md",
     )
     if rc != 0:
         return rc
 
-    gate_rc = check_phase_1c(console)
+    gate_rc = check_phase_1b(console, findings_snapshot=findings_snapshot)
     if gate_rc != 0:
         return gate_rc
 

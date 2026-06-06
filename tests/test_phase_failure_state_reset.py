@@ -156,7 +156,7 @@ def test_phase1_subphase_does_not_reuse_previous_attempt_failures(monkeypatch):
         phase_id="1b",
         label="test",
         agent="recon",
-        prompt_file="prompts/phase-1b-recon.md",
+        prompt_file="prompts/phase-1c-recon.md",
     )
 
     assert rc == 2
