@@ -67,6 +67,10 @@ Use this structure:
 
 ## Reporting rules
 
+- If `itemdb/codeql/last-run-manifest.yml` exists, check its `health.usable` key.
+  Only reference CodeQL signals when `health.usable` is `true`. When CodeQL did not
+  produce usable output, record the health classification and reason in the
+  Methodology section but do not claim zero CodeQL findings.
 - Place exploited findings (with demonstrated impact) above confirmed findings.
 - Clearly separate confirmed findings from unvalidated hypotheses.
 - Clearly label rejected findings as rejected.

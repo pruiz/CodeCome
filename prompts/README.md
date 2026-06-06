@@ -7,8 +7,8 @@ Each prompt corresponds to one workflow phase.
 ## Prompts
 
     phase-1a-profile.md
-    phase-1b-recon.md
-    phase-1c-sandbox.md
+    phase-1b-sandbox.md
+    phase-1c-recon.md
     phase-2-audit.md
     phase-3-review.md
     phase-4-validate.md
@@ -41,15 +41,15 @@ If you prefer direct invocation:
 
 ### Phase 1: reconnaissance
 
-Use `make phase-1` to run the full reconnaissance workflow (Phase 1a, CodeQL enrichment, Phase 1b, Phase 1c).
+Use `make phase-1` to run the full reconnaissance workflow (Phase 1a, Phase 1b sandbox, CodeQL enrichment, Phase 1c).
 
     make phase-1
 
 Or invoke subphases manually:
 
     opencode run --agent recon "$(cat prompts/phase-1a-profile.md)"
-    opencode run --agent recon "$(cat prompts/phase-1b-recon.md)"
-    opencode run --agent recon "$(cat prompts/phase-1c-sandbox.md)"
+    opencode run --agent recon "$(cat prompts/phase-1b-sandbox.md)"
+    opencode run --agent recon "$(cat prompts/phase-1c-recon.md)"
 
 Creates or updates target reconnaissance notes under:
 
