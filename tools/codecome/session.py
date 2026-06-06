@@ -120,7 +120,7 @@ def get_session_status(
 ) -> str | None:
     """Best-effort lookup of an opencode session status type."""
     req = urllib.request.Request(
-        f"{base_url}/session/{session_id}",
+        f"{base_url}/session/status",
         headers=_get_headers(auth_token, workspace_dir),
         method="GET",
     )
@@ -130,7 +130,13 @@ def get_session_status(
     except Exception:
         return None
 
-    status = data.get("status") if isinstance(data, dict) else None
+    if not isinstance(data, dict):
+        return None
+
+    # OpenCode's status endpoint returns only non-idle sessions; absence means idle.
+    status = data.get(session_id)
+    if status is None:
+        return "idle"
     if isinstance(status, dict):
         status_type = status.get("type")
         return status_type if isinstance(status_type, str) else None
