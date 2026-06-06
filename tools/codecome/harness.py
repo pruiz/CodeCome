@@ -167,6 +167,8 @@ def run_phase_mode(args: argparse.Namespace) -> int:
     try:
         while True:
             attempt_number += 1
+            phase_failures = []
+            phase_ok = False
             # Clear per-session dedup state so retries don't suppress updates.
             _reset_subagent_state()
             returncode, session_id, run_result, transcript_path = _run_single_attempt(
