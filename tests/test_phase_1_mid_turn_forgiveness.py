@@ -61,7 +61,7 @@ def test_mid_turn_cutoff_with_forgiveness_reaches_validation():
             phase_id="1b",
             label="test",
             agent="recon",
-            prompt_file="prompts/phase-1b-recon.md",
+            prompt_file="prompts/phase-1c-recon.md",
         )
 
     # Validation blocks pass → returncode stays 0 after forgiveness + validation
@@ -99,7 +99,7 @@ def test_mid_turn_cutoff_without_forgiveness_fails():
             phase_id="1b",
             label="test",
             agent="recon",
-            prompt_file="prompts/phase-1b-recon.md",
+            prompt_file="prompts/phase-1c-recon.md",
         )
 
     # Forgiveness denied → returncode=2 → mid-turn retry → no session ("id"→invalid) → fails

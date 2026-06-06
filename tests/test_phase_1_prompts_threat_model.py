@@ -13,46 +13,46 @@ def _read_prompt(name: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_phase_1b_recon_prompt_exists() -> None:
-    path = ROOT / "prompts" / "phase-1b-recon.md"
+def test_phase_1c_recon_prompt_exists() -> None:
+    path = ROOT / "prompts" / "phase-1c-recon.md"
     assert path.is_file(), f"{path} does not exist"
 
 
-def test_phase_1b_recon_has_detailed_reconnaissance_title() -> None:
-    content = _read_prompt("phase-1b-recon.md")
+def test_phase_1c_recon_has_detailed_reconnaissance_title() -> None:
+    content = _read_prompt("phase-1c-recon.md")
     assert "Detailed Reconnaissance" in content
     assert "CodeQL-assisted Reconnaissance" not in content
 
 
-def test_phase_1b_recon_mentions_codeql_as_optional() -> None:
-    content = _read_prompt("phase-1b-recon.md")
+def test_phase_1c_recon_mentions_codeql_as_optional() -> None:
+    content = _read_prompt("phase-1c-recon.md")
     assert "optional enrichment" in content
 
 
-def test_phase_1b_recon_requires_threat_model() -> None:
-    content = _read_prompt("phase-1b-recon.md")
+def test_phase_1c_recon_requires_threat_model() -> None:
+    content = _read_prompt("phase-1c-recon.md")
     assert "threat-model.md" in content
 
 
-def test_phase_1b_recon_references_threat_model_references() -> None:
-    content = _read_prompt("phase-1b-recon.md")
+def test_phase_1c_recon_references_threat_model_references() -> None:
+    content = _read_prompt("phase-1c-recon.md")
     assert "threat-model-checklist.md" in content
     assert "security-controls-and-assets.md" in content
 
 
-def test_phase_1b_recon_mentions_attacker_capabilities() -> None:
-    content = _read_prompt("phase-1b-recon.md")
+def test_phase_1c_recon_mentions_attacker_capabilities() -> None:
+    content = _read_prompt("phase-1c-recon.md")
     assert "attacker capabilities" in content.lower()
     assert "non-capabilities" in content
 
 
-def test_phase_1b_recon_mentions_open_questions_and_rerun() -> None:
-    content = _read_prompt("phase-1b-recon.md")
+def test_phase_1c_recon_mentions_open_questions_and_rerun() -> None:
+    content = _read_prompt("phase-1c-recon.md")
     assert "Open questions for the user" in content or "open questions" in content.lower()
 
 
-def test_phase_1b_recon_mentions_abuse_path_themes() -> None:
-    content = _read_prompt("phase-1b-recon.md")
+def test_phase_1c_recon_mentions_abuse_path_themes() -> None:
+    content = _read_prompt("phase-1c-recon.md")
     assert "abuse-path" in content.lower() or "Abuse-path" in content
 
 
@@ -88,7 +88,7 @@ def test_phase_3_uses_attacker_capabilities_in_review() -> None:
 
 def test_phase_1_codecome_uses_renamed_prompt_file() -> None:
     content = (ROOT / "tools" / "codecome" / "phase_1.py").read_text(encoding="utf-8")
-    assert "phase-1b-recon.md" in content
+    assert "phase-1c-recon.md" in content
     assert "phase-1b-codeql-recon.md" not in content
 
 

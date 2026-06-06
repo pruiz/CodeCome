@@ -5,7 +5,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
 import yaml
+
+pytestmark = pytest.mark.skip(reason="CodeQL plan repair removed in Phase 1 refactor; file deleted in commit 8")
 
 
 ROOT = Path(__file__).resolve().parents[1]

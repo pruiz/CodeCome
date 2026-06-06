@@ -526,19 +526,6 @@ def build_frontmatter_resume_prompt(phase: str, finding: str | None, validation_
     )
 
 
-def build_codeql_plan_resume_prompt(validation_output: str) -> str:
-    return (
-        "Your previous run created or edited `itemdb/notes/codeql-plan.yml`, but the file failed local "
-        "CodeQL plan validation.\n\n"
-        "Validation errors:\n"
-        f"{validation_output}\n\n"
-        "Repair only `itemdb/notes/codeql-plan.yml` with the smallest change needed. Do not redo unrelated "
-        "reconnaissance or modify target source code. Preserve the existing analysis units, pack selections, "
-        "manual build commands, and notes unless a reported validation error requires changing them.\n\n"
-        "Before ending, verify that the repaired plan passes local validation by running `rtk python3 tools/codecome.py check-codeql-plan`."
-    )
-
-
 def build_artifact_repair_resume_prompt(
     phase: str, finding: str | None, validation_output: str
 ) -> str:
@@ -555,29 +542,6 @@ def build_artifact_repair_resume_prompt(
         f"Phase {phase} completion checklist:\n"
         f"{checklist}\n\n"
         "Before ending, verify that the repaired artifacts pass local validation."
-    )
-
-
-def build_codeql_build_failure_resume_prompt(validation_output: str) -> str:
-    return (
-        "The repaired `itemdb/notes/codeql-plan.yml` was valid, but the next CodeQL database creation run still "
-        "failed. Continue the same narrow CodeQL build repair task.\n\n"
-        "Latest CodeQL failure details:\n"
-        f"{validation_output}\n\n"
-        "Repair only `itemdb/notes/codeql-plan.yml` and any helper scripts under workspace-relative `tmp/` or "
-        "`sandbox/`. Do not modify target source code.\n\n"
-        "Important execution model: CodeQL runs the manual `build_command` with the current working directory set "
-        "to the analysis unit source path (`analysis_units[].path`). It is not run from the workspace root, and it "
-        "is not run from the helper script directory. If a helper script changes directory, it must do so based on "
-        "the analysis source root or explicit paths that work from that source root.\n\n"
-        "CodeQL tokenizes `build_command` as argv; it does not execute it as a shell script. Do not put shell "
-        "control syntax in `build_command`: no `&&`, `||`, `;`, pipes, comments, multi-line commands, or "
-        "`bash -c` / `sh -c` snippets. If more than one command is needed, create a helper script under "
-        "workspace-relative `tmp/` and set `build_command` to invoke it, for example `bash ../../tmp/codeql-build.sh`.\n\n"
-        "Do not use absolute `/tmp/` paths. Use workspace-relative `tmp/` paths. Do not embed this workspace's "
-        "absolute path in `build_command`; prefer paths relative to the analysis unit source path.\n\n"
-        "Before ending, verify that the plan is valid YAML, that referenced helper scripts exist, and that shell "
-        "helpers pass syntax-only validation."
     )
 
 

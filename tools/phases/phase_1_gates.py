@@ -255,7 +255,7 @@ def check_phase_1a(console=None, findings_snapshot: dict[str, int] | None = None
             out.success(f"codeql-plan.yml: {len(units)} analysis unit(s) configured")
 
     out.separator(tone=T.SUCCESS)
-    out.success("Ready to run Phase 1b (Detailed Reconnaissance).")
+    out.success("Ready to run Phase 1b (Sandbox Bootstrap).")
     return 0
 
 
@@ -330,7 +330,7 @@ def check_phase_1b(console=None, findings_snapshot: dict[str, int] | None = None
                     out.info(f"    {status}: +{count}")
 
     out.separator(tone=T.SUCCESS)
-    out.success("Ready to run Phase 1c (Sandbox Bootstrap).")
+    out.success("Ready to run Phase 1c (Detailed Reconnaissance).")
     return 0
 
 
