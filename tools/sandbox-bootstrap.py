@@ -9,13 +9,15 @@ Manages the curated sandbox examples under templates/sandboxes/ and the
 target-specific sandbox at sandbox/.
 
 Subcommands:
-  list         List available sandbox examples.
-  inspect      Print manifest and previews for one example.
-  detect       Scan workspace and propose ranked sandbox candidates.
-  apply        Copy an example into sandbox/.
-  validate     Run validation tiers.
-  regenerate   Re-apply current sandbox example.
-  status       Print sandbox provenance and Phase 2 gate result.
+  list              List available sandbox examples.
+  inspect           Print manifest and previews for one example.
+  detect            Scan workspace and propose ranked sandbox candidates.
+  apply             Copy an example into sandbox/.
+  validate          Run validation tiers.
+  regenerate        Re-apply current sandbox example.
+  status            Print sandbox provenance and Phase 2 gate result.
+  recipe-validate   Validate itemdb/notes/sandbox-recipe.yml.
+  recipe-print      Print the sandbox recipe.
 
 Environment variables:
   CODECOME_ALLOW_NO_SANDBOX        Skip Phase 2 sandbox gate.
@@ -50,9 +52,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _colors as C
 
 ROOT = Path(__file__).resolve().parents[1]
+SANDBOX_NOTES_PATH = NOTES_ROOT = ROOT / "itemdb" / "notes"
+SANDBOX_RECIPE_PATH = NOTES_ROOT / "sandbox-recipe.yml"
 TEMPLATES_ROOT = ROOT / "templates" / "sandboxes"
 SANDBOX_ROOT = ROOT / "sandbox"
-NOTES_ROOT = ROOT / "itemdb" / "notes"
 SRC_ROOT = ROOT / "src"
 PROVENANCE_FILE = SANDBOX_ROOT / "CODECOME-GENERATED.md"
 
@@ -1556,6 +1559,52 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return 0 if overall_outcome == "passed" else 1
 
 
+def cmd_recipe_validate(args: argparse.Namespace) -> int:
+    path = Path(args.path) if hasattr(args, "path") and args.path else SANDBOX_RECIPE_PATH
+    if not path.is_file():
+        print(C.fail(f"Sandbox recipe not found at {path}"), file=sys.stderr)
+        return 1
+
+    try:
+        from sandbox.recipe import load_recipe, validate_recipe
+        recipe = load_recipe(path)
+    except Exception as exc:
+        print(C.fail(f"Failed to load recipe: {exc}"), file=sys.stderr)
+        return 1
+
+    errors = validate_recipe(recipe, root=str(ROOT))
+    if errors:
+        print(C.fail(f"Sandbox recipe at {path} has {len(errors)} validation error(s):"), file=sys.stderr)
+        for err in errors:
+            print(f"  {C.SYM_BULLET} {err}")
+        return 1
+
+    print(C.ok(f"Sandbox recipe at {path} is valid."))
+    return 0
+
+
+def cmd_recipe_print(args: argparse.Namespace) -> int:
+    path = Path(args.path) if hasattr(args, "path") and args.path else SANDBOX_RECIPE_PATH
+    if not path.is_file():
+        print(C.fail(f"Sandbox recipe not found at {path}"), file=sys.stderr)
+        return 1
+
+    try:
+        from sandbox.recipe import load_recipe
+        recipe = load_recipe(path)
+    except Exception as exc:
+        print(C.fail(f"Failed to load recipe: {exc}"), file=sys.stderr)
+        return 1
+
+    if args.format == "json":
+        _emit(recipe, "json")
+    else:
+        from sandbox.recipe import dump_recipe
+        print(dump_recipe(recipe).rstrip())
+
+    return 0
+
+
 def cmd_not_implemented(args: argparse.Namespace) -> int:
     name = getattr(args, "command", "<unknown>")
     print(
@@ -1693,6 +1742,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="Exit non-zero if Phase 2 should be blocked.",
     )
     p_status.set_defaults(func=cmd_status)
+
+    p_recipe_validate = sub.add_parser(
+        "recipe-validate",
+        parents=[common],
+        help="Validate itemdb/notes/sandbox-recipe.yml.",
+    )
+    p_recipe_validate.add_argument(
+        "path",
+        nargs="?",
+        default=str(SANDBOX_RECIPE_PATH),
+        help=f"Path to the recipe file. Defaults to {SANDBOX_RECIPE_PATH}.",
+    )
+    p_recipe_validate.set_defaults(func=cmd_recipe_validate)
+
+    p_recipe_print = sub.add_parser(
+        "recipe-print",
+        parents=[common],
+        help="Print the sandbox recipe.",
+    )
+    p_recipe_print.add_argument(
+        "path",
+        nargs="?",
+        default=str(SANDBOX_RECIPE_PATH),
+        help=f"Path to the recipe file. Defaults to {SANDBOX_RECIPE_PATH}.",
+    )
+    p_recipe_print.set_defaults(func=cmd_recipe_print)
 
     return parser
 
