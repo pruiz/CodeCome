@@ -9,6 +9,7 @@ services:
     working_dir: /workspace
     volumes:
       - ../:/workspace
+      - ../.tools/codeql/current:/opt/codeql:ro
       - codecome-cargo-target:/workspace/src/target
       - codecome-cargo-registry:/usr/local/cargo/registry
     tty: true
