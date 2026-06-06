@@ -70,6 +70,13 @@ def _path_is_fresh(path: Path, run_start_time: float) -> bool:
     return path.exists() and path.stat().st_mtime >= run_start_time
 
 
+def _display_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
 def _run_summary_is_fresh(phase_id: str, run_start_time: float) -> bool:
     """Return whether any fresh run-summary file exists for *phase_id*.
 
@@ -171,7 +178,7 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                 fresh_1a = any(_path_is_fresh(p, run_start_time) for p in paths_1a)
                 if not fresh_1a:
                     failures.append(
-                        f"Missing: {NOTES_ROOT.relative_to(ROOT)}/ — no phase-1a required notes "
+                        f"Missing: {_display_path(NOTES_ROOT)}/ — no phase-1a required notes "
                         f"({', '.join(_PHASE_1A_ARTIFACT_NAMES)}) "
                         "created or updated during this run"
                     )
@@ -184,7 +191,7 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                 fresh_1b = any(_path_is_fresh(p, run_start_time) for p in paths_1b)
                 if not fresh_1b:
                     failures.append(
-                        f"Missing: {NOTES_ROOT.relative_to(ROOT)}/ — no phase-1b required notes "
+                        f"Missing: {_display_path(NOTES_ROOT)}/ — no phase-1b required notes "
                         f"({', '.join(PHASE_1B_REQUIRED_NOTES)}) "
                         "created or updated during this run"
                     )
@@ -220,13 +227,13 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                 fresh_required = any(_path_is_fresh(path, run_start_time) for path in required_artifacts)
                 if not fresh_required:
                     failures.append(
-                        f"Missing: {NOTES_ROOT.relative_to(ROOT)}/ — no phase-1 required notes "
+                        f"Missing: {_display_path(NOTES_ROOT)}/ — no phase-1 required notes "
                         f"({', '.join(_PHASE1_REQUIRED_ARTIFACT_NAMES)}) "
                         "created or updated during this run"
                     )
             else:
                 failures.append(
-                    f"Missing: {NOTES_ROOT.relative_to(ROOT)}/ — required phase-1 notes "
+                    f"Missing: {_display_path(NOTES_ROOT)}/ — required phase-1 notes "
                     f"({', '.join(_PHASE1_REQUIRED_ARTIFACT_NAMES)}) are not all present"
                 )
 
@@ -271,12 +278,12 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                     break
             if not evidence_fresh:
                 failures.append(
-                    f"Missing: {EVIDENCE_ROOT.relative_to(ROOT)}/{finding}/ — no evidence files "
+                    f"Missing: {_display_path(EVIDENCE_ROOT)}/{finding}/ — no evidence files "
                     "created or updated during this run"
                 )
             if not finding_is_fresh:
                 failures.append(
-                    f"Missing: {FINDINGS_ROOT.relative_to(ROOT)}/*/{finding}*.md — finding file "
+                    f"Missing: {_display_path(FINDINGS_ROOT)}/*/{finding}*.md — finding file "
                     "not created or updated during this run"
                 )
             _append_run_summary_check(failures, f"4-{finding}", run_start_time)
@@ -296,7 +303,7 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
 
             if not finding_is_fresh:
                 failures.append(
-                    f"Missing: {FINDINGS_ROOT.relative_to(ROOT)}/*/{finding}*.md — finding file "
+                    f"Missing: {_display_path(FINDINGS_ROOT)}/*/{finding}*.md — finding file "
                     "not created or updated during this run"
                 )
                 return (len(failures) == 0, failures)
@@ -308,12 +315,12 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                     if fm and fm.get("status") == "EXPLOITED" and _exploitation_status_looks_real(fm):
                         if not exploits_fresh:
                             failures.append(
-                                f"Missing: {EVIDENCE_ROOT.relative_to(ROOT)}/{finding}/exploits/ "
+                                f"Missing: {_display_path(EVIDENCE_ROOT)}/{finding}/exploits/ "
                                 "— no exploit artifacts created or updated during this run"
                             )
                         return (len(failures) == 0, failures)
                 failures.append(
-                    f"Missing: exploitation frontmatter on {FINDINGS_ROOT.relative_to(ROOT)}/EXPLOITED/{finding}*.md "
+                    f"Missing: exploitation frontmatter on {_display_path(FINDINGS_ROOT)}/EXPLOITED/{finding}*.md "
                     "— exploitation status block is missing or invalid"
                 )
                 return (len(failures) == 0, failures)
@@ -326,7 +333,7 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                         return (True, [])
                 if not exploits_fresh:
                     failures.append(
-                        f"Missing: {EVIDENCE_ROOT.relative_to(ROOT)}/{finding}/exploits/ "
+                        f"Missing: {_display_path(EVIDENCE_ROOT)}/{finding}/exploits/ "
                         "— no exploit artifacts created or updated during this run"
                     )
                 return (len(failures) == 0, failures)
@@ -335,7 +342,7 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                 return (True, [])
 
             failures.append(
-                f"Missing: exploitation outcome for {FINDINGS_ROOT.relative_to(ROOT)}/{finding}*.md "
+                f"Missing: exploitation outcome for {_display_path(FINDINGS_ROOT)}/{finding}*.md "
                 "— finding is in an unexpected status for Phase 5"
             )
             return (len(failures) == 0, failures)
@@ -350,7 +357,7 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                 )
             if not fresh_report:
                 failures.append(
-                    f"Missing: {REPORTS_ROOT.relative_to(ROOT)}/ — no report files created "
+                    f"Missing: {_display_path(REPORTS_ROOT)}/ — no report files created "
                     "or updated during this run"
                 )
             _append_run_summary_check(failures, "6", run_start_time)
@@ -368,14 +375,14 @@ def phase_checklist_lines(phase: str, finding: str | None) -> list[str]:
     if phase_key == "1":
         return [
             f"Ensure all required Phase 1 notes exist under {_ITEMDB_NOTES_DIR}.",
-            f"Ensure {NOTES_ROOT.relative_to(ROOT)}/threat-model.md has all required H1 headings: # Threat Model Summary, # Scope, # System model, # Assets and security objectives, # Attacker model, # Trust boundary summary, # Existing controls, # Abuse-path themes for Phase 2, # Risk calibration for review focus, # Open questions for the user, # Re-run prompt hints.",
-            f"Ensure {NOTES_ROOT.relative_to(ROOT)}/file-risk-index.yml is present and consistent with interesting-files.md.",
-            f"Ensure {NOTES_ROOT.relative_to(ROOT)}/sandbox-plan.md documents the Phase 1b outcome.",
+            f"Ensure {_display_path(NOTES_ROOT)}/threat-model.md has all required H1 headings: # Threat Model Summary, # Scope, # System model, # Assets and security objectives, # Attacker model, # Trust boundary summary, # Existing controls, # Abuse-path themes for Phase 2, # Risk calibration for review focus, # Open questions for the user, # Re-run prompt hints.",
+            f"Ensure {_display_path(NOTES_ROOT)}/file-risk-index.yml is present and consistent with interesting-files.md.",
+            f"Ensure {_display_path(NOTES_ROOT)}/sandbox-plan.md documents the Phase 1b outcome.",
             "If sandbox bootstrap succeeded, ensure sandbox/CODECOME-GENERATED.md exists; otherwise document the halt clearly in sandbox-plan.md.",
         ]
     if str(phase) in ("2", "sweep"):
         return [
-            f"Create or update precise findings under {FINDINGS_ROOT.relative_to(ROOT)}/PENDING/.",
+            f"Create or update precise findings under {_display_path(FINDINGS_ROOT)}/PENDING/.",
             "Each finding must identify affected code, trust-boundary/source-to-sink reasoning, attackability, impact, validation plan, and counter-analysis placeholder.",
             "If no new vulnerabilities are found, document this in the run summary rather than creating placeholder findings.",
             f"Write a run summary to runs/phase-2-summary-YYYY-MM-DD-HHMMSS.md using templates/run-summary.md.",
@@ -383,7 +390,7 @@ def phase_checklist_lines(phase: str, finding: str | None) -> list[str]:
         ]
     if str(phase) == "3":
         return [
-            f"Review all candidate findings under {FINDINGS_ROOT.relative_to(ROOT)}/PENDING/.",
+            f"Review all candidate findings under {_display_path(FINDINGS_ROOT)}/PENDING/.",
             "Move clearly invalid findings to REJECTED and duplicates to DUPLICATE.",
             "Leave surviving findings reviewable, deduplicated, and updated with counter-analysis.",
             f"Write a run summary to runs/phase-3-summary-YYYY-MM-DD-HHMMSS.md using templates/run-summary.md.",
@@ -392,20 +399,20 @@ def phase_checklist_lines(phase: str, finding: str | None) -> list[str]:
     if str(phase) == "4":
         finding_ref = finding or "<finding-id>"
         return [
-            f"Ensure validation evidence exists under {EVIDENCE_ROOT.relative_to(ROOT)}/{finding_ref}/, including README.md.",
+            f"Ensure validation evidence exists under {_display_path(EVIDENCE_ROOT)}/{finding_ref}/, including README.md.",
             "Update the finding with validation results and move it to the correct status directory if needed.",
             "Do not stop until the evidence and finding status are consistent.",
         ]
     if str(phase) == "5":
         finding_ref = finding or "<finding-id>"
         return [
-            f"If exploitation succeeds, ensure {EVIDENCE_ROOT.relative_to(ROOT)}/{finding_ref}/exploits/ contains the exploit artifacts and exploits/README.md.",
+            f"If exploitation succeeds, ensure {_display_path(EVIDENCE_ROOT)}/{finding_ref}/exploits/ contains the exploit artifacts and exploits/README.md.",
             "If exploitation is not feasible, keep the finding in CONFIRMED and update its exploitation.status to NOT_FEASIBLE with a clear explanation.",
             "Do not stop until the exploit artifacts or the NOT_FEASIBLE documentation are durable and consistent.",
         ]
     if str(phase) == "6":
         return [
-            f"Ensure the report output under {REPORTS_ROOT.relative_to(ROOT)}/ is written and reviewable.",
+            f"Ensure the report output under {_display_path(REPORTS_ROOT)}/ is written and reviewable.",
             "Include the required summary sections and evidence references for exploited and confirmed findings.",
             "Do not stop until the report artifacts are durable on disk.",
         ]

@@ -187,6 +187,32 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
         assert any("sandbox state was not recorded" in failure for failure in failures), failures
         assert any("runs/phase-1-summary*.md" in failure for failure in failures), failures
 
+    def test_phase1_path_diagnostics_handle_notes_root_outside_root(self, tmp_path):
+        import phases.completion as completion_mod
+
+        orig_notes_root = completion_mod.NOTES_ROOT
+        orig_sandbox_plan = completion_mod.SANDBOX_PLAN_PATH
+        orig_root = completion_mod.ROOT
+
+        completion_mod.ROOT = tmp_path / "workspace"
+        completion_mod.NOTES_ROOT = tmp_path / "external-notes"
+        completion_mod.SANDBOX_PLAN_PATH = completion_mod.NOTES_ROOT / "sandbox-plan.md"
+
+        try:
+            for phase in ("1a", "1b", "1"):
+                ok, failures = completion_mod.check_phase_graceful_completion(phase, None, time.time())
+
+                assert ok is False
+                assert failures
+                assert not any("Internal error during artifact check" in failure for failure in failures), failures
+                assert any(str(completion_mod.NOTES_ROOT) in failure for failure in failures), failures
+
+            assert str(completion_mod.NOTES_ROOT) in "\n".join(completion_mod.phase_checklist_lines("1", None))
+        finally:
+            completion_mod.NOTES_ROOT = orig_notes_root
+            completion_mod.SANDBOX_PLAN_PATH = orig_sandbox_plan
+            completion_mod.ROOT = orig_root
+
     def test_phase2_accepts_summary_with_no_new_findings(self, tmp_path):
         """Phase 2 should pass when only the run summary is fresh (no new findings)."""
         import os
