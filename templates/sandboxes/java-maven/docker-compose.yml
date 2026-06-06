@@ -9,6 +9,7 @@ services:
     working_dir: /workspace
     volumes:
       - ../:/workspace
+      - ../.tools/codeql/current:/opt/codeql:ro
       - codecome-m2:/root/.m2
       - codecome-gradle:/root/.gradle
     tty: true

@@ -9,6 +9,7 @@ services:
     working_dir: /workspace
     volumes:
       - ../:/workspace
+      - ../.tools/codeql/current:/opt/codeql:ro
       - codecome-bundle:/usr/local/bundle
     tty: true
     stdin_open: true

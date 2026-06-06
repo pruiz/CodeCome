@@ -9,6 +9,7 @@ services:
     working_dir: /workspace
     volumes:
       - ../:/workspace:ro
+      - ../.tools/codeql/current:/opt/codeql:ro
     tty: true
     stdin_open: true
     security_opt:
