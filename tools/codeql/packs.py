@@ -81,8 +81,23 @@ def load_pack_catalog(path: Path) -> dict[str, Any]:
 
 
 def load_codeql_plan(path: Path) -> dict[str, Any]:
-    """Load and validate a CodeQL plan file."""
+    """Load and validate a CodeQL plan file.
+
+    Only schema v2 is supported.  Earlier versions raise an actionable
+    upgrade error so the user re-runs Phase 1a.
+    """
     data = load_yaml_mapping(path, what="CodeQL plan")
+
+    version = data.get("schema_version")
+    if version != 2:
+        msg = (
+            f"CodeQL plan at {path} has schema_version: {version!r}. "
+            f"Only schema_version: 2 is supported after the CodeQL recipe "
+            f"refactor.  Please delete the existing plan and re-run Phase 1a "
+            f"(``make phase-1``) to regenerate a v2 plan that works with the "
+            f"new sandbox-recipe integration."
+        )
+        raise PackResolverError(msg)
 
     units = data.get("analysis_units")
     if not isinstance(units, list):

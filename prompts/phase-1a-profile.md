@@ -59,11 +59,17 @@ Create `itemdb/notes/codeql-plan.yml` by filling in the template from `templates
 
 Rules:
 
+- Set `schema_version: 2`. The v2 schema adds two new optional fields (see below).
 - Discover analysis units under `./src`. An analysis unit is a coherent project/component with one source root and one or more languages/stacks, such as an API service, frontend app, native library, CLI, package, firmware tree, or benchmark corpus.
 - Use stable, lowercase `analysis_units[].id` values such as `api`, `frontend`, `native-lib`, or `root`. These IDs are discovered here; users do not define them in `codecome.yml`.
 - Set `analysis_units[].path` to the real source path under `./src` for that unit. Do not use CodeQL-generated helper paths such as `_codeql_detected_source_root`.
 - Use one `analysis_units` entry for a single-project repository and multiple entries for monorepos or mixed stacks.
 - Only include languages you have detected with **HIGH** or **MEDIUM** confidence.
+- For compiled languages (c-cpp, go, csharp, java-kotlin, swift) set `analysis_units[].sandbox_build_target` to the `build_targets[].id` from `sandbox-recipe.yml` that provides the build command for this unit. If the recipe has not been generated yet (this is Phase 1a), pick a sensible id such as `root` — Phase 1b will flesh out the recipe and the id can be updated if needed.
+- For each language, set `build_provider`:
+  - `"sandbox-recipe"` — for compiled languages whose build command should be resolved from `sandbox-recipe.yml` after Phase 1b. Leave `build_command` empty (the runner resolves it from the recipe).
+  - `"none"` — for no-build languages (python, javascript-typescript, ruby).
+- Avoid concrete build shell snippets in `build_command` unless the build is obvious and stable and no recipe is available. Prefer `build_provider: sandbox-recipe` for everything that needs a build.
 - For each language in each analysis unit, select the appropriate pack profiles:
   - `official` — always include for languages with CodeQL support.
   - `github-security-lab` — include for security-focused audits.
@@ -92,13 +98,12 @@ Rules:
 - Do not assume the target is a web application.
 - Do not modify files under `src/`.
 - Do not generate vulnerability findings.
-- Do not produce full reconnaissance notes (attack-surface, trust-boundaries, etc.) — those are Phase 1b.
-- Do not bootstrap the sandbox — that is Phase 1c.
-- Do not run CodeQL manually. The harness runs it after this sub-stage.
+- Do not produce full reconnaissance notes (attack-surface, trust-boundaries, etc.) — those are Phase 1c.
+- The sandbox will be built by Phase 1b. Do not attempt sandbox work here.
+- Do not run CodeQL manually. The harness runs it after Phase 1b.
 - Be explicit about uncertainty.
 - Prefer useful notes over exhaustive dumps.
 - Focus on what later sub-stages need.
-- Phase 1a does not produce `threat-model.md`.
 - Phase 1a does not produce attack-surface, trust-boundary, or data-flow notes.
 - Phase 1a does not bootstrap sandbox.
 - Non-blocking open questions should go into the run summary file.

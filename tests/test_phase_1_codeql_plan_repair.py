@@ -19,7 +19,7 @@ def _write_invalid_plan(root: Path) -> None:
     plan = root / "itemdb" / "notes" / "codeql-plan.yml"
     plan.parent.mkdir(parents=True, exist_ok=True)
     plan.write_text(
-        "schema_version: 1\n"
+        "schema_version: 2\n"
         "analysis_units:\n"
         "  - id: native\n"
         "    path: ./src/native\n"
@@ -36,7 +36,7 @@ def _write_valid_plan(root: Path) -> None:
     plan = root / "itemdb" / "notes" / "codeql-plan.yml"
     plan.parent.mkdir(parents=True, exist_ok=True)
     plan.write_text(
-        "schema_version: 1\n"
+        "schema_version: 2\n"
         "analysis_units:\n"
         "  - id: native\n"
         "    path: ./src/native\n"
@@ -76,7 +76,7 @@ def _write_manual_plan(root: Path, build_command: str) -> None:
     plan.write_text(
         yaml.safe_dump(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "analysis_units": [
                     {
                         "id": "native",
@@ -371,7 +371,7 @@ def _write_plan_with_build_mode(root: Path, build_mode: str | None, build_comman
     import yaml as _yaml
 
     data: dict = {
-        "schema_version": 1,
+        "schema_version": 2,
         "analysis_units": [
             {
                 "id": "native",

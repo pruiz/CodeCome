@@ -295,7 +295,7 @@ def test_run_codeql_database_failure_honors_soft_policy(tmp_path: Path) -> None:
 
     plan_path = tmp_path / "itemdb" / "notes" / "codeql-plan.yml"
     plan_path.parent.mkdir(parents=True)
-    plan_path.write_text("schema_version: 1\n", encoding="utf-8")
+    plan_path.write_text("schema_version: 2\nanalysis_units:\n  - id: root\n    path: ./src\n    languages:\n      - id: python\n        packs:\n          - official\n", encoding="utf-8")
 
     catalog = tmp_path / "templates" / "codeql-packs.yml"
     catalog.parent.mkdir(parents=True)
@@ -382,7 +382,7 @@ def test_run_codeql_empty_languages_returns_skipped(tmp_path: Path) -> None:
 
     plan_path = tmp_path / "itemdb" / "notes" / "codeql-plan.yml"
     plan_path.parent.mkdir(parents=True)
-    plan_path.write_text("schema_version: 1\nanalysis_units: []\n", encoding="utf-8")
+    plan_path.write_text("schema_version: 2\nanalysis_units: []\n", encoding="utf-8")
 
     catalog = tmp_path / "templates" / "codeql-packs.yml"
     catalog.parent.mkdir(parents=True)
@@ -415,7 +415,7 @@ def test_run_codeql_pack_resolver_error_soft_policy(tmp_path: Path) -> None:
 
     plan_path = tmp_path / "itemdb" / "notes" / "codeql-plan.yml"
     plan_path.parent.mkdir(parents=True)
-    plan_path.write_text("schema_version: 1\n", encoding="utf-8")
+    plan_path.write_text("schema_version: 2\nanalysis_units:\n  - id: root\n    path: ./src\n    languages:\n      - id: python\n        packs:\n          - official\n", encoding="utf-8")
 
     catalog = tmp_path / "templates" / "codeql-packs.yml"
     catalog.parent.mkdir(parents=True)

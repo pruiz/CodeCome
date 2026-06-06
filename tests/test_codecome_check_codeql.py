@@ -85,7 +85,7 @@ def test_codeql_check_fails_failed_artifacts(tmp_path: Path, capsys) -> None:
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
     (notes / "codeql-plan.yml").write_text(
-        "schema_version: 1\nanalysis_units:\n  - id: root\n    path: ./src\n    languages:\n      - id: python\n        packs:\n          - official\n",
+        "schema_version: 2\nanalysis_units:\n  - id: root\n    path: ./src\n    languages:\n      - id: python\n        packs:\n          - official\n",
         encoding="utf-8",
     )
     manifest_dir = config.abs_output_dir

@@ -32,7 +32,7 @@ def test_unsupported_language_soft_policy_warns_not_fails(tmp_path: Path, capsys
     (notes / "target-profile.md").write_text("profile", encoding="utf-8")
     (notes / "build-model.md").write_text("model", encoding="utf-8")
     (notes / "codeql-plan.yml").write_text(
-        "schema_version: 1\n"
+        "schema_version: 2\n"
         "recommended: true\n"
         "analysis_units:\n"
         "  - id: gilroy\n"
@@ -65,7 +65,7 @@ def test_unsupported_language_hard_policy_fails(tmp_path: Path, capsys) -> None:
     (notes / "target-profile.md").write_text("profile", encoding="utf-8")
     (notes / "build-model.md").write_text("model", encoding="utf-8")
     (notes / "codeql-plan.yml").write_text(
-        "schema_version: 1\n"
+        "schema_version: 2\n"
         "recommended: true\n"
         "analysis_units:\n"
         "  - id: gilroy\n"
@@ -98,7 +98,7 @@ def test_non_recommended_unit_without_languages_is_skipped(tmp_path: Path, capsy
     (notes / "target-profile.md").write_text("profile", encoding="utf-8")
     (notes / "build-model.md").write_text("model", encoding="utf-8")
     (notes / "codeql-plan.yml").write_text(
-        "schema_version: 1\n"
+        "schema_version: 2\n"
         "recommended: true\n"
         "analysis_units:\n"
         "  - id: api\n"
@@ -129,3 +129,33 @@ def test_non_recommended_unit_without_languages_is_skipped(tmp_path: Path, capsy
     out = capsys.readouterr().out
     assert rc == 0
     assert "not recommended for CodeQL" in out
+
+
+def test_schema_v1_rejected_at_gate_1a(tmp_path: Path, capsys) -> None:
+    notes = tmp_path / "itemdb" / "notes"
+    notes.mkdir(parents=True)
+    (notes / "target-profile.md").write_text("profile", encoding="utf-8")
+    (notes / "build-model.md").write_text("model", encoding="utf-8")
+    (notes / "codeql-plan.yml").write_text(
+        "schema_version: 1\n"
+        "recommended: true\n"
+        "analysis_units:\n"
+        "  - id: api\n"
+        "    path: ./src\n"
+        "    languages:\n"
+        "      - id: python\n"
+        "        packs:\n"
+        "          - official\n",
+        encoding="utf-8",
+    )
+
+    (tmp_path / "src").mkdir()
+
+    from phases.phase_1_gates import check_phase_1a
+
+    with patch("phases.phase_1_gates.ROOT", tmp_path):
+        rc = check_phase_1a()
+
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "schema_version" in out

@@ -2,7 +2,7 @@
 # The model fills in language entries based on source tree analysis.
 # Consumed by CodeQL run orchestration (tools/codeql/runner.py).
 
-schema_version: 1
+schema_version: 2
 generated_by: "phase-1a-profile"
 
 source_path: "./src"
@@ -16,10 +16,12 @@ analysis_units: []
 #     path: "./src/api"
 #     kind: "service"
 #     primary: true
+#     sandbox_build_target: "root"        # references a build_target id in sandbox-recipe.yml
 #     languages:
 #       - id: "python"
 #         confidence: "HIGH"
 #         build_mode: "none"
+#         build_provider: "none"           # "sandbox-recipe" or "none"
 #         build_command: null
 #         packs:
 #           - "official"
@@ -29,11 +31,13 @@ analysis_units: []
 #     path: "./src/native"
 #     kind: "library"
 #     primary: false
+#     sandbox_build_target: "native-lib"  # references a build_target id in sandbox-recipe.yml
 #     languages:
 #       - id: "c-cpp"
 #         confidence: "HIGH"
 #         build_mode: "manual"
-#         build_command: "make -C src/native"
+#         build_provider: "sandbox-recipe"  # resolved from sandbox-recipe.yml after Phase 1b
+#         build_command: null               # derived from recipe; leave empty when build_provider is "sandbox-recipe"
 #         db_create_timeout: 1800   # optional: seconds, model-estimated from source size
 #         analyze_timeout: 900      # optional: seconds, per query-profile run
 #         packs:
@@ -41,6 +45,15 @@ analysis_units: []
 #           - "github-security-lab"
 #           - "trailofbits"
 #           - "coding-standards"
+#
+# v2 changes:
+#   - sandbox_build_target on analysis units links to sandbox-recipe.yml build_targets.
+#   - build_provider on language entries controls where the build command comes from.
+#     Use "sandbox-recipe" for compiled languages (the sandbox provides the build command).
+#     Use "none" for no-build languages (python, javascript-typescript, ruby).
+#   - build_command should be left empty when build_provider is "sandbox-recipe"
+#     (the runner resolves it from the recipe).  Only provide build_command directly
+#     when the build cannot be expressed through the recipe.
 #
 # Allowed language IDs: python, javascript-typescript, ruby, c-cpp, go, csharp, java-kotlin, swift
 # Allowed confidence values: HIGH, MEDIUM, LOW
