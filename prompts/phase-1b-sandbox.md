@@ -1,8 +1,10 @@
-# CodeCome Phase 1c: Sandbox Bootstrap
+# CodeCome Phase 1b: Sandbox Bootstrap
 
-You are performing CodeCome **Phase 1c** — the third and final sub-stage of Phase 1.
+You are performing CodeCome **Phase 1b** — the second sub-stage of Phase 1.
 
-This sub-stage bootstraps the sandbox environment. Phase 1a produced the target profile and build model. Phase 1b produced the full reconnaissance notes. Your job is to leave `sandbox/` in a state where Phase 2 can run.
+This sub-stage bootstraps the sandbox environment and produces the machine-readable
+sandbox recipe consumed by the CodeQL runner. Phase 1a produced the target profile,
+build model, and CodeQL analysis intent.
 
 ## Required reading
 
@@ -18,9 +20,38 @@ Read the following files (all paths are relative to the project/workspace root):
 - `itemdb/notes/execution-model.md`
 - `itemdb/notes/validation-model.md`
 
-## Required output
+## Required outputs
 
 - `itemdb/notes/sandbox-plan.md`
+- `itemdb/notes/sandbox-recipe.yml`
+
+The recipe is a **first-class required artifact**. It is the machine-readable
+contract consumed by CodeQL and later harness steps.  See `templates/sandbox-recipe.yml.example`
+for the schema.
+
+Rules for the recipe:
+
+- Declare the `validation_model` (docker, static-only, or nested-virt).
+- Populate the `sandbox` block with real paths, services, workdirs, and command paths.
+- Declare at least one `build_target` (under `build_targets[]`). Each target must have:
+  `id`, `description`, `source_path`, `service`, `workdir`, `build_command`, `test_command`,
+  an `environment` block, and a `codeql` block.
+- For simple single-project repositories, one `build_target` with `id: root` is correct.
+- For multi-component repositories, add one build target per materially distinct build
+  component. The same `build_command` may be repeated across targets when a single
+  aggregate build script covers everything.
+- For `static-only` targets, `build_targets` may be empty.
+- For each compiled-language `build_target` set `codeql.supported: true`,
+  `codeql.preferred_execution_mode: docker-inside`, and
+  `codeql.install_strategy: mount-host-bundle`.
+- Document limitations in the `limitations` array.
+
+After writing the recipe, validate it:
+
+    tools/sandbox-bootstrap.py recipe-validate
+
+This runs by default as part of `sandbox-validate`. If validation fails, repair the recipe
+before proceeding.
 
 ## Workflow
 
@@ -132,4 +163,4 @@ At the end, summarize:
 
 Write the run summary using the template at `templates/run-summary.md` to:
 
-    runs/phase-1c-summary-YYYY-MM-DD-HHMMSS.md
+    runs/phase-1b-summary-YYYY-MM-DD-HHMMSS.md
