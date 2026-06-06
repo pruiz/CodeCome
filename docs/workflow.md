@@ -22,14 +22,15 @@ The workflow is intentionally simple in the initial PoC:
 
 ## Phase 1: Target reconnaissance + sandbox bootstrap
 
-Phase 1 has two sub-stages, run in the same invocation:
+Phase 1 has three sub-stages, run in the same invocation:
 
-- **Phase 1a** — Source reconnaissance.
-- **Phase 1b** — Sandbox bootstrap.
+- **Phase 1a** — Source reconnaissance and CodeQL planning.
+- **Phase 1b** — Sandbox bootstrap and recipe generation.
+- **Phase 1c** — Detailed reconnaissance enriched with CodeQL signals.
 
 Goal:
 
-    Understand the target, then prepare a working validation
+    Understand the target and prepare a working validation
     environment under `sandbox/`.
 
 Run:
@@ -47,25 +48,8 @@ Run:
 Expected outputs under `itemdb/notes/`:
 
     target-profile.md
-    attack-surface.md
     build-model.md
-    execution-model.md
-    trust-boundaries.md
-    data-flow.md
-    validation-model.md
-    interesting-files.md
-    security-assumptions.md
-
-Optional outputs:
-
-    auth-model.md
-    web-routes.md
-    cli-commands.md
-    public-api.md
-    cwe-map.md
-    benchmark-notes.md
-    crypto-usage.md
-    iac-resources.md
+    codeql-plan.yml
 
 Phase 1a should not normally create findings.
 
@@ -75,9 +59,30 @@ Curated examples live under `templates/sandboxes/<id>/`. The recon
 agent picks one (or `multi-service-compose` for multi-stack repos)
 and applies it via `tools/sandbox-bootstrap.py`.
 
-Required output:
+Required outputs:
 
     itemdb/notes/sandbox-plan.md
+    itemdb/notes/sandbox-recipe.yml
+
+### Phase 1c: detailed reconnaissance
+
+After the sandbox is bootstrapped and CodeQL has run, Phase 1c
+produces the full set of detailed reconnaissance notes:
+
+    itemdb/notes/attack-surface.md
+    itemdb/notes/execution-model.md
+    itemdb/notes/trust-boundaries.md
+    itemdb/notes/data-flow.md
+    itemdb/notes/validation-model.md
+    itemdb/notes/interesting-files.md
+    itemdb/notes/security-assumptions.md
+    itemdb/notes/threat-model.md
+    itemdb/notes/file-risk-index.yml
+
+If `itemdb/codeql/last-run-manifest.yml` exists and ``health.usable``
+is true, Phase 1c incorporates CodeQL signal files into the above
+notes. If CodeQL did not produce usable results, recon proceeds
+with source analysis alone.
 
 Generated artifacts (git-ignored):
 

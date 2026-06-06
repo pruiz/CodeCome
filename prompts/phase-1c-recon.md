@@ -1,8 +1,8 @@
-# CodeCome Phase 1b: Detailed Reconnaissance
+# CodeCome Phase 1c: Detailed Reconnaissance
 
-You are performing CodeCome **Phase 1b** — the second sub-stage of Phase 1.
+You are performing CodeCome **Phase 1c** — the third and final sub-stage of Phase 1.
 
-Phase 1b produces detailed reconnaissance notes. If CodeQL artifacts are available, use them as optional enrichment. If they are absent or CodeQL was disabled, continue with source-only reconnaissance. Phase 1b must complete regardless of CodeQL availability.
+Phase 1c produces detailed reconnaissance notes. If CodeQL artifacts are available, use them as optional enrichment. If they are absent or CodeQL was disabled, continue with source-only reconnaissance. Phase 1c must complete regardless of CodeQL availability.
 
 ## Required reading
 
@@ -26,21 +26,23 @@ Also read the Phase 1a outputs:
 
 ## CodeQL artifacts (conditional)
 
-If CodeQL analysis was performed, the following artifacts may exist. Treat them as reconnaissance evidence, not proof of vulnerability:
+If CodeQL analysis was performed, read `itemdb/codeql/last-run-manifest.yml`.
+The manifest contains a ``health`` block with ``usable`` and ``classification`` keys.
 
-- `itemdb/codeql/run-manifest.yml` — CodeQL run outcome and metadata.
-- `itemdb/codeql/normalized/alerts.yml` — Normalized CodeQL alerts with source/sink/flow.
-- `itemdb/codeql/normalized/file-signals.yml` — Per-file CodeQL signal scores.
-- `itemdb/codeql/codeql-summary.md` — Human-readable CodeQL summary.
+- **If ``health.usable`` is true**, the following artifacts may exist under
+  ``itemdb/codeql/runs/<run-id>/``. Treat them as reconnaissance evidence, not proof
+  of vulnerability:
+  - ``normalized/alerts.yml`` — Normalized CodeQL alerts with source/sink/flow.
+  - ``normalized/file-signals.yml`` — Per-file CodeQL signal scores.
+  - ``codeql-summary.md`` — Human-readable CodeQL summary.
 
-If these files exist:
+- **If ``health.usable`` is false**, do **not** import CodeQL alerts or file-signals
+  into ``file-risk-index.yml`` or ``interesting-files.md``. Record the health summary
+  (classification + reason) in ``threat-model.md`` under a new ``# CodeQL health``
+  heading so later phases know CodeQL was attempted but did not produce usable signals.
 
-1. Read them and extract relevant signals.
-2. Use alert data to enrich your understanding of potential sources, sinks, and trust-boundary crossings.
-3. Use file-signals to prioritize files for the file-risk-index.
-4. Do not treat CodeQL alerts as confirmed vulnerabilities. They are static-analysis hints.
-
-If these files do not exist, proceed with reconnaissance based on source analysis alone. Phase 1b must complete regardless of CodeQL availability.
+If CodeQL was not run or the manifest is absent, proceed with reconnaissance based
+on source analysis alone. Phase 1c must complete regardless of CodeQL availability.
 
 ## Target
 
