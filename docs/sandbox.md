@@ -119,6 +119,28 @@ helper gaps rather than hard gate failures.
 The validation matrix is appended to
 `sandbox/CODECOME-GENERATED.md` so each run is auditable.
 
+## Sandbox recipe
+
+Phase 1b also produces `itemdb/notes/sandbox-recipe.yml`, a machine-readable
+contract consumed by later harness steps (CodeQL runner, Phase 1c recon). It
+describes:
+
+- how to invoke sandbox capabilities (setup, up, check, build, test, etc.),
+- per-unit build targets with source paths, workdirs, and build/test commands,
+- CodeQL execution hints (install strategy, preferred execution mode).
+
+Validate the recipe:
+
+    make sandbox-validate
+
+(Validates both the sandbox itself and the recipe file.)
+
+Print the recipe:
+
+    $(PYTHON) tools/sandbox-bootstrap.py recipe-print
+
+See `templates/sandbox-recipe.yml.example` for the schema.
+
 ## Phase 2 sandbox gate
 
 Before running `make phase-2`, the gate inspects the most recent

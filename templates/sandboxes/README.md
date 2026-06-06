@@ -35,6 +35,21 @@ Each seed contains:
 See `.opencode/skills/sandbox-bootstrap/SKILL.md` for the full
 authoring rules.
 
+## Sandbox recipe
+
+After bootstrap, Phase 1b writes `itemdb/notes/sandbox-recipe.yml`.
+This machine-readable file is the contract between the sandbox and
+later harness steps. See `templates/sandbox-recipe.yml.example`
+for the schema.
+
+To validate it:
+
+    tools/sandbox-bootstrap.py recipe-validate
+
+To print it:
+
+    tools/sandbox-bootstrap.py recipe-print
+
 ## License
 
 The files in this `templates/sandboxes/` subtree are licensed under
