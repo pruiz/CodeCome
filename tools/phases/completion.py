@@ -208,26 +208,15 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
 
             # Phase 1c and bare "1": require the full monolith set.
             required_artifacts = _phase1_required_artifacts()
+            sandbox_generated = ROOT / "sandbox" / "CODECOME-GENERATED.md"
+            sandbox_state_recorded = _path_is_fresh(sandbox_generated, run_start_time) or _path_is_fresh(
+                SANDBOX_PLAN_PATH, run_start_time
+            )
+            import glob as _glob
+            run_summaries = _glob.glob(str(ROOT / "runs" / f"phase-{original_phase}-summary*.md"))
+            summary_fresh = any(Path(p).stat().st_mtime >= run_start_time for p in run_summaries)
+
             if all(path.exists() for path in required_artifacts):
-                sandbox_generated = ROOT / "sandbox" / "CODECOME-GENERATED.md"
-                sandbox_state_recorded = _path_is_fresh(sandbox_generated, run_start_time) or _path_is_fresh(
-                    SANDBOX_PLAN_PATH, run_start_time
-                )
-                import glob as _glob
-                run_summaries = _glob.glob(str(ROOT / "runs" / f"phase-{original_phase}-summary*.md"))
-                summary_fresh = any(Path(p).stat().st_mtime >= run_start_time for p in run_summaries)
-                if phase_is_1c:
-                    if not sandbox_state_recorded:
-                        failures.append(
-                            "Missing: sandbox/CODECOME-GENERATED.md or itemdb/notes/sandbox-plan.md "
-                            "— sandbox state was not recorded during this run"
-                        )
-                    if not summary_fresh:
-                        failures.append(
-                            f"Missing: runs/phase-{original_phase}-summary*.md — run summary "
-                            "was not created or updated during this run"
-                        )
-                    return (len(failures) == 0, failures)
                 fresh_required = any(_path_is_fresh(path, run_start_time) for path in required_artifacts)
                 if not fresh_required:
                     failures.append(
@@ -235,21 +224,22 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                         f"({', '.join(_PHASE1_REQUIRED_ARTIFACT_NAMES)}) "
                         "created or updated during this run"
                     )
-                if not sandbox_state_recorded:
-                    failures.append(
-                        "Missing: sandbox/CODECOME-GENERATED.md or itemdb/notes/sandbox-plan.md "
-                        "— sandbox state was not recorded during this run"
-                    )
-                if not summary_fresh:
-                    failures.append(
-                        f"Missing: runs/phase-{original_phase}-summary*.md — run summary "
-                        "was not created or updated during this run"
-                    )
-                return (len(failures) == 0, failures)
-            failures.append(
-                f"Missing: {NOTES_ROOT.relative_to(ROOT)}/ — required phase-1 notes "
-                f"({', '.join(_PHASE1_REQUIRED_ARTIFACT_NAMES)}) are not all present"
-            )
+            else:
+                failures.append(
+                    f"Missing: {NOTES_ROOT.relative_to(ROOT)}/ — required phase-1 notes "
+                    f"({', '.join(_PHASE1_REQUIRED_ARTIFACT_NAMES)}) are not all present"
+                )
+
+            if not sandbox_state_recorded:
+                failures.append(
+                    "Missing: sandbox/CODECOME-GENERATED.md or itemdb/notes/sandbox-plan.md "
+                    "— sandbox state was not recorded during this run"
+                )
+            if not summary_fresh:
+                failures.append(
+                    f"Missing: runs/phase-{original_phase}-summary*.md — run summary "
+                    "was not created or updated during this run"
+                )
             return (len(failures) == 0, failures)
         elif phase_key in ("2", "sweep"):
             import glob as _glob

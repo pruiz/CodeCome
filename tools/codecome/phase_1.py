@@ -559,6 +559,8 @@ def _run_subphase(
     # --- Retry loop (mirrors harness.run_phase_mode) ---
     while True:
         attempt_number += 1
+        phase_failures = []
+        phase_ok = False
         _reset_subagent_state()
         finish_warning = None
 

@@ -164,6 +164,29 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
             completion_mod.SANDBOX_PLAN_PATH = orig_sandbox_plan
             completion_mod.ROOT = orig_root
 
+    def test_bare_phase1_reports_notes_sandbox_and_summary_failures(self, tmp_path):
+        import phases.completion as completion_mod
+
+        orig_notes_root = completion_mod.NOTES_ROOT
+        orig_sandbox_plan = completion_mod.SANDBOX_PLAN_PATH
+        orig_root = completion_mod.ROOT
+
+        completion_mod.ROOT = tmp_path
+        completion_mod.NOTES_ROOT = tmp_path / "itemdb" / "notes"
+        completion_mod.SANDBOX_PLAN_PATH = completion_mod.NOTES_ROOT / "sandbox-plan.md"
+
+        try:
+            ok, failures = completion_mod.check_phase_graceful_completion("1", None, time.time())
+        finally:
+            completion_mod.NOTES_ROOT = orig_notes_root
+            completion_mod.SANDBOX_PLAN_PATH = orig_sandbox_plan
+            completion_mod.ROOT = orig_root
+
+        assert ok is False
+        assert any("required phase-1 notes" in failure for failure in failures), failures
+        assert any("sandbox state was not recorded" in failure for failure in failures), failures
+        assert any("runs/phase-1-summary*.md" in failure for failure in failures), failures
+
     def test_phase2_accepts_summary_with_no_new_findings(self, tmp_path):
         """Phase 2 should pass when only the run summary is fresh (no new findings)."""
         import os
