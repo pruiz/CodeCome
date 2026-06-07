@@ -529,13 +529,13 @@ def build_frontmatter_resume_prompt(phase: str, finding: str | None, validation_
 def build_artifact_repair_resume_prompt(
     phase: str, finding: str | None, validation_output: str
 ) -> str:
-    """Build a resume prompt for Phase 1b artifact validation failures."""
+    """Build a resume prompt for phase artifact validation failures."""
     checklist = "\n".join(f"- {line}" for line in phase_checklist_lines(phase, finding))
     return (
-        "Your previous run produced Phase 1b artifacts that failed local validation.\n\n"
+        f"Your previous run produced Phase {phase} artifacts that failed local validation.\n\n"
         "Validation errors:\n"
         f"{validation_output}\n\n"
-        "Repair only the reported missing or malformed Phase 1b artifacts with minimal changes. "
+        f"Repair only the reported missing or malformed Phase {phase} artifacts with minimal changes. "
         "Do not rewrite unrelated reconnaissance notes and do not modify target source code. "
         "If threat-model.md is missing required headings, add only the missing H1 headings and "
         "leave the existing content intact.\n\n"

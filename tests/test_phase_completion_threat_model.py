@@ -49,3 +49,17 @@ def test_build_artifact_repair_resume_prompt_avoids_unrelated_rewrites() -> None
 
     assert "unrelated" in prompt
     assert "do not modify target source code" in prompt
+
+
+def test_build_artifact_repair_resume_prompt_supports_phase_1a() -> None:
+    from phases.completion import build_artifact_repair_resume_prompt
+
+    prompt = build_artifact_repair_resume_prompt(
+        "1a",
+        None,
+        "itemdb/notes/codeql-plan.yml has empty languages; set recommended=false",
+    )
+
+    assert "Phase 1a artifacts" in prompt
+    assert "codeql-plan.yml" in prompt
+    assert "recommended=false" in prompt

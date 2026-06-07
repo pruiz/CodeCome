@@ -151,6 +151,19 @@ def _check_codeql_artifacts(console: Any) -> int:
     return 0
 
 
+def _phase_1a_codeql_plan_repair_output() -> str:
+    return (
+        "Gate 1a rejected itemdb/notes/codeql-plan.yml. Repair only that file.\n"
+        "For every analysis unit whose languages list is empty, either remove the unit "
+        "from analysis_units or set recommended: false on that unit. Prefer moving "
+        "unsupported-language inventory such as Rust, Swift, Elixir, Zig, F#, VB6, "
+        "WebAssembly, and static-only components into the top-level notes list instead "
+        "of keeping active CodeQL analysis units with languages: [].\n"
+        "Keep CodeQL-supported units with non-empty languages lists. Do not modify "
+        "target-profile.md, build-model.md, source code, or project configuration."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Subphase runner
 # ---------------------------------------------------------------------------
@@ -456,23 +469,45 @@ def run_phase_1(
     out = get_output(console)
     # ---- Phase 1a: Target Profile ----
     findings_snapshot_1a = count_findings_snapshot()
-    rc = _run_subphase(
-        args=args,
-        console=console,
-        rendering_ctx=rendering_ctx,
-        runner=runner,
-        base_url=base_url,
-        phase_id="1a",
-        label="Target Profile",
-        agent="recon",
-        prompt_file="prompts/phase-1a-profile.md",
-    )
-    if rc != 0:
-        return rc
+    phase_1a_session_id: str | None = None
+    phase_1a_prompt: str | None = None
+    phase_1a_artifact_retries = 0
+    while True:
+        outcome = _run_subphase(
+            args=args,
+            console=console,
+            rendering_ctx=rendering_ctx,
+            runner=runner,
+            base_url=base_url,
+            phase_id="1a",
+            label="Target Profile",
+            agent="recon",
+            prompt_file="prompts/phase-1a-profile.md",
+            existing_session_id=phase_1a_session_id,
+            initial_prompt=phase_1a_prompt,
+            return_outcome=True,
+        )
+        if outcome.returncode != 0:
+            return outcome.returncode
 
-    gate_rc = check_phase_1a(console, findings_snapshot=findings_snapshot_1a)
-    if gate_rc != 0:
-        return gate_rc
+        gate_rc = check_phase_1a(console, findings_snapshot=findings_snapshot_1a)
+        if gate_rc == 0:
+            break
+
+        max_artifact_retries = 2
+        if phase_1a_artifact_retries >= max_artifact_retries or not outcome.session_id:
+            return gate_rc
+
+        phase_1a_artifact_retries += 1
+        out.warn(
+            "\n[Auto-Correction] Phase 1a artifacts failed Gate 1a validation. "
+            "CodeCome will resume the same session and ask for a minimal CodeQL plan repair "
+            f"(retry {phase_1a_artifact_retries}/{max_artifact_retries})."
+        )
+        phase_1a_session_id = outcome.session_id
+        phase_1a_prompt = build_artifact_repair_resume_prompt(
+            "1a", None, _phase_1a_codeql_plan_repair_output()
+        )
 
     # ---- Phase 1b: Sandbox Bootstrap ----
     rc = _run_subphase(

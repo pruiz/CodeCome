@@ -115,8 +115,8 @@ def load_codeql_plan(path: Path) -> dict[str, Any]:
         languages = unit.get("languages")
         if unit.get("recommended") is False and (languages is None or languages == []):
             continue
-        if not isinstance(languages, list) or not languages:
-            raise PackResolverError(f"CodeQL plan at {path} must define analysis unit {unit_id!r} languages as a non-empty list.")
+        if not isinstance(languages, list):
+            raise PackResolverError(f"CodeQL plan at {path} must define analysis unit {unit_id!r} languages as a list.")
         for j, entry in enumerate(languages):
             if not isinstance(entry, dict):
                 raise PackResolverError(f"CodeQL plan at {path} has non-mapping language entry {j} in analysis unit {unit_id!r}.")
@@ -199,7 +199,11 @@ def resolve_plan_packs(plan: dict[str, Any], catalog: dict[str, Any], skip_unsup
             continue
 
         languages_out: list[dict[str, Any]] = []
-        for entry in unit.get("languages", []):
+        languages = unit.get("languages", [])
+        if languages == []:
+            plan_warnings.append(f"Skipping analysis unit '{unit['id']}' because it has no CodeQL languages")
+            continue
+        for entry in languages:
             language_id = entry["id"]
             profiles = list(entry.get("packs", []))
 
@@ -223,15 +227,16 @@ def resolve_plan_packs(plan: dict[str, Any], catalog: dict[str, Any], skip_unsup
                     },
                 }
             )
-        units_out.append(
-            {
-                "id": unit["id"],
-                "path": unit["path"],
-                "kind": unit.get("kind"),
-                "primary": unit.get("primary", False),
-                "languages": languages_out,
-            }
-        )
+        if languages_out:
+            units_out.append(
+                {
+                    "id": unit["id"],
+                    "path": unit["path"],
+                    "kind": unit.get("kind"),
+                    "primary": unit.get("primary", False),
+                    "languages": languages_out,
+                }
+            )
 
     result: dict[str, Any] = {
         "schema_version": 1,
