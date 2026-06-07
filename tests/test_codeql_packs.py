@@ -218,6 +218,24 @@ def test_load_codeql_plan_allows_non_recommended_unit_without_languages(tmp_path
     assert plan["analysis_units"][1]["id"] == "gilroy"
 
 
+def test_load_codeql_plan_allows_empty_language_list_for_policy_gate(tmp_path: Path) -> None:
+    plan_path = tmp_path / "plan.yml"
+    plan_path.write_text(
+        (
+            "schema_version: 2\n"
+            "analysis_units:\n"
+            "  - id: gilroy\n"
+            "    path: ./src/gilroy\n"
+            "    languages: []\n"
+        ),
+        encoding="utf-8",
+    )
+
+    plan = load_codeql_plan(plan_path)
+
+    assert plan["analysis_units"][0]["languages"] == []
+
+
 def test_resolve_plan_packs_skip_unsupported(tmp_path: Path) -> None:
     catalog_path = tmp_path / "catalog.yml"
     _write_catalog(catalog_path)
@@ -303,3 +321,35 @@ def test_resolve_plan_packs_skips_non_recommended_units(tmp_path: Path) -> None:
     assert len(warnings) == 1
     assert "gilroy" in warnings[0]
     assert "recommended=false" in warnings[0]
+
+
+def test_resolve_plan_packs_skips_empty_language_units(tmp_path: Path) -> None:
+    catalog_path = tmp_path / "catalog.yml"
+    _write_catalog(catalog_path)
+    catalog = load_pack_catalog(catalog_path)
+
+    plan = {
+        "schema_version": 2,
+        "analysis_units": [
+            {
+                "id": "api",
+                "path": "./src/api",
+                "languages": [
+                    {"id": "python", "packs": ["official"]},
+                ],
+            },
+            {
+                "id": "gilroy",
+                "path": "./src/gilroy",
+                "languages": [],
+            },
+        ],
+    }
+
+    resolved = resolve_plan_packs(plan, catalog, skip_unsupported=True)
+
+    assert [unit["id"] for unit in resolved["analysis_units"]] == ["api"]
+    warnings = resolved.get("warnings", [])
+    assert len(warnings) == 1
+    assert "gilroy" in warnings[0]
+    assert "no CodeQL languages" in warnings[0]

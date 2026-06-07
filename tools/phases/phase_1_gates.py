@@ -161,9 +161,19 @@ def _validate_codeql_analysis_unit(
     if unit.get("recommended") is False and (languages is None or languages == []):
         out.info(f"codeql-plan.yml: analysis unit '{unit_id}' is not recommended for CodeQL; skipping language validation")
         return None
-    if not isinstance(languages, list) or len(languages) == 0:
+    if not isinstance(languages, list):
         out.error(f"codeql-plan.yml: analysis unit '{unit_id}' has no languages")
         return 1
+    if len(languages) == 0:
+        fail_policy = _codeql_fail_policy()
+        if fail_policy == "hard":
+            out.error(f"codeql-plan.yml: analysis unit '{unit_id}' has no CodeQL languages and is not marked recommended=false")
+            return 1
+        out.warn(
+            f"codeql-plan.yml: analysis unit '{unit_id}' has no CodeQL languages — will be skipped (fail_policy=soft); "
+            "mark recommended=false or move unsupported-language inventory to top-level notes"
+        )
+        return None
 
     for j, lang in enumerate(languages):
         result = _validate_codeql_language_entry(

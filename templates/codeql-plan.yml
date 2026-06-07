@@ -54,6 +54,9 @@ analysis_units: []
 #   - build_command should be left empty when build_provider is "sandbox-recipe"
 #     (the runner resolves it from the recipe).  Only provide build_command directly
 #     when the build cannot be expressed through the recipe.
+#   - Do not create active analysis units with languages: []. If a component is
+#     inventory-only or unsupported by CodeQL, either omit it from analysis_units
+#     and describe it in top-level notes, or set recommended: false on that unit.
 #
 # Allowed language IDs: python, javascript-typescript, ruby, c-cpp, go, csharp, java-kotlin
 # Allowed confidence values: HIGH, MEDIUM, LOW

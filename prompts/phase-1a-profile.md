@@ -65,6 +65,7 @@ Rules:
 - Set `analysis_units[].path` to the real source path under `./src` for that unit. Do not use CodeQL-generated helper paths such as `_codeql_detected_source_root`.
 - Use one `analysis_units` entry for a single-project repository and multiple entries for monorepos or mixed stacks.
 - Only include languages you have detected with **HIGH** or **MEDIUM** confidence.
+- Do not create active `analysis_units` entries with `languages: []`. If a component has no locally supported CodeQL language, either omit it from `analysis_units` and mention it in top-level `notes`, or set that unit's `recommended: false`.
 - For compiled languages (c-cpp, go, csharp, java-kotlin) set `analysis_units[].sandbox_build_target` to the `build_targets[].id` from `sandbox-recipe.yml` that provides the build command for this unit. If the recipe has not been generated yet (this is Phase 1a), pick a sensible id such as `root` — Phase 1b will flesh out the recipe and the id can be updated if needed.
 - For each language, set `build_provider`:
   - `"sandbox-recipe"` — for compiled languages whose build command should be resolved from `sandbox-recipe.yml` after Phase 1b. Leave `build_command` empty (the runner resolves it from the recipe).
@@ -92,7 +93,9 @@ Rules:
 - Estimate `analyze_timeout` (seconds) per profile if query packs are known to be heavy (e.g. security suites on large codebases); otherwise omit to use harness default.
 - Set `recommended: false` if you cannot confidently profile any language.
 - Add relevant `notes` explaining your language choices and any uncertainties.
+- Put unsupported-language inventory (for example Swift, Rust, Elixir, Zig, F#, VB6, WebAssembly, or static-only components) in top-level `notes`, not in active CodeQL analysis units with empty `languages` lists.
 - Update `exclude` patterns to match the target's test, fixture, vendor, and generated code directories if different from the defaults.
+- If you self-validate the plan, validate against these schema rules, not only YAML syntax: every recommended analysis unit must have a non-empty `languages` list; empty-language inventory units must be omitted or marked `recommended: false`.
 
 ## Important rules
 

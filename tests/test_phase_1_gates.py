@@ -131,6 +131,77 @@ def test_manual_sandbox_recipe_build_provider_does_not_require_inline_command(tm
     assert "manual build without build_command" not in out
 
 
+def test_empty_language_unit_soft_policy_warns_not_fails(tmp_path: Path, capsys) -> None:
+    notes = tmp_path / "itemdb" / "notes"
+    notes.mkdir(parents=True)
+    (notes / "target-profile.md").write_text("profile", encoding="utf-8")
+    (notes / "build-model.md").write_text("model", encoding="utf-8")
+    (notes / "codeql-plan.yml").write_text(
+        "schema_version: 2\n"
+        "recommended: true\n"
+        "analysis_units:\n"
+        "  - id: api\n"
+        "    path: ./src/api\n"
+        "    languages:\n"
+        "      - id: python\n"
+        "        confidence: HIGH\n"
+        "        build_mode: none\n"
+        "        packs:\n"
+        "          - official\n"
+        "  - id: gilroy\n"
+        "    path: ./src/gilroy\n"
+        "    languages: []\n",
+        encoding="utf-8",
+    )
+
+    (tmp_path / "src" / "api").mkdir(parents=True)
+    (tmp_path / "src" / "gilroy").mkdir(parents=True)
+
+    mock_config = type("cfg", (), {"fail_policy": "soft", "enabled": True})()
+
+    from phases.phase_1_gates import check_phase_1a
+
+    with patch("phases.phase_1_gates.ROOT", tmp_path), \
+         patch("phases.phase_1_gates._resolve_codeql_config", return_value=mock_config):
+        rc = check_phase_1a()
+
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "analysis unit 'gilroy' has no CodeQL languages" in out
+    assert "will be skipped" in out
+
+
+def test_empty_language_unit_hard_policy_fails(tmp_path: Path, capsys) -> None:
+    notes = tmp_path / "itemdb" / "notes"
+    notes.mkdir(parents=True)
+    (notes / "target-profile.md").write_text("profile", encoding="utf-8")
+    (notes / "build-model.md").write_text("model", encoding="utf-8")
+    (notes / "codeql-plan.yml").write_text(
+        "schema_version: 2\n"
+        "recommended: true\n"
+        "analysis_units:\n"
+        "  - id: gilroy\n"
+        "    path: ./src/gilroy\n"
+        "    languages: []\n",
+        encoding="utf-8",
+    )
+
+    (tmp_path / "src" / "gilroy").mkdir(parents=True)
+
+    mock_config = type("cfg", (), {"fail_policy": "hard", "enabled": True})()
+
+    from phases.phase_1_gates import check_phase_1a
+
+    with patch("phases.phase_1_gates.ROOT", tmp_path), \
+         patch("phases.phase_1_gates._resolve_codeql_config", return_value=mock_config):
+        rc = check_phase_1a()
+
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "analysis unit 'gilroy' has no CodeQL languages" in out
+    assert "recommended=false" in out
+
+
 def test_unsupported_language_hard_policy_fails(tmp_path: Path, capsys) -> None:
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
