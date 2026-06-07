@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 import subprocess
+import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from codeql.platform import host_platform, container_platform, platforms_compatible
 
@@ -47,6 +48,7 @@ def exec_codeql(
     *args: str,
     timeout: int = 600,
     cwd: str | None = None,
+    progress: Callable[[str], None] | None = None,
 ) -> tuple[bool, str, int]:
     """Run a CodeQL command inside a Docker Compose service.
 
@@ -60,13 +62,47 @@ def exec_codeql(
         cmd += ["-w", cwd]
     cmd += [service, str(codeql_binary), *args]
 
+    if progress is None:
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=timeout,
+            )
+            output = result.stdout.strip() + "\n" + result.stderr.strip()
+            return result.returncode == 0, output.strip(), result.returncode
+        except subprocess.TimeoutExpired:
+            return False, f"CodeQL command timed out after {timeout}s", -1
+        except Exception as exc:
+            return False, str(exc), -1
+
     try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout,
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
         )
-        output = result.stdout.strip() + "\n" + result.stderr.strip()
-        return result.returncode == 0, output.strip(), result.returncode
-    except subprocess.TimeoutExpired:
-        return False, f"CodeQL command timed out after {timeout}s", -1
     except Exception as exc:
         return False, str(exc), -1
+
+    lines: list[str] = []
+
+    def _read_output() -> None:
+        for line in process.stdout:
+            stripped = line.rstrip()
+            if stripped:
+                lines.append(stripped)
+                progress(f"CodeQL [sandbox]: {stripped}")
+
+    reader = threading.Thread(target=_read_output, daemon=True)
+    reader.start()
+
+    try:
+        returncode = process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+        reader.join(timeout=5)
+        return False, f"CodeQL command timed out after {timeout}s", -1
+
+    reader.join(timeout=5)
+    return returncode == 0, "\n".join(lines[-40:]), returncode

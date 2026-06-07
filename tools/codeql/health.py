@@ -201,7 +201,7 @@ def _classify(
     if db_ok and db_exists and not sarif_ok:
         return "failed", "Database created but no SARIF files found."
 
-    if db_ok and db_exists and has_compiled and not extract_ok:
+    if db_ok and db_exists and has_compiled and extract_ok <= 0:
         return "extraction-failed", (
             "CodeQL database creation reported success but "
             f"extractor_successes={extract_ok} for compiled languages. "

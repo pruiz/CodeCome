@@ -73,6 +73,17 @@ def run_codeql(config: CodeQLConfig, *, run_dir: Path | None = None, progress: C
     analysis_units: list[str] = []
     analyzed_profiles = 0
 
+    recipe_path = ROOT / "itemdb" / "notes" / "sandbox-recipe.yml"
+    sandbox_recipe = None
+    if recipe_path.exists():
+        try:
+            from sandbox.recipe import load_recipe
+            sandbox_recipe = load_recipe(recipe_path)
+        except Exception:
+            pass
+
+    from codeql.health import COMPILED_LANGUAGES
+
     for unit_entry in resolved["analysis_units"]:
         unit_id = unit_entry["id"]
         source_path = unit_entry["path"]
@@ -98,6 +109,43 @@ def run_codeql(config: CodeQLConfig, *, run_dir: Path | None = None, progress: C
                 )
                 return _manifest(_tool_failure_status(config), now_utc, config, [version], warnings, failures, language_ids, analysis_units)
 
+            is_compiled = language_id in COMPILED_LANGUAGES
+            docker_ctx = None
+
+            if is_compiled and sandbox_recipe:
+                codeql_cfg = sandbox_recipe.get("codeql", {})
+                target_id = plan_unit.get("sandbox_build_target") or unit_id
+                target_cfg = {}
+                service = sandbox_recipe.get("sandbox", {}).get("default_service", "")
+                workspace_root = sandbox_recipe.get("sandbox", {}).get("workspace_root", "/workspace")
+                compose_file = sandbox_recipe.get("sandbox", {}).get("compose_file", "sandbox/docker-compose.yml")
+
+                for target in sandbox_recipe.get("build_targets", []):
+                    if target.get("id") == target_id:
+                        target_cfg = target.get("codeql", {})
+                        service = target.get("service") or target.get("environment", {}).get("service") or service
+                        break
+
+                exec_mode = target_cfg.get("preferred_execution_mode") or codeql_cfg.get("default_execution_mode", "host")
+                install_strategy = target_cfg.get("install_strategy") or codeql_cfg.get("install_strategy", "mount-host-bundle")
+
+                if exec_mode == "docker-inside":
+                    from codeql.in_docker import check_platform
+                    ok, msg = check_platform(service, ROOT / compose_file, install_strategy)
+                    if not ok:
+                        failures.append(msg)
+                        if config.fail_policy == "soft":
+                            _progress(progress, f"CodeQL: {msg}")
+                            continue
+                        return _manifest("unavailable", now_utc, config, [version], warnings, failures, language_ids, analysis_units)
+
+                    docker_ctx = {
+                        "service": service,
+                        "compose_file": ROOT / compose_file,
+                        "binary": "/opt/codeql/codeql",
+                        "workspace_root": workspace_root,
+                    }
+
             db_dir = database_dir / unit_id / language_id
             sarif_dir.mkdir(parents=True, exist_ok=True)
 
@@ -113,6 +161,7 @@ def run_codeql(config: CodeQLConfig, *, run_dir: Path | None = None, progress: C
                 config.abs_cache_dir,
                 timeout=db_timeout,
                 progress=progress,
+                docker_ctx=docker_ctx,
             )
             if not ok:
                 failures.append(msg)
@@ -148,6 +197,7 @@ def run_codeql(config: CodeQLConfig, *, run_dir: Path | None = None, progress: C
                     config.abs_cache_dir,
                     timeout=analyze_timeout,
                     progress=progress,
+                    docker_ctx=docker_ctx,
                 )
                 if not ok:
                     if config.fail_policy == "soft" and profile != "official":
@@ -270,19 +320,39 @@ def _create_database(
     cache_dir: Path | None = None,
     timeout: int = 600,
     progress: Callable[[str], None] | None = None,
+    docker_ctx: dict[str, Any] | None = None,
 ) -> tuple[bool, str]:
     """Create a CodeQL database.  Returns (success, message)."""
     db_dir.parent.mkdir(parents=True, exist_ok=True)
 
+    is_docker = docker_ctx is not None
+    workspace_root = docker_ctx["workspace_root"] if is_docker else str(ROOT)
+
     cmd = [
-        str(binary), "database", "create",
-        str(db_dir),
+        "database", "create",
+        str(db_dir).replace(str(ROOT), workspace_root),
         "-l", language_id,
-        "-s", str(ROOT / source_path),
+        "-s", str(ROOT / source_path).replace(str(ROOT), workspace_root),
         "--overwrite",
         "--no-run-unnecessary-builds",
     ]
+    
+    if cache_dir:
+        cmd.append(f"--codescanning-config={str(cache_dir).replace(str(ROOT), workspace_root)}") # dummy cache config wait no
+    # let's rebuild cmd cleanly
+    cmd = [
+        str(docker_ctx["binary"]) if is_docker else str(binary), 
+        "database", "create",
+        str(db_dir).replace(str(ROOT), workspace_root),
+        "-l", language_id,
+        "-s", str(ROOT / source_path).replace(str(ROOT), workspace_root),
+        "--overwrite",
+        "--no-run-unnecessary-builds",
+    ]
+    
     _add_common_caches(cmd, cache_dir)
+    if is_docker:
+        cmd = [arg.replace(str(ROOT), workspace_root) for arg in cmd]
 
     if build_mode == "none":
         cmd += ["--build-mode=none"]
@@ -302,11 +372,24 @@ def _create_database(
         temp_config.parent.mkdir(parents=True, exist_ok=True)
         config_content = {"paths-ignore": exclude_patterns}
         temp_config.write_text(_yaml.dump(config_content, default_flow_style=False), encoding="utf-8")
-        cmd += ["--codescanning-config=" + str(temp_config)]
+        cmd += ["--codescanning-config=" + str(temp_config).replace(str(ROOT), workspace_root)]
 
     try:
-        return _run_with_progress(cmd, f"Database create timed out for {language_id} after {timeout}s",
-                                  f"Database create failed for {language_id}", timeout, progress)
+        if is_docker:
+            from codeql.in_docker import exec_codeql
+            ok, msg, rc = exec_codeql(
+                docker_ctx["service"],
+                docker_ctx["compose_file"],
+                docker_ctx["binary"],
+                *cmd[1:],
+                timeout=timeout,
+                cwd=workspace_root,
+                progress=progress,
+            )
+            return ok, msg
+        else:
+            return _run_with_progress(cmd, f"Database create timed out for {language_id} after {timeout}s",
+                                      f"Database create failed for {language_id}", timeout, progress)
     finally:
         if temp_config is not None and temp_config.parent.exists():
             import shutil as _shutil
@@ -321,20 +404,40 @@ def _run_analyze(
     cache_dir: Path | None = None,
     timeout: int = 600,
     progress: Callable[[str], None] | None = None,
+    docker_ctx: dict[str, Any] | None = None,
 ) -> tuple[bool, str]:
     """Run codeql database analyze.  Returns (success, message)."""
+    is_docker = docker_ctx is not None
+    workspace_root = docker_ctx["workspace_root"] if is_docker else str(ROOT)
+
     cmd = [
-        str(binary), "database", "analyze",
-        str(db_dir),
+        str(docker_ctx["binary"]) if is_docker else str(binary), 
+        "database", "analyze",
+        str(db_dir).replace(str(ROOT), workspace_root),
         "--format=sarif-latest",
-        f"--output={sarif_path}",
+        f"--output={str(sarif_path).replace(str(ROOT), workspace_root)}",
         "--sarif-include-query-help=never",
     ]
     _add_common_caches(cmd, cache_dir)
+    if is_docker:
+        cmd = [arg.replace(str(ROOT), workspace_root) for arg in cmd]
     cmd += packs
 
-    return _run_with_progress(cmd, f"Analyze timed out for {db_dir.name} after {timeout}s",
-                              f"Analyze failed for {db_dir.name}", timeout, progress)
+    if is_docker:
+        from codeql.in_docker import exec_codeql
+        ok, msg, rc = exec_codeql(
+            docker_ctx["service"],
+            docker_ctx["compose_file"],
+            docker_ctx["binary"],
+            *cmd[1:],
+            timeout=timeout,
+            cwd=workspace_root,
+            progress=progress,
+        )
+        return ok, msg
+    else:
+        return _run_with_progress(cmd, f"Analyze timed out for {db_dir.name} after {timeout}s",
+                                  f"Analyze failed for {db_dir.name}", timeout, progress)
 
 
 def _ensure_query_packs_available(
