@@ -271,18 +271,18 @@ def check_phase_1a(console=None, findings_snapshot: dict[str, int] | None = None
     return 0
 
 
-def check_phase_1b(console=None, findings_snapshot: dict[str, int] | None = None) -> int:
-    """Gate 1b: recon notes and file-risk-index.yml must be valid."""
+def check_phase_1c(console=None, findings_snapshot: dict[str, int] | None = None) -> int:
+    """Gate 1c: recon notes and file-risk-index.yml must be valid."""
     out = get_output(console)
-    out.header("Gate 1b: Detailed Reconnaissance")
+    out.header("Gate 1c: Detailed Reconnaissance")
     out.separator(tone=T.SECTION)
 
     missing = _notes_exist(*REQUIRED_NOTES_1B)
     if missing:
-        out.error("Required Phase 1b reconnaissance notes are missing:")
+        out.error("Required Phase 1c reconnaissance notes are missing:")
         for name in missing:
             out.info(f"    itemdb/notes/{name}")
-        out.info("Run Phase 1b first.")
+        out.info("Run Phase 1c first.")
         return 1
 
     for name in REQUIRED_NOTES_1B:
@@ -335,27 +335,27 @@ def check_phase_1b(console=None, findings_snapshot: dict[str, int] | None = None
         new_findings = sum(delta.values())
         if new_findings > 0:
             out.warn(
-                f"{new_findings} new finding(s) were created during Phase 1b. Findings should not be created during reconnaissance.",
+                f"{new_findings} new finding(s) were created during Phase 1c. Findings should not be created during reconnaissance.",
             )
             for status, count in delta.items():
                 if count > 0:
                     out.info(f"    {status}: +{count}")
 
     out.separator(tone=T.SUCCESS)
-    out.success("Ready to run Phase 1c (Detailed Reconnaissance).")
+    out.success("Phase 1 complete. Ready to run Phase 2.")
     return 0
 
 
-def check_phase_1c(console=None) -> int:
-    """Gate 1c: sandbox-plan.md must exist and sandbox provenance is checked."""
+def check_phase_1b(console=None) -> int:
+    """Gate 1b: sandbox-plan.md must exist and sandbox provenance is checked."""
     out = get_output(console)
-    out.header("Gate 1c: Sandbox Bootstrap")
+    out.header("Gate 1b: Sandbox Bootstrap")
     out.separator(tone=T.SECTION)
 
     plan_path = ROOT / "itemdb" / "notes" / "sandbox-plan.md"
     if not plan_path.exists():
         out.error("itemdb/notes/sandbox-plan.md does not exist")
-        out.info("Run Phase 1c first.")
+        out.info("Run Phase 1b first.")
         return 1
 
     out.success("itemdb/notes/sandbox-plan.md exists")
@@ -373,5 +373,5 @@ def check_phase_1c(console=None) -> int:
         out.warn("sandbox/ is empty or does not exist")
 
     out.separator(tone=T.SUCCESS)
-    out.success("Phase 1 complete. Ready to run Phase 2.")
+    out.success("Ready to run Phase 1c (Detailed Reconnaissance).")
     return 0

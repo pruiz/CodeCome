@@ -524,7 +524,7 @@ def run_phase_1(
     if rc != 0:
         return rc
 
-    gate_rc = check_phase_1c(console)
+    gate_rc = check_phase_1b(console)
     if gate_rc != 0:
         return gate_rc
 
@@ -552,7 +552,7 @@ def run_phase_1(
     if rc != 0:
         return rc
 
-    gate_rc = check_phase_1b(console, findings_snapshot=findings_snapshot)
+    gate_rc = check_phase_1c(console, findings_snapshot=findings_snapshot)
     if gate_rc != 0:
         return gate_rc
 

@@ -14,8 +14,8 @@ def test_required_notes_1b_includes_threat_model() -> None:
     assert "threat-model.md" in REQUIRED_NOTES_1B
 
 
-def test_check_phase_1b_missing_threat_model(tmp_path: Path, capsys) -> None:
-    from phases.phase_1_gates import check_phase_1b
+def test_check_phase_1c_missing_threat_model(tmp_path: Path, capsys) -> None:
+    from phases.phase_1_gates import check_phase_1c
 
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
@@ -27,13 +27,13 @@ def test_check_phase_1b_missing_threat_model(tmp_path: Path, capsys) -> None:
             (notes / name).write_text("", encoding="utf-8")
 
     with patch("phases.phase_1_gates.ROOT", tmp_path):
-        rc = check_phase_1b()
+        rc = check_phase_1c()
 
     assert rc == 1
 
 
-def test_check_phase_1b_has_detailed_reconnaissance_labels(tmp_path: Path, capsys) -> None:
-    from phases.phase_1_gates import check_phase_1b
+def test_check_phase_1c_has_detailed_reconnaissance_labels(tmp_path: Path, capsys) -> None:
+    from phases.phase_1_gates import check_phase_1c
 
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
@@ -43,7 +43,7 @@ def test_check_phase_1b_has_detailed_reconnaissance_labels(tmp_path: Path, capsy
         (notes / name).write_text("", encoding="utf-8")
 
     with patch("phases.phase_1_gates.ROOT", tmp_path):
-        check_phase_1b()
+        check_phase_1c()
 
     out = capsys.readouterr().out
     assert "Detailed Reconnaissance" in out

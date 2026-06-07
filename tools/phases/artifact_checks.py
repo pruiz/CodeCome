@@ -78,7 +78,8 @@ def _h1_headings(path: Path) -> set[str]:
 def _missing_headings(path: Path, required: list[str]) -> list[str]:
     """Return list of required headings missing from *path*."""
     present = _h1_headings(path)
-    return [h for h in required if h not in present]
+    present_lower = {h.lower() for h in present}
+    return [h for h in required if h.lower() not in present_lower]
 
 
 # -- Artifact helpers -----------------------------------------------------------
