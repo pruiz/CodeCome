@@ -5,8 +5,9 @@
 # CodeCome C/C++ test hook. Marker: __TARGET_NAME__.
 set -euo pipefail
 
-docker compose -f sandbox/docker-compose.yml run --rm codecome-sandbox bash -lc '
-set -euo pipefail
+if [ ! -f /.dockerenv ]; then
+  exec docker compose -f sandbox/docker-compose.yml exec -T codecome-sandbox "$0" "$@"
+fi
 
 cd /workspace
 
@@ -23,4 +24,3 @@ elif [ -d /workspace/tmp/build ] && [ -f /workspace/tmp/build/CTestTestfile.cmak
 else
   echo "No test runner configured for target __TARGET_NAME__."
 fi
-'

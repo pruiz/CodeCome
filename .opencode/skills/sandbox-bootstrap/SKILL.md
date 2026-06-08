@@ -152,6 +152,17 @@ and how to run it.
 - All helper scripts are bash with `set -euo pipefail` at the top.
 - Path discipline: paths inside the container start with
   `/workspace/...`; paths on the host start with `sandbox/...`.
+- **Dual-mode scripts**: Ensure scripts like `build.sh` and `test.sh` can be executed both on the host and directly inside the sandbox (e.g. via CodeQL tracer). Use the following dual-mode pattern:
+  ```bash
+  if [ ! -f /.dockerenv ]; then
+      # On Host: execute this script inside the running container
+      exec docker compose -f sandbox/docker-compose.yml exec -T codecome-sandbox "$0" "$@"
+  fi
+
+  # Inside Docker: run the inner logic (e.g., cd /workspace/src && make)
+  cd /workspace/src
+  make
+  ```
 - Idempotency: `down.sh`, `clean.sh`, and `reset.sh` should be safe
   to run repeatedly even when the stack is already down.
 - `check.sh` runs **inside the sandbox container**, exercising the
