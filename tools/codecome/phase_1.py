@@ -529,10 +529,21 @@ def run_phase_1(
         return gate_rc
 
     # ---- CodeQL analysis (post-sandbox) ----
-    _run_codeql(console)
-    rc = _check_codeql_artifacts(console)
-    if rc != 0:
-        return rc
+    import subprocess
+    has_sandbox = (ROOT / "sandbox").exists()
+    if has_sandbox:
+        out.info("Starting sandbox for CodeQL execution...")
+        subprocess.run(["make", "sandbox-up"], cwd=str(ROOT), check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+    try:
+        _run_codeql(console)
+        rc = _check_codeql_artifacts(console)
+        if rc != 0:
+            return rc
+    finally:
+        if has_sandbox:
+            out.info("Stopping sandbox after CodeQL execution...")
+            subprocess.run(["make", "sandbox-down"], cwd=str(ROOT), check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # Snapshot findings immediately before 1c so the warning scope matches 1c.
     findings_snapshot = count_findings_snapshot()

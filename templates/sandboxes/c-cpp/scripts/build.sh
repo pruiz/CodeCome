@@ -5,8 +5,9 @@
 # CodeCome C/C++ build hook. Marker: __TARGET_NAME__.
 set -euo pipefail
 
-docker compose -f sandbox/docker-compose.yml run --rm codecome-sandbox bash -lc '
-set -euo pipefail
+if [ ! -f /.dockerenv ]; then
+  exec docker compose -f sandbox/docker-compose.yml exec -T codecome-sandbox "$0" "$@"
+fi
 
 cd /workspace
 
@@ -33,4 +34,3 @@ else
   echo "Add target-specific build logic here."
   exit 1
 fi
-'
