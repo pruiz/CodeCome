@@ -304,6 +304,10 @@ Validate finding frontmatter:
 
     make frontmatter
 
+Review open questions and re-run hints from phase run summaries:
+
+    make hints
+
 Regenerate index:
 
     make index
