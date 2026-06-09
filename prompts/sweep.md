@@ -144,6 +144,8 @@ At the end, summarize in your response (or write a brief run summary under `runs
 - adjacent files worth sweeping next,
 - important assumptions,
 - recommended next phase,
+- open questions for the user (same content as in the run summary),
+- re-run prompt hints (same content as in the run summary; use `PROMPT_EXTRA` / `PROMPT_EXTRA_FILE` snippets),
 - files created or modified.
 
 ## Run summary
@@ -155,4 +157,4 @@ Write the run summary using the template at `templates/run-summary.md` to:
 Replace `<slug>` with a short sanitised version of the target file path
 (e.g. `runs/sweep-src-app-controllers-upload-php-summary-2026-06-09-143022.md`).
 
-You MUST fill in the `# Open questions for the user` and `# Re-run prompt hints` sections. If there are no useful open questions or hints, write "None." Do not omit either section.
+You MUST fill in both sections. Questions must be complete, self-contained sentences ending in `?` — avoid terse noun phrases. Hints must use actual `PROMPT_EXTRA` or `PROMPT_EXTRA_FILE` snippets.

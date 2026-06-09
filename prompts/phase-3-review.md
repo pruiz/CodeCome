@@ -205,6 +205,8 @@ At the end, summarize:
 - semantic duplicate groups identified,
 - major confidence changes,
 - recommended validation order,
+- open questions for the user (same content as in the run summary),
+- re-run prompt hints (same content as in the run summary; use `PROMPT_EXTRA` / `PROMPT_EXTRA_FILE` snippets),
 - files modified.
 
 ## Run summary
@@ -215,4 +217,4 @@ Write the run summary to:
 
 Use the current timestamp (year-month-day-hour-minute-second). Use the structure from `templates/run-summary.md`.
 
-You MUST fill in the `# Open questions for the user` and `# Re-run prompt hints` sections. If there are no useful open questions or hints, write "None." Do not omit either section.
+You MUST fill in both sections. Questions must be complete, self-contained sentences ending in `?` — avoid terse noun phrases. Hints must use actual `PROMPT_EXTRA` or `PROMPT_EXTRA_FILE` snippets.

@@ -78,20 +78,35 @@ Mark each assumption as:
 
 List questions that would materially improve a later re-run.
 
-## Question: <short question>
+Each question must be a complete, specific sentence ending in `?`.
+Someone seeing only the question line should understand what's being asked
+without reading the rest of the run summary.
 
-- Why it matters:
-- Affects:
-- Suggested answer format:
+Good: "Should the sandbox install librapidjson-dev to unblock deenzone?"
+Bad:  "Validation model for C challenges"
+
+Answer these by re-running the phase with:
+
+    PROMPT_EXTRA="your answer" make phase-<N>
+    PROMPT_EXTRA_FILE=path/to/answers.txt make phase-<N>
+
+If there are no useful questions, write: None.
+
+## Question: <full-sentence question ending in ?>
+
+- Why it matters: What changes if this is answered.
+- Affects: Which phases, findings, or decisions depend on the answer.
+- Suggested answer format: A `PROMPT_EXTRA` snippet or concrete format.
 
 # Re-run prompt hints
 
-If useful, provide a short copy/paste prompt that the user can pass into a
-future re-run with the missing context.
+Copy/paste snippets the user can pass via `PROMPT_EXTRA` or
+`PROMPT_EXTRA_FILE` on re-run. These are the actual mechanisms — do not
+invent fictional environment variables. Example:
 
-If there are no useful hints, write:
+    PROMPT_EXTRA="Focus on auth modules; assume production deployment" make phase-2
 
-None.
+If there are no useful hints, write: None.
 
 # Limitations
 
