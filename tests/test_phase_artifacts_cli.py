@@ -33,34 +33,34 @@ def test_allow_missing_generated_skips_missing_artifacts(capsys, tmp_path: Path)
 
 
 def test_strict_mode_fails_on_missing_threat_model(capsys, tmp_path: Path) -> None:
-    from phases.artifact_checks import check_phase_1b_artifacts
+    from phases.artifact_checks import check_phase_1c_artifacts
 
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
     (tmp_path / "runs").mkdir()
 
     with patch("phases.artifact_checks.ROOT", tmp_path):
-        errors = check_phase_1b_artifacts(allow_missing_generated=False)
+        errors = check_phase_1c_artifacts(allow_missing_generated=False)
 
     assert any("threat-model.md" in e for e in errors)
 
 
 def test_allow_missing_generated_skips_threat_model(tmp_path: Path) -> None:
-    from phases.artifact_checks import check_phase_1b_artifacts
+    from phases.artifact_checks import check_phase_1c_artifacts
 
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
     (tmp_path / "runs").mkdir()
 
     with patch("phases.artifact_checks.ROOT", tmp_path):
-        errors = check_phase_1b_artifacts(allow_missing_generated=True)
+        errors = check_phase_1c_artifacts(allow_missing_generated=True)
 
     # Missing threat-model.md is tolerated under the flag
     assert not any("threat-model.md" in e and "Missing" in e for e in errors)
 
 
 def test_malformed_threat_model_fails_even_with_flag(tmp_path: Path) -> None:
-    from phases.artifact_checks import check_phase_1b_artifacts
+    from phases.artifact_checks import check_phase_1c_artifacts
 
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
@@ -70,7 +70,7 @@ def test_malformed_threat_model_fails_even_with_flag(tmp_path: Path) -> None:
     (notes / "threat-model.md").write_text("# Only An Intro\n\nSome content.\n", encoding="utf-8")
 
     with patch("phases.artifact_checks.ROOT", tmp_path):
-        errors = check_phase_1b_artifacts(allow_missing_generated=True)
+        errors = check_phase_1c_artifacts(allow_missing_generated=True)
 
     assert any("missing headings" in e for e in errors)
 
@@ -104,7 +104,7 @@ def test_phase_all_runs_all_implemented(capsys, tmp_path: Path) -> None:
 
 
 def test_threat_model_heading_validation(tmp_path: Path) -> None:
-    from phases.artifact_checks import check_phase_1b_artifacts
+    from phases.artifact_checks import check_phase_1c_artifacts
 
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
@@ -129,14 +129,14 @@ def test_threat_model_heading_validation(tmp_path: Path) -> None:
     (notes / "threat-model.md").write_text("\n".join(lines), encoding="utf-8")
 
     with patch("phases.artifact_checks.ROOT", tmp_path):
-        errors = check_phase_1b_artifacts(allow_missing_generated=True)
+        errors = check_phase_1c_artifacts(allow_missing_generated=True)
 
     heading_errors = [e for e in errors if "headings" in e]
     assert heading_errors == [], f"unexpected: {heading_errors}"
 
 
 def test_threat_model_missing_one_heading(tmp_path: Path) -> None:
-    from phases.artifact_checks import check_phase_1b_artifacts
+    from phases.artifact_checks import check_phase_1c_artifacts
 
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
@@ -153,20 +153,20 @@ def test_threat_model_missing_one_heading(tmp_path: Path) -> None:
     (notes / "threat-model.md").write_text(content, encoding="utf-8")
 
     with patch("phases.artifact_checks.ROOT", tmp_path):
-        errors = check_phase_1b_artifacts(allow_missing_generated=True)
+        errors = check_phase_1c_artifacts(allow_missing_generated=True)
 
     assert any("Attacker model" in e for e in errors)
 
 
 def test_phase_1b_notes_all_required(tmp_path: Path) -> None:
-    from phases.artifact_checks import check_phase_1b_artifacts, PHASE_1B_REQUIRED_NOTES
+    from phases.artifact_checks import check_phase_1c_artifacts, PHASE_1C_REQUIRED_NOTES
 
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
     (tmp_path / "runs").mkdir()
 
     # Create all required notes as empty files
-    for name in PHASE_1B_REQUIRED_NOTES:
+    for name in PHASE_1C_REQUIRED_NOTES:
         (notes / name).write_text("", encoding="utf-8")
 
     # Create valid threat-model with all headings
@@ -182,7 +182,7 @@ def test_phase_1b_notes_all_required(tmp_path: Path) -> None:
     (notes / "threat-model.md").write_text(content, encoding="utf-8")
 
     with patch("phases.artifact_checks.ROOT", tmp_path):
-        errors = check_phase_1b_artifacts(allow_missing_generated=True)
+        errors = check_phase_1c_artifacts(allow_missing_generated=True)
 
     assert errors == [], f"unexpected errors: {errors}"
 

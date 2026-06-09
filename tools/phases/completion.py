@@ -49,7 +49,7 @@ _PHASE1_REQUIRED_ARTIFACT_NAMES = [
 # lists are defined here alongside the monolith set.
 _PHASE_1A_ARTIFACT_NAMES = ("target-profile.md", "build-model.md", "codeql-plan.yml")
 
-PHASE_1B_REQUIRED_NOTES: list[str] = [
+PHASE_1C_REQUIRED_NOTES: list[str] = [
     "attack-surface.md",
     "execution-model.md",
     "trust-boundaries.md",
@@ -187,12 +187,12 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
 
             if original_phase == "1b":
                 notes_dir = ROOT / "itemdb" / "notes"
-                paths_1b = [notes_dir / n for n in PHASE_1B_REQUIRED_NOTES]
+                paths_1b = [notes_dir / n for n in PHASE_1C_REQUIRED_NOTES]
                 fresh_1b = any(_path_is_fresh(p, run_start_time) for p in paths_1b)
                 if not fresh_1b:
                     failures.append(
                         f"Missing: {_display_path(NOTES_ROOT)}/ — no phase-1b required notes "
-                        f"({', '.join(PHASE_1B_REQUIRED_NOTES)}) "
+                        f"({', '.join(PHASE_1C_REQUIRED_NOTES)}) "
                         "created or updated during this run"
                     )
                 _append_run_summary_check(failures, original_phase, run_start_time)
