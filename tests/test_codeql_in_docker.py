@@ -15,16 +15,22 @@ def test_check_platform_mount_host_bundle_compatible() -> None:
          patch("codeql.in_docker.container_platform", return_value="Linux x86_64"):
         ok, msg = check_platform("app", "dc.yml", "mount-host-bundle")
         assert ok is True
-        assert msg == ""
+        assert msg == "Linux x86_64"
 
 
 def test_check_platform_mount_host_bundle_incompatible() -> None:
     with patch("codeql.in_docker.host_platform", return_value="Darwin arm64"), \
-         patch("codeql.in_docker.container_platform", return_value="Linux x86_64"):
-        ok, msg = check_platform("app", "dc.yml", "mount-host-bundle")
+         patch("codeql.in_docker.container_platform", return_value="Linux aarch64"):
+        ok, msg = check_platform("app", "dc.yml", "mount-host-bundle", is_compiled=True)
         assert ok is False
-        assert "cross platforms" in msg
-        assert "mount-host-bundle" in msg
+        assert "cannot trace arm64 compilers" in msg
+
+def test_check_platform_darwin_host_to_linux_amd64_is_compatible() -> None:
+    with patch("codeql.in_docker.host_platform", return_value="Darwin arm64"), \
+         patch("codeql.in_docker.container_platform", return_value="Linux x86_64"):
+        ok, msg = check_platform("app", "dc.yml", "mount-host-bundle", is_compiled=True)
+        assert ok is True
+        assert msg == "Linux x86_64"
 
 
 def test_check_platform_unknown_strategy_returns_ok() -> None:

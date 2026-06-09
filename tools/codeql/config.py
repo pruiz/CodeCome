@@ -36,7 +36,7 @@ DEFAULTS: dict[str, Any] = {
     "pack_catalog": "./templates/codeql-packs.yml",
     "install_managed": True,
     "install_version": "latest",
-    "install_path": ".tools/codeql/current/codeql",
+    "install_path": "",
     "output_dir": "./itemdb/codeql",
     "database_dir": "./itemdb/codeql/databases",
     "cache_dir": "./.cache/codeql",
@@ -113,7 +113,7 @@ class CodeQLConfig:
 
     install_managed: bool = True
     install_version: str = "latest"
-    install_path: str = ".tools/codeql/current/codeql"
+    install_path: str = ""
 
     output_dir: str = "./itemdb/codeql"
     database_dir: str = "./itemdb/codeql/databases"
@@ -196,7 +196,15 @@ def resolve_config() -> CodeQLConfig:
     install_managed = _get("install_managed", DEFAULTS["install_managed"],
                            env="CODEQL_MANAGED_INSTALL", coerce=bool)
     install_version = _str_env("CODEQL_VERSION") or _get("install_version", DEFAULTS["install_version"])
-    install_path = _get("install_path", DEFAULTS["install_path"])
+    
+    install_path = _str_env("CODEQL_INSTALL_PATH") or _get("install_path", DEFAULTS["install_path"])
+    if not install_path:
+        from codeql.platform import codeql_platform
+        try:
+            plat = codeql_platform()
+            install_path = f".tools/codeql/{plat}/current/codeql"
+        except RuntimeError:
+            install_path = ".tools/codeql/current/codeql"
 
     # Paths
     pack_catalog = _get("pack_catalog", DEFAULTS["pack_catalog"])

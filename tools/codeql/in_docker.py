@@ -17,28 +17,25 @@ def check_platform(
     service: str,
     compose_file: str | Path,
     install_strategy: str,
+    is_compiled: bool = False,
 ) -> tuple[bool, str]:
-    """Verify that the host CodeQL bundle can run inside the container.
+    """Verify that the CodeQL bundle can run inside the container.
 
-    Returns (ok, message).  When *install_strategy* is ``mount-host-bundle``,
-    the host and container platforms must be compatible (same OS/arch).
+    If host is Darwin arm64 and container is Linux aarch64, we can run CodeQL
+    via Rosetta 2/QEMU, BUT CodeQL's amd64 tracer cannot LD_PRELOAD into aarch64
+    compilers. Therefore, compiled languages must be skipped.
     """
-    if install_strategy not in ("mount-host-bundle",):
-        return True, ""
-
     host_plat = host_platform()
     container_plat = container_platform(service, compose_file)
 
-    if not platforms_compatible(host_plat, container_plat):
-        return False, (
-            f"CodeQL bundle is for {host_plat}; sandbox service "
-            f"{service!r} runs {container_plat}. "
-            "install_strategy=mount-host-bundle cannot cross platforms. "
-            "Use install_strategy=download-in-container or image-preinstalled "
-            "(not yet supported)."
-        )
+    if host_plat == "Darwin arm64" and container_plat == "Linux aarch64":
+        if is_compiled:
+            return False, (
+                "CodeQL for Linux is amd64-only and cannot trace arm64 compilers via LD_PRELOAD. "
+                "Options: configure sandbox platform as linux/amd64 to emulate, or skip CodeQL."
+            )
 
-    return True, ""
+    return True, container_plat
 
 
 def exec_codeql(
