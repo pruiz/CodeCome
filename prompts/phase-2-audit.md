@@ -209,3 +209,5 @@ At the end, summarize:
 Write the run summary using the template at `templates/run-summary.md` to:
 
     runs/phase-2-summary-YYYY-MM-DD-HHMMSS.md
+
+You MUST fill in the `# Open questions for the user` and `# Re-run prompt hints` sections. If there are no useful open questions or hints, write "None." Do not omit either section.

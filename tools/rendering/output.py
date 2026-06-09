@@ -264,6 +264,75 @@ class RenderOutput:
 
     # -- panel output ------------------------------------------------------
 
+    def render_questions(self, questions: Any) -> None:
+        """Render open questions and re-run hints from a run summary.
+
+        Expects a ``RunSummaryQuestions`` instance (from
+        ``codecome.run_summary_questions``).  If the instance has no
+        content this is a no-op.
+        """
+        if not getattr(questions, "has_content", lambda: False)():
+            return
+
+        open_qs = getattr(questions, "open_questions", [])
+        rerun_hints: str | None = getattr(questions, "rerun_hints", None)
+
+        if open_qs:
+            self.separator(tone=T.WARNING)
+            self.section("Open questions from run summary", tone=T.WARNING)
+            for i, q in enumerate(open_qs, 1):
+                q_text = getattr(q, "question", str(q))
+                why = getattr(q, "why_it_matters", "")
+                affects = getattr(q, "affects", "")
+                suggested = getattr(q, "suggested_format", "")
+
+                if self.rich:
+                    from rich.panel import Panel
+                    from rich.text import Text
+
+                    body = Text()
+                    body.append(q_text, style="bold")
+                    if why:
+                        body.append(f"\nWhy it matters: {why}")
+                    if affects:
+                        body.append(f"\nAffects: {affects}")
+                    if suggested:
+                        body.append(f"\nSuggested answer: {suggested}")
+                    self.sink.write(
+                        Panel(
+                            body,
+                            title=f"Question {i}",
+                            border_style=_rich_tone(T.WARNING) or "yellow",
+                        )
+                    )
+                elif self.plain:
+                    self.line(f"\n  Question {i}: {q_text}", tone=T.WARNING)
+                    if why:
+                        self.line(f"    Why it matters: {why}", tone=T.DETAIL)
+                    if affects:
+                        self.line(f"    Affects: {affects}", tone=T.DETAIL)
+                    if suggested:
+                        self.line(f"    Suggested answer: {suggested}", tone=T.DETAIL)
+
+        if rerun_hints:
+            self.separator(tone=T.ACCENT)
+            self.section("Re-run prompt hints", tone=T.ACCENT)
+            if self.rich:
+                from rich.panel import Panel
+                from rich.text import Text
+
+                self.sink.write(
+                    Panel(
+                        Text(rerun_hints),
+                        title="Re-run hints",
+                        border_style=_rich_tone(T.ACCENT) or "cyan",
+                    )
+                )
+            elif self.plain:
+                self.sink.write_text("")
+                for line in rerun_hints.split("\n"):
+                    self.sink.write_text(f"  {line}")
+
     def panel(self, title: str, text: str, *, tone: Tone = T.ERROR) -> None:
         """Print a bordered panel (error, warning, or info box)."""
         if self.rich:

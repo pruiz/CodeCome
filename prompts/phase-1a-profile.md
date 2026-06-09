@@ -108,7 +108,7 @@ Rules:
 - Focus on what later sub-stages need.
 - Phase 1a does not produce attack-surface, trust-boundary, or data-flow notes.
 - Phase 1a does not bootstrap sandbox.
-- Non-blocking open questions should go into the run summary file.
+- Non-blocking open questions should go into the run summary file. You MUST fill in the `# Open questions for the user` and `# Re-run prompt hints` sections. If there are no useful open questions or hints, write "None." Do not omit either section.
 
 ## Final response
 
