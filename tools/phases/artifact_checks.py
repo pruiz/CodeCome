@@ -172,21 +172,21 @@ def _check_phase_1a_no_leak(
             )
 
 
-# -- Phase 1b ------------------------------------------------------------------
+# -- Phase 1c ------------------------------------------------------------------
 
-from phases.completion import PHASE_1B_REQUIRED_NOTES  # noqa: E402
+from phases.completion import PHASE_1C_REQUIRED_NOTES  # noqa: E402
 
 
-def check_phase_1b_artifacts(
+def check_phase_1c_artifacts(
     allow_missing_generated: bool = False,
 ) -> list[str]:
-    """Validate Phase 1b artifacts, including ``threat-model.md`` headings."""
+    """Validate Phase 1c artifacts, including ``threat-model.md`` headings."""
     errors: list[str] = []
     notes = ROOT / "itemdb" / "notes"
     runs = ROOT / "runs"
 
     # -- Required recon notes --
-    for name in PHASE_1B_REQUIRED_NOTES:
+    for name in PHASE_1C_REQUIRED_NOTES:
         path = notes / name
         err = _artifact_ok(path, allow_missing_generated=allow_missing_generated)
         if err:
@@ -200,7 +200,7 @@ def check_phase_1b_artifacts(
                 )
 
     # -- Run summary --
-    summary_path = runs / "phase-1b-summary.md"
+    summary_path = runs / "phase-1c-summary.md"
     err = _artifact_ok(summary_path, allow_missing_generated=allow_missing_generated)
     if err:
         errors.append(err)
@@ -221,10 +221,10 @@ def check_phase_1b_artifacts(
 
 def has_valid_threat_model() -> bool:
     """Return True if ``threat-model.md`` exists with all required headings."""
-    return check_phase_1b_threat_model_issues() == []
+    return check_phase_1c_threat_model_issues() == []
 
 
-def check_phase_1b_threat_model_issues() -> list[str]:
+def check_phase_1c_threat_model_issues() -> list[str]:
     """Validate only the threat-model heading requirements.
 
     Returns a list of error messages (empty means success).
@@ -243,13 +243,13 @@ def check_phase_1b_threat_model_issues() -> list[str]:
     return errors
 
 
-# -- Phase 1c ------------------------------------------------------------------
+# -- Phase 1b ------------------------------------------------------------------
 
 
-def check_phase_1c_artifacts(
+def check_phase_1b_artifacts(
     allow_missing_generated: bool = False,
 ) -> list[str]:
-    """Validate Phase 1c artifacts."""
+    """Validate Phase 1b artifacts."""
     errors: list[str] = []
     notes = ROOT / "itemdb" / "notes"
     runs = ROOT / "runs"
@@ -260,7 +260,7 @@ def check_phase_1c_artifacts(
     if err:
         errors.append(err)
 
-    summary_path = runs / "phase-1c-summary.md"
+    summary_path = runs / "phase-1b-summary.md"
     err = _artifact_ok(summary_path, allow_missing_generated=allow_missing_generated)
     if err:
         errors.append(err)

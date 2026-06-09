@@ -70,7 +70,7 @@ def run_full_pipeline(config: CodeQLConfig, progress: Callable[[str], None] | No
     from codeql.runner import run_codeql, write_manifest, write_summary
     from codeql.normalize import normalize_all
     from codeql.import_risk import import_risk
-    from codeql.packs import load_yaml_mapping
+    from codeql.packs import load_yaml_mapping, dump_yaml
     from codeql.health import compute_health
 
     output_dir = config.abs_output_dir
@@ -118,6 +118,10 @@ def run_full_pipeline(config: CodeQLConfig, progress: Callable[[str], None] | No
     )
     manifest.setdefault("health", health)
 
+    # Write health.yml
+    health_path = run_dir / "health.yml"
+    health_path.write_text(dump_yaml(health), encoding="utf-8")
+
     _progress(progress, f"CodeQL: health classification={health['classification']} usable={health['usable']}")
 
     # Step 5: import risk only when health says usable
@@ -154,7 +158,7 @@ def _load_resolved(path: Path) -> dict[str, Any] | None:
     if not path.is_file():
         return None
     try:
-        from codeql.packs import load_yaml_mapping
+        from codeql.packs import load_yaml_mapping, dump_yaml
         return load_yaml_mapping(path, what="resolved packs")
     except Exception:
         return None
