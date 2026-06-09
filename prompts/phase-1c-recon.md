@@ -175,7 +175,7 @@ Prioritize files that contain or strongly influence:
 
 For each high-risk file, include concrete reasons, likely entry points, sources, sinks, trust boundaries, suggested vulnerability classes, suggested skills, and suggested validation methods when inferable.
 
-If CodeQL file signals exist (`itemdb/codeql/normalized/file-signals.yml`), incorporate them:
+If CodeQL file signals exist (resolve via `itemdb/codeql/last-run-manifest.yml` → `run_id` → `itemdb/codeql/runs/<run-id>/normalized/file-signals.yml`), incorporate them:
 - Add `external_signals.codeql` blocks to file entries with CodeQL alerts.
 - Boost scores where CodeQL reports high-precision alerts, but cap at 5.
 - Explain every CodeQL-driven score boost in the `reasons` field.

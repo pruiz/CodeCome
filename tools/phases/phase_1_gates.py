@@ -24,7 +24,7 @@ except ImportError:
     _resolve_codeql_config = None  # type: ignore[assignment]
 
 
-REQUIRED_NOTES_1B = [
+PHASE_1C_REQUIRED_NOTES = [
     "attack-surface.md",
     "execution-model.md",
     "trust-boundaries.md",
@@ -277,7 +277,7 @@ def check_phase_1c(console=None, findings_snapshot: dict[str, int] | None = None
     out.header("Gate 1c: Detailed Reconnaissance")
     out.separator(tone=T.SECTION)
 
-    missing = _notes_exist(*REQUIRED_NOTES_1B)
+    missing = _notes_exist(*PHASE_1C_REQUIRED_NOTES)
     if missing:
         out.error("Required Phase 1c reconnaissance notes are missing:")
         for name in missing:
@@ -285,7 +285,7 @@ def check_phase_1c(console=None, findings_snapshot: dict[str, int] | None = None
         out.info("Run Phase 1c first.")
         return 1
 
-    for name in REQUIRED_NOTES_1B:
+    for name in PHASE_1C_REQUIRED_NOTES:
         out.success(f"itemdb/notes/{name} exists")
 
     risk_path = ROOT / "itemdb" / "notes" / "file-risk-index.yml"

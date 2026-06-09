@@ -80,6 +80,21 @@ def validate_recipe(recipe: dict[str, Any], *, root: str | Path) -> list[str]:
                     f"sandbox-recipe.yml: sandbox.path {sandbox_path_str!r} does not exist"
                 )
 
+        if validation_model == "docker":
+            compose_file = sandbox.get("compose_file")
+            if not isinstance(compose_file, str) or not compose_file:
+                errors.append("sandbox-recipe.yml: sandbox.compose_file is missing or empty (required for docker)")
+            else:
+                compose_path = Path(root) / compose_file
+                if not compose_path.exists():
+                    errors.append(
+                        f"sandbox-recipe.yml: sandbox.compose_file {compose_file!r} does not exist"
+                    )
+
+            default_service = sandbox.get("default_service")
+            if not isinstance(default_service, str) or not default_service:
+                errors.append("sandbox-recipe.yml: sandbox.default_service is missing or empty (required for docker)")
+
     # --- commands block (optional but warn on missing known keys) ---
     commands = recipe.get("commands")
     if commands is not None and not isinstance(commands, dict):
@@ -97,7 +112,7 @@ def validate_recipe(recipe: dict[str, Any], *, root: str | Path) -> list[str]:
             "sandbox-recipe.yml: 'build_targets' is empty but validation_model requires at least one target"
         )
     elif isinstance(build_targets, list):
-        errors.extend(_validate_build_targets(build_targets, root))
+        errors.extend(_validate_build_targets(build_targets, root, validation_model))
 
     # --- codeql block (optional) ---
     codeql = recipe.get("codeql")
@@ -115,9 +130,12 @@ def validate_recipe(recipe: dict[str, Any], *, root: str | Path) -> list[str]:
     return errors
 
 
-def _validate_build_targets(targets: list[Any], root: str | Path) -> list[str]:
+def _validate_build_targets(
+    targets: list[Any], root: str | Path, validation_model: str
+) -> list[str]:
     errors: list[str] = []
     seen_ids: set[str] = set()
+    is_docker = validation_model == "docker"
 
     for i, target in enumerate(targets):
         if not isinstance(target, dict):
@@ -163,10 +181,80 @@ def _validate_build_targets(targets: list[Any], root: str | Path) -> list[str]:
                 f"sandbox-recipe.yml: build_target {target_id!r} workdir {workdir!r} must be absolute (e.g. /workspace/src)"
             )
 
+        # service required for docker targets
+        if is_docker:
+            service = target.get("service")
+            if not isinstance(service, str) or not service:
+                errors.append(
+                    f"sandbox-recipe.yml: build_target {target_id!r} missing or empty 'service' (required for docker validation_model)"
+                )
+
+        # environment block
+        environment = target.get("environment")
+        if isinstance(environment, dict):
+            errors.extend(_validate_target_environment(environment, target_id, root))
+        elif is_docker:
+            if environment is None:
+                errors.append(
+                    f"sandbox-recipe.yml: build_target {target_id!r} missing 'environment' block"
+                )
+            else:
+                errors.append(
+                    f"sandbox-recipe.yml: build_target {target_id!r} 'environment' must be a mapping"
+                )
+
+        # build_command
+        build_command = target.get("build_command")
+        if isinstance(build_command, str) and build_command.strip():
+            build_path = Path(root) / build_command
+            if not build_path.exists():
+                errors.append(
+                    f"sandbox-recipe.yml: build_target {target_id!r} build_command path {build_command!r} does not exist"
+                )
+
         # codeql hints
         codeql = target.get("codeql")
         if isinstance(codeql, dict):
             errors.extend(_validate_codeql_hints(codeql, prefix=f"build_targets[{i}].codeql"))
+            if "supported" in codeql and not isinstance(codeql["supported"], bool):
+                errors.append(
+                    f"sandbox-recipe.yml: build_targets[{i}].codeql.supported must be boolean"
+                )
+
+    return errors
+
+
+def _validate_target_environment(
+    environment: dict[str, Any], target_id: str, root: str | Path
+) -> list[str]:
+    errors: list[str] = []
+    env_type = environment.get("type")
+    if isinstance(env_type, str) and env_type not in ("docker-compose", "container", "native", "static-only"):
+        errors.append(
+            f"sandbox-recipe.yml: build_target {target_id!r} environment.type {env_type!r} invalid "
+            f"(expected docker-compose, container, native, or static-only)"
+        )
+
+    if env_type in ("docker-compose",):
+        compose_file = environment.get("compose_file")
+        if isinstance(compose_file, str) and compose_file.strip():
+            compose_path = Path(root) / (compose_file if not Path(compose_file).is_absolute() else compose_file)
+            if not compose_path.exists():
+                errors.append(
+                    f"sandbox-recipe.yml: build_target {target_id!r} environment.compose_file "
+                    f"{compose_file!r} does not exist"
+                )
+        else:
+            errors.append(
+                f"sandbox-recipe.yml: build_target {target_id!r} missing or empty environment.compose_file"
+            )
+
+    service = environment.get("service")
+    if not isinstance(service, str) or not service:
+        if env_type in ("docker-compose",):
+            errors.append(
+                f"sandbox-recipe.yml: build_target {target_id!r} missing or empty environment.service"
+            )
 
     return errors
 

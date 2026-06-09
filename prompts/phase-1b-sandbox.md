@@ -16,9 +16,7 @@ Read the following files (all paths are relative to the project/workspace root):
 - `.opencode/skills/sandbox-bootstrap/SKILL.md`
 - `itemdb/notes/target-profile.md`
 - `itemdb/notes/build-model.md`
-- `itemdb/notes/threat-model.md`
-- `itemdb/notes/execution-model.md`
-- `itemdb/notes/validation-model.md`
+- `templates/sandbox-recipe.yml.example`
 
 ## Required outputs
 

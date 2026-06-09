@@ -84,20 +84,21 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
         orig_sandbox_plan = completion_mod.SANDBOX_PLAN_PATH
         orig_root = completion_mod.ROOT
 
-        completion_mod.NOTES_ROOT = tmp_path
-        completion_mod.SANDBOX_PLAN_PATH = tmp_path / "sandbox-plan.md"
         completion_mod.ROOT = tmp_path / "codecome_workspace"
+        completion_mod.NOTES_ROOT = completion_mod.ROOT / "itemdb" / "notes"
+        completion_mod.SANDBOX_PLAN_PATH = completion_mod.NOTES_ROOT / "sandbox-plan.md"
 
         fake_time = time.time()
 
         (completion_mod.ROOT / "sandbox").mkdir(parents=True)
         (completion_mod.ROOT / "sandbox" / "CODECOME-GENERATED.md").write_text("")
         os.utime(completion_mod.ROOT / "sandbox" / "CODECOME-GENERATED.md", (fake_time + 60, fake_time + 60))
+        completion_mod.NOTES_ROOT.mkdir(parents=True, exist_ok=True)
         completion_mod.SANDBOX_PLAN_PATH.write_text("")
         os.utime(completion_mod.SANDBOX_PLAN_PATH, (fake_time + 60, fake_time + 60))
 
         for name in completion_mod._PHASE1_REQUIRED_ARTIFACT_NAMES:
-            artifact = tmp_path / name
+            artifact = completion_mod.NOTES_ROOT / name
             artifact.parent.mkdir(parents=True, exist_ok=True)
             artifact.write_text("")
             os.utime(artifact, (fake_time + 60, fake_time + 60))
@@ -115,7 +116,7 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
             assert ok is True, f"Phase 1 should succeed when all artifacts exist; failures={failures!r}"
             assert failures == []
             ok, failures = completion_mod.check_phase_graceful_completion("1c", None, fake_time)
-            assert ok is True, f"Phase 1c should use the same artifact gate as Phase 1; failures={failures!r}"
+            assert ok is True, f"Phase 1c should succeed with fresh recon notes; failures={failures!r}"
             assert failures == []
         finally:
             completion_mod.NOTES_ROOT = orig_notes_root
@@ -130,9 +131,9 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
         orig_sandbox_plan = completion_mod.SANDBOX_PLAN_PATH
         orig_root = completion_mod.ROOT
 
-        completion_mod.NOTES_ROOT = tmp_path / "notes"
-        completion_mod.SANDBOX_PLAN_PATH = completion_mod.NOTES_ROOT / "sandbox-plan.md"
         completion_mod.ROOT = tmp_path / "codecome_workspace"
+        completion_mod.NOTES_ROOT = completion_mod.ROOT / "itemdb" / "notes"
+        completion_mod.SANDBOX_PLAN_PATH = completion_mod.NOTES_ROOT / "sandbox-plan.md"
 
         run_start = time.time()
 
@@ -142,15 +143,14 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
             artifact.write_text("", encoding="utf-8")
             os.utime(artifact, (run_start - 60, run_start - 60))
 
-        sandbox_generated = completion_mod.ROOT / "sandbox" / "CODECOME-GENERATED.md"
-        sandbox_generated.parent.mkdir(parents=True)
-
         try:
             ok, failures = completion_mod.check_phase_graceful_completion("1", None, run_start)
             assert ok is False
             assert failures, "Expected failure details for phase 1 with no fresh artifacts"
-            sandbox_generated.write_text("validated", encoding="utf-8")
-            os.utime(sandbox_generated, (run_start + 60, run_start + 60))
+            # Refresh recon notes to make Phase 1c pass
+            for name in completion_mod.PHASE_1C_REQUIRED_NOTES:
+                artifact = completion_mod.NOTES_ROOT / name
+                os.utime(artifact, (run_start + 60, run_start + 60))
             summary_dir = completion_mod.ROOT / "runs"
             summary_dir.mkdir(parents=True, exist_ok=True)
             summary = summary_dir / "phase-1c-summary.md"
@@ -199,7 +199,7 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
         completion_mod.SANDBOX_PLAN_PATH = completion_mod.NOTES_ROOT / "sandbox-plan.md"
 
         try:
-            for phase in ("1a", "1b", "1"):
+            for phase in ("1a", "1c", "1"):
                 ok, failures = completion_mod.check_phase_graceful_completion(phase, None, time.time())
 
                 assert ok is False

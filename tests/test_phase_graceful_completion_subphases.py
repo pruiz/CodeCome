@@ -72,25 +72,22 @@ def test_phase_1a_graceful_completion_fails_if_no_1a_artifacts_fresh(tmp_path: P
 
 
 def test_phase_1b_graceful_completion_only_checks_1b_artifacts(tmp_path: Path) -> None:
-    """Phase 1b should return True when 1b artifacts and a fresh run summary are present."""
+    """Phase 1b should return True when sandbox bootstrap artifacts and a fresh run summary are present."""
     from phases.completion import check_phase_graceful_completion
 
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
+    sandbox_dir = tmp_path / "sandbox"
+    sandbox_dir.mkdir(parents=True)
     runs = tmp_path / "runs"
     runs.mkdir(parents=True)
 
     now = time.time()
 
-    # Write 1b artifacts but no sandbox-plan.md or 1a artifacts
-    names_1b = [
-        "attack-surface.md", "execution-model.md", "trust-boundaries.md",
-        "data-flow.md", "threat-model.md", "validation-model.md",
-        "interesting-files.md", "file-risk-index.yml", "security-assumptions.md",
-    ]
-    for name in names_1b:
-        (notes / name).write_text("content", encoding="utf-8")
-        (notes / name).touch()
+    (notes / "sandbox-plan.md").write_text("content", encoding="utf-8")
+    (notes / "sandbox-plan.md").touch()
+    (sandbox_dir / "CODECOME-GENERATED.md").write_text("content", encoding="utf-8")
+    (sandbox_dir / "CODECOME-GENERATED.md").touch()
 
     summary = runs / "phase-1b-summary.md"
     summary.write_text("", encoding="utf-8")
@@ -158,18 +155,17 @@ def test_phase_1b_excludes_sandbox_plan_from_check(tmp_path: Path) -> None:
 
 
 def test_phase_1c_passes_with_fresh_sandbox_plan(tmp_path: Path) -> None:
-    """Phase 1c should return True when sandbox-plan.md and a fresh run summary are present."""
+    """Phase 1c should return True when recon notes and a fresh run summary are present."""
     from phases.completion import check_phase_graceful_completion
 
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
-    (tmp_path / "sandbox").mkdir()
     runs = tmp_path / "runs"
     runs.mkdir(parents=True)
 
     now = time.time()
-    (notes / "sandbox-plan.md").write_text("content", encoding="utf-8")
-    (notes / "sandbox-plan.md").touch()
+    (notes / "attack-surface.md").write_text("content", encoding="utf-8")
+    (notes / "attack-surface.md").touch()
 
     summary = runs / "phase-1c-summary.md"
     summary.write_text("", encoding="utf-8")
@@ -183,7 +179,7 @@ def test_phase_1c_passes_with_fresh_sandbox_plan(tmp_path: Path) -> None:
 
 
 def test_phase_1c_fails_without_sandbox_artifacts(tmp_path: Path) -> None:
-    """Phase 1c should return False when neither sandbox-plan.md nor CODECOME-GENERATED.md is fresh."""
+    """Phase 1c should return False when no recon notes are fresh."""
     import phases.completion as completion_mod
     from phases.completion import check_phase_graceful_completion
 
@@ -194,11 +190,9 @@ def test_phase_1c_fails_without_sandbox_artifacts(tmp_path: Path) -> None:
 
     now = time.time()
 
-    # Write all Phase 1 notes except sandbox-plan.md so the old files exist but aren't fresh
-    from phases.completion import _PHASE1_REQUIRED_ARTIFACT_NAMES
-    for name in _PHASE1_REQUIRED_ARTIFACT_NAMES:
-        if name != "sandbox-plan.md":
-            (notes / name).write_text("content", encoding="utf-8")
+    # Write sandbox artifacts but NOT recon notes
+    (notes / "sandbox-plan.md").write_text("content", encoding="utf-8")
+    (tmp_path / "sandbox" / "CODECOME-GENERATED.md").write_text("content", encoding="utf-8")
 
     orig_root = completion_mod.ROOT
     orig_notes_root = completion_mod.NOTES_ROOT
@@ -213,8 +207,8 @@ def test_phase_1c_fails_without_sandbox_artifacts(tmp_path: Path) -> None:
 
     assert ok is False
     assert failures, "Expected failure details when no 1c artifacts are fresh"
-    assert any("sandbox-plan.md" in f or "CODECOME-GENERATED.md" in f for f in failures), (
-        f"Expected failure detail to mention sandbox artifacts, got {failures!r}"
+    assert any("phase-1c required notes" in f for f in failures), (
+        f"Expected failure detail to mention recon notes, got {failures!r}"
     )
     assert any("runs/phase-1c-summary*.md" in f for f in failures), (
         f"Expected phase-1c summary failure, got {failures!r}"

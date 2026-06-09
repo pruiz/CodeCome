@@ -31,8 +31,11 @@ _ITEMDB_REPORTS_DIR = "itemdb/reports/"
 
 _PHASE1_REQUIRED_ARTIFACT_NAMES = [
     "target-profile.md",
-    "attack-surface.md",
     "build-model.md",
+    "codeql-plan.yml",
+    "sandbox-plan.md",
+    "sandbox-recipe.yml",
+    "attack-surface.md",
     "execution-model.md",
     "trust-boundaries.md",
     "data-flow.md",
@@ -41,7 +44,6 @@ _PHASE1_REQUIRED_ARTIFACT_NAMES = [
     "file-risk-index.yml",
     "security-assumptions.md",
     "threat-model.md",
-    "sandbox-plan.md",
 ]
 
 # Subphase-specific artifact sets.  Phase 1b uses its own list (the canonical
@@ -168,9 +170,11 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
     try:
         if phase_key == "1":
             # -- Subphase-specific graceful-completion checks --
-            # Phase 1a and 1b should not require artifacts owned by other subphases
-            # (sandbox-plan.md from 1c, or sandbox/CODECOME-GENERATED.md).
-            # Bare "1" (full Phase 1) and 1c keep the existing monolith check below.
+            # Each subphase only checks artifacts it owns:
+            #   1a: target-profile.md, build-model.md, codeql-plan.yml
+            #   1b: sandbox-plan.md, sandbox-recipe.yml, sandbox/CODECOME-GENERATED.md
+            #   1c: recon notes (attack-surface.md, threat-model.md, ...)
+            # Bare "1" (full Phase 1) keeps the existing monolith check below.
 
             if original_phase == "1a":
                 notes_dir = ROOT / "itemdb" / "notes"
@@ -187,28 +191,31 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
 
             if original_phase == "1b":
                 notes_dir = ROOT / "itemdb" / "notes"
-                paths_1b = [notes_dir / n for n in PHASE_1C_REQUIRED_NOTES]
-                fresh_1b = any(_path_is_fresh(p, run_start_time) for p in paths_1b)
+                sandbox_generated = ROOT / "sandbox" / "CODECOME-GENERATED.md"
+                recipe_path = notes_dir / "sandbox-recipe.yml"
+                fresh_1b = (
+                    _path_is_fresh(notes_dir / "sandbox-plan.md", run_start_time)
+                    or _path_is_fresh(sandbox_generated, run_start_time)
+                    or _path_is_fresh(recipe_path, run_start_time)
+                )
                 if not fresh_1b:
                     failures.append(
-                        f"Missing: {_display_path(NOTES_ROOT)}/ — no phase-1b required notes "
-                        f"({', '.join(PHASE_1C_REQUIRED_NOTES)}) "
-                        "created or updated during this run"
+                        "Missing: itemdb/notes/sandbox-plan.md, itemdb/notes/sandbox-recipe.yml, "
+                        "or sandbox/CODECOME-GENERATED.md "
+                        "— no sandbox bootstrap artifact was created or updated during this run"
                     )
                 _append_run_summary_check(failures, original_phase, run_start_time)
                 return (len(failures) == 0, failures)
 
             if original_phase == "1c":
                 notes_dir = ROOT / "itemdb" / "notes"
-                sandbox_generated = ROOT / "sandbox" / "CODECOME-GENERATED.md"
-                fresh_1c = (
-                    _path_is_fresh(notes_dir / "sandbox-plan.md", run_start_time)
-                    or _path_is_fresh(sandbox_generated, run_start_time)
-                )
+                paths_1c = [notes_dir / n for n in PHASE_1C_REQUIRED_NOTES]
+                fresh_1c = any(_path_is_fresh(p, run_start_time) for p in paths_1c)
                 if not fresh_1c:
                     failures.append(
-                        "Missing: itemdb/notes/sandbox-plan.md or sandbox/CODECOME-GENERATED.md "
-                        "— neither sandbox state artifact was created or updated during this run"
+                        f"Missing: {_display_path(NOTES_ROOT)}/ — no phase-1c required notes "
+                        f"({', '.join(PHASE_1C_REQUIRED_NOTES)}) "
+                        "created or updated during this run"
                     )
                 _append_run_summary_check(failures, original_phase, run_start_time)
                 return (len(failures) == 0, failures)

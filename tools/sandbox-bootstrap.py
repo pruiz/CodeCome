@@ -1518,6 +1518,17 @@ def cmd_validate(args: argparse.Namespace) -> int:
                         print(f"  {skip_id:<3} {skip_purpose:<18} {_format_outcome('skipped')}  (prior tier failed)")
                 break
 
+    recipe_errors: list[str] = []
+    if SANDBOX_RECIPE_PATH.exists():
+        try:
+            from sandbox.recipe import load_recipe, validate_recipe
+            recipe = load_recipe(SANDBOX_RECIPE_PATH)
+            recipe_errors = validate_recipe(recipe, root=ROOT)
+        except Exception as exc:
+            recipe_errors = [f"Failed to load recipe: {exc}"]
+    elif not args.scripts_only:
+        recipe_errors = ["sandbox-recipe.yml not found; run Phase 1b to generate it"]
+
     helper_status = _capability_status()
     missing_helpers = [
         name for name in ("shell", "logs", "clean", "reset")
@@ -1532,6 +1543,8 @@ def cmd_validate(args: argparse.Namespace) -> int:
         "tiers": results,
         "capabilities": helper_status,
         "missing_helpers": missing_helpers,
+        "recipe_valid": len(recipe_errors) == 0,
+        "recipe_errors": recipe_errors,
     }
 
     if args.format == "json":
@@ -1539,6 +1552,10 @@ def cmd_validate(args: argparse.Namespace) -> int:
     else:
         print()
         print(f"  {C.BOLD}overall:{C.RESET}  {_format_outcome(overall_outcome)}")
+        if recipe_errors:
+            print(C.warn(f"Recipe validation ({len(recipe_errors)} error(s)):"))
+            for err in recipe_errors:
+                print(f"    {C.SYM_BULLET} {err}")
         if missing_helpers:
             print(C.warn(
                 "Helper capabilities still missing: " + ", ".join(missing_helpers)

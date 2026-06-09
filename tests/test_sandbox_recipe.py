@@ -246,4 +246,8 @@ class TestValidateRecipe:
 
 def _setup_fake_paths(tmp_path: Path) -> None:
     (tmp_path / "sandbox").mkdir(exist_ok=True)
+    (tmp_path / "sandbox" / "scripts").mkdir(exist_ok=True)
     (tmp_path / "src").mkdir(exist_ok=True)
+    (tmp_path / "sandbox" / "docker-compose.yml").write_text("")
+    (tmp_path / "sandbox" / "scripts" / "build.sh").write_text("")
+    (tmp_path / "sandbox" / "scripts" / "build-cli.sh").write_text("")

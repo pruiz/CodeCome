@@ -20,6 +20,19 @@ def _generate_run_id() -> str:
     return f"{ts}-{fingerprint}"
 
 
+def _inject_total_alerts(manifest: dict[str, Any], normalized_dir: Path) -> None:
+    """Read total_alerts from normalized alerts.yml and inject into manifest."""
+    alerts_path = normalized_dir / "alerts.yml"
+    if not alerts_path.is_file():
+        return
+    try:
+        from codeql.packs import load_yaml_mapping
+        data = load_yaml_mapping(alerts_path, what="alerts")
+        manifest["total_alerts"] = len(data.get("alerts", []))
+    except Exception:
+        pass
+
+
 def _set_run_dir(config: CodeQLConfig) -> tuple[str, Path]:
     output_dir = config.abs_output_dir
     run_id = _generate_run_id()
@@ -108,6 +121,9 @@ def run_full_pipeline(config: CodeQLConfig, progress: Callable[[str], None] | No
                     f"SARIF normalization failed: {exc}"
                 )
                 manifest["status"] = "failed" if config.fail_policy == "hard" else "soft-failed"
+
+    # Inject total_alerts from normalized alerts before health computation
+    _inject_total_alerts(manifest, normalized_dir)
 
     # Step 4: compute health
     health = compute_health(
