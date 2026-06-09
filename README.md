@@ -439,6 +439,7 @@ All three can be combined in a single invocation.
     make findings-evidence FINDING=CC-0001     # create evidence dir
     make next-id                               # next free finding id
     make frontmatter                           # validate finding frontmatter
+    make hints                                 # print open questions and re-run hints from run summaries
     make index                                 # regenerate finding index
     make report                                # regenerate report
     make list-risk-files                       # top-scoring risky files from index
