@@ -373,8 +373,4 @@ def run_phase_mode(args: argparse.Namespace) -> int:
             "switch to a different model/provider before retrying"
         )
 
-    # ── Display open questions from run summary ──
-    from codecome.run_summary_questions import display_phase_questions
-    display_phase_questions(str(args.phase), args.finding)
-
     return returncode

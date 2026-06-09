@@ -77,6 +77,7 @@ help:
 	@printf "    $(BOLD)make check$(RESET)          Validate workspace structure and config\n"
 	@printf "    $(BOLD)make status$(RESET)         Show current finding status\n"
 	@printf "    $(BOLD)make next-id$(RESET)        Show next available finding id\n"
+	@printf "    $(BOLD)make hints$(RESET)         Print open questions and re-run hints from phase run summaries\n"
 	@printf "    $(BOLD)make frontmatter$(RESET)    Validate finding frontmatter\n"
 	@printf "    $(BOLD)make tests$(RESET)          Run dev test suite + frontmatter gate\n"
 	@printf "    $(BOLD)make itemdb-reset$(RESET)   Remove local audit artifacts and recreate .gitkeep files\n"
@@ -302,6 +303,9 @@ codeql-clean:
 
 index: env-check
 	$(PYTHON) tools/render-index.py
+
+hints: env-check
+	$(PYTHON) tools/codecome.py hints
 
 report: env-check
 	$(PYTHON) tools/render-report.py

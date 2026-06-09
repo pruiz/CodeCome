@@ -704,6 +704,69 @@ def command_check_codeql_plan(_: argparse.Namespace) -> int:
     return rc
 
 
+def command_hints(_: argparse.Namespace) -> int:
+    from codecome.run_summary_questions import (
+        find_latest_summary,
+        parse_summary,
+    )
+
+    phases = ("1a", "1b", "1c", "2", "3", "4", "5", "6")
+    found_any = False
+
+    print()
+    print(C.header("Open questions & re-run hints"))
+    print()
+
+    for phase_id in phases:
+        summary_path = find_latest_summary(phase_id)
+        if not summary_path:
+            continue
+
+        try:
+            qs = parse_summary(summary_path)
+        except Exception:
+            continue
+
+        if not qs.has_content():
+            continue
+
+        found_any = True
+        rel = summary_path.relative_to(ROOT)
+        print(f"  {C.BOLD_CYAN}Phase {phase_id}{C.RESET}  {C.DIM}·  {rel}{C.RESET}")
+        print()
+
+        for q in qs.open_questions:
+            print(f"  {C.colorize(q.question, C.YELLOW)}")
+            if q.why_it_matters:
+                print(f"    {C.DIM}Why:{C.RESET} {q.why_it_matters}")
+            if q.affects:
+                print(f"    {C.DIM}Affects:{C.RESET} {q.affects}")
+            if q.suggested_format:
+                print(f"    {C.DIM}Answer:{C.RESET} {q.suggested_format}")
+            print()
+
+        if qs.rerun_hints:
+            print(f"  {C.BOLD_CYAN}Re-run hints:{C.RESET}")
+            for line in qs.rerun_hints.split("\n"):
+                stripped = line.strip()
+                if stripped:
+                    print(f"    {stripped}")
+            print()
+
+    if found_any:
+        print(C.SYM_DASH * 62)
+        print("Answer questions by re-running the phase with:")
+        print()
+        print("    PROMPT_EXTRA=\"your answer\" make phase-<N>")
+        print("    PROMPT_EXTRA_FILE=path/to/answers.txt make phase-<N>")
+    else:
+        print("  No open questions or re-run hints found.")
+        print("  Run phases first to populate run summaries.")
+
+    print()
+    return 0
+
+
 def command_check_phase_artifacts(args: argparse.Namespace) -> int:
     from phases.artifact_checks import check_phase_artifacts
     return check_phase_artifacts(
@@ -731,6 +794,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     check_plan_parser = subparsers.add_parser("check-codeql-plan", help="Validate itemdb/notes/codeql-plan.yml")
     check_plan_parser.set_defaults(func=command_check_codeql_plan)
+
+    hints_parser = subparsers.add_parser("hints", help="Print open questions and re-run hints from all phase run summaries.")
+    hints_parser.set_defaults(func=command_hints)
 
     check_artifacts_parser = subparsers.add_parser(
         "check-phase-artifacts",

@@ -4,8 +4,8 @@
 """
 Parse run-summary Markdown files for open questions and re-run hints.
 
-Used by the phase harness to extract user-facing questions from run
-summaries and render them at the end of each phase.
+Used by ``codecome.py hints`` to extract user-facing questions from run
+summaries across all completed phases.
 """
 
 from __future__ import annotations
@@ -197,29 +197,6 @@ def parse_summary(path: Path) -> RunSummaryQuestions:
         open_questions=open_questions,
         rerun_hints=rerun_hints,
     )
-
-
-def display_phase_questions(
-    phase_id: str, finding: str | None = None
-) -> None:
-    """Find the latest run summary for *phase_id*, parse it, and render
-    open questions and re-run hints to console.
-
-    This is a no-op when no summary is found or when parsing fails.
-    Intended to be called at the end of each phase.
-    """
-    from rendering.output import get_output
-
-    summary_path = find_latest_summary(phase_id, finding)
-    if not summary_path:
-        return
-    try:
-        questions = parse_summary(summary_path)
-    except Exception:
-        return
-
-    out = get_output(None)
-    out.render_questions(questions)
 
 
 def find_latest_summary(

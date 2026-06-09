@@ -60,7 +60,7 @@ def test_run_summary_has_open_questions_section() -> None:
     content = path.read_text(encoding="utf-8")
 
     assert "# Open questions for the user" in content
-    assert "## Question: <short question>" in content
+    assert "## Question:" in content
     assert "# Re-run prompt hints" in content
 
 
@@ -68,7 +68,7 @@ def test_run_summary_uses_subsection_not_table_for_questions() -> None:
     path = ROOT / "templates" / "run-summary.md"
     content = path.read_text(encoding="utf-8")
 
-    assert "## Question: <short question>" in content
+    assert "## Question:" in content
     assert "| Question | Why it matters | Affects | Suggested answer format |" not in content
 
 

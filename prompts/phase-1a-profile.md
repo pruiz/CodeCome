@@ -108,7 +108,7 @@ Rules:
 - Focus on what later sub-stages need.
 - Phase 1a does not produce attack-surface, trust-boundary, or data-flow notes.
 - Phase 1a does not bootstrap sandbox.
-- Non-blocking open questions should go into the run summary file. You MUST fill in the `# Open questions for the user` and `# Re-run prompt hints` sections. If there are no useful open questions or hints, write "None." Do not omit either section.
+- Non-blocking open questions should go into the run summary file. Questions must be complete, self-contained sentences ending in `?` — avoid terse noun phrases. Hints must use actual `PROMPT_EXTRA` or `PROMPT_EXTRA_FILE` snippets.
 
 ## Final response
 
@@ -118,6 +118,8 @@ At the end, summarize:
 - Build system and buildability assessment
 - Languages selected for CodeQL analysis and their confidence levels
 - Files created: `target-profile.md`, `build-model.md`, `codeql-plan.yml`
+- Open questions for the user (same content as in the run summary),
+- Re-run prompt hints (same content as in the run summary; use `PROMPT_EXTRA` / `PROMPT_EXTRA_FILE` snippets),
 - Key uncertainties or blockers
 
 Before ending, validate that `itemdb/notes/codeql-plan.yml` is valid and follows CodeCome rules by running:

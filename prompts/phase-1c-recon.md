@@ -262,8 +262,8 @@ At the end, summarize:
 - Recommended Phase 2 focus,
 - Highest-risk files from `file-risk-index.yml`,
 - CodeQL signals incorporated (if any),
-- Open questions for the user,
-- Re-run prompt hints,
+- Open questions for the user (same content as in the run summary),
+- Re-run prompt hints (same content as in the run summary; use `PROMPT_EXTRA` / `PROMPT_EXTRA_FILE` snippets),
 - Files created in this sub-stage,
 - Key limitations and uncertainties.
 
@@ -273,4 +273,4 @@ Write the run summary using the template at `templates/run-summary.md` to:
 
     runs/phase-1b-summary-YYYY-MM-DD-HHMMSS.md
 
-You MUST fill in the `# Open questions for the user` and `# Re-run prompt hints` sections. If there are no useful open questions or hints, write "None." Do not omit either section.
+You MUST fill in both sections. Questions must be complete, self-contained sentences ending in `?` — avoid terse noun phrases. Hints must use actual `PROMPT_EXTRA` or `PROMPT_EXTRA_FILE` snippets.
