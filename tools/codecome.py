@@ -353,7 +353,7 @@ def _phase_1_notes_exist() -> bool:
 
 def check_phase_progress() -> None:
     """Print a summary of which phases have been run based on durable artifacts."""
-    from phases.phase_1_gates import REQUIRED_NOTES_1B
+    from phases.phase_1_gates import PHASE_1C_REQUIRED_NOTES
 
     notes_dir = ROOT / "itemdb" / "notes"
     evidence_root = ROOT / "itemdb" / "evidence"
@@ -380,18 +380,18 @@ def check_phase_progress() -> None:
     else:
         rows.append(("CodeQL", "info", "not run"))
 
-    # Phase 1b
-    missing_1b = [n for n in REQUIRED_NOTES_1B if not (notes_dir / n).is_file()]
-    if not missing_1b:
-        rows.append(("Phase 1b", "ok", "completed"))
-    elif len(missing_1b) < len(REQUIRED_NOTES_1B):
-        rows.append(("Phase 1b", "warn", f"{len(missing_1b)} of {len(REQUIRED_NOTES_1B)} notes missing"))
-    else:
-        rows.append(("Phase 1b", "info", "not run"))
+    # Phase 1b (Sandbox Bootstrap)
+    has_1b = (notes_dir / "sandbox-plan.md").is_file()
+    rows.append(("Phase 1b", "ok" if has_1b else "info", "completed" if has_1b else "not run"))
 
-    # Phase 1c
-    has_1c = (notes_dir / "sandbox-plan.md").is_file()
-    rows.append(("Phase 1c", "ok" if has_1c else "info", "completed" if has_1c else "not run"))
+    # Phase 1c (Detailed Reconnaissance)
+    missing_1c = [n for n in PHASE_1C_REQUIRED_NOTES if not (notes_dir / n).is_file()]
+    if not missing_1c:
+        rows.append(("Phase 1c", "ok", "completed"))
+    elif len(missing_1c) < len(PHASE_1C_REQUIRED_NOTES):
+        rows.append(("Phase 1c", "warn", f"{len(missing_1c)} of {len(PHASE_1C_REQUIRED_NOTES)} notes missing"))
+    else:
+        rows.append(("Phase 1c", "info", "not run"))
 
     # Phase 2
     pending = counts["PENDING"]

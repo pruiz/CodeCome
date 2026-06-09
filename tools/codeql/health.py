@@ -25,7 +25,7 @@ VALID_HEALTH_CLASSIFICATIONS = frozenset(
     }
 )
 
-COMPILED_LANGUAGES = frozenset({"c-cpp", "go", "swift"})
+COMPILED_LANGUAGES = frozenset({"c-cpp", "go", "swift", "csharp", "java-kotlin"})
 
 
 def compute_health(
@@ -133,12 +133,24 @@ def _normalized_fresh(run_dir: Path, output_dir: Path) -> bool:
     return True
 
 
-def _extractor_successes(manifest: dict[str, Any]) -> int:
-    return manifest.get("extractor_successes", _unknown_int("extractor_successes"))
+def _extractor_successes(manifest: dict[str, Any]) -> int | None:
+    val = manifest.get("extractor_successes")
+    if val is None:
+        return None
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return None
 
 
-def _extractor_failures(manifest: dict[str, Any]) -> int:
-    return manifest.get("extractor_failures", _unknown_int("extractor_failures"))
+def _extractor_failures(manifest: dict[str, Any]) -> int | None:
+    val = manifest.get("extractor_failures")
+    if val is None:
+        return None
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return None
 
 
 def _has_compiled(resolved_plan: dict[str, Any] | None) -> bool:
@@ -201,12 +213,19 @@ def _classify(
     if db_ok and db_exists and not sarif_ok:
         return "failed", "Database created but no SARIF files found."
 
-    if db_ok and db_exists and has_compiled and extract_ok <= 0:
-        return "extraction-failed", (
-            "CodeQL database creation reported success but "
-            f"extractor_successes={extract_ok} for compiled languages. "
-            "The database may be empty or extraction did not observe the build."
-        )
+    if db_ok and db_exists and has_compiled:
+        if extract_ok is None:
+            return "extraction-failed", (
+                "CodeQL database creation reported success but extractor success count "
+                "is unknown for compiled languages. The database may be empty or "
+                "extraction did not observe the build."
+            )
+        if extract_ok == 0:
+            return "extraction-failed", (
+                "CodeQL database creation reported success but "
+                f"extractor_successes={extract_ok} for compiled languages. "
+                "The database may be empty or extraction did not observe the build."
+            )
 
     if db_ok and db_exists and not normalized_ok:
         return "failed", "SARIF normalization failed."
@@ -221,8 +240,12 @@ def _classify(
         return "failed", "Normalized signals are missing."
 
     if sarif_ok and normalized_ok:
-        sarif_dir = Path(checks.get("_sarif_dir", "")) if "_sarif_dir" in checks else None
         alert_count = _count_alerts(manifest)
+        if alert_count is None:
+            return "completed-partial", (
+                "CodeQL ran successfully but the alert count could not be determined. "
+                "The normalized output may be usable but should be verified."
+            )
         if alert_count == 0:
             return "completed-empty-valid", (
                 "CodeQL ran successfully and found zero alerts. "
@@ -235,11 +258,14 @@ def _classify(
     return "failed", "CodeQL run did not meet usability criteria."
 
 
-def _count_alerts(manifest: dict[str, Any]) -> int:
+def _count_alerts(manifest: dict[str, Any]) -> int | None:
+    val = manifest.get("total_alerts")
+    if val is None:
+        return None
     try:
-        return int(manifest.get("total_alerts", _unknown_int("total_alerts")))
+        return int(val)
     except (TypeError, ValueError):
-        return _unknown_int("total_alerts")
+        return None
 
 
 def _is_usable(classification: str) -> bool:
@@ -252,7 +278,3 @@ def _is_usable(classification: str) -> bool:
 
 def _unknown(key: str) -> str:
     return f"<unknown:{key}>"
-
-
-def _unknown_int(key: str) -> int:
-    return -1

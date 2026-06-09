@@ -5,7 +5,7 @@
 Phase 1 subphase orchestration.
 
 Runs Phase 1 as three subphases (1a / 1b / 1c) with gates and CodeQL
-analysis between 1a and 1b.  The opencode server is started once and
+analysis between 1b and 1c.  The opencode server is started once and
 reused across all three subphase sessions.
 """
 
@@ -167,6 +167,165 @@ def _phase_1a_codeql_plan_repair_output() -> str:
         "Keep CodeQL-supported units with valid paths, valid build_mode, and non-empty languages lists.\n"
         "Do not modify target-profile.md, build-model.md, source code, or project configuration."
     )
+
+
+def _validate_codeql_plan_for_repair() -> tuple[int, str]:
+    """Validate codeql-plan.yml and return (rc, output).
+    
+    This is the implementation backing ``tools/codecome.py check-codeql-plan``.
+    It reuses the same validation logic as the Phase 1a gate but collects
+    output as a string tuple instead of writing to a rich console.
+    """
+    import io
+    from pathlib import Path
+
+    buf = io.StringIO()
+    notes_dir = ROOT / "itemdb" / "notes"
+    plan_path = notes_dir / "codeql-plan.yml"
+
+    if not plan_path.exists():
+        buf.write("ERROR: itemdb/notes/codeql-plan.yml does not exist\n")
+        return 1, buf.getvalue()
+
+    try:
+        import yaml
+    except ImportError:
+        buf.write("WARN: PyYAML not available; cannot validate codeql-plan.yml\n")
+        return 0, buf.getvalue()
+
+    try:
+        from codeql.packs import load_codeql_plan
+        plan = load_codeql_plan(plan_path)
+    except Exception as exc:
+        buf.write(f"ERROR: codeql-plan.yml: {exc}\n")
+        return 1, buf.getvalue()
+
+    errors = _collect_plan_errors(plan, notes_dir)
+    if errors:
+        for err in errors:
+            buf.write(f"ERROR: {err}\n")
+        return 1, buf.getvalue()
+
+    units = plan.get("analysis_units", [])
+    buf.write(f"codeql-plan.yml: {len(units)} analysis unit(s) configured, all valid\n")
+    return 0, buf.getvalue()
+
+
+def _collect_plan_errors(plan: dict, notes_dir: Path) -> list[str]:
+    """Return a list of validation error strings for codeql-plan.yml.
+    
+    Reuses the same logic as ``check_phase_1a()`` but returns strings
+    instead of writing to a rendering output.
+    """
+    from codeql.capabilities import is_supported_language, supported_build_modes
+
+    errors: list[str] = []
+
+    if plan.get("recommended") is True:
+        units = plan.get("analysis_units", [])
+        if not isinstance(units, list) or len(units) == 0:
+            errors.append("codeql-plan.yml: recommended=true but no analysis_units entries")
+            return errors
+
+        valid_confidences = {"HIGH", "MEDIUM", "LOW"}
+        seen_unit_ids: set[str] = set()
+        seen_databases: set[tuple[str, str]] = set()
+
+        for i, unit in enumerate(units):
+            if not isinstance(unit, dict):
+                errors.append(f"codeql-plan.yml: analysis unit {i} is not a mapping")
+                continue
+            unit_id = unit.get("id")
+            if not isinstance(unit_id, str) or not unit_id:
+                errors.append(f"codeql-plan.yml: analysis unit {i} missing valid 'id'")
+                continue
+            if unit_id in seen_unit_ids:
+                errors.append(f"codeql-plan.yml: duplicate analysis unit id '{unit_id}'")
+            seen_unit_ids.add(unit_id)
+
+            unit_path = unit.get("path")
+            if not isinstance(unit_path, str) or not unit_path:
+                errors.append(f"codeql-plan.yml: analysis unit '{unit_id}' missing valid 'path'")
+                continue
+            resolved_path = (ROOT / unit_path).resolve()
+            src_root = (ROOT / "src").resolve()
+            try:
+                under_src = resolved_path == src_root or resolved_path.is_relative_to(src_root)
+            except ValueError:
+                under_src = False
+            if not under_src:
+                errors.append(f"codeql-plan.yml: analysis unit '{unit_id}' path must be under src/: {unit_path}")
+            if "_codeql_detected_source_root" in resolved_path.parts:
+                errors.append(f"codeql-plan.yml: analysis unit '{unit_id}' path uses CodeQL-generated helper path")
+            if not resolved_path.exists():
+                errors.append(f"codeql-plan.yml: analysis unit '{unit_id}' path does not exist: {unit_path}")
+
+            languages = unit.get("languages")
+            if unit.get("recommended") is False and (languages is None or languages == []):
+                continue
+            if not isinstance(languages, list):
+                errors.append(f"codeql-plan.yml: analysis unit '{unit_id}' has no languages")
+                continue
+            if len(languages) == 0:
+                errors.append(
+                    f"codeql-plan.yml: analysis unit '{unit_id}' has no CodeQL languages and "
+                    "is not marked recommended=false"
+                )
+                continue
+
+            for j, lang in enumerate(languages):
+                if not isinstance(lang, dict):
+                    errors.append(
+                        f"codeql-plan.yml: analysis unit '{unit_id}' language entry {j} is not a mapping"
+                    )
+                    continue
+                language_id = lang.get("id")
+                if not isinstance(language_id, str) or not language_id:
+                    errors.append(
+                        f"codeql-plan.yml: analysis unit '{unit_id}' language entry {j} missing valid 'id'"
+                    )
+                    continue
+                if not is_supported_language(language_id):
+                    errors.append(
+                        f"codeql-plan.yml: unsupported CodeQL language '{language_id}' in analysis unit '{unit_id}'"
+                    )
+                    continue
+                db_key = (unit_id, language_id)
+                if db_key in seen_databases:
+                    errors.append(
+                        f"codeql-plan.yml: duplicate language '{language_id}' in analysis unit '{unit_id}'"
+                    )
+                seen_databases.add(db_key)
+                if lang.get("confidence") not in valid_confidences:
+                    errors.append(
+                        f"codeql-plan.yml: language '{language_id}' in analysis unit '{unit_id}' "
+                        f"has unexpected confidence '{lang.get('confidence')}'"
+                    )
+                build_mode = lang.get("build_mode")
+                supported_modes = supported_build_modes(language_id)
+                if build_mode not in supported_modes:
+                    errors.append(
+                        f"codeql-plan.yml: language '{language_id}' in analysis unit '{unit_id}' "
+                        f"has unsupported build_mode '{build_mode}' "
+                        f"(allowed: {', '.join(sorted(supported_modes))})"
+                    )
+                build_command = lang.get("build_command")
+                build_provider = lang.get("build_provider")
+                recipe_backed = build_provider == "sandbox-recipe"
+                if build_mode == "manual" and not recipe_backed and not (isinstance(build_command, str) and build_command.strip()):
+                    errors.append(
+                        f"codeql-plan.yml: language '{language_id}' in analysis unit '{unit_id}' "
+                        "uses manual build without build_command"
+                    )
+                if "packs" not in lang:
+                    errors.append(
+                        f"codeql-plan.yml: language '{language_id}' in analysis unit '{unit_id}' missing 'packs'"
+                    )
+                elif not isinstance(lang["packs"], list) or len(lang["packs"]) == 0:
+                    errors.append(
+                        f"codeql-plan.yml: language '{language_id}' in analysis unit '{unit_id}' has empty packs list"
+                    )
+    return errors
 
 
 # ---------------------------------------------------------------------------

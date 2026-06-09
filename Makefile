@@ -335,7 +335,7 @@ findings-package:
 # Sandbox
 # ---------------------------------------------------------------------------
 
-SANDBOX_SCRIPT_HINT := "No sandbox helper script found. Run 'make phase-1' (sub-stage 1c) to bootstrap sandbox/ from templates/sandboxes/, or place the helper script under sandbox/scripts/ manually."
+SANDBOX_SCRIPT_HINT := "No sandbox helper script found. Run 'make phase-1' (sub-stage 1b) to bootstrap sandbox/ from templates/sandboxes/, or place the helper script under sandbox/scripts/ manually."
 
 sandbox-setup:
 	@if [ -x sandbox/scripts/setup.sh ]; then \
@@ -384,7 +384,7 @@ sandbox-test:
 	./sandbox/scripts/test.sh
 
 # ---------------------------------------------------------------------------
-# Sandbox bootstrap (Phase 1c)
+# Sandbox bootstrap (Phase 1b)
 # ---------------------------------------------------------------------------
 
 sandbox-list: env-check

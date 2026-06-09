@@ -9,9 +9,9 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 
 def test_required_notes_1b_includes_threat_model() -> None:
-    from phases.phase_1_gates import REQUIRED_NOTES_1B
+    from phases.phase_1_gates import PHASE_1C_REQUIRED_NOTES
 
-    assert "threat-model.md" in REQUIRED_NOTES_1B
+    assert "threat-model.md" in PHASE_1C_REQUIRED_NOTES
 
 
 def test_check_phase_1c_missing_threat_model(tmp_path: Path, capsys) -> None:
@@ -21,8 +21,8 @@ def test_check_phase_1c_missing_threat_model(tmp_path: Path, capsys) -> None:
     notes.mkdir(parents=True)
 
     # Create all required notes except threat-model.md
-    from phases.phase_1_gates import REQUIRED_NOTES_1B
-    for name in REQUIRED_NOTES_1B:
+    from phases.phase_1_gates import PHASE_1C_REQUIRED_NOTES
+    for name in PHASE_1C_REQUIRED_NOTES:
         if name != "threat-model.md":
             (notes / name).write_text("", encoding="utf-8")
 
@@ -38,8 +38,8 @@ def test_check_phase_1c_has_detailed_reconnaissance_labels(tmp_path: Path, capsy
     notes = tmp_path / "itemdb" / "notes"
     notes.mkdir(parents=True)
 
-    from phases.phase_1_gates import REQUIRED_NOTES_1B
-    for name in REQUIRED_NOTES_1B:
+    from phases.phase_1_gates import PHASE_1C_REQUIRED_NOTES
+    for name in PHASE_1C_REQUIRED_NOTES:
         (notes / name).write_text("", encoding="utf-8")
 
     with patch("phases.phase_1_gates.ROOT", tmp_path):

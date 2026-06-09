@@ -666,8 +666,9 @@ def write_summary(manifest: dict[str, Any], normalized_dir: Path, output_dir: Pa
             total_alerts = len(data.get("alerts", []))
             lines.append(f"- **Total alerts**: {total_alerts}")
             lines.append("")
-        except Exception as exc:
-            _progress(progress, f"CodeQL: sandbox recipe not loaded: {exc}")
+        except Exception:
+            lines.append("- **Total alerts**: (error reading alerts.yml)")
+            lines.append("")
 
     if warnings:
         lines.append("## Warnings")
