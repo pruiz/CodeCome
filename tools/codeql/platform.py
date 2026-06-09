@@ -46,3 +46,16 @@ def platforms_compatible(host_plat: str, container_plat: str) -> bool:
     if host_plat == "unknown" or container_plat == "unknown":
         return True  # assume compatible when unmeasurable
     return host_plat == container_plat
+
+def codeql_platform() -> str:
+    """Return the CodeQL platform string, e.g. ``osx64``, ``linux64``, ``win64``."""
+    import platform
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    if system == "darwin":
+        return "osx64"
+    if system == "linux":
+        return "linux64"
+    if system == "windows":
+        return "win64"
+    raise RuntimeError(f"Unsupported platform: system={system} machine={machine}")

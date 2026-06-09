@@ -28,10 +28,10 @@ from codeql.config import ROOT, resolve_config
 from codeql.packs import PackResolverError, dump_yaml, load_codeql_plan, load_pack_catalog, resolve_plan_packs
 
 
-def _cmd_install() -> int:
+def _cmd_install(args: argparse.Namespace) -> int:
     """Install the managed CodeQL CLI."""
     from codeql.install import install
-    return install()
+    return install(platform_override=args.platform)
 
 
 def _cmd_check() -> int:
@@ -209,7 +209,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("install", help="Install the managed CodeQL CLI.")
+    install_cmd = sub.add_parser("install", help="Install the managed CodeQL CLI.")
+    install_cmd.add_argument("--platform", help="Override platform (e.g. linux64, osx64)", default=None)
     sub.add_parser("check", help="Verify the CodeQL CLI is installed and working.")
     sub.add_parser("run", help="Run CodeQL analysis (create DBs, analyze, normalize SARIF).")
     sub.add_parser("import-risk", help="Import CodeQL file signals into file-risk-index.yml.")
@@ -231,7 +232,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.command == "install":
-        return _cmd_install()
+        return _cmd_install(args)
     elif args.command == "check":
         return _cmd_check()
     elif args.command == "resolve-packs":

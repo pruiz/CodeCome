@@ -52,18 +52,6 @@ def _github_headers() -> dict[str, str]:
 # Platform detection
 # ---------------------------------------------------------------------------
 
-def _detect_platform() -> str:
-    system = platform.system().lower()
-    machine = platform.machine().lower()
-    if system == "darwin":
-        return "osx64"
-    if system == "linux":
-        return "linux64"
-    if system == "windows":
-        return "win64"
-    raise RuntimeError(f"Unsupported platform: system={system} machine={machine}")
-
-
 def _bundle_suffix(plat: str) -> str:
     """Return the asset name suffix for a given platform."""
     return f"{plat}.zip"
@@ -203,7 +191,7 @@ def _codeql_binary(base_dir: Path) -> Path:
     return binary  # fall back; will fail usefully in _verify if missing
 
 
-def install(config: Optional[CodeQLConfig] = None) -> int:
+def install(config: Optional[CodeQLConfig] = None, platform_override: str | None = None) -> int:
     """Install (or reinstall) the managed CodeQL CLI.
 
     Returns 0 on success, 1 on failure.
@@ -241,8 +229,17 @@ def install(config: Optional[CodeQLConfig] = None) -> int:
     # Normalize: strip optional leading 'v' to avoid double-v in URLs/paths.
     version = version.lstrip("v")
 
+    # --- Download ---
+    try:
+        from codeql.platform import codeql_platform
+        plat = platform_override or codeql_platform()
+    except RuntimeError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    print(f"Platform: {plat}")
+
     # --- Determine target directories ---
-    tools_dir = ROOT / ".tools" / "codeql"
+    tools_dir = ROOT / ".tools" / "codeql" / plat
     version_dir = tools_dir / version
     current_link = tools_dir / "current"
     binary_path = _codeql_binary(version_dir)
@@ -254,14 +251,6 @@ def install(config: Optional[CodeQLConfig] = None) -> int:
         # Ensure the 'current' symlink points to this version
         _ensure_symlink(version_dir, current_link)
         return _verify(binary_path)
-
-    # --- Download ---
-    try:
-        plat = _detect_platform()
-    except RuntimeError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
-    print(f"Platform: {plat}")
 
     if version == "latest":
         # Re-fetch since we already resolved it above

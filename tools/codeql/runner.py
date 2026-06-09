@@ -131,18 +131,32 @@ def run_codeql(config: CodeQLConfig, *, run_dir: Path | None = None, progress: C
 
                 if exec_mode == "docker-inside":
                     from codeql.in_docker import check_platform
-                    ok, msg = check_platform(service, ROOT / compose_file, install_strategy)
+                    ok, container_plat_msg = check_platform(service, ROOT / compose_file, install_strategy, is_compiled=is_compiled)
                     if not ok:
-                        failures.append(msg)
+                        failures.append(container_plat_msg)
                         if config.fail_policy == "soft":
-                            _progress(progress, f"CodeQL: {msg}")
+                            _progress(progress, f"CodeQL: {container_plat_msg}")
                             continue
                         return _manifest("unavailable", now_utc, config, [version], warnings, failures, language_ids, analysis_units)
+
+                    # JIT Provisioning for Linux container if running on macOS
+                    if container_plat_msg.startswith("Linux ") and "linux64" not in str(binary_path):
+                        # Ensure linux64 bundle is installed
+                        from codeql.install import install as _codeql_install
+                        _progress(progress, "CodeQL: JIT provisioning linux64 bundle for container execution")
+                        install_rc = _codeql_install(config=config, platform_override="linux64")
+                        if install_rc != 0:
+                            failures.append("CodeQL JIT provisioning failed for linux64 bundle")
+                            return _manifest(_tool_failure_status(config), now_utc, config, [version], warnings, failures, language_ids, analysis_units)
+                        
+                        docker_ctx_binary = "/workspace/.tools/codeql/linux64/current/codeql"
+                    else:
+                        docker_ctx_binary = f"/workspace/.tools/codeql/{binary_path.parent.parent.name}/current/codeql"
 
                     docker_ctx = {
                         "service": service,
                         "compose_file": ROOT / compose_file,
-                        "binary": "/opt/codeql/codeql",
+                        "binary": docker_ctx_binary,
                         "workspace_root": workspace_root,
                     }
 

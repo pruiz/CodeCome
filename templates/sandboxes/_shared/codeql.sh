@@ -6,6 +6,6 @@ set -euo pipefail
 # Resolve compose file and service from the recipe or sane defaults
 COMPOSE_FILE="${CODECOME_COMPOSE_FILE:-./sandbox/docker-compose.yml}"
 SERVICE="${CODECOME_SERVICE:-app}"
-CODEQL_BIN="${CODECOME_CODEQL_BIN:-/opt/codeql/codeql}"
+CODEQL_BIN="${CODECOME_CODEQL_BIN:-/workspace/.tools/codeql/linux64/current/codeql}"
 
 exec docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE" "$CODEQL_BIN" "$@"
