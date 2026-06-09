@@ -22,7 +22,6 @@ analysis_units: []
 #         confidence: "HIGH"
 #         build_mode: "none"
 #         build_provider: "none"           # "sandbox-recipe" or "none"
-#         build_command: null
 #         packs:
 #           - "official"
 #           - "github-security-lab"
@@ -37,7 +36,6 @@ analysis_units: []
 #         confidence: "HIGH"
 #         build_mode: "manual"
 #         build_provider: "sandbox-recipe"  # resolved from sandbox-recipe.yml after Phase 1b
-#         build_command: null               # derived from recipe; leave empty when build_provider is "sandbox-recipe"
 #         db_create_timeout: 1800   # optional: seconds, model-estimated from source size
 #         analyze_timeout: 900      # optional: seconds, per query-profile run
 #         packs:
@@ -51,9 +49,6 @@ analysis_units: []
 #   - build_provider on language entries controls where the build command comes from.
 #     Use "sandbox-recipe" for compiled languages (the sandbox provides the build command).
 #     Use "none" for no-build languages (python, javascript-typescript, ruby).
-#   - build_command should be left empty when build_provider is "sandbox-recipe"
-#     (the runner resolves it from the recipe).  Only provide build_command directly
-#     when the build cannot be expressed through the recipe.
 #   - Do not create active analysis units with languages: []. If a component is
 #     inventory-only or unsupported by CodeQL, either omit it from analysis_units
 #     and describe it in top-level notes, or set recommended: false on that unit.

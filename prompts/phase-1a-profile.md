@@ -68,9 +68,8 @@ Rules:
 - Do not create active `analysis_units` entries with `languages: []`. If a component has no locally supported CodeQL language, either omit it from `analysis_units` and mention it in top-level `notes`, or set that unit's `recommended: false`.
 - For compiled languages (c-cpp, go, csharp, java-kotlin) set `analysis_units[].sandbox_build_target` to the `build_targets[].id` from `sandbox-recipe.yml` that provides the build command for this unit. If the recipe has not been generated yet (this is Phase 1a), pick a sensible id such as `root` — Phase 1b will flesh out the recipe and the id can be updated if needed.
 - For each language, set `build_provider`:
-  - `"sandbox-recipe"` — for compiled languages whose build command should be resolved from `sandbox-recipe.yml` after Phase 1b. Leave `build_command` empty (the runner resolves it from the recipe).
+  - `"sandbox-recipe"` — for compiled languages whose build command should be resolved from `sandbox-recipe.yml` after Phase 1b.
   - `"none"` — for no-build languages (python, javascript-typescript, ruby).
-- Avoid concrete build shell snippets in `build_command` unless the build is obvious and stable and no recipe is available. Prefer `build_provider: sandbox-recipe` for everything that needs a build.
 - For each language in each analysis unit, select the appropriate pack profiles:
   - `official` — always include for languages with CodeQL support.
   - `github-security-lab` — include for security-focused audits.
@@ -84,7 +83,6 @@ Rules:
 - Do not include Swift or Rust as CodeQL languages for now. If detected, mention them in `notes` as manually reviewed or future-tooling candidates instead of adding them to `analysis_units[].languages`.
 - Use `manual` only when you identified a concrete build command for that analysis unit.
 - Use `autobuild` only as an explicit choice when build files exist but the exact command is uncertain.
-- Fill in `build_command` when `build_mode` is `manual`.
 - Estimate `db_create_timeout` (seconds) for each language when `build_mode` is `manual` or `autobuild`:
   - For `none` mode leave it unset; harness default is 600s.
   - Estimate based on approximate source file count, build complexity, and whether compilation is involved.

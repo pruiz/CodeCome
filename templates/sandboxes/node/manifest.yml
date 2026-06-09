@@ -21,7 +21,6 @@ required_tools:
   - "pnpm"
 default_ports:
   - 3000
-build_command: "npm install"
 test_command: "npm test"
 notes_md: "notes.md"
 caveats:

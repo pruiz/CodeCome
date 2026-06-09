@@ -16,7 +16,6 @@ from codeql.platform import host_platform, container_platform, platforms_compati
 def check_platform(
     service: str,
     compose_file: str | Path,
-    install_strategy: str,
     is_compiled: bool = False,
 ) -> tuple[bool, str]:
     """Verify that the CodeQL bundle can run inside the container.

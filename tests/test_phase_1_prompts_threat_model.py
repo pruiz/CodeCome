@@ -62,7 +62,7 @@ def test_phase_1a_does_not_produce_threat_model() -> None:
 
 
 def test_phase_1c_reads_threat_model() -> None:
-    content = _read_prompt("phase-1b-sandbox.md")
+    content = _read_prompt("phase-1c-recon.md")
     assert "threat-model.md" in content
 
 

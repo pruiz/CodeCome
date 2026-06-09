@@ -24,7 +24,6 @@ required_tools:
   - "dotnet"
 default_ports:
   - 5000
-build_command: "dotnet build"
 test_command: "dotnet test"
 notes_md: "notes.md"
 caveats:

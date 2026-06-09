@@ -18,7 +18,6 @@ required_tools:
   - "terraform"
   - "tflint"
 default_ports: []
-build_command: "terraform init -backend=false"
 test_command: "terraform validate"
 notes_md: "notes.md"
 caveats:

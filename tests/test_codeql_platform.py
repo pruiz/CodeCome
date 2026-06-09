@@ -23,6 +23,7 @@ def test_host_platform_known_os() -> None:
 
 def test_container_platform_mocked() -> None:
     with patch("codeql.platform.subprocess.run") as mock_run:
+        mock_run.return_value.returncode = 0
         mock_run.return_value.stdout = "Linux x86_64\n"
         mock_run.return_value.stderr = ""
 

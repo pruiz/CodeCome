@@ -20,7 +20,6 @@ required_tools:
   - "qemu-utils"
   - "binutils"
 default_ports: []
-build_command: ""
 test_command: ""
 notes_md: "notes.md"
 caveats:

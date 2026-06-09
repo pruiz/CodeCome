@@ -79,8 +79,8 @@ def run_codeql(config: CodeQLConfig, *, run_dir: Path | None = None, progress: C
         try:
             from sandbox.recipe import load_recipe
             sandbox_recipe = load_recipe(recipe_path)
-        except Exception:
-            pass
+        except Exception as exc:
+            _progress(progress, f"CodeQL: sandbox recipe not loaded: {exc}")
 
     from codeql.health import COMPILED_LANGUAGES
 
@@ -127,11 +127,9 @@ def run_codeql(config: CodeQLConfig, *, run_dir: Path | None = None, progress: C
                         break
 
                 exec_mode = target_cfg.get("preferred_execution_mode") or codeql_cfg.get("default_execution_mode", "host")
-                install_strategy = target_cfg.get("install_strategy") or codeql_cfg.get("install_strategy", "mount-host-bundle")
-
                 if exec_mode == "docker-inside":
                     from codeql.in_docker import check_platform
-                    ok, container_plat_msg = check_platform(service, ROOT / compose_file, install_strategy, is_compiled=is_compiled)
+                    ok, container_plat_msg = check_platform(service, ROOT / compose_file, is_compiled=is_compiled)
                     if not ok:
                         failures.append(container_plat_msg)
                         if config.fail_policy == "soft":
@@ -391,7 +389,7 @@ def _create_database(
     try:
         if is_docker:
             from codeql.in_docker import exec_codeql
-            ok, msg, rc = exec_codeql(
+            ok, msg, _rc = exec_codeql(
                 docker_ctx["service"],
                 docker_ctx["compose_file"],
                 docker_ctx["binary"],
@@ -439,7 +437,7 @@ def _run_analyze(
 
     if is_docker:
         from codeql.in_docker import exec_codeql
-        ok, msg, rc = exec_codeql(
+        ok, msg, _rc = exec_codeql(
             docker_ctx["service"],
             docker_ctx["compose_file"],
             docker_ctx["binary"],
@@ -668,8 +666,8 @@ def write_summary(manifest: dict[str, Any], normalized_dir: Path, output_dir: Pa
             total_alerts = len(data.get("alerts", []))
             lines.append(f"- **Total alerts**: {total_alerts}")
             lines.append("")
-        except Exception:
-            pass
+        except Exception as exc:
+            _progress(progress, f"CodeQL: sandbox recipe not loaded: {exc}")
 
     if warnings:
         lines.append("## Warnings")

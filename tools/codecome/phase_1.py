@@ -154,13 +154,18 @@ def _check_codeql_artifacts(console: Any) -> int:
 def _phase_1a_codeql_plan_repair_output() -> str:
     return (
         "Gate 1a rejected itemdb/notes/codeql-plan.yml. Repair only that file.\n"
-        "For every analysis unit whose languages list is empty, either remove the unit "
-        "from analysis_units or set recommended: false on that unit. Prefer moving "
-        "unsupported-language inventory such as Rust, Swift, Elixir, Zig, F#, VB6, "
-        "WebAssembly, and static-only components into the top-level notes list instead "
-        "of keeping active CodeQL analysis units with languages: [].\n"
-        "Keep CodeQL-supported units with non-empty languages lists. Do not modify "
-        "target-profile.md, build-model.md, source code, or project configuration."
+        "Please check the previous tool execution errors and correct the plan.\n"
+        "Common fixes:\n"
+        " - For every analysis unit whose languages list is empty, either remove the unit "
+        "   from analysis_units or set recommended: false on that unit. Prefer moving "
+        "   unsupported-language inventory such as Rust, Swift, Elixir, Zig, F#, VB6, "
+        "   WebAssembly, and static-only components into the top-level notes list instead "
+        "   of keeping active CodeQL analysis units with languages: [].\n"
+        " - Ensure all analysis unit IDs are unique.\n"
+        " - Ensure paths correctly map to existing directories under src/.\n"
+        " - Ensure build_mode matches the CodeQL supported build modes for each language.\n"
+        "Keep CodeQL-supported units with valid paths, valid build_mode, and non-empty languages lists.\n"
+        "Do not modify target-profile.md, build-model.md, source code, or project configuration."
     )
 
 

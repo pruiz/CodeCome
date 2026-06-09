@@ -21,7 +21,6 @@ required_tools:
   - "gradle"
 default_ports:
   - 8080
-build_command: "mvn package -DskipTests"
 test_command: "mvn test"
 notes_md: "notes.md"
 caveats:

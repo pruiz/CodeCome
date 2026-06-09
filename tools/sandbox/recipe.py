@@ -15,7 +15,6 @@ except ImportError:  # pragma: no cover
 
 SUPPORTED_SCHEMA_VERSIONS = frozenset({1})
 VALID_VALIDATION_MODELS = frozenset({"docker", "static-only", "nested-virt"})
-VALID_INSTALL_STRATEGIES = frozenset({"mount-host-bundle", "copy-host-bundle", "image-preinstalled"})
 VALID_EXECUTION_MODES = frozenset({"host", "docker-inside", "docker-wrapper", "unavailable"})
 
 
@@ -175,21 +174,23 @@ def _validate_build_targets(targets: list[Any], root: str | Path) -> list[str]:
 def _validate_codeql_hints(codeql: dict[str, Any], prefix: str) -> list[str]:
     errors: list[str] = []
 
-    install_strategy = codeql.get("install_strategy")
-    if install_strategy is not None:
-        if not isinstance(install_strategy, str) or install_strategy not in VALID_INSTALL_STRATEGIES:
-            valid = ", ".join(sorted(VALID_INSTALL_STRATEGIES))
-            errors.append(
-                f"sandbox-recipe.yml: {prefix}.install_strategy {install_strategy!r} invalid (allowed: {valid})"
-            )
+    if "preferred_execution_mode" in codeql:
+        mode = codeql.get("preferred_execution_mode")
+        if mode is not None:
+            if not isinstance(mode, str) or mode not in VALID_EXECUTION_MODES:
+                valid = ", ".join(sorted(VALID_EXECUTION_MODES))
+                errors.append(
+                    f"sandbox-recipe.yml: {prefix}.preferred_execution_mode {mode!r} invalid (allowed: {valid})"
+                )
 
-    preferred_mode = codeql.get("preferred_execution_mode")
-    if preferred_mode is not None:
-        if not isinstance(preferred_mode, str) or preferred_mode not in VALID_EXECUTION_MODES:
-            valid = ", ".join(sorted(VALID_EXECUTION_MODES))
-            errors.append(
-                f"sandbox-recipe.yml: {prefix}.preferred_execution_mode {preferred_mode!r} invalid (allowed: {valid})"
-            )
+    if "default_execution_mode" in codeql:
+        mode = codeql.get("default_execution_mode")
+        if mode is not None:
+            if not isinstance(mode, str) or mode not in VALID_EXECUTION_MODES:
+                valid = ", ".join(sorted(VALID_EXECUTION_MODES))
+                errors.append(
+                    f"sandbox-recipe.yml: {prefix}.default_execution_mode {mode!r} invalid (allowed: {valid})"
+                )
 
     return errors
 

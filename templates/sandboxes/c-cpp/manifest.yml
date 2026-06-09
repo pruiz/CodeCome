@@ -25,7 +25,6 @@ required_tools:
   - "lldb"
   - "valgrind"
 default_ports: []
-build_command: "make"
 test_command: "make test"
 notes_md: "notes.md"
 caveats:

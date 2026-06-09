@@ -13,7 +13,7 @@ from codeql.in_docker import check_platform, exec_codeql
 def test_check_platform_mount_host_bundle_compatible() -> None:
     with patch("codeql.in_docker.host_platform", return_value="Linux x86_64"), \
          patch("codeql.in_docker.container_platform", return_value="Linux x86_64"):
-        ok, msg = check_platform("app", "dc.yml", "mount-host-bundle")
+        ok, msg = check_platform("app", "dc.yml")
         assert ok is True
         assert msg == "Linux x86_64"
 
@@ -21,20 +21,20 @@ def test_check_platform_mount_host_bundle_compatible() -> None:
 def test_check_platform_mount_host_bundle_incompatible() -> None:
     with patch("codeql.in_docker.host_platform", return_value="Darwin arm64"), \
          patch("codeql.in_docker.container_platform", return_value="Linux aarch64"):
-        ok, msg = check_platform("app", "dc.yml", "mount-host-bundle", is_compiled=True)
+        ok, msg = check_platform("app", "dc.yml", is_compiled=True)
         assert ok is False
         assert "cannot trace arm64 compilers" in msg
 
 def test_check_platform_darwin_host_to_linux_amd64_is_compatible() -> None:
     with patch("codeql.in_docker.host_platform", return_value="Darwin arm64"), \
          patch("codeql.in_docker.container_platform", return_value="Linux x86_64"):
-        ok, msg = check_platform("app", "dc.yml", "mount-host-bundle", is_compiled=True)
+        ok, msg = check_platform("app", "dc.yml", is_compiled=True)
         assert ok is True
         assert msg == "Linux x86_64"
 
 
 def test_check_platform_unknown_strategy_returns_ok() -> None:
-    ok, msg = check_platform("app", "dc.yml", "download-in-container")
+    ok, msg = check_platform("app", "dc.yml")
     assert ok is True
 
 
