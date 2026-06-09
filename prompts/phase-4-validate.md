@@ -37,6 +37,7 @@ Read the following files (all paths are relative to the project/workspace root):
 - the assigned finding
 - relevant source files under `src/`
 - sandbox documentation under `sandbox/`
+- `itemdb/notes/threat-model.md` — operational threat model from Phase 1b: assets, attacker capabilities and non-capabilities, trust-boundary summary, existing controls, abuse-path themes, risk calibration, and open assumptions. When this file is available, use it to plan realistic validation attempts.
 
 Use additional target-specific skills only if they clearly apply.
 
@@ -59,13 +60,19 @@ Do not create unrelated findings.
 2. Extract the exact vulnerability claim.
 3. Review the existing counter-analysis.
 4. Identify what evidence would confirm or reject the claim.
-5. Inspect relevant source files.
-6. Prepare the sandbox under `sandbox/`.
-7. Execute the validation plan or improve it.
-8. Capture commands, inputs, outputs, logs, and observations.
-9. Store evidence under `itemdb/evidence/<finding-id>/`.
-10. Update the finding.
-11. Move the finding to the correct status directory if needed.
+5. When available, consult `itemdb/notes/threat-model.md` before finalizing the validation approach:
+   - Attacker capabilities: validate against the described attacker profile. Do not design a validation that assumes capabilities explicitly excluded as non-capabilities.
+   - Trust boundaries: ensure the validation crosses documented trust boundaries. A finding that does not cross a documented boundary may still be valid but requires additional justification.
+   - Existing controls: identify controls that may block or narrow the validation path and factor them into the plan.
+   - Affected assets: map the finding's claimed impact to documented assets and security objectives.
+   - Open assumptions: note any threat-model assumptions that change exploitability or validation feasibility, and record them in the evidence.
+6. Inspect relevant source files.
+7. Prepare the sandbox under `sandbox/`.
+8. Execute the validation plan or improve it.
+9. Capture commands, inputs, outputs, logs, and observations.
+10. Store evidence under `itemdb/evidence/<finding-id>/`.
+11. Update the finding.
+12. Move the finding to the correct status directory if needed.
 
 ## Evidence requirements
 
@@ -191,6 +198,7 @@ At the end, summarize:
 - result: CONFIRMED / REJECTED / UNRESOLVED,
 - evidence files created,
 - finding file moved or updated,
+- threat-model assumptions that materially affected validation strategy or evidence interpretation,
 - open questions for the user (same content as in the run summary),
 - re-run prompt hints (same content as in the run summary; use `PROMPT_EXTRA` / `PROMPT_EXTRA_FILE` snippets),
 - remaining limitations.
