@@ -135,7 +135,9 @@ def test_exploit_validation_skill_references_threat_model() -> None:
 
 def test_exploit_validation_skill_mentions_attacker_capabilities() -> None:
     content = _read_opencode(".opencode/skills/exploit-validation/SKILL.md")
-    assert "non-capabilities" in content.lower()
+    content_lower = content.lower()
+    assert "attacker" in content_lower
+    assert "non-capabilities" in content_lower
 
 
 # ---------------------------------------------------------------------------
