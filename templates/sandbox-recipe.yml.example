@@ -30,8 +30,6 @@ build_targets:
     source_path: ./src
     service: app
     workdir: /workspace/src
-    build_command: ./sandbox/scripts/build.sh
-    test_command: ./sandbox/scripts/test.sh
     environment:
       type: docker-compose
       compose_file: ./sandbox/docker-compose.yml
@@ -39,13 +37,11 @@ build_targets:
     codeql:
       supported: true
       preferred_execution_mode: docker-inside
-      install_strategy: mount-host-bundle
       notes: []
 
 codeql:
   supported: true
   default_execution_mode: docker-inside
-  install_strategy: mount-host-bundle
   notes:
     - CodeQL is optional and best-effort.
     - Compiled-language database creation should use build_targets rather than host guesses.

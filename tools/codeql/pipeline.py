@@ -14,8 +14,9 @@ from codeql.config import ROOT, CodeQLConfig
 
 
 def _generate_run_id() -> str:
+    import uuid
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    fingerprint = hashlib.sha256(ts.encode()).hexdigest()[:8]
+    fingerprint = uuid.uuid4().hex[:8]
     return f"{ts}-{fingerprint}"
 
 

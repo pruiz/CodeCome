@@ -21,9 +21,11 @@ Use additional target-specific skills only if they clearly apply.
 
 ## CodeQL signals (conditional)
 
-If `itemdb/codeql/last-run-manifest.yml` exists, read its `health` block.
-When `health.usable` is `true`, use `itemdb/codeql/normalized/alerts.yml`
-and `file-signals.yml` as enrichment for the target file. When
+If `itemdb/codeql/last-run-manifest.yml` exists, read its `health` block and `run_id`.
+When `health.usable` is `true`, read:
+- `itemdb/codeql/runs/<run_id>/normalized/alerts.yml`
+- `itemdb/codeql/runs/<run_id>/normalized/file-signals.yml`
+as enrichment for the target file. When
 `health.usable` is `false`, the CodeQL run did not produce trustworthy
 output — do not import its signals.
 

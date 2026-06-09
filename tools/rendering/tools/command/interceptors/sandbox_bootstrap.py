@@ -315,8 +315,6 @@ def _render_sandbox_inspect_rich(
         sections.append(Text(f"  template_vars:  {', '.join(payload['template_vars'])}", style="dim"))
     if payload.get("default_ports"):
         sections.append(Text(f"  default_ports:  {', '.join(str(p) for p in payload['default_ports'])}", style="dim"))
-    if payload.get("build_command"):
-        sections.append(Text(f"  build_command:  {payload['build_command']}", style="dim"))
     if payload.get("test_command"):
         sections.append(Text(f"  test_command:   {payload['test_command']}", style="dim"))
     if payload.get("caveats"):
@@ -662,8 +660,6 @@ def _render_sandbox_inspect_plain(payload: dict, glyphs: dict, sink, renderer: T
         sink.write_text(f"  template_vars:  {', '.join(payload['template_vars'])}")
     if payload.get("default_ports"):
         sink.write_text(f"  default_ports:  {', '.join(str(p) for p in payload['default_ports'])}")
-    if payload.get("build_command"):
-        sink.write_text(f"  build_command:  {payload['build_command']}")
     if payload.get("test_command"):
         sink.write_text(f"  test_command:   {payload['test_command']}")
     if payload.get("caveats"):

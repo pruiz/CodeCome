@@ -23,7 +23,6 @@ required_tools:
 default_ports:
   - 5672
   - 15672
-build_command: "gmake || rebar3 compile || mix compile"
 test_command: "gmake ct-* || rebar3 eunit,ct || mix test"
 notes_md: "notes.md"
 caveats:

@@ -14,7 +14,6 @@ required_tools:
   - "composer"
 default_ports:
   - 8000
-build_command: "composer install"
 test_command: "vendor/bin/phpunit"
 notes_md: "notes.md"
 caveats:

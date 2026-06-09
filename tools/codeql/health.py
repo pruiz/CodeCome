@@ -180,9 +180,6 @@ def _classify(
     has_compiled = checks.get("has_compiled_languages", False)
     extract_ok = checks.get("extractor_successes", 0)
 
-    if not has_languages:
-        return "skipped", "No languages were resolved for analysis."
-
     if status == "failed":
         if not db_ok:
             return "failed", "CodeQL database creation failed."
@@ -194,6 +191,9 @@ def _classify(
         if not db_ok and not db_exists:
             return "soft-failed", "CodeQL database creation soft-failed."
         return "soft-failed", "CodeQL pipeline soft-failed."
+
+    if not has_languages:
+        return "skipped", "No languages were resolved for analysis."
 
     if not analyze_ok:
         return "analysis-failed", "One or more CodeQL query profiles failed to analyze."

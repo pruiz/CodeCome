@@ -20,7 +20,6 @@ required_tools:
   - "venv"
 default_ports:
   - 8000
-build_command: "pip install -e ."
 test_command: "pytest"
 notes_md: "notes.md"
 caveats:

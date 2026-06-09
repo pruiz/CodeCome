@@ -15,7 +15,10 @@ def host_platform() -> str:
         result = subprocess.run(
             ["uname", "-sm"], capture_output=True, text=True, timeout=10
         )
-        return result.stdout.strip()
+        if result.returncode != 0:
+            return "unknown"
+        value = result.stdout.strip()
+        return value or "unknown"
     except Exception:
         return "unknown"
 
@@ -36,7 +39,10 @@ def container_platform(
             ],
             capture_output=True, text=True, timeout=timeout,
         )
-        return result.stdout.strip() or result.stderr.strip()
+        if result.returncode != 0:
+            return "unknown"
+        value = result.stdout.strip()
+        return value or "unknown"
     except Exception:
         return "unknown"
 

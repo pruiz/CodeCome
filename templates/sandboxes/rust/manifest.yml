@@ -17,7 +17,6 @@ required_tools:
   - "rustup"
 default_ports:
   - 8080
-build_command: "cargo build"
 test_command: "cargo test"
 notes_md: "notes.md"
 caveats:

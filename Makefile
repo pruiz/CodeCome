@@ -106,7 +106,7 @@ help:
 	@printf "    $(BOLD)make sandbox-build$(RESET)  Build the target inside the sandbox\n"
 	@printf "    $(BOLD)make sandbox-test$(RESET)   Test the target inside the sandbox\n"
 	@printf "\n"
-	@printf "  $(BOLD)$(CYAN)Sandbox bootstrap (Phase 1b):$(RESET)\n"
+	@printf "  $(BOLD)$(CYAN)Sandbox bootstrap:$(RESET)\n"
 	@printf "\n"
 	@printf "    $(BOLD)make sandbox-list$(RESET)                List curated example sandboxes\n"
 	@printf "    $(BOLD)make sandbox-inspect ID=python$(RESET)   Inspect one example\n"

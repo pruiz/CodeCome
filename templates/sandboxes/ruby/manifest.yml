@@ -17,7 +17,6 @@ required_tools:
   - "rake"
 default_ports:
   - 3000
-build_command: "bundle install"
 test_command: "bundle exec rake test"
 notes_md: "notes.md"
 caveats:

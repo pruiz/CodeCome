@@ -854,7 +854,7 @@ any data under `itemdb/notes/` or `itemdb/findings/`.
    module; exposed through the existing `tools/sandbox-bootstrap.py` CLI.
 6. **Existing itemdb data**: ignored during the refactor. No migration, no
    reads, no deletes of content under `itemdb/notes/` or `itemdb/findings/`.
-7. **Multi-target invocation**: the runner resolves `Sandbox_build_target` from
+7. **Multi-target invocation**: the runner resolves `sandbox_build_target` from
    the recipe per (analysis unit, language) pair and invokes CodeQL with the
    resolved `build_command`. Identical commands across targets are allowed;
    CodeQL's extractor is per-database so observing the same build multiple

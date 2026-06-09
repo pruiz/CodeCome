@@ -34,16 +34,13 @@ Rules for the recipe:
 - Declare the `validation_model` (docker, static-only, or nested-virt).
 - Populate the `sandbox` block with real paths, services, workdirs, and command paths.
 - Declare at least one `build_target` (under `build_targets[]`). Each target must have:
-  `id`, `description`, `source_path`, `service`, `workdir`, `build_command`, `test_command`,
+  `id`, `description`, `source_path`, `service`, `workdir`,
   an `environment` block, and a `codeql` block.
 - For simple single-project repositories, one `build_target` with `id: root` is correct.
 - For multi-component repositories, add one build target per materially distinct build
-  component. The same `build_command` may be repeated across targets when a single
-  aggregate build script covers everything.
 - For `static-only` targets, `build_targets` may be empty.
 - For each compiled-language `build_target` set `codeql.supported: true`,
-  `codeql.preferred_execution_mode: docker-inside`, and
-  `codeql.install_strategy: mount-host-bundle`.
+  and `codeql.preferred_execution_mode: docker-inside`.
 - Document limitations in the `limitations` array.
 
 After writing the recipe, validate it:

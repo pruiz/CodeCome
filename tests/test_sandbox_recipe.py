@@ -48,7 +48,6 @@ VALID_RECIPE = {
             "codeql": {
                 "supported": True,
                 "preferred_execution_mode": "docker-inside",
-                "install_strategy": "mount-host-bundle",
                 "notes": [],
             },
         },
@@ -56,7 +55,6 @@ VALID_RECIPE = {
     "codeql": {
         "supported": True,
         "default_execution_mode": "docker-inside",
-        "install_strategy": "mount-host-bundle",
         "notes": [],
     },
     "limitations": [],
@@ -80,7 +78,7 @@ class TestLoadRecipe:
         path = tmp_path / "nonexistent.yml"
         try:
             load_recipe(path)
-            assert False, "Expected ValueError"
+            raise AssertionError("Expected ValueError")
         except ValueError as exc:
             assert "Failed to read" in str(exc)
 
@@ -89,7 +87,7 @@ class TestLoadRecipe:
         path.write_text("- list\n- not\n- a mapping\n", encoding="utf-8")
         try:
             load_recipe(path)
-            assert False, "Expected ValueError"
+            raise AssertionError("Expected ValueError")
         except ValueError as exc:
             assert "YAML mapping" in str(exc)
 
@@ -179,13 +177,6 @@ class TestValidateRecipe:
         errors = validate_recipe(recipe, root=str(tmp_path))
         assert any("must be absolute" in e for e in errors)
 
-    def test_invalid_install_strategy(self, tmp_path: Path) -> None:
-        target = dict(VALID_RECIPE["build_targets"][0])
-        target["codeql"] = dict(target["codeql"], install_strategy="ftp")
-        recipe = dict(VALID_RECIPE, build_targets=[target])
-        _setup_fake_paths(tmp_path)
-        errors = validate_recipe(recipe, root=str(tmp_path))
-        assert any("install_strategy" in e and "invalid" in e for e in errors)
 
     def test_invalid_preferred_execution_mode(self, tmp_path: Path) -> None:
         target = dict(VALID_RECIPE["build_targets"][0])
@@ -244,7 +235,6 @@ class TestValidateRecipe:
             "codeql": {
                 "supported": True,
                 "preferred_execution_mode": "docker-inside",
-                "install_strategy": "mount-host-bundle",
                 "notes": [],
             },
         }

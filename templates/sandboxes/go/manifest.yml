@@ -14,7 +14,6 @@ required_tools:
   - "go"
 default_ports:
   - 8080
-build_command: "go build ./..."
 test_command: "go test ./..."
 notes_md: "notes.md"
 caveats:

@@ -17,7 +17,6 @@ required_tools:
   - "curl"
 default_ports:
   - 8080
-build_command: ""
 test_command: "curl -fsSL http://localhost:__APP_PORT__/ >/dev/null"
 notes_md: "notes.md"
 caveats:

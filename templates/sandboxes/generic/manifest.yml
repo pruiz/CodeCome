@@ -15,7 +15,6 @@ required_tools:
   - "ripgrep"
   - "jq"
 default_ports: []
-build_command: ""
 test_command: ""
 notes_md: "notes.md"
 caveats:

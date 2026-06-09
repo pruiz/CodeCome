@@ -77,7 +77,6 @@ class ExampleManifest:
     applies_when: Dict[str, List[str]] = field(default_factory=dict)
     required_tools: List[str] = field(default_factory=list)
     default_ports: List[Any] = field(default_factory=list)
-    build_command: str = ""
     test_command: str = ""
     notes_md: str = "notes.md"
     caveats: List[str] = field(default_factory=list)
@@ -111,7 +110,6 @@ class ExampleManifest:
             applies_when={k: list(v or []) for k, v in applies.items() if isinstance(v, list)},
             required_tools=list(data.get("required_tools") or []),
             default_ports=list(data.get("default_ports") or []),
-            build_command=str(data.get("build_command", "")),
             test_command=str(data.get("test_command", "")),
             notes_md=str(data.get("notes_md", "notes.md")),
             caveats=list(data.get("caveats") or []),
@@ -497,7 +495,6 @@ def cmd_inspect(args: argparse.Namespace) -> int:
                 "applies_when": manifest.applies_when,
                 "required_tools": manifest.required_tools,
                 "default_ports": manifest.default_ports,
-                "build_command": manifest.build_command,
                 "test_command": manifest.test_command,
                 "caveats": manifest.caveats,
                 "template_vars": manifest.template_vars,
@@ -524,8 +521,6 @@ def cmd_inspect(args: argparse.Namespace) -> int:
         print(f"  {C.DIM}default_ports:{C.RESET} {ports}")
     if manifest.template_vars:
         print(f"  {C.DIM}template_vars:{C.RESET} {', '.join(manifest.template_vars)}")
-    if manifest.build_command:
-        print(f"  {C.DIM}build_command:{C.RESET} {manifest.build_command}")
     if manifest.test_command:
         print(f"  {C.DIM}test_command:{C.RESET} {manifest.test_command}")
     if manifest.caveats:

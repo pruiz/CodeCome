@@ -28,18 +28,19 @@ def test_no_stale_phase_1b_1c_references_in_prompts():
 
     # Stale patterns that indicate the old order (1b = recon, 1c = sandbox)
     stale_patterns = [
-        (r"Phase 1b.*Detailed Reconnaissance", "Phase 1b should not describe Detailed Reconnaissance (now 1c)"),
-        (r"Phase 1b.*reconnaissance", "Phase 1b should not be described as reconnaissance (now 1c)"),
-        (r"Phase 1c.*Sandbox Bootstrap", "Phase 1c should not describe Sandbox Bootstrap (now 1b)"),
-        (r"Phase 1c.*sandbox bootstrap", "Phase 1c should not describe sandbox bootstrap (now 1b)"),
-        (r"\b1b\b.*\brecon\b", "phase-1b should not reference recon (now 1c)"),
+        (r"Phase 1b(?:.|\n){0,100}Detailed Reconnaissance", "Phase 1b should not describe Detailed Reconnaissance (now 1c)"),
+        (r"Phase 1b(?:.|\n){0,100}reconnaissance", "Phase 1b should not be described as reconnaissance (now 1c)"),
+        (r"Phase 1c(?:.|\n){0,100}Sandbox Bootstrap", "Phase 1c should not describe Sandbox Bootstrap (now 1b)"),
+        (r"Phase 1c(?:.|\n){0,100}sandbox bootstrap", "Phase 1c should not describe sandbox bootstrap (now 1b)"),
+        (r"\b1b\b(?:.|\n){0,100}\brecon\b", "phase-1b should not reference recon (now 1c)"),
     ]
 
     # The canonical files may reference the old names in their key/value style
     # but NOT in a way that mixes the phase number with the wrong task.
     exceptions: dict[str, list[str]] = {
         "phase-1b-sandbox.md": [],
-        "phase-1c-recon.md": [],
+        "phase-1c-recon.md": [r"Phase 1b(?:.|\n){0,100}reconnaissance", r"\b1b\b(?:.|\n){0,100}\brecon\b"],
+        "README.md": [r"\b1b\b(?:.|\n){0,100}\brecon\b", r"Phase 1b(?:.|\n){0,100}reconnaissance"],
     }
 
     for prompt_file in sorted(prompts_dir.glob("*.md")):
