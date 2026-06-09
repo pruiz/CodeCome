@@ -215,11 +215,20 @@ def _collect_plan_errors(plan: dict, notes_dir: Path) -> list[str]:
     """Return a list of validation error strings for codeql-plan.yml.
     
     Reuses the same logic as ``check_phase_1a()`` but returns strings
-    instead of writing to a rendering output.
+    instead of writing to a rendering output.  Respects the configured
+    CodeQL fail_policy so that ``check-codeql-plan`` mirrors the gate.
     """
     from codeql.capabilities import is_supported_language, supported_build_modes
 
     errors: list[str] = []
+
+    # Mirror the gate: only hard-fail the conditions that check_phase_1a
+    # would block on under the current fail_policy.
+    try:
+        from codeql.config import resolve_config as _resolve_codeql_config
+        fail_policy = _resolve_codeql_config().fail_policy
+    except Exception:
+        fail_policy = "soft"
 
     if plan.get("recommended") is True:
         units = plan.get("analysis_units", [])
@@ -227,7 +236,6 @@ def _collect_plan_errors(plan: dict, notes_dir: Path) -> list[str]:
             errors.append("codeql-plan.yml: recommended=true but no analysis_units entries")
             return errors
 
-        valid_confidences = {"HIGH", "MEDIUM", "LOW"}
         seen_unit_ids: set[str] = set()
         seen_databases: set[tuple[str, str]] = set()
 
@@ -267,10 +275,11 @@ def _collect_plan_errors(plan: dict, notes_dir: Path) -> list[str]:
                 errors.append(f"codeql-plan.yml: analysis unit '{unit_id}' has no languages")
                 continue
             if len(languages) == 0:
-                errors.append(
-                    f"codeql-plan.yml: analysis unit '{unit_id}' has no CodeQL languages and "
-                    "is not marked recommended=false"
-                )
+                if fail_policy == "hard":
+                    errors.append(
+                        f"codeql-plan.yml: analysis unit '{unit_id}' has no CodeQL languages and "
+                        "is not marked recommended=false"
+                    )
                 continue
 
             for j, lang in enumerate(languages):
@@ -286,9 +295,10 @@ def _collect_plan_errors(plan: dict, notes_dir: Path) -> list[str]:
                     )
                     continue
                 if not is_supported_language(language_id):
-                    errors.append(
-                        f"codeql-plan.yml: unsupported CodeQL language '{language_id}' in analysis unit '{unit_id}'"
-                    )
+                    if fail_policy == "hard":
+                        errors.append(
+                            f"codeql-plan.yml: unsupported CodeQL language '{language_id}' in analysis unit '{unit_id}'"
+                        )
                     continue
                 db_key = (unit_id, language_id)
                 if db_key in seen_databases:
@@ -296,11 +306,6 @@ def _collect_plan_errors(plan: dict, notes_dir: Path) -> list[str]:
                         f"codeql-plan.yml: duplicate language '{language_id}' in analysis unit '{unit_id}'"
                     )
                 seen_databases.add(db_key)
-                if lang.get("confidence") not in valid_confidences:
-                    errors.append(
-                        f"codeql-plan.yml: language '{language_id}' in analysis unit '{unit_id}' "
-                        f"has unexpected confidence '{lang.get('confidence')}'"
-                    )
                 build_mode = lang.get("build_mode")
                 supported_modes = supported_build_modes(language_id)
                 if build_mode not in supported_modes:

@@ -1529,6 +1529,9 @@ def cmd_validate(args: argparse.Namespace) -> int:
     elif not args.scripts_only:
         recipe_errors = ["sandbox-recipe.yml not found; run Phase 1b to generate it"]
 
+    if recipe_errors:
+        overall_outcome = "failed"
+
     helper_status = _capability_status()
     missing_helpers = [
         name for name in ("shell", "logs", "clean", "reset")

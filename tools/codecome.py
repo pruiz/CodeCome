@@ -381,7 +381,7 @@ def check_phase_progress() -> None:
         rows.append(("CodeQL", "info", "not run"))
 
     # Phase 1b (Sandbox Bootstrap)
-    has_1b = (notes_dir / "sandbox-plan.md").is_file()
+    has_1b = (notes_dir / "sandbox-plan.md").is_file() and (notes_dir / "sandbox-recipe.yml").is_file()
     rows.append(("Phase 1b", "ok" if has_1b else "info", "completed" if has_1b else "not run"))
 
     # Phase 1c (Detailed Reconnaissance)
