@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import time
 from pathlib import Path
@@ -423,8 +424,9 @@ class TestFindLatestSummary:
         p2 = runs_dir / "phase-2-summary-newer.md"
         p1.write_text("old")
         p2.write_text("new")
-        time.sleep(0.01)
-        p2.write_text("newer")
+        base_time = time.time()
+        os.utime(p1, (base_time, base_time))
+        os.utime(p2, (base_time + 1, base_time + 1))
 
         result = find_latest_summary("2")
         assert result is not None

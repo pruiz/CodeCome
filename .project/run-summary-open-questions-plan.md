@@ -4,7 +4,7 @@ Issue: https://github.com/pruiz/CodeCome/issues/33
 
 ## Goal
 
-Add first-class support for durable, reusable user-context questions and re-run hints across CodeCome. The model owns explaining questions and hints in its final response and run summary. The harness verifies they were written. A `make hints` command lets the user review them offline.
+Add first-class support for durable, reusable user-context questions and re-run hints across CodeCome. The model owns explaining questions and hints in its final response and run summary. A `make hints` command lets the user review them offline.
 
 ## Design decisions
 

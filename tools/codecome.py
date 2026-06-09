@@ -710,29 +710,23 @@ def command_hints(_: argparse.Namespace) -> int:
         parse_summary,
     )
 
-    phases = ("1a", "1b", "1c", "2", "3", "4", "5", "6")
+    # Phases 4/5 write finding-scoped summaries (phase-4-CC-0001-summary*.md),
+    # so we search with a wildcard glob in addition to the bare pattern.
+    # Sweeps write sweep-<slug>-summary*.md, searched separately.
+    phases = ("1a", "1b", "1c", "2", "3")
+    finding_phases = ("4", "5")
     found_any = False
 
-    print()
-    print(C.header("Open questions & re-run hints"))
-    print()
-
-    for phase_id in phases:
-        summary_path = find_latest_summary(phase_id)
-        if not summary_path:
-            continue
-
+    def _process(path: Path, label: str) -> bool:
         try:
-            qs = parse_summary(summary_path)
-        except Exception:
-            continue
-
+            qs = parse_summary(path)
+        except (OSError, ValueError, UnicodeDecodeError):
+            return False
         if not qs.has_content():
-            continue
+            return False
 
-        found_any = True
-        rel = summary_path.relative_to(ROOT)
-        print(f"  {C.BOLD_CYAN}Phase {phase_id}{C.RESET}  {C.DIM}·  {rel}{C.RESET}")
+        rel = path.relative_to(ROOT)
+        print(f"  {C.BOLD_CYAN}{label}{C.RESET}  {C.DIM}·  {rel}{C.RESET}")
         print()
 
         for q in qs.open_questions:
@@ -752,6 +746,45 @@ def command_hints(_: argparse.Namespace) -> int:
                 if stripped:
                     print(f"    {stripped}")
             print()
+
+        return True
+
+    print()
+    print(C.header("Open questions & re-run hints"))
+    print()
+
+    for phase_id in phases:
+        summary_path = find_latest_summary(phase_id)
+        if not summary_path:
+            continue
+        if _process(summary_path, f"Phase {phase_id}"):
+            found_any = True
+
+    for phase_id in finding_phases:
+        # Also search the finding-scoped pattern: phase-4-*-summary*.md
+        runs_dir = ROOT / "runs"
+        if not runs_dir.is_dir():
+            continue
+        candidates = sorted(
+            runs_dir.glob(f"phase-{phase_id}-*-summary*.md"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if candidates:
+            summary_path = candidates[0]
+            if _process(summary_path, f"Phase {phase_id}"):
+                found_any = True
+
+    # Sweep summaries: sweep-<slug>-summary*.md
+    if (ROOT / "runs").is_dir():
+        sweep_candidates = sorted(
+            (ROOT / "runs").glob("sweep-*-summary*.md"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        for sp in sweep_candidates:
+            if _process(sp, "Sweep"):
+                found_any = True
 
     if found_any:
         print(C.SYM_DASH * 62)

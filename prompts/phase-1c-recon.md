@@ -271,6 +271,6 @@ At the end, summarize:
 
 Write the run summary using the template at `templates/run-summary.md` to:
 
-    runs/phase-1b-summary-YYYY-MM-DD-HHMMSS.md
+    runs/phase-1c-summary-YYYY-MM-DD-HHMMSS.md
 
 You MUST fill in both sections. Questions must be complete, self-contained sentences ending in `?` — avoid terse noun phrases. Hints must use actual `PROMPT_EXTRA` or `PROMPT_EXTRA_FILE` snippets.
