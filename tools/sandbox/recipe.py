@@ -130,6 +130,21 @@ def validate_recipe(recipe: dict[str, Any], *, root: str | Path) -> list[str]:
     return errors
 
 
+def _command_looks_path_like(command: str) -> bool:
+    """Return True when *command* appears to be a filesystem path.
+
+    Shell commands like ``make -C src`` or ``mvn test`` should NOT be
+    validated as paths.  Only the first token is inspected.
+    """
+    if not command.strip():
+        return False
+    try:
+        first = command.strip().split()[0]
+    except IndexError:
+        return False
+    return first.startswith(("./", "/"))
+
+
 def _validate_build_targets(
     targets: list[Any], root: str | Path, validation_model: str
 ) -> list[str]:
@@ -206,11 +221,12 @@ def _validate_build_targets(
         # build_command
         build_command = target.get("build_command")
         if isinstance(build_command, str) and build_command.strip():
-            build_path = Path(root) / build_command
-            if not build_path.exists():
-                errors.append(
-                    f"sandbox-recipe.yml: build_target {target_id!r} build_command path {build_command!r} does not exist"
-                )
+            if _command_looks_path_like(build_command):
+                build_path = Path(root) / build_command
+                if not build_path.exists():
+                    errors.append(
+                        f"sandbox-recipe.yml: build_target {target_id!r} build_command path {build_command!r} does not exist"
+                    )
 
         # codeql hints
         codeql = target.get("codeql")

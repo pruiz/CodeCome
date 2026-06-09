@@ -29,8 +29,10 @@ def _inject_total_alerts(manifest: dict[str, Any], normalized_dir: Path) -> None
         from codeql.packs import load_yaml_mapping
         data = load_yaml_mapping(alerts_path, what="alerts")
         manifest["total_alerts"] = len(data.get("alerts", []))
-    except Exception:
-        pass
+    except Exception as exc:
+        manifest.setdefault("warnings", []).append(
+            f"Failed to read total_alerts from alerts.yml: {exc}"
+        )
 
 
 def _set_run_dir(config: CodeQLConfig) -> tuple[str, Path]:

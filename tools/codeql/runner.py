@@ -659,7 +659,11 @@ def write_summary(manifest: dict[str, Any], normalized_dir: Path, output_dir: Pa
 
     alerts_path = normalized_dir / "alerts.yml"
 
-    if alerts_path.is_file():
+    total_alerts = manifest.get("total_alerts")
+    if total_alerts is not None:
+        lines.append(f"- **Total alerts**: {total_alerts}")
+        lines.append("")
+    elif alerts_path.is_file():
         from codeql.packs import load_yaml_mapping
         try:
             data = load_yaml_mapping(alerts_path, what="alerts")
