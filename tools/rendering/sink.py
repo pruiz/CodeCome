@@ -76,10 +76,10 @@ class RichConsoleSink:
         return self._console
 
     def write(self, renderable: Any, *, expand: bool = True) -> None:
-        self._console.print(renderable, overflow="ignore", crop=False)
+        self._console.print(renderable, overflow="fold", crop=False)
 
     def write_text(self, text: str, *, end: str = "\n") -> None:
-        self._console.print(text, overflow="ignore", crop=False, end=end)
+        self._console.print(text, overflow="fold", crop=False, end=end)
 
 
 class TextualRichLogSink:
