@@ -20,8 +20,6 @@ from codecome.config import ROOT
 # Data types
 # ---------------------------------------------------------------------------
 
-_SECTION_HEADING_RE = re.compile(r"^#\s")
-
 
 @dataclass
 class OpenQuestion:
@@ -98,7 +96,7 @@ def _is_none_content(body: str) -> bool:
         "none.",
         "none —",
         "n/a",
-    ) or first_line.startswith("none ")
+    ) or first_line.startswith(("none ", "<none"))
 
 
 # ---------------------------------------------------------------------------
@@ -129,11 +127,6 @@ def _parse_questions(body: str) -> list[OpenQuestion]:
         # Ignore question blocks where the heading text is effectively empty
         # or a none marker (e.g. "## Question: <none ...>")
         if not question_text or _is_none_content(question_text):
-            continue
-        # Skip placeholder-like questions: "<none", "None", "N/A"
-        if question_text.strip().lower() in ("none", "<none", "n/a", "none."):
-            continue
-        if question_text.strip().lower().startswith(("<none", "none ")):
             continue
 
         q = OpenQuestion(question=question_text)
@@ -183,11 +176,6 @@ def parse_summary(path: Path) -> RunSummaryQuestions:
     open_questions: list[OpenQuestion] = []
     if questions_body is not None:
         open_questions = _parse_questions(questions_body)
-        # Only treat as empty if there are no parsed questions AND the body
-        # is effectively "none" content (avoids false negatives when intro
-        # text starts with "None" but still has real questions after it).
-        if not open_questions and _is_none_content(questions_body):
-            open_questions = []
 
     rerun_hints: str | None = None
     if hints_body is not None:
@@ -208,6 +196,8 @@ def find_latest_summary(
     the one with the highest modification time.
     """
     runs_dir = ROOT / "runs"
+    if not runs_dir.is_dir():
+        return None
 
     # Build glob pattern:
     #   phase-2-summary*.md
