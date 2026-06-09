@@ -24,6 +24,7 @@ Before validating a finding, read:
 - `.opencode/skills/finding-format/SKILL.md`
 - `.opencode/skills/exploit-validation/SKILL.md`
 - `.opencode/skills/sandbox-validation/SKILL.md`
+- `itemdb/notes/threat-model.md` — when available, the operational threat model from Phase 1b. Use it to ensure validation planning respects documented attacker capabilities, non-capabilities, trust boundaries, existing controls, and open assumptions.
 - relevant files under `itemdb/notes/`
 - the assigned finding
 - relevant source files under `src/`
@@ -117,13 +118,14 @@ Multiple methods may be combined.
 2. Extract the exact vulnerability claim.
 3. Review the counter-analysis.
 4. Identify what evidence would confirm or reject the claim.
-5. Inspect the relevant source code.
-6. Prepare the sandbox.
-7. Execute the validation plan or improve it.
-8. Record commands and outputs.
-9. Store evidence under `itemdb/evidence/<finding-id>/`.
-10. Update the finding.
-11. Move the finding to the correct status directory if needed.
+5. When the threat model exists, review how the finding's validation plan aligns with documented attacker capabilities, trust boundaries, existing controls, and open assumptions. Refine the plan if it assumes capabilities contradicted by the threat model.
+6. Inspect the relevant source code.
+7. Prepare the sandbox.
+8. Execute the validation plan or improve it.
+9. Record commands and outputs.
+10. Store evidence under `itemdb/evidence/<finding-id>/`.
+11. Update the finding.
+12. Move the finding to the correct status directory if needed.
 
 ## Evidence directory
 

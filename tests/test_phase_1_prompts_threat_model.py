@@ -100,3 +100,38 @@ def test_phase_1_recon_md_removed() -> None:
 def test_phase_1b_codeql_recon_md_removed() -> None:
     path = ROOT / "prompts" / "phase-1b-codeql-recon.md"
     assert not path.exists(), f"{path} should have been renamed"
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 — threat-model.md integration
+# ---------------------------------------------------------------------------
+
+def test_phase_4_explicitly_references_threat_model_when_present() -> None:
+    content = _read_prompt("phase-4-validate.md")
+    assert "itemdb/notes/threat-model.md" in content
+
+
+def test_phase_4_uses_conditional_when_available_language() -> None:
+    content = _read_prompt("phase-4-validate.md")
+    content_lower = content.lower()
+    assert (
+        "when this file is available" in content_lower
+        or "when available" in content_lower
+        or "when present" in content_lower
+    )
+
+
+def test_phase_4_mentions_attacker_capabilities_and_non_capabilities() -> None:
+    content = _read_prompt("phase-4-validate.md")
+    assert "attacker capabilit" in content.lower()
+    assert "non-capabilities" in content.lower()
+
+
+def test_phase_4_mentions_trust_boundaries_in_validation_context() -> None:
+    content = _read_prompt("phase-4-validate.md")
+    assert "trust boundar" in content.lower()
+
+
+def test_phase_4_mentions_existing_controls() -> None:
+    content = _read_prompt("phase-4-validate.md")
+    assert "existing controls" in content.lower()

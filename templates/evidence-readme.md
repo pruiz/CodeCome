@@ -36,6 +36,19 @@ Include:
 - relevant configuration,
 - date of validation.
 
+# Threat-model assumptions (if applicable)
+
+When the validation result was materially affected by assumptions from the threat model, document them here.
+
+Examples:
+
+- Attacker capability constrained by threat-model non-capabilities
+- Trust boundary documented in `itemdb/notes/threat-model.md` that shaped the validation path
+- Existing control from the threat model that blocked or narrowed validation
+- Open assumption from the threat model that affected exploitability assessment
+
+If the threat model did not affect the result, this section may be omitted.
+
 # Commands executed
 
 List the exact commands executed.
