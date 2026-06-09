@@ -214,3 +214,5 @@ Write the run summary to:
     runs/phase-3-summary-YYYY-MM-DD-HHMMSS.md
 
 Use the current timestamp (year-month-day-hour-minute-second). Use the structure from `templates/run-summary.md`.
+
+You MUST fill in the `# Open questions for the user` and `# Re-run prompt hints` sections. If there are no useful open questions or hints, write "None." Do not omit either section.

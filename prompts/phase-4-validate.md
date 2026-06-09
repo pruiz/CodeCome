@@ -201,3 +201,5 @@ Write the run summary using the template at `templates/run-summary.md` to:
 
 Replace `FINDING` with the validated finding id
 (e.g. `runs/phase-4-CC-0001-summary-2026-06-05-143022.md`).
+
+You MUST fill in the `# Open questions for the user` and `# Re-run prompt hints` sections. If there are no useful open questions or hints, write "None." Do not omit either section.

@@ -576,4 +576,9 @@ def run_phase_1(
     out.separator(tone=T.SUCCESS)
     out.success("Phase 1 complete — all subphases passed.", symbol=True)
 
+    # ── Display open questions from all subphase run summaries ──
+    from codecome.run_summary_questions import display_phase_questions
+    for subphase in ("1a", "1b", "1c"):
+        display_phase_questions(subphase)
+
     return 0

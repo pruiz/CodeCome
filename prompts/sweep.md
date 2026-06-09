@@ -145,3 +145,14 @@ At the end, summarize in your response (or write a brief run summary under `runs
 - important assumptions,
 - recommended next phase,
 - files created or modified.
+
+## Run summary
+
+Write the run summary using the template at `templates/run-summary.md` to:
+
+    runs/sweep-<slug>-summary-YYYY-MM-DD-HHMMSS.md
+
+Replace `<slug>` with a short sanitised version of the target file path
+(e.g. `runs/sweep-src-app-controllers-upload-php-summary-2026-06-09-143022.md`).
+
+You MUST fill in the `# Open questions for the user` and `# Re-run prompt hints` sections. If there are no useful open questions or hints, write "None." Do not omit either section.
