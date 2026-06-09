@@ -13,6 +13,12 @@ def _read_prompt(name: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _read_opencode(path_from_root: str) -> str:
+    path = ROOT / path_from_root
+    assert path.is_file(), f"{path} does not exist"
+    return path.read_text(encoding="utf-8")
+
+
 def test_phase_1c_recon_prompt_exists() -> None:
     path = ROOT / "prompts" / "phase-1c-recon.md"
     assert path.is_file(), f"{path} does not exist"
@@ -102,6 +108,36 @@ def test_phase_1b_codeql_recon_md_removed() -> None:
     assert not path.exists(), f"{path} should have been renamed"
 
 
+
+# ---------------------------------------------------------------------------
+# Phase 4 validator agent and skill — threat-model.md integration
+# ---------------------------------------------------------------------------
+
+def test_validator_agent_references_threat_model() -> None:
+    content = _read_opencode(".opencode/agents/validator.md")
+    assert "itemdb/notes/threat-model.md" in content
+
+
+def test_validator_agent_uses_conditional_language() -> None:
+    content = _read_opencode(".opencode/agents/validator.md")
+    content_lower = content.lower()
+    assert (
+        "when available" in content_lower
+        or "when present" in content_lower
+        or "if present" in content_lower
+    )
+
+
+def test_exploit_validation_skill_references_threat_model() -> None:
+    content = _read_opencode(".opencode/skills/exploit-validation/SKILL.md")
+    assert "itemdb/notes/threat-model.md" in content
+
+
+def test_exploit_validation_skill_mentions_attacker_capabilities() -> None:
+    content = _read_opencode(".opencode/skills/exploit-validation/SKILL.md")
+    assert "non-capabilities" in content.lower()
+
+
 # ---------------------------------------------------------------------------
 # Phase 4 — threat-model.md integration
 # ---------------------------------------------------------------------------
@@ -118,6 +154,7 @@ def test_phase_4_uses_conditional_when_available_language() -> None:
         "when this file is available" in content_lower
         or "when available" in content_lower
         or "when present" in content_lower
+        or "if present" in content_lower
     )
 
 

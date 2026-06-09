@@ -37,7 +37,7 @@ Read the following files (all paths are relative to the project/workspace root):
 - the assigned finding
 - relevant source files under `src/`
 - sandbox documentation under `sandbox/`
-- `itemdb/notes/threat-model.md` — operational threat model from Phase 1b: assets, attacker capabilities and non-capabilities, trust-boundary summary, existing controls, abuse-path themes, risk calibration, and open assumptions. When this file is available, use it to plan realistic validation attempts.
+- If present, `itemdb/notes/threat-model.md` — operational threat model from Phase 1b: assets, attacker capabilities and non-capabilities, trust-boundary summary, existing controls, abuse-path themes, risk calibration, and open assumptions. Use it to plan realistic validation attempts.
 
 Use additional target-specific skills only if they clearly apply.
 
