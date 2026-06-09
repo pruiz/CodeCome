@@ -24,7 +24,7 @@ Before validating a finding, read:
 - `.opencode/skills/finding-format/SKILL.md`
 - `.opencode/skills/exploit-validation/SKILL.md`
 - `.opencode/skills/sandbox-validation/SKILL.md`
-- `itemdb/notes/threat-model.md` — when available, the operational threat model from Phase 1b. Use it to ensure validation planning respects documented attacker capabilities, non-capabilities, trust boundaries, existing controls, and open assumptions.
+- If present, `itemdb/notes/threat-model.md` — the operational threat model from Phase 1b. Use it to ensure validation planning respects documented attacker capabilities, non-capabilities, trust boundaries, existing controls, and open assumptions.
 - relevant files under `itemdb/notes/`
 - the assigned finding
 - relevant source files under `src/`
