@@ -174,3 +174,111 @@ def test_phase_4_mentions_trust_boundaries_in_validation_context() -> None:
 def test_phase_4_mentions_existing_controls() -> None:
     content = _read_prompt("phase-4-validate.md")
     assert "existing controls" in content.lower()
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 exploiter agent — threat-model.md integration
+# ---------------------------------------------------------------------------
+
+def test_exploiter_agent_references_threat_model() -> None:
+    content = _read_opencode(".opencode/agents/exploiter.md")
+    assert "itemdb/notes/threat-model.md" in content
+
+
+def test_exploiter_agent_uses_conditional_language() -> None:
+    content = _read_opencode(".opencode/agents/exploiter.md")
+    content_lower = content.lower()
+    assert (
+        "when available" in content_lower
+        or "when present" in content_lower
+        or "if present" in content_lower
+    )
+
+
+def test_exploiter_agent_mentions_non_capabilities() -> None:
+    content = _read_opencode(".opencode/agents/exploiter.md")
+    assert "non-capabilities" in content
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 exploit-development skill — threat-model.md integration
+# ---------------------------------------------------------------------------
+
+def test_exploit_development_skill_references_threat_model() -> None:
+    content = _read_opencode(".opencode/skills/exploit-development/SKILL.md")
+    assert "itemdb/notes/threat-model.md" in content
+
+
+def test_exploit_development_skill_mentions_non_capabilities() -> None:
+    content = _read_opencode(".opencode/skills/exploit-development/SKILL.md")
+    assert "non-capabilities" in content
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 prompt — threat-model.md integration
+# ---------------------------------------------------------------------------
+
+def test_phase_5_explicitly_references_threat_model_when_present() -> None:
+    content = _read_prompt("phase-5-exploit.md")
+    assert "itemdb/notes/threat-model.md" in content
+
+
+def test_phase_5_uses_conditional_when_present_language() -> None:
+    content = _read_prompt("phase-5-exploit.md")
+    content_lower = content.lower()
+    assert (
+        "when available" in content_lower
+        or "when present" in content_lower
+        or "if present" in content_lower
+    )
+
+
+def test_phase_5_mentions_attacker_capabilities_and_non_capabilities() -> None:
+    content = _read_prompt("phase-5-exploit.md")
+    assert "attacker capabilit" in content.lower()
+    assert "non-capabilities" in content
+
+
+def test_phase_5_mentions_trust_boundaries() -> None:
+    content = _read_prompt("phase-5-exploit.md")
+    assert "trust boundar" in content.lower()
+
+
+def test_phase_5_mentions_existing_controls() -> None:
+    content = _read_prompt("phase-5-exploit.md")
+    assert "existing controls" in content.lower()
+
+
+def test_phase_5_mentions_open_assumptions() -> None:
+    content = _read_prompt("phase-5-exploit.md")
+    assert "open assumptions" in content.lower()
+
+
+def test_phase_5_checklist_references_non_capabilities() -> None:
+    content = _read_prompt("phase-5-exploit.md")
+    assert "non-capabilities" in content
+    assert "threat-model.md" in content
+
+
+def test_phase_5_final_response_mentions_threat_model_assumptions() -> None:
+    content = _read_prompt("phase-5-exploit.md")
+    assert "threat-model assumptions" in content.lower()
+
+
+# ---------------------------------------------------------------------------
+# Exploit README template — threat-model assumptions section
+# ---------------------------------------------------------------------------
+
+def test_exploit_readme_template_has_threat_model_assumptions_section() -> None:
+    content = _read_opencode("templates/exploit-readme.md")
+    assert "# Threat Model Assumptions" in content
+
+
+def test_exploit_readme_template_mentions_non_capabilities() -> None:
+    content = _read_opencode("templates/exploit-readme.md")
+    assert "non-capabilities" in content.lower()
+
+
+def test_exploit_readme_template_mentions_open_assumptions() -> None:
+    content = _read_opencode("templates/exploit-readme.md")
+    assert "open assumptions" in content.lower()
