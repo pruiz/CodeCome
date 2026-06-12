@@ -161,7 +161,7 @@ class TestSweepSummaryPrompt:
 
         try:
             files = ["src/a.php", "src/b.cs"]
-            prompt_path = module.build_sweep_summary_prompt(files)
+            prompt_path = module.build_sweep_summary_prompt(files, [])
             content = prompt_path.read_text(encoding="utf-8")
             assert "src/a.php" in content
             assert "src/b.cs" in content
@@ -181,7 +181,7 @@ class TestSweepSummaryPrompt:
         module.TMP_DIR = tmp_path / "tmp" / "file-sweep-prompts"
 
         try:
-            prompt_path = module.build_sweep_summary_prompt(["src/foo.php"])
+            prompt_path = module.build_sweep_summary_prompt(["src/foo.php"], [])
             content = prompt_path.read_text(encoding="utf-8")
             assert "Do NOT create new findings" in content or "not create" in content.lower()
             assert "Do NOT perform fresh vulnerability hunting" in content or "not perform" in content.lower()
@@ -189,7 +189,7 @@ class TestSweepSummaryPrompt:
             module.SWEEP_SUMMARY_PROMPT = ROOT / "prompts" / "phase-2-sweep-summary.md"
             module.TMP_DIR = orig_tmp_dir
 
-    def test_summary_prompt_mentions_sweep_summary_naming(self, tmp_path):
+    def test_summary_prompt_contains_injected_per_file_summaries(self, tmp_path):
         module = _load_run_sweep()
 
         real_template = module.SWEEP_SUMMARY_PROMPT.read_text(encoding="utf-8")
@@ -200,10 +200,16 @@ class TestSweepSummaryPrompt:
         module.TMP_DIR = tmp_path / "tmp" / "file-sweep-prompts"
 
         try:
-            prompt_path = module.build_sweep_summary_prompt(["src/foo.php"])
+            summaries = [
+                "runs/phase-2-summary-sweep-src-a-2026-06-12-120000.md",
+                "runs/phase-2-summary-sweep-src-b-2026-06-12-121000.md",
+            ]
+            prompt_path = module.build_sweep_summary_prompt(["src/a.php"], summaries)
             content = prompt_path.read_text(encoding="utf-8")
             assert "runs/sweep-summary-" in content
-            assert "phase-2-summary-sweep-*.md" in content
+            assert "phase-2-summary-sweep-src-a-2026-06-12-120000.md" in content
+            assert "phase-2-summary-sweep-src-b-2026-06-12-121000.md" in content
+            assert "## Per-file sweep summaries" in content
         finally:
             module.SWEEP_SUMMARY_PROMPT = ROOT / "prompts" / "phase-2-sweep-summary.md"
             module.TMP_DIR = orig_tmp_dir
@@ -214,6 +220,6 @@ class TestSweepSummaryPrompt:
         module.SWEEP_SUMMARY_PROMPT = tmp_path / "nonexistent.md"
         try:
             with pytest.raises(FileNotFoundError, match="missing sweep summary prompt"):
-                module.build_sweep_summary_prompt(["src/foo.php"])
+                module.build_sweep_summary_prompt(["src/foo.php"], [])
         finally:
             module.SWEEP_SUMMARY_PROMPT = ROOT / "prompts" / "phase-2-sweep-summary.md"

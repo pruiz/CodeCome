@@ -159,6 +159,6 @@ Write the run summary using the template at `templates/run-summary.md` to:
     runs/phase-2-summary-sweep-<slug>-YYYY-MM-DD-HHMMSS.md
 
 Replace `<slug>` with a short sanitised version of the target file path
-(e.g. `runs/phase-2-summary-sweep-src-app-controllers-upload-php-2026-06-09-143022.md`).
+(e.g. `runs/phase-2-summary-sweep-src-app-controllers-upload.php-2026-06-09-143022.md`).
 
 You MUST fill in both sections. Questions must be complete, self-contained sentences ending in `?` — avoid terse noun phrases. Hints must use actual `PROMPT_EXTRA` or `PROMPT_EXTRA_FILE` snippets.

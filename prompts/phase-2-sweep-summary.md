@@ -10,10 +10,10 @@ Read these files (all paths are relative to the project/workspace root):
 
 - `AGENTS.md`
 - `codecome.yml`
-- All per-file sweep summaries matching `runs/phase-2-summary-sweep-*.md`
+- ONLY the per-file sweep summaries listed in the `## Per-file sweep summaries` section of this prompt. Do NOT read unrelated historical sweep summaries — old summaries from previous sweeps are not part of this consolidation.
 - Findings under `itemdb/findings/PENDING/` that were created or touched during the sweep (identifiable from the per-file summaries)
 
-If available in the context of this run, note which files were selected for the sweep (see the prompt body or prompt file attached to this run).
+The `## Selected files` and `## Per-file sweep summaries` sections below this prompt body list exactly which files were swept and which per-file summaries were produced by this batch. Use that information, not a blind glob of all `runs/phase-2-summary-sweep-*.md`.
 
 ## Forbidden actions
 
