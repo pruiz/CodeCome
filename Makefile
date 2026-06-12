@@ -15,6 +15,23 @@ export PROMPT_EXTRA_FILE
 # Pass --thinking to raw opencode run when CODECOME_THINKING=1
 OPENCODE_THINKING_FLAG := $(if $(filter 1,$(CODECOME_THINKING)),--thinking,)
 
+# Derive managed CodeQL binary path from the host OS (no inline Python).
+UNAME_S := $(shell uname -s 2>/dev/null || printf unknown)
+ifeq ($(UNAME_S),Darwin)
+CODEQL_PLATFORM := osx64
+else ifeq ($(UNAME_S),Linux)
+CODEQL_PLATFORM := linux64
+else ifneq (,$(findstring MINGW,$(UNAME_S)))
+CODEQL_PLATFORM := win64
+else ifneq (,$(findstring MSYS,$(UNAME_S)))
+CODEQL_PLATFORM := win64
+else ifneq (,$(findstring CYGWIN,$(UNAME_S)))
+CODEQL_PLATFORM := win64
+else
+CODEQL_PLATFORM := win64
+endif
+CODEQL_BIN := $(or $(CODEQL_INSTALL_PATH),.tools/codeql/$(CODEQL_PLATFORM)/current/codeql)
+
 ifndef NO_COLOR
 RED := \033[31m
 GREEN := \033[32m
@@ -160,11 +177,7 @@ env-check:
 	@test -x "$(PYTHON)" || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) Missing repo virtualenv at .venv\n\nRun:\n\n    make init\n\n" && exit 1)
 	@$(PYTHON) -c "import yaml, rich" >/dev/null 2>&1 || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) .venv is missing required Python packages\n\nRun:\n\n    make init\n\nIf you updated requirements, rerun the same command to resync .venv.\n\n" && exit 1)
 	@if [ ! -f .tools/codeql/.disabled ]; then \
-		test -x .tools/codeql/current/codeql 2>/dev/null || \
-		test -x .tools/codeql/osx64/current/codeql 2>/dev/null || \
-		test -x .tools/codeql/linux64/current/codeql 2>/dev/null || \
-		test -x .tools/codeql/win64/current/codeql 2>/dev/null || \
-		(printf "\n$(BOLD)$(RED)[FAIL]$(RESET) CodeQL is enabled but the managed binary is missing.\n\nRun:\n\n    make init\n\nOr to explicitly disable CodeQL:\n\n    CODEQL=0 make init\n\n" && exit 1); \
+		test -x "$(CODEQL_BIN)" || (printf "\n$(BOLD)$(RED)[FAIL]$(RESET) CodeQL is enabled but the managed binary is missing ($(CODEQL_BIN)).\n\nRun:\n\n    make init\n\nOr to explicitly disable CodeQL:\n\n    CODEQL=0 make init\n\n" && exit 1); \
 	fi
 
 # ---------------------------------------------------------------------------
