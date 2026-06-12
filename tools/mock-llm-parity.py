@@ -54,8 +54,6 @@ _PARITY_IGNORED_TYPES = {
     "connector.updated",
     "reference.updated",
 }
-# Legacy alias kept for external test references.
-_SERVE_ONLY_TYPES = _PARITY_IGNORED_TYPES
 
 
 def _step_sort_key(ev: dict[str, Any]) -> tuple[int | float, str]:
@@ -342,7 +340,7 @@ def run_serve(prompt: str, model: str, agent: str, timeout: float) -> list[dict[
 def normalize_event(ev: dict[str, Any]) -> dict[str, Any] | None:
     """Remove volatile fields and serve-only events for comparison."""
     ev_type = ev.get("type", "")
-    if ev_type in _SERVE_ONLY_TYPES:
+    if ev_type in _PARITY_IGNORED_TYPES:
         return None
     out = dict(ev)
 

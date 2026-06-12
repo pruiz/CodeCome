@@ -53,6 +53,7 @@ def test_resolve_config_falls_back_on_invalid_max_candidates(monkeypatch) -> Non
 
 
 def test_install_path_defaults_to_platform_specific(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("CODEQL_INSTALL_PATH", raising=False)
     config_path = tmp_path / "codecome.yml"
     config_path.write_text(
         "audit:\n  static_analysis:\n    codeql:\n      enabled: true\n",
