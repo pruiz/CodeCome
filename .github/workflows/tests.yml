@@ -52,11 +52,19 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: make init
 
+      - name: Verify environment (full CodeQL install)
+        if: matrix.python-version == '3.14'
+        run: make env-check
+
       - name: Run make init (skip CodeQL install)
         if: matrix.python-version != '3.14'
         env:
           CODEQL_SKIP_INSTALL: 1
         run: make init
+
+      - name: Verify environment (skip CodeQL install)
+        if: matrix.python-version != '3.14'
+        run: make env-check
 
       - name: Run pytest with coverage
         id: pytest

@@ -152,9 +152,9 @@ class TestNormalizeEvent:
         assert "messageID" not in out["part"]
         assert out["part"]["text"] == "hello"
 
-    def test_normalize_filters_serve_only_types(self):
+    def test_normalize_filters_parity_ignored_types(self):
         mod = load_parity_module()
-        for t in mod._SERVE_ONLY_TYPES:
+        for t in mod._PARITY_IGNORED_TYPES:
             assert mod.normalize_event({"type": t}) is None
 
     def test_normalize_truncates_tool_output(self):
