@@ -454,9 +454,8 @@ All `make` targets that depend on Python tooling expect a repo-local `.venv/`. I
 
 Wrapper controls:
 
-    CODECOME_USE_WRAPPER=0   # bypass wrapper and use raw opencode run
     CODECOME_THINKING=1      # show model reasoning/thinking blocks in output
-    OPENCODE_ARGS='...'      # extra flags for opencode run (forwarded directly when CODECOME_USE_WRAPPER=0; in wrapper mode only --model, --variant and --thinking are used)
+    OPENCODE_ARGS='...'      # extra flags for opencode run (--model, --variant, --thinking)
     CODECOME_MODEL=<id>          # pin the model per phase
     CODECOME_MODEL_VARIANT=<v>   # pin the model variant
 

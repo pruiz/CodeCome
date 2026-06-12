@@ -514,7 +514,7 @@ class TestFindLatestSummarySweepExclusion:
         assert result is not None
         assert result.name == "phase-2-CC-0001-summary-2026-06-12.md"
 
-    def test_explicit_exclude_pattern_overrides_default(self, tmp_path, monkeypatch):
+    def test_explicit_exclude_pattern_extends_default(self, tmp_path, monkeypatch):
         import codecome.run_summary_questions as rsm
         runs_dir = tmp_path / "runs"
         runs_dir.mkdir()

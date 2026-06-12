@@ -20,10 +20,10 @@ from __future__ import annotations
 
 import argparse
 import glob
-import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -144,28 +144,27 @@ def run_one_file(file_path: str, dry_run: bool) -> int:
     if dry_run:
         return 0
 
-    if os.environ.get("CODECOME_USE_WRAPPER") == "0":
-        prompt = prompt_path.read_text(encoding="utf-8")
-        command = ["opencode", "run", "--agent", "auditor", prompt]
-    else:
-        command = [
-            sys.executable,
-            "tools/run-agent.py",
-            "--phase",
-            "2",
-            "--label",
-            f"Deep Sweep: {file_path}",
-            "--agent",
-            "auditor",
-            "--prompt-file",
-            str(prompt_path.relative_to(ROOT)),
-        ]
+    command = [
+        sys.executable,
+        "tools/run-agent.py",
+        "--phase",
+        "2",
+        "--label",
+        f"Deep Sweep: {file_path}",
+        "--agent",
+        "auditor",
+        "--prompt-file",
+        str(prompt_path.relative_to(ROOT)),
+    ]
 
     result = subprocess.run(command, cwd=ROOT)
     return int(result.returncode)
 
 
-def build_sweep_summary_prompt(selected_files: list[str]) -> Path:
+def build_sweep_summary_prompt(
+    selected_files: list[str],
+    per_file_summaries: list[str],
+) -> Path:
     if not SWEEP_SUMMARY_PROMPT.exists():
         try:
             rel = SWEEP_SUMMARY_PROMPT.relative_to(ROOT)
@@ -178,20 +177,30 @@ def build_sweep_summary_prompt(selected_files: list[str]) -> Path:
     files_list = "\n".join(f"    {f}" for f in selected_files)
     files_block = f"{files_header}{files_list}\n"
 
-    prompt = template + "\n" + files_block
-    prompt_path = TMP_DIR / "sweep-summary-prompt.md"
+    summaries_block = ""
+    if per_file_summaries:
+        summaries_header = "## Per-file sweep summaries\n\nRead ONLY these per-file summaries (do not read unrelated historical sweep summaries):\n\n"
+        summaries_list = "\n".join(f"    {s}" for s in per_file_summaries)
+        summaries_block = f"{summaries_header}{summaries_list}\n"
+
+    prompt = template + "\n" + files_block + summaries_block
+    prompt_path = TMP_DIR / f"sweep-summary-{time.strftime('%Y%m%d-%H%M%S')}.md"
     TMP_DIR.mkdir(parents=True, exist_ok=True)
     prompt_path.write_text(prompt, encoding="utf-8")
     return prompt_path
 
 
-def run_sweep_summary(selected_files: list[str], dry_run: bool) -> int:
-    prompt_path = build_sweep_summary_prompt(selected_files)
+def run_sweep_summary(files: list[str], per_file_summaries: list[str]) -> int:
+    """Run the aggregate sweep rollup after all per-file sweeps complete.
+
+    Uses raw ``opencode run`` directly because the aggregate rollup is
+    not a phase-mode run — it does not participate in the Phase 2
+    completion gate and ``run-agent.py`` does not currently support
+    non-phase utility prompts.
+    """
+    prompt_path = build_sweep_summary_prompt(files, per_file_summaries)
     print(C.header("Sweep Summary (Aggregate Rollup)"))
     print(f"Prompt: {prompt_path.relative_to(ROOT)}")
-
-    if dry_run:
-        return 0
 
     prompt = prompt_path.read_text(encoding="utf-8")
     command = ["opencode", "run", "--agent", "auditor", prompt]
@@ -237,14 +246,24 @@ def main() -> int:
             print(C.fail(f"Readiness gate failed with exit code {exc.returncode}"), file=sys.stderr)
             return int(exc.returncode)
 
+    sweep_start_time = time.time()
     for file_path in files:
         code = run_one_file(file_path, args.dry_run)
         if code != 0:
             print(C.fail(f"Sweep failed for {file_path} with exit code {code}"), file=sys.stderr)
             return code
 
-    if len(files) >= 1 and not args.dry_run:
-        code = run_sweep_summary(files, args.dry_run)
+    if not args.dry_run:
+        fresh_summaries = [
+            str(s.relative_to(ROOT))
+            for f in files
+            for s in sorted(
+                (ROOT / "runs").glob(f"phase-2-summary-sweep-{slugify(f)}-*.md"),
+                key=lambda p: p.stat().st_mtime,
+            )
+            if s.stat().st_mtime >= sweep_start_time
+        ]
+        code = run_sweep_summary(files, fresh_summaries)
         if code != 0:
             print(C.fail(f"Sweep aggregate summary failed with exit code {code}"), file=sys.stderr)
             return code

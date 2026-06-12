@@ -486,7 +486,6 @@ CodeCome ships reusable phase prompts under `prompts/`:
 
 ### Wrapper environment variables
 
-    CODECOME_USE_WRAPPER=0              # bypass the styled wrapper
     CODECOME_THINKING=1                 # show model reasoning/thinking blocks in output
     CODECOME_THINKING=0                 # hide model reasoning/thinking blocks
     CODECOME_RENDER_REASONING=0         # suppress on-screen Thinking panels (independent override)
@@ -498,7 +497,7 @@ CodeCome ships reusable phase prompts under `prompts/`:
     CODECOME_BOOTSTRAP_DRY_RUN=1        # force --dry-run on sandbox apply/regenerate
     CODECOME_BASH_SHIM_RENDER=0         # disable rtk/cat/head/tail/rg/ls/find/tree routing
     CODECOME_BASH_SHIM_LS_STRIP_LONG_FORMAT=0
-    OPENCODE_ARGS='...'                 # extra flags for opencode run (forwarded directly when CODECOME_USE_WRAPPER=0; in wrapper mode only --model, --variant and --thinking are used)
+    OPENCODE_ARGS='...'                 # extra flags for opencode run (--model, --variant, --thinking)
     CODECOME_MODEL=<id>                 # pin model per phase, e.g. anthropic/claude-opus-4-7
     CODECOME_MODEL_VARIANT=<v>          # pin model variant, e.g. high, max
 

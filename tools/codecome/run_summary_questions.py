@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from fnmatch import fnmatch
 from pathlib import Path
 
 from codecome.config import ROOT
@@ -201,8 +202,8 @@ def find_latest_summary(
     When *phase_id* is ``"2"`` and no *finding* is provided, per-file
     sweep summaries (``phase-2-summary-sweep-*.md``) are excluded
     automatically so callers get the latest broad ``make phase-2``
-    summary.  Pass explicit *exclude_patterns* to override or extend this
-    behaviour.
+    summary.  Pass explicit *exclude_patterns* to extend (but not
+    override) this behaviour.
     """
     runs_dir = ROOT / "runs"
     if not runs_dir.is_dir():
@@ -229,10 +230,7 @@ def find_latest_summary(
     if effective_excludes:
         candidates = [
             p for p in candidates
-            if not any(
-                p.match(pat) or (pat.endswith(".md") and pat == p.name)
-                for pat in effective_excludes
-            )
+            if not any(fnmatch(p.name, pat) for pat in effective_excludes)
         ]
 
     return candidates[0] if candidates else None
