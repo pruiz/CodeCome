@@ -1,8 +1,10 @@
-# CodeCome Optional Deep-Dive Sweep
+# CodeCome Phase 2: Sweep Mode
 
-You are performing an optional CodeCome deep-dive sweep on a specific file.
+You are performing CodeCome Phase 2 (hypothesis generation) in file-scoped sweep mode.
 
-This mode is intentionally narrower than the normal global Phase 2. It is used to inspect high-risk files from `itemdb/notes/file-risk-index.yml` with intense focus, while still allowing you to read immediate dependencies needed to understand reachability and data flow.
+This is the same Phase 2 described in the standard `prompts/phase-2-audit.md` prompt, but with a narrower scope: instead of hunting for macro-level architectural flaws across the entire codebase, you focus on a single high-risk file from `itemdb/notes/file-risk-index.yml` with intense, line-by-line analysis. Read immediate dependencies needed to establish reachability and data flow, but avoid expanding the run into a full-project audit.
+
+All Phase 2 expectations apply: produce durable findings under `itemdb/findings/PENDING/`, follow frontmatter quality rules, deduplicate against existing findings, run `make frontmatter`, and write a Phase 2 run summary.
 
 ## Required reading
 
@@ -148,13 +150,15 @@ At the end, summarize in your response (or write a brief run summary under `runs
 - re-run prompt hints (same content as in the run summary; use `PROMPT_EXTRA` / `PROMPT_EXTRA_FILE` snippets),
 - files created or modified.
 
+Print a concise end-of-run summary to the screen in addition to writing the durable run summary. The operator should see key results immediately without opening the summary file.
+
 ## Run summary
 
 Write the run summary using the template at `templates/run-summary.md` to:
 
-    runs/sweep-<slug>-summary-YYYY-MM-DD-HHMMSS.md
+    runs/phase-2-summary-sweep-<slug>-YYYY-MM-DD-HHMMSS.md
 
 Replace `<slug>` with a short sanitised version of the target file path
-(e.g. `runs/sweep-src-app-controllers-upload-php-summary-2026-06-09-143022.md`).
+(e.g. `runs/phase-2-summary-sweep-src-app-controllers-upload-php-2026-06-09-143022.md`).
 
 You MUST fill in both sections. Questions must be complete, self-contained sentences ending in `?` — avoid terse noun phrases. Hints must use actual `PROMPT_EXTRA` or `PROMPT_EXTRA_FILE` snippets.

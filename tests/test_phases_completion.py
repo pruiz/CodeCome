@@ -780,6 +780,78 @@ class TestPhase45And6GatesRequireRunSummary:
             self._restore(completion_mod, originals)
 
 
+class TestSweepCompletionGate:
+    def test_sweep_accepts_phase2_summary_sweep(self, tmp_path):
+        """Phase sweep should pass when a fresh sweep-named Phase 2 summary exists."""
+        import os
+        import phases.completion as completion_mod
+
+        orig_root = completion_mod.ROOT
+        orig_findings_root = completion_mod.FINDINGS_ROOT
+        completion_mod.ROOT = tmp_path
+        completion_mod.FINDINGS_ROOT = tmp_path / "itemdb" / "findings"
+        (tmp_path / "runs").mkdir(parents=True, exist_ok=True)
+        summary = tmp_path / "runs" / "phase-2-summary-sweep-src-foo-php-2026-06-12-143022.md"
+        summary.write_text("", encoding="utf-8")
+        run_start = time.time() - 60
+        os.utime(summary, (run_start + 60, run_start + 60))
+
+        try:
+            ok, failures = completion_mod.check_phase_graceful_completion(
+                "sweep", None, run_start
+            )
+            assert ok is True, f"Expected ok for sweep with fresh summary, got failures={failures!r}"
+            assert failures == []
+        finally:
+            completion_mod.ROOT = orig_root
+            completion_mod.FINDINGS_ROOT = orig_findings_root
+
+    def test_sweep_failure_when_no_summary(self, tmp_path):
+        """Phase sweep should report missing Phase 2 summary when nothing is freshened."""
+        import phases.completion as completion_mod
+
+        orig_root = completion_mod.ROOT
+        orig_findings_root = completion_mod.FINDINGS_ROOT
+        completion_mod.ROOT = tmp_path
+        completion_mod.FINDINGS_ROOT = tmp_path / "itemdb" / "findings"
+        (tmp_path / "runs").mkdir(parents=True, exist_ok=True)
+
+        try:
+            ok, failures = completion_mod.check_phase_graceful_completion(
+                "sweep", None, time.time()
+            )
+            assert ok is False
+            assert any("runs/phase-2-summary" in f for f in failures), (
+                f"Expected failure detail to mention runs/phase-2-summary, got {failures!r}"
+            )
+        finally:
+            completion_mod.ROOT = orig_root
+            completion_mod.FINDINGS_ROOT = orig_findings_root
+
+    def test_sweep_checklist_is_phase2_checklist(self):
+        """Phase sweep checklist should be the same as Phase 2 checklist."""
+        from phases.completion import phase_checklist_lines
+
+        sweep_lines = phase_checklist_lines("sweep", None)
+        phase2_lines = phase_checklist_lines("2", None)
+        assert sweep_lines == phase2_lines, (
+            f"Expected sweep checklist to equal Phase 2 checklist"
+        )
+
+    def test_sweep_resume_prompt_uses_phase2_gate(self):
+        """Resume prompt for sweep should mention phase-2-summary like Phase 2."""
+        from phases.completion import build_phase_resume_prompt
+
+        prompt = build_phase_resume_prompt(
+            "sweep", None, "stop", 1,
+            failure_details=[
+                "Missing: runs/phase-2-summary*.md — run summary was not created or updated",
+            ],
+        )
+        assert "runs/phase-2-summary*.md" in prompt
+        assert "Fix only these missing items." in prompt
+
+
 class TestPhase3ChecklistMentionsRunSummary:
     def test_phase3_checklist_mentions_summary(self):
         from phases.completion import phase_checklist_lines

@@ -14,6 +14,7 @@ from codecome.run_summary_questions import (
     OpenQuestion,
     RunSummaryQuestions,
     find_latest_summary,
+    find_latest_sweep_summary,
     parse_summary,
     _extract_section,
     _is_none_content,
@@ -458,4 +459,118 @@ class TestFindLatestSummary:
         import codecome.run_summary_questions as rsm
         monkeypatch.setattr(rsm, "ROOT", tmp_path)
         result = find_latest_summary("2")
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# find_latest_summary sweep exclusion tests
+# ---------------------------------------------------------------------------
+
+class TestFindLatestSummarySweepExclusion:
+    def test_phase2_excludes_sweep_summaries_by_default(self, tmp_path, monkeypatch):
+        import codecome.run_summary_questions as rsm
+        runs_dir = tmp_path / "runs"
+        runs_dir.mkdir()
+        monkeypatch.setattr(rsm, "ROOT", tmp_path)
+
+        broad = runs_dir / "phase-2-summary-2026-06-12-120000.md"
+        sweep = runs_dir / "phase-2-summary-sweep-src-foo-php-2026-06-12-120500.md"
+        broad.write_text("broad phase 2")
+        sweep.write_text("sweep summary")
+        base_time = time.time()
+        os.utime(broad, (base_time, base_time))
+        os.utime(sweep, (base_time + 1, base_time + 1))
+
+        result = find_latest_summary("2")
+        assert result is not None
+        assert result.name == "phase-2-summary-2026-06-12-120000.md"
+
+    def test_phase2_returns_none_when_only_sweep_summaries_exist(self, tmp_path, monkeypatch):
+        import codecome.run_summary_questions as rsm
+        runs_dir = tmp_path / "runs"
+        runs_dir.mkdir()
+        monkeypatch.setattr(rsm, "ROOT", tmp_path)
+
+        sweep = runs_dir / "phase-2-summary-sweep-src-foo-2026-06-12-130000.md"
+        sweep.write_text("sweep")
+        base_time = time.time()
+        os.utime(sweep, (base_time, base_time))
+
+        result = find_latest_summary("2")
+        assert result is None
+
+    def test_phase2_with_finding_does_not_exclude_sweep(self, tmp_path, monkeypatch):
+        import codecome.run_summary_questions as rsm
+        runs_dir = tmp_path / "runs"
+        runs_dir.mkdir()
+        monkeypatch.setattr(rsm, "ROOT", tmp_path)
+
+        finding_summary = runs_dir / "phase-2-CC-0001-summary-2026-06-12.md"
+        finding_summary.write_text("finding scoped")
+        base_time = time.time()
+        os.utime(finding_summary, (base_time, base_time))
+
+        result = find_latest_summary("2", "CC-0001")
+        assert result is not None
+        assert result.name == "phase-2-CC-0001-summary-2026-06-12.md"
+
+    def test_explicit_exclude_pattern_overrides_default(self, tmp_path, monkeypatch):
+        import codecome.run_summary_questions as rsm
+        runs_dir = tmp_path / "runs"
+        runs_dir.mkdir()
+        monkeypatch.setattr(rsm, "ROOT", tmp_path)
+
+        broad = runs_dir / "phase-2-summary-2026-06-12-120000.md"
+        other = runs_dir / "phase-2-summary-other-2026-06-12-120100.md"
+        broad.write_text("broad")
+        other.write_text("other")
+        base_time = time.time()
+        os.utime(broad, (base_time, base_time))
+        os.utime(other, (base_time + 1, base_time + 1))
+
+        result = find_latest_summary(
+            "2", exclude_patterns=("phase-2-summary-sweep-*.md", "phase-2-summary-other-*.md"),
+        )
+        assert result is not None
+        assert result.name == "phase-2-summary-2026-06-12-120000.md"
+
+
+# ---------------------------------------------------------------------------
+# find_latest_sweep_summary tests
+# ---------------------------------------------------------------------------
+
+class TestFindLatestSweepSummary:
+    def test_finds_newest_sweep_summary(self, tmp_path, monkeypatch):
+        import codecome.run_summary_questions as rsm
+        runs_dir = tmp_path / "runs"
+        runs_dir.mkdir()
+        monkeypatch.setattr(rsm, "ROOT", tmp_path)
+
+        p1 = runs_dir / "sweep-summary-2026-06-12-120000.md"
+        p2 = runs_dir / "sweep-summary-2026-06-12-121000.md"
+        p1.write_text("older")
+        p2.write_text("newer")
+        base_time = time.time()
+        os.utime(p1, (base_time, base_time))
+        os.utime(p2, (base_time + 1, base_time + 1))
+
+        result = find_latest_sweep_summary()
+        assert result is not None
+        assert result.name == "sweep-summary-2026-06-12-121000.md"
+
+    def test_returns_none_when_no_sweep_summary(self, tmp_path, monkeypatch):
+        import codecome.run_summary_questions as rsm
+        runs_dir = tmp_path / "runs"
+        runs_dir.mkdir()
+        monkeypatch.setattr(rsm, "ROOT", tmp_path)
+
+        p = runs_dir / "phase-2-summary-sweep-src-foo-2026-06-12.md"
+        p.write_text("per-file sweep")
+        result = find_latest_sweep_summary()
+        assert result is None
+
+    def test_returns_none_when_dir_missing(self, tmp_path, monkeypatch):
+        import codecome.run_summary_questions as rsm
+        monkeypatch.setattr(rsm, "ROOT", tmp_path)
+        result = find_latest_sweep_summary()
         assert result is None

@@ -38,7 +38,8 @@ import _colors as C
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INDEX = ROOT / "itemdb" / "notes" / "file-risk-index.yml"
-PROMPT_TEMPLATE = ROOT / "prompts" / "sweep.md"
+PROMPT_TEMPLATE = ROOT / "prompts" / "phase-2-sweep.md"
+SWEEP_SUMMARY_PROMPT = ROOT / "prompts" / "phase-2-sweep-summary.md"
 TMP_DIR = ROOT / "tmp" / "file-sweep-prompts"
 
 
@@ -164,6 +165,40 @@ def run_one_file(file_path: str, dry_run: bool) -> int:
     return int(result.returncode)
 
 
+def build_sweep_summary_prompt(selected_files: list[str]) -> Path:
+    if not SWEEP_SUMMARY_PROMPT.exists():
+        try:
+            rel = SWEEP_SUMMARY_PROMPT.relative_to(ROOT)
+        except ValueError:
+            rel = SWEEP_SUMMARY_PROMPT
+        raise FileNotFoundError(f"missing sweep summary prompt: {rel}")
+    template = SWEEP_SUMMARY_PROMPT.read_text(encoding="utf-8")
+
+    files_header = "## Selected files\n\nThe per-file sweep runs were executed on these files:\n\n"
+    files_list = "\n".join(f"    {f}" for f in selected_files)
+    files_block = f"{files_header}{files_list}\n"
+
+    prompt = template + "\n" + files_block
+    prompt_path = TMP_DIR / "sweep-summary-prompt.md"
+    TMP_DIR.mkdir(parents=True, exist_ok=True)
+    prompt_path.write_text(prompt, encoding="utf-8")
+    return prompt_path
+
+
+def run_sweep_summary(selected_files: list[str], dry_run: bool) -> int:
+    prompt_path = build_sweep_summary_prompt(selected_files)
+    print(C.header("Sweep Summary (Aggregate Rollup)"))
+    print(f"Prompt: {prompt_path.relative_to(ROOT)}")
+
+    if dry_run:
+        return 0
+
+    prompt = prompt_path.read_text(encoding="utf-8")
+    command = ["opencode", "run", "--agent", "auditor", prompt]
+    result = subprocess.run(command, cwd=ROOT)
+    return int(result.returncode)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run sequential CodeCome file-scoped sweeps")
     parser.add_argument("--file", action="append", default=[], help="Specific file or glob to sweep. May be repeated.")
@@ -206,6 +241,12 @@ def main() -> int:
         code = run_one_file(file_path, args.dry_run)
         if code != 0:
             print(C.fail(f"Sweep failed for {file_path} with exit code {code}"), file=sys.stderr)
+            return code
+
+    if len(files) >= 1 and not args.dry_run:
+        code = run_sweep_summary(files, args.dry_run)
+        if code != 0:
+            print(C.fail(f"Sweep aggregate summary failed with exit code {code}"), file=sys.stderr)
             return code
 
     return 0

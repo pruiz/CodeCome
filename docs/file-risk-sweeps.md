@@ -32,9 +32,9 @@ Show only paths for scripting:
 
     python tools/list-risk-files.py --format paths
 
-## Run an optional Deep Sweep
+## Run a Phase 2 Deep Sweep
 
-While the global Phase 2 agent (`make phase-2`) focuses on macro-level architectural flaws and cross-component issues, you can run an optional **Deep Sweep** to perform exhaustive, line-by-line vulnerability hunting on specific high-risk files. 
+While the global Phase 2 agent (`make phase-2`) focuses on macro-level architectural flaws and cross-component issues, you can run an optional **Deep Sweep** (Phase 2 sweep mode) to perform exhaustive, line-by-line vulnerability hunting on specific high-risk files. Each sweep run creates Phase 2 candidate findings under `itemdb/findings/PENDING/` and writes a Phase 2 run summary.
 
 Run a sweep on specific files (supports glob patterns):
 
@@ -49,11 +49,21 @@ Preview selected files and generated prompts without invoking OpenCode:
 
     python tools/run-sweep.py --dry-run
 
-The sweep runner is sequential by default. It invokes the normal `auditor` agent using a specialized prompt that forces the model to read related dependencies and imports to establish complete source-to-sink context.
+The sweep runner is sequential by default. It invokes the normal `auditor` agent with a specialized prompt (`prompts/phase-2-sweep.md`) that forces the model to read related dependencies and imports to establish complete source-to-sink context.
 
 Generated temporary prompts are written under:
 
     tmp/file-sweep-prompts/
+
+Each per-file sweep run writes a Phase 2 run summary at:
+
+    runs/phase-2-summary-sweep-<slug>-YYYY-MM-DD-HHMMSS.md
+
+After all selected files complete, the runner invokes a final aggregate sweep summary using `prompts/phase-2-sweep-summary.md`. The aggregate step consolidates findings, open questions, and re-run hints from all per-file summaries and writes:
+
+    runs/sweep-summary-YYYY-MM-DD-HHMMSS.md
+
+The aggregate summary is also printed to the screen. Use `make hints` to review it later — the `Sweep` block in `codecome hints` surfaces questions from the latest aggregate sweep rollup.
 
 ## Relationship with normal Phase 2
 

@@ -707,12 +707,13 @@ def command_check_codeql_plan(_: argparse.Namespace) -> int:
 def command_hints(_: argparse.Namespace) -> int:
     from codecome.run_summary_questions import (
         find_latest_summary,
+        find_latest_sweep_summary,
         parse_summary,
     )
 
-    # Phases 4/5 write finding-scoped summaries (phase-4-CC-0001-summary*.md),
-    # so we search with a wildcard glob in addition to the bare pattern.
-    # Sweeps write sweep-<slug>-summary*.md, searched separately.
+    # Phase 2 lookup now automatically skips per-file sweep summaries
+    # (phase-2-summary-sweep-*.md) so the broad Phase 2 block is clean.
+    # Sweep questions are surfaced via the aggregate sweep-summary-*.md.
     phases = ("1a", "1b", "1c", "2", "3")
     finding_phases = ("4", "5")
     found_any = False
@@ -760,6 +761,12 @@ def command_hints(_: argparse.Namespace) -> int:
         if _process(summary_path, f"Phase {phase_id}"):
             found_any = True
 
+    # Sweep block: aggregate sweep summary only
+    sweep_summary = find_latest_sweep_summary()
+    if sweep_summary:
+        if _process(sweep_summary, "Sweep"):
+            found_any = True
+
     for phase_id in finding_phases:
         # Also search the finding-scoped pattern: phase-4-*-summary*.md
         runs_dir = ROOT / "runs"
@@ -773,17 +780,6 @@ def command_hints(_: argparse.Namespace) -> int:
         if candidates:
             summary_path = candidates[0]
             if _process(summary_path, f"Phase {phase_id}"):
-                found_any = True
-
-    # Sweep summaries: sweep-<slug>-summary*.md
-    if (ROOT / "runs").is_dir():
-        sweep_candidates = sorted(
-            (ROOT / "runs").glob("sweep-*-summary*.md"),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
-        for sp in sweep_candidates:
-            if _process(sp, "Sweep"):
                 found_any = True
 
     if found_any:
