@@ -357,7 +357,7 @@ When to use it:
 
 Trade-off: token cost scales linearly with the number of files swept (one full agent session per file). Sweep on 10 high-risk files costs roughly as many tokens as 10 Phase 2 runs. It produces overlapping findings that Phase 3 has to deduplicate. Always preview first with `--dry-run`.
 
-How it works: the sweep runner reads `itemdb/notes/file-risk-index.yml` (written by Phase 1), selects all files at score 4 or above (or the files matched by `FILE=`), writes one prompt per file under `tmp/file-sweep-prompts/`, then invokes the `auditor` agent once per file in sequence.
+How it works: the sweep runner reads `itemdb/notes/file-risk-index.yml` (written by Phase 1), selects all files at score 4 or above (or the files matched by `FILE=`), writes one prompt per file under `tmp/file-sweep-prompts/` (using `prompts/phase-2-sweep.md`), then invokes the `auditor` agent once per file in sequence. Each sweep run writes a Phase 2 summary at `runs/phase-2-summary-sweep-<slug>-YYYY-MM-DD-HHMMSS.md`.
 
     make list-risk-files                     # preview which files would be swept
     python tools/run-sweep.py --dry-run      # show selected files and prompts, no agent calls
@@ -477,11 +477,12 @@ CodeCome ships reusable phase prompts under `prompts/`:
     prompts/phase-1b-recon.md
     prompts/phase-1c-sandbox.md
     prompts/phase-2-audit.md
+    prompts/phase-2-sweep.md
+    prompts/phase-2-sweep-summary.md
     prompts/phase-3-review.md
     prompts/phase-4-validate.md
     prompts/phase-5-exploit.md
     prompts/phase-6-report.md
-    prompts/sweep.md
 
 ### Wrapper environment variables
 

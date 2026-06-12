@@ -188,12 +188,21 @@ def parse_summary(path: Path) -> RunSummaryQuestions:
 
 
 def find_latest_summary(
-    phase_id: str, finding: str | None = None
+    phase_id: str,
+    finding: str | None = None,
+    *,
+    exclude_patterns: tuple[str, ...] = (),
 ) -> Path | None:
     """Find the newest run-summary file for a phase.
 
     Globs ``runs/phase-{phase_id}[-{finding}]-summary*.md`` and returns
     the one with the highest modification time.
+
+    When *phase_id* is ``"2"`` and no *finding* is provided, per-file
+    sweep summaries (``phase-2-summary-sweep-*.md``) are excluded
+    automatically so callers get the latest broad ``make phase-2``
+    summary.  Pass explicit *exclude_patterns* to override or extend this
+    behaviour.
     """
     runs_dir = ROOT / "runs"
     if not runs_dir.is_dir():
@@ -209,6 +218,38 @@ def find_latest_summary(
 
     candidates = sorted(
         runs_dir.glob(pattern),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+
+    effective_excludes: set[str] = set(exclude_patterns)
+    if phase_id == "2" and not finding:
+        effective_excludes.add("phase-2-summary-sweep-*.md")
+
+    if effective_excludes:
+        candidates = [
+            p for p in candidates
+            if not any(
+                p.match(pat) or (pat.endswith(".md") and pat == p.name)
+                for pat in effective_excludes
+            )
+        ]
+
+    return candidates[0] if candidates else None
+
+
+def find_latest_sweep_summary() -> Path | None:
+    """Find the newest aggregate sweep rollup summary.
+
+    Globs ``runs/sweep-summary-*.md`` and returns the one with the
+    highest modification time.
+    """
+    runs_dir = ROOT / "runs"
+    if not runs_dir.is_dir():
+        return None
+
+    candidates = sorted(
+        runs_dir.glob("sweep-summary-*.md"),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
