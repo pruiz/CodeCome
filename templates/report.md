@@ -56,6 +56,12 @@ Mention whether validation was:
 - sanitizer-based,
 - test-based.
 
+When a project threat model exists (`itemdb/notes/threat-model.md`), summarize:
+
+- attacker model assumed (capabilities and explicit non-capabilities),
+- threat assumptions that scoped the review,
+- key trust boundaries considered.
+
 # Scope
 
 Describe what was in scope.
@@ -67,6 +73,12 @@ Include:
 - excluded directories,
 - target-specific assumptions,
 - whether tests/examples/generated code/vendor code were included.
+
+When the threat model is available, include:
+
+- documented trust boundaries,
+- assets and security objectives in scope,
+- attacker postures considered.
 
 # Findings summary
 
@@ -209,6 +221,7 @@ Examples:
 - Production systems were not tested.
 - Some target components may not have been built or executed.
 - Some dependencies, credentials, or fixtures may be missing.
+- Threat-model assumptions that may affect severity or exploitability (only when `itemdb/notes/threat-model.md` is present).
 
 # Recommended next steps
 

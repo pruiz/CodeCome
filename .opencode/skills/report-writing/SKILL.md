@@ -34,6 +34,7 @@ Read:
 - `itemdb/findings/REJECTED/`
 - `itemdb/findings/DUPLICATE/`
 - `itemdb/evidence/`
+- If present, `itemdb/notes/threat-model.md` — operational threat model with attacker capabilities, non-capabilities, trust boundaries, existing controls, assets, and open assumptions. Use to ground Methodology, Scope, and Limitations sections without duplicating the full artifact.
 
 ## Outputs
 
