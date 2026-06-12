@@ -35,11 +35,27 @@ DEFAULT_AGENT = "test"
 DEFAULT_TIMEOUT_S = 30.0
 MOCK_HOST = "127.0.0.1"
 
-# Events that only appear in the serve path and should be ignored for parity.
+# Events that should be ignored for parity (serve-only, lifecycle, or volatile config).
 # Note: session.status (retry/busy) is NOT serve-only when _CODECOME_INSIDE_HARNESS=1
 # because the status-forwarder plugin emits them to stdout.
 # session.idle is deprecated and serve-only.
-_SERVE_ONLY_TYPES = {"server.connected", "server.heartbeat", "session.idle", "message.updated", "message.part.updated", "file.edited", "file.watcher.updated", "todo.updated"}
+_PARITY_IGNORED_TYPES = {
+    "server.connected",
+    "server.heartbeat",
+    "session.idle",
+    "message.updated",
+    "message.part.updated",
+    "file.edited",
+    "file.watcher.updated",
+    "todo.updated",
+    # Volatile opencode startup/config events that vary across builds.
+    "plugin.added",
+    "plugin.updated",
+    "connector.updated",
+    "reference.updated",
+}
+# Legacy alias kept for external test references.
+_SERVE_ONLY_TYPES = _PARITY_IGNORED_TYPES
 
 
 def _step_sort_key(ev: dict[str, Any]) -> tuple[int | float, str]:
@@ -394,8 +410,8 @@ def normalize_event(ev: dict[str, Any]) -> dict[str, Any] | None:
 def compare_events(
     run_events: list[dict[str, Any]], serve_events: list[dict[str, Any]]
 ) -> tuple[bool, str]:
-    run_norm = [normalize_event(e) for e in run_events if normalize_event(e) is not None]
-    serve_norm = [normalize_event(e) for e in serve_events if normalize_event(e) is not None]
+    run_norm = [e for e in map(normalize_event, run_events) if e is not None]
+    serve_norm = [e for e in map(normalize_event, serve_events) if e is not None]
 
     run_sorted = _sort_events_by_step(run_norm)
     serve_sorted = _sort_events_by_step(serve_norm)

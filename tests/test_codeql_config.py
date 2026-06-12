@@ -50,3 +50,22 @@ def test_resolve_config_falls_back_on_invalid_max_candidates(monkeypatch) -> Non
 
     config = config_module.resolve_config()
     assert config.max_candidates == config_module.DEFAULTS["max_candidates"]
+
+
+def test_install_path_defaults_to_platform_specific(tmp_path: Path, monkeypatch) -> None:
+    config_path = tmp_path / "codecome.yml"
+    config_path.write_text(
+        "audit:\n  static_analysis:\n    codeql:\n      enabled: true\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config_module, "ROOT", tmp_path)
+    (tmp_path / "templates").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "templates" / "codeql-packs.yml").write_text("", encoding="utf-8")
+
+    from codeql.platform import codeql_platform
+    plat = codeql_platform()
+
+    config = config_module.resolve_config()
+    assert plat in config.install_path
+    assert config.install_path.endswith("/current/codeql")
+    assert ".tools/codeql/" in config.install_path
