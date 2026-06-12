@@ -282,3 +282,101 @@ def test_exploit_readme_template_mentions_non_capabilities() -> None:
 def test_exploit_readme_template_mentions_open_assumptions() -> None:
     content = _read_opencode("templates/exploit-readme.md")
     assert "open assumptions" in content.lower()
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 reporter agent — threat-model.md integration
+# ---------------------------------------------------------------------------
+
+def test_reporter_agent_references_threat_model() -> None:
+    content = _read_opencode(".opencode/agents/reporter.md")
+    assert "itemdb/notes/threat-model.md" in content
+
+
+def test_reporter_agent_uses_conditional_language() -> None:
+    content = _read_opencode(".opencode/agents/reporter.md")
+    content_lower = content.lower()
+    assert (
+        "when available" in content_lower
+        or "when present" in content_lower
+        or "if present" in content_lower
+    )
+
+
+def test_reporter_agent_mentions_attacker_model() -> None:
+    content = _read_opencode(".opencode/agents/reporter.md")
+    assert "attacker model" in content.lower() or "attacker-model" in content.lower()
+
+
+def test_reporter_agent_mentions_threat_model_in_limitations() -> None:
+    content = _read_opencode(".opencode/agents/reporter.md")
+    assert "threat model" in content.lower() or "threat-model" in content.lower()
+    assert "open assumptions" in content.lower()
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 report-writing skill — threat-model.md integration
+# ---------------------------------------------------------------------------
+
+def test_report_writing_skill_references_threat_model() -> None:
+    content = _read_opencode(".opencode/skills/report-writing/SKILL.md")
+    assert "itemdb/notes/threat-model.md" in content
+
+
+def test_report_writing_skill_mentions_attacker() -> None:
+    content = _read_opencode(".opencode/skills/report-writing/SKILL.md")
+    assert "attacker" in content.lower()
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 prompt — threat-model.md integration
+# ---------------------------------------------------------------------------
+
+def test_phase_6_explicitly_references_threat_model_when_present() -> None:
+    content = _read_prompt("phase-6-report.md")
+    assert "itemdb/notes/threat-model.md" in content
+
+
+def test_phase_6_uses_conditional_language() -> None:
+    content = _read_prompt("phase-6-report.md")
+    content_lower = content.lower()
+    assert (
+        "when available" in content_lower
+        or "when present" in content_lower
+        or "if present" in content_lower
+    )
+
+
+def test_phase_6_mentions_trust_boundaries() -> None:
+    content = _read_prompt("phase-6-report.md")
+    assert "trust boundar" in content.lower() or "trust-boundary" in content.lower()
+
+
+def test_phase_6_mentions_attacker_model_in_methodology() -> None:
+    content = _read_prompt("phase-6-report.md")
+    assert "attacker model" in content.lower() or "attacker-model" in content.lower()
+
+
+def test_phase_6_guards_against_speculative_severity() -> None:
+    content = _read_prompt("phase-6-report.md")
+    content_lower = content.lower()
+    assert "inflate" in content_lower or "abuse-path" in content_lower
+
+
+# ---------------------------------------------------------------------------
+# Report template — threat-model context
+# ---------------------------------------------------------------------------
+
+def test_report_template_mentions_threat_model() -> None:
+    content = _read_opencode("templates/report.md")
+    assert "threat model" in content.lower() or "threat-model" in content.lower()
+
+
+def test_report_template_mentions_trust_boundaries_in_scope() -> None:
+    content = _read_opencode("templates/report.md")
+    assert "trust boundar" in content.lower()
+
+
+def test_report_template_mentions_attacker_model_in_methodology() -> None:
+    content = _read_opencode("templates/report.md")
+    assert "attacker model" in content.lower()
