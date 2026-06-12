@@ -49,6 +49,14 @@ class TestStateTracker:
     def test_empty_ingest_returns_empty(self, tracker):
         assert tracker.ingest({"type": "unknown"}) == [{"type": "unknown"}]
 
+    @pytest.mark.parametrize("event_type", [
+        "plugin.added",
+        "connector.updated",
+        "reference.updated",
+    ])
+    def test_bootstrap_lifecycle_events_silently_dropped(self, tracker, event_type):
+        assert tracker.ingest({"type": event_type, "properties": {"id": "test"}}) == []
+
     def test_delta_accumulates_text(self, tracker):
         tracker.ingest({
             "type": "message.part.delta",
