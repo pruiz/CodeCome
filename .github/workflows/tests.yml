@@ -36,7 +36,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          pinned_version="1.15.7"
+          pinned_version="1.17.7"
           echo "Installing opencode pinned: $pinned_version"
           curl -fsSL https://opencode.ai/install | bash -s -- --version "$pinned_version"
           "$HOME/.opencode/bin/opencode" --version
