@@ -113,8 +113,9 @@ class StateTracker:
             return [mapped] if mapped else []
 
         if event_type in ("session.updated",
-                          "plugin.added", "connector.updated",
-                          "reference.updated"):
+                          "plugin.added", "plugin.updated",
+                          "connector.updated", "reference.updated",
+                          "catalog.updated", "integration.updated"):
             return []
 
         # Pass-through events that don't need accumulation.
