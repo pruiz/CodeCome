@@ -53,6 +53,8 @@ _PARITY_IGNORED_TYPES = {
     "plugin.updated",
     "connector.updated",
     "reference.updated",
+    "catalog.updated",
+    "integration.updated",
 }
 
 
