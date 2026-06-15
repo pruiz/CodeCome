@@ -228,7 +228,7 @@ class TestSweepSummaryPrompt:
 class TestRunSweepSummaryModelPropagation:
     """run_sweep_summary passes resolved model/variant/thinking to raw opencode run."""
 
-    def _setup_summary_env(self, module, tmp_path, monkeypatch):
+    def _setup_summary_env(self, module, tmp_path):
         """Configure temporary SWEEP_SUMMARY_PROMPT, TMP_DIR, and ROOT for a test.
 
         Returns (orig_swp, orig_tmp_dir, orig_root) for cleanup in the caller.
@@ -252,7 +252,7 @@ class TestRunSweepSummaryModelPropagation:
     def test_passes_model_and_variant_flags(self, tmp_path, monkeypatch):
         """When model and variant are resolved, --model and --variant appear in the command."""
         module = _load_run_sweep()
-        orig_swp, orig_tmp_dir, orig_root = self._setup_summary_env(module, tmp_path, monkeypatch)
+        orig_swp, orig_tmp_dir, orig_root = self._setup_summary_env(module, tmp_path)
 
         from codecome.config import RuntimeConfig
 
@@ -264,7 +264,10 @@ class TestRunSweepSummaryModelPropagation:
             thinking_on=False,
             thinking_source="env",
         )
-        monkeypatch.setattr(module, "resolve_runtime_config", lambda agent: fake_rc)
+        def fake_resolver(agent: str):
+            assert agent == "auditor", f"Expected auditor agent, got {agent!r}"
+            return fake_rc
+        monkeypatch.setattr(module, "resolve_runtime_config", fake_resolver)
 
         captured_commands: list[list[str]] = []
         def fake_run(command, **kwargs):
@@ -294,7 +297,7 @@ class TestRunSweepSummaryModelPropagation:
     def test_passes_thinking_flag_when_on(self, tmp_path, monkeypatch):
         """When thinking is on, --thinking appears in the command."""
         module = _load_run_sweep()
-        orig_swp, orig_tmp_dir, orig_root = self._setup_summary_env(module, tmp_path, monkeypatch)
+        orig_swp, orig_tmp_dir, orig_root = self._setup_summary_env(module, tmp_path)
 
         from codecome.config import RuntimeConfig
 
@@ -306,7 +309,10 @@ class TestRunSweepSummaryModelPropagation:
             thinking_on=True,
             thinking_source="provider-default",
         )
-        monkeypatch.setattr(module, "resolve_runtime_config", lambda agent: fake_rc)
+        def fake_resolver(agent: str):
+            assert agent == "auditor", f"Expected auditor agent, got {agent!r}"
+            return fake_rc
+        monkeypatch.setattr(module, "resolve_runtime_config", fake_resolver)
 
         captured_commands: list[list[str]] = []
         def fake_run(command, **kwargs):
@@ -329,7 +335,7 @@ class TestRunSweepSummaryModelPropagation:
     def test_no_flags_when_nothing_resolved(self, tmp_path, monkeypatch):
         """When model/variant are None and thinking is off, no extra flags are passed."""
         module = _load_run_sweep()
-        orig_swp, orig_tmp_dir, orig_root = self._setup_summary_env(module, tmp_path, monkeypatch)
+        orig_swp, orig_tmp_dir, orig_root = self._setup_summary_env(module, tmp_path)
 
         from codecome.config import RuntimeConfig
 
@@ -341,7 +347,10 @@ class TestRunSweepSummaryModelPropagation:
             thinking_on=False,
             thinking_source="env",
         )
-        monkeypatch.setattr(module, "resolve_runtime_config", lambda agent: fake_rc)
+        def fake_resolver(agent: str):
+            assert agent == "auditor", f"Expected auditor agent, got {agent!r}"
+            return fake_rc
+        monkeypatch.setattr(module, "resolve_runtime_config", fake_resolver)
 
         captured_commands: list[list[str]] = []
         def fake_run(command, **kwargs):
