@@ -35,6 +35,7 @@ except ImportError:  # pragma: no cover
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import _colors as C
+from codecome.config import resolve_runtime_config
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INDEX = ROOT / "itemdb" / "notes" / "file-risk-index.yml"
@@ -197,13 +198,30 @@ def run_sweep_summary(files: list[str], per_file_summaries: list[str]) -> int:
     not a phase-mode run — it does not participate in the Phase 2
     completion gate and ``run-agent.py`` does not currently support
     non-phase utility prompts.
+
+    Model and variant resolution mirrors the per-file sweep runs so
+    that ``CODECOME_MODEL``, ``CODECOME_MODEL_VARIANT``, ``OPENCODE_ARGS``,
+    and ``codecome.yml`` agent pinning are all honoured for the aggregate
+    step.
     """
+    rc = resolve_runtime_config("auditor")
     prompt_path = build_sweep_summary_prompt(files, per_file_summaries)
     print(C.header("Sweep Summary (Aggregate Rollup)"))
     print(f"Prompt: {prompt_path.relative_to(ROOT)}")
+    print(f"  agent=auditor  model={rc.model or '(unknown)'}  "
+          f"variant={rc.variant or '(unknown)'}  "
+          f"thinking={'on' if rc.thinking_on else 'off'}"
+          f"  (model source: {rc.model_source}, variant source: {rc.variant_source})")
 
     prompt = prompt_path.read_text(encoding="utf-8")
-    command = ["opencode", "run", "--agent", "auditor", prompt]
+    command = ["opencode", "run", "--agent", "auditor"]
+    if rc.model:
+        command.extend(["--model", rc.model])
+    if rc.variant:
+        command.extend(["--variant", rc.variant])
+    if rc.thinking_on:
+        command.append("--thinking")
+    command.append(prompt)
     result = subprocess.run(command, cwd=ROOT)
     return int(result.returncode)
 
