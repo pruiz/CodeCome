@@ -223,3 +223,141 @@ class TestSweepSummaryPrompt:
                 module.build_sweep_summary_prompt(["src/foo.php"], [])
         finally:
             module.SWEEP_SUMMARY_PROMPT = ROOT / "prompts" / "phase-2-sweep-summary.md"
+
+
+class TestRunSweepSummaryModelPropagation:
+    """run_sweep_summary passes resolved model/variant/thinking to raw opencode run."""
+
+    def _setup_summary_env(self, module, tmp_path, monkeypatch):
+        """Configure temporary SWEEP_SUMMARY_PROMPT, TMP_DIR, and ROOT for a test.
+
+        Returns (orig_swp, orig_tmp_dir, orig_root) for cleanup in the caller.
+        """
+        real_template = module.SWEEP_SUMMARY_PROMPT.read_text(encoding="utf-8")
+        tmp_template = tmp_path / "phase-2-sweep-summary.md"
+        tmp_template.write_text(real_template, encoding="utf-8")
+        orig_swp = module.SWEEP_SUMMARY_PROMPT
+        module.SWEEP_SUMMARY_PROMPT = tmp_template
+        orig_tmp_dir = module.TMP_DIR
+        module.TMP_DIR = tmp_path / "tmp" / "file-sweep-prompts"
+        orig_root = module.ROOT
+        module.ROOT = tmp_path
+        return orig_swp, orig_tmp_dir, orig_root
+
+    def _teardown_summary_env(self, module, orig_swp, orig_tmp_dir, orig_root):
+        module.SWEEP_SUMMARY_PROMPT = orig_swp
+        module.TMP_DIR = orig_tmp_dir
+        module.ROOT = orig_root
+
+    def test_passes_model_and_variant_flags(self, tmp_path, monkeypatch):
+        """When model and variant are resolved, --model and --variant appear in the command."""
+        module = _load_run_sweep()
+        orig_swp, orig_tmp_dir, orig_root = self._setup_summary_env(module, tmp_path, monkeypatch)
+
+        from codecome.config import RuntimeConfig
+
+        fake_rc = RuntimeConfig(
+            model="test-provider/test-model",
+            variant="test-variant",
+            model_source="env CODECOME_MODEL",
+            variant_source="env CODECOME_MODEL_VARIANT",
+            thinking_on=False,
+            thinking_source="env",
+        )
+        monkeypatch.setattr(module, "resolve_runtime_config", lambda agent: fake_rc)
+
+        captured_commands: list[list[str]] = []
+        def fake_run(command, **kwargs):
+            captured_commands.append(list(command))
+            return module.subprocess.CompletedProcess(command, 0)
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        try:
+            code = module.run_sweep_summary(["src/a.php"], [])
+            assert code == 0
+            assert len(captured_commands) == 1
+            cmd = captured_commands[0]
+            assert "--model" in cmd
+            model_idx = cmd.index("--model")
+            assert cmd[model_idx + 1] == "test-provider/test-model"
+            assert "--variant" in cmd
+            variant_idx = cmd.index("--variant")
+            assert cmd[variant_idx + 1] == "test-variant"
+            assert "--thinking" not in cmd
+            assert cmd[0] == "opencode"
+            assert cmd[1] == "run"
+            assert "--agent" in cmd and cmd[cmd.index("--agent") + 1] == "auditor"
+        finally:
+            self._teardown_summary_env(module, orig_swp, orig_tmp_dir, orig_root)
+
+    def test_passes_thinking_flag_when_on(self, tmp_path, monkeypatch):
+        """When thinking is on, --thinking appears in the command."""
+        module = _load_run_sweep()
+        orig_swp, orig_tmp_dir, orig_root = self._setup_summary_env(module, tmp_path, monkeypatch)
+
+        from codecome.config import RuntimeConfig
+
+        fake_rc = RuntimeConfig(
+            model=None,
+            variant=None,
+            model_source="(unknown)",
+            variant_source="(unknown)",
+            thinking_on=True,
+            thinking_source="provider-default",
+        )
+        monkeypatch.setattr(module, "resolve_runtime_config", lambda agent: fake_rc)
+
+        captured_commands: list[list[str]] = []
+        def fake_run(command, **kwargs):
+            captured_commands.append(list(command))
+            return module.subprocess.CompletedProcess(command, 0)
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        try:
+            code = module.run_sweep_summary(["src/b.cs"], [])
+            assert code == 0
+            assert len(captured_commands) == 1
+            cmd = captured_commands[0]
+            assert "--thinking" in cmd
+            assert "--model" not in cmd
+            assert "--variant" not in cmd
+        finally:
+            self._teardown_summary_env(module, orig_swp, orig_tmp_dir, orig_root)
+
+    def test_no_flags_when_nothing_resolved(self, tmp_path, monkeypatch):
+        """When model/variant are None and thinking is off, no extra flags are passed."""
+        module = _load_run_sweep()
+        orig_swp, orig_tmp_dir, orig_root = self._setup_summary_env(module, tmp_path, monkeypatch)
+
+        from codecome.config import RuntimeConfig
+
+        fake_rc = RuntimeConfig(
+            model=None,
+            variant=None,
+            model_source="(unknown)",
+            variant_source="(unknown)",
+            thinking_on=False,
+            thinking_source="env",
+        )
+        monkeypatch.setattr(module, "resolve_runtime_config", lambda agent: fake_rc)
+
+        captured_commands: list[list[str]] = []
+        def fake_run(command, **kwargs):
+            captured_commands.append(list(command))
+            return module.subprocess.CompletedProcess(command, 0)
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        try:
+            code = module.run_sweep_summary(["src/c.py"], [])
+            assert code == 0
+            assert len(captured_commands) == 1
+            cmd = captured_commands[0]
+            assert "--model" not in cmd
+            assert "--variant" not in cmd
+            assert "--thinking" not in cmd
+            assert cmd[:3] == ["opencode", "run", "--agent"]
+        finally:
+            self._teardown_summary_env(module, orig_swp, orig_tmp_dir, orig_root)
