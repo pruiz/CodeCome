@@ -51,8 +51,11 @@ class TestStateTracker:
 
     @pytest.mark.parametrize("event_type", [
         "plugin.added",
+        "plugin.updated",
         "connector.updated",
         "reference.updated",
+        "catalog.updated",
+        "integration.updated",
     ])
     def test_bootstrap_lifecycle_events_silently_dropped(self, tracker, event_type):
         assert tracker.ingest({"type": event_type, "properties": {"id": "test"}}) == []
