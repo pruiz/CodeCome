@@ -177,10 +177,10 @@ def gate_phase_3() -> int:
 
     nv_count = count_findings("PENDING")
     if nv_count == 0:
-        print(fail("No findings in PENDING."))
+        print(warn("No findings in PENDING."))
         print()
-        print(info("Run Phase 2 first: make phase-2"))
-        return 1
+        print(info("Phase 3 has nothing to review and will complete as a no-op."))
+        return 0
 
     print(ok(f"{nv_count} finding(s) in PENDING."))
     print()

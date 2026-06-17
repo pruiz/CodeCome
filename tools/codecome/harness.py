@@ -16,6 +16,7 @@ import dataclasses
 import os
 import signal
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -31,6 +32,65 @@ from phases.completion import (
     build_phase_resume_prompt, build_frontmatter_resume_prompt,
     build_artifact_repair_resume_prompt,
 )
+
+
+def _pending_finding_count() -> int:
+    pending_dir = ROOT / "itemdb" / "findings" / "PENDING"
+    if not pending_dir.exists():
+        return 0
+    return len([p for p in pending_dir.glob("CC-*.md") if p.is_file()])
+
+
+def _write_phase3_noop_summary() -> Path:
+    runs_dir = ROOT / "runs"
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+    path = runs_dir / f"phase-3-summary-{timestamp}.md"
+    path.write_text(
+        "# CodeCome Run Summary\n\n"
+        f"Date: {datetime.now().date().isoformat()}  \n"
+        "Phase: counter_analysis  \n"
+        "Agent: reviewer  \n"
+        "Target path: `./src`\n\n"
+        "# Goal\n\n"
+        "Review pending findings.\n\n"
+        "# Prompt\n\n"
+        "Phase 3 was requested, but there were no PENDING findings to review.\n\n"
+        "# Files read\n\n"
+        "- `itemdb/findings/PENDING/`\n\n"
+        "# Files created\n\n"
+        f"- `runs/{path.name}`\n\n"
+        "# Files modified\n\n"
+        "None.\n\n"
+        "# Findings created\n\n"
+        "| ID | Title | Path |\n"
+        "|---|---|---|\n"
+        "| - | None. | - |\n\n"
+        "# Findings moved\n\n"
+        "| ID | From | To | Reason |\n"
+        "|---|---|---|---|\n"
+        "| - | - | - | None. |\n\n"
+        "# Findings updated\n\n"
+        "| ID | Update summary |\n"
+        "|---|---|\n"
+        "| - | None. |\n\n"
+        "# Evidence created\n\n"
+        "None.\n\n"
+        "# Important observations\n\n"
+        "No PENDING findings were available, so Phase 3 had nothing to review.\n\n"
+        "# Assumptions\n\n"
+        "None.\n\n"
+        "# Open questions for the user\n\n"
+        "None.\n\n"
+        "# Re-run prompt hints\n\n"
+        "None.\n\n"
+        "# Limitations\n\n"
+        "No counter-analysis was performed because there were no PENDING findings.\n\n"
+        "# Recommended next step\n\n"
+        "Run Phase 2 if additional vulnerability hypotheses are needed.\n",
+        encoding="utf-8",
+    )
+    return path
 
 
 def run_phase_mode(args: argparse.Namespace) -> int:
@@ -125,6 +185,14 @@ def run_phase_mode(args: argparse.Namespace) -> int:
     if console is None:
         out.warn("rich is not installed; using plain structured output fallback")
 
+    if str(args.phase) == "3" and _pending_finding_count() == 0:
+        summary_path = _write_phase3_noop_summary()
+        out.separator(tone=T.SUCCESS)
+        out.success("Phase 3 completed successfully", symbol=True)
+        out.detail("  no PENDING findings; nothing to review")
+        out.detail(f"  summary: {summary_path.relative_to(ROOT)}")
+        return 0
+
     attempt_number = 0
     last_session_id: str = ""
     last_finish_reason: Optional[str] = None
@@ -169,6 +237,7 @@ def run_phase_mode(args: argparse.Namespace) -> int:
             attempt_number += 1
             phase_failures = []
             phase_ok = False
+            finish_warning = None
             # Clear per-session dedup state so retries don't suppress updates.
             _reset_subagent_state()
             returncode, session_id, run_result, transcript_path = _run_single_attempt(
@@ -315,7 +384,8 @@ def run_phase_mode(args: argparse.Namespace) -> int:
                             out.error(msg)
                             print(validation_output)
                         break
-                break
+                if returncode == 0:
+                    break
 
             if returncode == 2 and (
                 last_finish_reason in _FINISH_MID_TURN
@@ -367,6 +437,10 @@ def run_phase_mode(args: argparse.Namespace) -> int:
         )
         if finish_warning:
             out.error(f"  reason: {finish_warning}", strong=False)
+        if phase_failures:
+            out.error("  remaining gate failures:", strong=False)
+            for failure in phase_failures:
+                out.detail(f"    - {failure}")
         out.detail(f"  transcript: {transcript_path.relative_to(ROOT)}")
         out.warn(
             "  hint: the run is likely partial; rerun the phase or "

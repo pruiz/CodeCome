@@ -213,8 +213,8 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
             completion_mod.SANDBOX_PLAN_PATH = orig_sandbox_plan
             completion_mod.ROOT = orig_root
 
-    def test_phase2_accepts_summary_with_no_new_findings(self, tmp_path):
-        """Phase 2 should pass when only the run summary is fresh (no new findings)."""
+    def test_phase2_accepts_explicit_no_findings_summary(self, tmp_path):
+        """Phase 2 may pass with zero findings when the summary says so."""
         import os
         import phases.completion as completion_mod
 
@@ -224,7 +224,13 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
         completion_mod.FINDINGS_ROOT = tmp_path / "itemdb" / "findings"
         (tmp_path / "runs").mkdir(parents=True, exist_ok=True)
         summary = tmp_path / "runs" / "phase-2-summary-2026-06-05-143022.md"
-        summary.write_text("", encoding="utf-8")
+        summary.write_text(
+            "# Findings created\n\n"
+            "| ID | Title | Path |\n"
+            "|---|---|---|\n"
+            "| - | None. | - |\n",
+            encoding="utf-8",
+        )
         run_start = time.time() - 60
         os.utime(summary, (run_start + 60, run_start + 60))
 
@@ -232,6 +238,70 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
             ok, failures = completion_mod.check_phase_graceful_completion("2", None, run_start)
             assert ok is True, f"Phase 2 should pass with fresh summary alone; failures={failures!r}"
             assert failures == []
+        finally:
+            completion_mod.ROOT = orig_root
+            completion_mod.FINDINGS_ROOT = orig_findings_root
+
+    def test_phase2_rejects_vague_no_finding_summary(self, tmp_path):
+        """A fresh summary without explicit no-finding wording is not enough."""
+        import os
+        import phases.completion as completion_mod
+
+        orig_root = completion_mod.ROOT
+        orig_findings_root = completion_mod.FINDINGS_ROOT
+        completion_mod.ROOT = tmp_path
+        completion_mod.FINDINGS_ROOT = tmp_path / "itemdb" / "findings"
+        (tmp_path / "runs").mkdir(parents=True, exist_ok=True)
+        summary = tmp_path / "runs" / "phase-2-summary-2026-06-05-143022.md"
+        summary.write_text("# Goal\n\nLooked around.\n", encoding="utf-8")
+        run_start = time.time() - 60
+        os.utime(summary, (run_start + 60, run_start + 60))
+
+        try:
+            ok, failures = completion_mod.check_phase_graceful_completion("2", None, run_start)
+            assert ok is False
+            assert any("does not explicitly state" in f for f in failures), failures
+        finally:
+            completion_mod.ROOT = orig_root
+            completion_mod.FINDINGS_ROOT = orig_findings_root
+
+    def test_phase2_rejects_fresh_stub_finding(self, tmp_path):
+        """A fresh template-like finding should not satisfy Phase 2 completion."""
+        import os
+        import phases.completion as completion_mod
+
+        orig_root = completion_mod.ROOT
+        orig_findings_root = completion_mod.FINDINGS_ROOT
+        completion_mod.ROOT = tmp_path
+        completion_mod.FINDINGS_ROOT = tmp_path / "itemdb" / "findings"
+        pending = tmp_path / "itemdb" / "findings" / "PENDING"
+        pending.mkdir(parents=True, exist_ok=True)
+        (tmp_path / "runs").mkdir(parents=True, exist_ok=True)
+        summary = tmp_path / "runs" / "phase-2-summary-2026-06-05-143022.md"
+        summary.write_text("# Findings created\n\n| ID | Title | Path |\n|---|---|---|\n| CC-0001 | Stub | itemdb/findings/PENDING/CC-0001-stub.md |\n", encoding="utf-8")
+        finding = pending / "CC-0001-stub.md"
+        finding.write_text(
+            "---\n"
+            "id: \"CC-0001\"\n"
+            "title: \"Stub\"\n"
+            "status: \"PENDING\"\n"
+            "severity: \"MEDIUM\"\n"
+            "cvss_v4:\n  vector: \"\"\n  score: 0.0\n  justification: \"\"\n"
+            "confidence: \"LOW\"\ncategory: \"Unclassified\"\ncwe: []\nlanguage: \"unknown\"\ntarget_area: \"unknown\"\n"
+            "files: []\nsymbols: []\nentry_points: []\nsources: []\nsinks: []\ntrust_boundary: \"unknown\"\nassets_at_risk: []\n"
+            "validation:\n  status: \"NOT_STARTED\"\n  methods: []\n  evidence_dir: \"itemdb/evidence/CC-0001\"\n  summary: \"\"\n"
+            "exploitation:\n  status: \"NOT_STARTED\"\n  impact_demonstrated: \"\"\n  exploit_type: \"\"\n  severity_before: \"\"\n  severity_after: \"\"\n  artifacts_dir: \"itemdb/evidence/CC-0001/exploits\"\n  summary: \"\"\n"
+            "created_at: \"2026-06-16\"\nupdated_at: \"2026-06-16\"\n---\n\n# Summary\n\nPending.\n",
+            encoding="utf-8",
+        )
+        run_start = time.time() - 60
+        for path in (summary, finding):
+            os.utime(path, (run_start + 60, run_start + 60))
+
+        try:
+            ok, failures = completion_mod.check_phase_graceful_completion("2", None, run_start)
+            assert ok is False
+            assert any("Phase 2 finding is incomplete" in f for f in failures), failures
         finally:
             completion_mod.ROOT = orig_root
             completion_mod.FINDINGS_ROOT = orig_findings_root
@@ -340,7 +410,45 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
         )
         assert "Missing required artifacts:" in prompt
         assert "runs/phase-2-summary*.md" in prompt
-        assert "Fix only these missing items." in prompt
+        assert "Fix every listed item." in prompt
+        assert "authoritative completion-gate output" in prompt
+        assert "Do not claim validation passed" in prompt
+
+    def test_phase2_reports_all_quality_errors_without_truncation(self, tmp_path, monkeypatch):
+        import os
+        import phases.completion as completion_mod
+        from findings import quality as quality_mod
+
+        orig_root = completion_mod.ROOT
+        orig_findings_root = completion_mod.FINDINGS_ROOT
+        completion_mod.ROOT = tmp_path
+        completion_mod.FINDINGS_ROOT = tmp_path / "itemdb" / "findings"
+        pending = tmp_path / "itemdb" / "findings" / "PENDING"
+        pending.mkdir(parents=True, exist_ok=True)
+        (tmp_path / "runs").mkdir(parents=True, exist_ok=True)
+        summary = tmp_path / "runs" / "phase-2-summary-2026-06-18-120000.md"
+        finding = pending / "CC-0099-many-errors.md"
+        summary.write_text("# Findings created\n\n| ID | Title | Path |\n|---|---|---|\n| CC-0099 | Many | itemdb/findings/PENDING/CC-0099-many-errors.md |\n", encoding="utf-8")
+        finding.write_text("placeholder", encoding="utf-8")
+        run_start = time.time() - 60
+        for path in (summary, finding):
+            os.utime(path, (run_start + 60, run_start + 60))
+        monkeypatch.setattr(
+            quality_mod,
+            "validate_phase2_finding_quality",
+            lambda _path: [f"error-{i}" for i in range(7)],
+        )
+
+        try:
+            ok, failures = completion_mod.check_phase_graceful_completion("2", None, run_start)
+        finally:
+            completion_mod.ROOT = orig_root
+            completion_mod.FINDINGS_ROOT = orig_findings_root
+
+        assert ok is False
+        joined = "\n".join(failures)
+        for i in range(7):
+            assert f"error-{i}" in joined
 
     def test_resume_prompt_without_failure_details_uses_generic_wording(self):
         """Resume prompt should use the generic reassess wording when no failure details given."""
@@ -792,7 +900,13 @@ class TestSweepCompletionGate:
         completion_mod.FINDINGS_ROOT = tmp_path / "itemdb" / "findings"
         (tmp_path / "runs").mkdir(parents=True, exist_ok=True)
         summary = tmp_path / "runs" / "phase-2-summary-sweep-src-foo-php-2026-06-12-143022.md"
-        summary.write_text("", encoding="utf-8")
+        summary.write_text(
+            "# Findings created\n\n"
+            "| ID | Title | Path |\n"
+            "|---|---|---|\n"
+            "| - | None. | - |\n",
+            encoding="utf-8",
+        )
         run_start = time.time() - 60
         os.utime(summary, (run_start + 60, run_start + 60))
 
@@ -849,7 +963,8 @@ class TestSweepCompletionGate:
             ],
         )
         assert "runs/phase-2-summary*.md" in prompt
-        assert "Fix only these missing items." in prompt
+        assert "Fix every listed item." in prompt
+        assert "authoritative completion-gate output" in prompt
 
 
 class TestPhase3ChecklistMentionsRunSummary:
