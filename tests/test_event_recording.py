@@ -1,4 +1,5 @@
 import sys
+import re
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 
@@ -77,4 +78,7 @@ def test_phase_transcript_does_not_truncate_existing_file(tmp_path, monkeypatch)
 
     assert existing.read_text(encoding="utf-8") == "keep me\n"
     assert transcript.path != existing
-    assert transcript.path.name.startswith("last-phase-1c-no-finding-attempt-1-")
+    assert re.fullmatch(
+        r"last-phase-1c-no-finding-attempt-1-\d{8}-\d{6}-pid\d+\.jsonl",
+        transcript.path.name,
+    )

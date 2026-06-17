@@ -216,3 +216,85 @@ def test_has_valid_threat_model_returns_false_when_missing(tmp_path: Path) -> No
 
     with patch("phases.artifact_checks.ROOT", tmp_path):
         assert not has_valid_threat_model()
+
+
+def test_phase2_artifacts_accept_explicit_no_findings_summary(tmp_path: Path) -> None:
+    from phases.artifact_checks import check_phase_2_artifacts
+
+    runs = tmp_path / "runs"
+    runs.mkdir(parents=True)
+    (runs / "phase-2-summary-2026-06-16-120000.md").write_text(
+        "# Findings created\n\n"
+        "| ID | Title | Path |\n"
+        "|---|---|---|\n"
+        "| - | None. | - |\n",
+        encoding="utf-8",
+    )
+
+    with patch("phases.artifact_checks.ROOT", tmp_path):
+        assert check_phase_2_artifacts() == []
+
+
+def test_phase2_artifacts_reject_stub_finding(tmp_path: Path) -> None:
+    from phases.artifact_checks import check_phase_2_artifacts
+
+    runs = tmp_path / "runs"
+    pending = tmp_path / "itemdb" / "findings" / "PENDING"
+    runs.mkdir(parents=True)
+    pending.mkdir(parents=True)
+    (runs / "phase-2-summary-2026-06-16-120000.md").write_text(
+        "# Findings created\n\n"
+        "| ID | Title | Path |\n"
+        "|---|---|---|\n"
+        "| CC-0001 | Stub | itemdb/findings/PENDING/CC-0001-stub.md |\n",
+        encoding="utf-8",
+    )
+    (pending / "CC-0001-stub.md").write_text(
+        "---\n"
+        "id: \"CC-0001\"\n"
+        "title: \"Stub\"\n"
+        "status: \"PENDING\"\n"
+        "severity: \"MEDIUM\"\n"
+        "cvss_v4:\n  vector: \"\"\n  score: 0.0\n  justification: \"\"\n"
+        "confidence: \"LOW\"\ncategory: \"Unclassified\"\ncwe: []\nlanguage: \"unknown\"\ntarget_area: \"unknown\"\n"
+        "files: []\nsymbols: []\nentry_points: []\nsources: []\nsinks: []\ntrust_boundary: \"unknown\"\nassets_at_risk: []\n"
+        "validation:\n  status: \"NOT_STARTED\"\n  methods: []\n  evidence_dir: \"itemdb/evidence/CC-0001\"\n  summary: \"\"\n"
+        "exploitation:\n  status: \"NOT_STARTED\"\n  impact_demonstrated: \"\"\n  exploit_type: \"\"\n  severity_before: \"\"\n  severity_after: \"\"\n  artifacts_dir: \"itemdb/evidence/CC-0001/exploits\"\n  summary: \"\"\n"
+        "created_at: \"2026-06-16\"\nupdated_at: \"2026-06-16\"\n---\n\n# Summary\n\nPending.\n",
+        encoding="utf-8",
+    )
+
+    with patch("phases.artifact_checks.ROOT", tmp_path):
+        errors = check_phase_2_artifacts()
+
+    assert any("not a complete Phase 2 finding" in error for error in errors), errors
+
+
+def test_phase2_artifacts_report_all_quality_errors(tmp_path: Path, monkeypatch) -> None:
+    from phases.artifact_checks import check_phase_2_artifacts
+    from findings import quality as quality_mod
+
+    runs = tmp_path / "runs"
+    pending = tmp_path / "itemdb" / "findings" / "PENDING"
+    runs.mkdir(parents=True)
+    pending.mkdir(parents=True)
+    (runs / "phase-2-summary-2026-06-18-120000.md").write_text(
+        "# Findings created\n\n"
+        "| ID | Title | Path |\n"
+        "|---|---|---|\n"
+        "| CC-0099 | Many | itemdb/findings/PENDING/CC-0099-many-errors.md |\n",
+        encoding="utf-8",
+    )
+    (pending / "CC-0099-many-errors.md").write_text("placeholder", encoding="utf-8")
+    monkeypatch.setattr(
+        quality_mod,
+        "validate_phase2_finding_quality",
+        lambda _path: [f"artifact-error-{i}" for i in range(7)],
+    )
+
+    with patch("phases.artifact_checks.ROOT", tmp_path):
+        errors = check_phase_2_artifacts()
+
+    joined = "\n".join(errors)
+    for i in range(7):
+        assert f"artifact-error-{i}" in joined

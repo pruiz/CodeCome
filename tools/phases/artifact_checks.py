@@ -283,6 +283,71 @@ def _validate_risk_index() -> list[str]:
     return validate_file_risk_index()
 
 
+# -- Phase 2 -------------------------------------------------------------------
+
+
+def _phase2_summaries() -> list[Path]:
+    runs = ROOT / "runs"
+    if not runs.exists():
+        return []
+    return sorted(
+        [path for path in runs.glob("phase-2-summary*.md") if path.is_file()],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+
+
+def _phase2_pending_findings() -> list[Path]:
+    pending = ROOT / "itemdb" / "findings" / "PENDING"
+    if not pending.exists():
+        return []
+    return sorted(path for path in pending.glob("CC-*.md") if path.is_file())
+
+
+def check_phase_2_artifacts(allow_missing_generated: bool = False) -> list[str]:
+    """Validate Phase 2 artifacts.
+
+    A correct Phase 2 run may create zero findings, but that must be explicit in
+    the run summary. If findings exist, they must be reviewable Phase 2 artifacts
+    rather than untouched templates.
+    """
+    from findings.quality import (
+        phase2_summary_declares_no_findings,
+        validate_phase2_finding_quality,
+    )
+
+    errors: list[str] = []
+    summaries = _phase2_summaries()
+    if not summaries:
+        if not allow_missing_generated:
+            errors.append("Missing artifact: runs/phase-2-summary*.md")
+        return errors
+
+    if phase2_summary_declares_no_findings(summaries[0]):
+        return errors
+
+    findings = _phase2_pending_findings()
+    if not findings:
+        errors.append(
+            "Phase 2 summary does not explicitly state that no findings were found, "
+            "and no PENDING findings exist"
+        )
+        return errors
+
+    for finding in findings:
+        quality_errors = validate_phase2_finding_quality(finding)
+        if quality_errors:
+            try:
+                rel = finding.relative_to(ROOT)
+            except ValueError:
+                rel = finding
+            errors.append(
+                f"{rel} is not a complete Phase 2 finding: "
+                + "; ".join(quality_errors)
+            )
+    return errors
+
+
 # -- Dispatch ------------------------------------------------------------------
 
 
@@ -308,10 +373,10 @@ def check_phase_artifacts(
     phases_to_check: list[str]
 
     if phase == "all":
-        phases_to_check = ["1a", "1b", "1c"]
+        phases_to_check = ["1a", "1b", "1c", "2"]
     elif phase == "1":
         phases_to_check = ["1a", "1b", "1c"]
-    elif phase in ("2", "3", "4", "5", "6"):
+    elif phase in ("3", "4", "5", "6"):
         print(C.info(f"Phase {phase} artifact checks not yet implemented; nothing to do."))
         return 0
     else:
@@ -364,8 +429,16 @@ def _check_phase_1c_with_ct(
     return check_phase_1c_artifacts(allow_missing_generated=allow_missing_generated)
 
 
+def _check_phase_2_with_ct(
+    allow_missing_generated: bool = False,
+    phase_1a_start_time: float | None = None,
+) -> list[str]:
+    return check_phase_2_artifacts(allow_missing_generated=allow_missing_generated)
+
+
 _CHECKERS = {
     "1a": _check_phase_1a_with_ct,
     "1b": _check_phase_1b_with_ct,
     "1c": _check_phase_1c_with_ct,
+    "2": _check_phase_2_with_ct,
 }

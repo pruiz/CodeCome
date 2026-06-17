@@ -70,7 +70,11 @@ class Transcript:
             counter = _ATTEMPT_COUNTER.get(key, 1)
             _ATTEMPT_COUNTER[key] = counter + 1
 
-        path = _unique_transcript_path(_transcript_dir() / f"last-phase-{phase}-{finding_tag}-attempt-{counter}.jsonl")
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        path = _unique_transcript_path(
+            _transcript_dir()
+            / f"last-phase-{phase}-{finding_tag}-attempt-{counter}-{stamp}-pid{os.getpid()}.jsonl"
+        )
         return cls(path, path.open("x", encoding="utf-8", buffering=1))
 
     @classmethod

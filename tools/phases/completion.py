@@ -91,6 +91,16 @@ def _run_summary_is_fresh(phase_id: str, run_start_time: float) -> bool:
     return any(Path(p).stat().st_mtime >= run_start_time for p in matches)
 
 
+def _fresh_run_summaries(phase_id: str, run_start_time: float) -> list[Path]:
+    import glob as _glob
+    matches = [Path(p) for p in _glob.glob(str(ROOT / "runs" / f"phase-{phase_id}-summary*.md"))]
+    return sorted(
+        [p for p in matches if p.is_file() and p.stat().st_mtime >= run_start_time],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+
+
 def _append_run_summary_check(
     failures: list[str], phase_id: str, run_start_time: float
 ) -> None:
@@ -109,6 +119,29 @@ def _iter_files(root: Path) -> Iterator[Path]:
     for path in root.rglob("*"):
         if path.is_file():
             yield path
+
+
+def _fresh_pending_findings(run_start_time: float) -> list[Path]:
+    pending_dir = FINDINGS_ROOT / "PENDING"
+    if not pending_dir.exists():
+        return []
+    return sorted(
+        [
+            path for path in pending_dir.glob("CC-*.md")
+            if path.is_file() and path.stat().st_mtime >= run_start_time
+        ],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+
+
+def _latest_summary_declares_no_phase2_findings(run_start_time: float) -> bool:
+    from findings.quality import phase2_summary_declares_no_findings
+
+    summaries = _fresh_run_summaries("2", run_start_time)
+    if not summaries:
+        return False
+    return phase2_summary_declares_no_findings(summaries[0])
 
 
 def _find_finding_file(status_dir: Path, finding_id: str, run_start_time: float) -> Path | None:
@@ -256,14 +289,34 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                 )
             return (len(failures) == 0, failures)
         elif phase_key in ("2", "sweep"):
-            import glob as _glob
-            run_summaries = _glob.glob(str(ROOT / "runs" / "phase-2-summary*.md"))
-            summary_fresh = any(Path(p).stat().st_mtime >= run_start_time for p in run_summaries)
-            if not summary_fresh:
+            from findings.quality import validate_phase2_finding_quality
+
+            fresh_summaries = _fresh_run_summaries("2", run_start_time)
+            if not fresh_summaries:
                 failures.append(
                     "Missing: runs/phase-2-summary*.md — run summary was not "
                     "created or updated"
                 )
+
+            fresh_findings = _fresh_pending_findings(run_start_time)
+            if fresh_findings:
+                for finding_path in fresh_findings:
+                    quality_errors = validate_phase2_finding_quality(finding_path)
+                    if quality_errors:
+                        try:
+                            rel = finding_path.relative_to(ROOT)
+                        except ValueError:
+                            rel = finding_path
+                        failures.append(
+                            f"Invalid: {rel} — Phase 2 finding is incomplete: "
+                            + "; ".join(quality_errors)
+                        )
+            elif fresh_summaries and not _latest_summary_declares_no_phase2_findings(run_start_time):
+                failures.append(
+                    "Missing: itemdb/findings/PENDING/ — no finding was created or updated during this run, "
+                    "and the fresh Phase 2 summary does not explicitly state that no findings were found"
+                )
+
             return (len(failures) == 0, failures)
         elif phase_key == "3":
             import glob as _glob
@@ -497,7 +550,8 @@ def build_phase_resume_prompt(
             lines.append(f"- {detail}")
         lines.append("")
         lines.append(
-            "Fix only these missing items. Do not redo completed work."
+            "Fix every listed item. Do not redo completed work. The list above is CodeCome's "
+            "authoritative completion-gate output; do not ignore any item."
         )
     else:
         lines.append("")
@@ -515,6 +569,10 @@ def build_phase_resume_prompt(
     lines.append(
         "Before ending, verify that the required durable artifacts for "
         "this phase exist, are updated, and are internally consistent."
+    )
+    lines.append(
+        "Do not claim validation passed unless the validation tool call actually completed successfully. "
+        "If a validation or shell tool call fails, fix the invocation or report that validation could not be run."
     )
 
     return "\n".join(lines)

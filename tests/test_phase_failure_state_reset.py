@@ -117,6 +117,83 @@ def test_phase_mode_does_not_reuse_previous_attempt_failures(monkeypatch):
     assert captured == [["stale failure from previous attempt"], None]
 
 
+def test_phase_mode_terminal_stop_missing_artifacts_auto_resumes(monkeypatch):
+    from codecome import harness as harness_mod
+    from codecome import runner as runner_mod
+
+    transcript = harness_mod.ROOT / "tmp" / "fake.jsonl"
+    attempts = iter([
+        (0, "ses_test", _terminal_result(), transcript),
+        (0, "ses_test", _terminal_result(), transcript),
+    ])
+    completion_results = iter([
+        (False, ["runs/phase-2-summary*.md was not updated during this run"]),
+        (True, []),
+    ])
+    captured: list[list[str] | None] = []
+    prompts: list[str] = []
+
+    def fake_run_single_attempt(_args, _console, prompt, *_a, **_kw):
+        prompts.append(prompt)
+        return next(attempts)
+
+    def fake_resume_prompt(*_args, failure_details=None, **_kw):
+        captured.append(failure_details)
+        return "resume prompt"
+
+    monkeypatch.setattr(harness_mod, "ServerRunner", lambda: _FakeServerRunner())
+    monkeypatch.setenv("CODECOME_MAX_ITERATION_RETRIES", "1")
+    monkeypatch.setattr(harness_mod, "load_prompt", lambda *_a, **_kw: "initial prompt")
+    monkeypatch.setattr(harness_mod, "resolve_runtime_config", lambda _agent: _FakeRuntimeConfig())
+    monkeypatch.setattr(harness_mod, "configure_rendering", lambda *_a, **_kw: None)
+    monkeypatch.setattr(runner_mod, "_run_single_attempt", fake_run_single_attempt)
+    monkeypatch.setattr(
+        harness_mod,
+        "check_phase_graceful_completion",
+        lambda *_a, **_kw: next(completion_results),
+    )
+    monkeypatch.setattr(harness_mod, "build_phase_resume_prompt", fake_resume_prompt)
+
+    from findings import checks_entry
+    monkeypatch.setattr(checks_entry, "run_frontmatter_validation", lambda: (0, ""))
+
+    rc = harness_mod.run_phase_mode(_args())
+
+    assert rc == 0
+    assert prompts == ["initial prompt", "resume prompt"]
+    assert captured == [["runs/phase-2-summary*.md was not updated during this run"]]
+
+
+def test_phase_mode_final_failure_prints_gate_failures(monkeypatch, capsys):
+    from codecome import harness as harness_mod
+    from codecome import runner as runner_mod
+
+    transcript = harness_mod.ROOT / "tmp" / "fake.jsonl"
+
+    monkeypatch.setattr(harness_mod, "ServerRunner", lambda: _FakeServerRunner())
+    monkeypatch.setenv("CODECOME_MAX_ITERATION_RETRIES", "0")
+    monkeypatch.setattr(harness_mod, "load_prompt", lambda *_a, **_kw: "initial prompt")
+    monkeypatch.setattr(harness_mod, "resolve_runtime_config", lambda _agent: _FakeRuntimeConfig())
+    monkeypatch.setattr(harness_mod, "configure_rendering", lambda *_a, **_kw: None)
+    monkeypatch.setattr(
+        runner_mod,
+        "_run_single_attempt",
+        lambda *_a, **_kw: (0, "ses_test", _terminal_result(), transcript),
+    )
+    monkeypatch.setattr(
+        harness_mod,
+        "check_phase_graceful_completion",
+        lambda *_a, **_kw: (False, ["Invalid: CC-0015 still contains template guidance"]),
+    )
+
+    rc = harness_mod.run_phase_mode(_args())
+    output = capsys.readouterr().out
+
+    assert rc == 2
+    assert "remaining gate failures" in output
+    assert "CC-0015 still contains template guidance" in output
+
+
 def test_phase1_subphase_does_not_reuse_previous_attempt_failures(monkeypatch):
     from codecome import phase_1 as p1
 

@@ -127,3 +127,18 @@ def test_gate_phase_4_rejects_wrong_status(tmp_path, monkeypatch):
         assert exit_code == 1
     finally:
         gates_module.ROOT = original_root
+
+
+def test_gate_phase_3_no_pending_is_noop_success(tmp_path, capsys):
+    original_root = gates_module.ROOT
+    gates_module.ROOT = tmp_path
+    (tmp_path / "itemdb" / "findings" / "PENDING").mkdir(parents=True)
+
+    try:
+        exit_code = gates_module.gate_phase_3()
+    finally:
+        gates_module.ROOT = original_root
+
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert "nothing to review" in out
