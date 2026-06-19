@@ -595,10 +595,16 @@ def _run_subphase(
             max_iteration_retries = int(os.environ.get("CODECOME_MAX_ITERATION_RETRIES", "1"))
             if iteration_retry_count < max_iteration_retries:
                 iteration_retry_count += 1
-                msg = (
-                    "\n[Auto-Resume] CodeCome observed a mid-turn model/provider cutoff and will resume the same "
-                    f"session once to let the model finish the interrupted work (retry {iteration_retry_count}/{max_iteration_retries})."
-                )
+                if last_finish_reason in _FINISH_BUDGET:
+                    msg = (
+                        "\n[Auto-Resume] CodeCome observed output budget exhaustion and will resume the same "
+                        f"session once to let the model finish the interrupted work (retry {iteration_retry_count}/{max_iteration_retries})."
+                    )
+                else:
+                    msg = (
+                        "\n[Auto-Resume] CodeCome observed a mid-turn model/provider cutoff and will resume the same "
+                        f"session once to let the model finish the interrupted work (retry {iteration_retry_count}/{max_iteration_retries})."
+                    )
                 out.warn(msg)
                 if last_session_id and last_session_id != "id":
                     prompt = build_phase_resume_prompt(
@@ -608,8 +614,9 @@ def _run_subphase(
                     continue
                 else:
                     finish_warning = (
-                        "CodeCome correctly detected that the model/provider stopped mid-turn, but it could not determine "
-                        "a session ID for automatic continuation. Treating the subphase as incomplete."
+                        "CodeCome correctly detected that the model/provider stopped before completing "
+                        "the phase, but it could not determine a session ID for automatic continuation. "
+                        "Treating the subphase as incomplete."
                     )
                     out.error("Could not determine session ID to resume.", strong=False)
             break
