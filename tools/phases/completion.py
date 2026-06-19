@@ -486,9 +486,12 @@ def _resume_opener_for_reason(reason: str) -> str:
 
     - ``"infrastructure_error"`` — harness fatal-retry path.
     - A finish reason from ``rendering.events._FINISH_MID_TURN`` (e.g.
-      ``"length"``, ``"tool_use"``) — the model/provider cut off mid-turn.
-    - A finish reason from ``rendering.events._FINISH_FAILURE`` — the
-      model/provider reported a failure finish reason.
+      ``"tool_use"``, ``"unknown"``) — the model/provider cut off mid-turn.
+    - A finish reason from ``rendering.events._FINISH_BUDGET`` (e.g.
+      ``"length"``, ``"max_tokens"``) — the model/provider exhausted its
+      output budget before completing all required artifacts.
+    - A finish reason from ``rendering.events._FINISH_HARD_FAILURE`` — the
+      model/provider reported a non-recoverable failure finish reason.
     - ``"graceful_forgiveness"`` — synthesized by the harness when the
       mid-turn cutoff happened but partial artifacts were written.
     - A finish reason from ``rendering.events._FINISH_TERMINAL_OK`` (e.g.
