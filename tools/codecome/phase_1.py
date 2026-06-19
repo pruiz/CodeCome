@@ -33,6 +33,7 @@ from rendering.output import get_output, T
 from rendering.events import (
     _FINISH_TERMINAL_OK,
     _FINISH_MID_TURN,
+    _FINISH_BUDGET,
     _FINISH_FAILURE,
     _reset_subagent_state,
 )
@@ -453,6 +454,12 @@ def _run_subphase(
                 "CodeCome observed a step_finish event without a finish reason, so the model/provider completion "
                 "state is ambiguous. Treating the run as incomplete."
             )
+        elif last_finish_reason in _FINISH_BUDGET:
+            finish_warning = (
+                f"CodeCome observed output budget exhaustion (finish reason '{last_finish_reason}'). "
+                f"The model/provider stopped after {step_finish_count} completed loops before producing all "
+                "required artifacts. Treating the subphase as incomplete."
+            )
         elif last_finish_reason in _FINISH_FAILURE:
             finish_warning = (
                 f"CodeCome observed finish reason '{last_finish_reason}', which means the model/provider stopped "
@@ -478,22 +485,29 @@ def _run_subphase(
 
         if finish_warning is not None:
             if (
-                (not any_step_finish_seen or last_finish_reason in _FINISH_MID_TURN)
+                (last_finish_reason in _FINISH_MID_TURN or last_finish_reason in _FINISH_BUDGET)
                 and last_permission_error is None
             ):
                 phase_ok, phase_failures = check_phase_graceful_completion(
                     phase_id, finding, subphase_start_time)
-                if phase_ok:
-                    msg = (
-                        f"CodeCome observed an incomplete model/provider completion signal for Phase {phase_id} after "
-                        f"{step_finish_count} completed loops, but expected durable artifacts were written during "
-                        "the run. Treating the subphase as complete enough to run validation and auto-repair."
-                    )
-                    out.success(msg)
-                    finish_warning = None
-                    last_finish_reason = "graceful_forgiveness"
+                if last_finish_reason in _FINISH_MID_TURN:
+                    if phase_ok:
+                        msg = (
+                            f"CodeCome observed an incomplete model/provider completion signal for Phase {phase_id} after "
+                            f"{step_finish_count} completed loops, but expected durable artifacts were written during "
+                            "the run. Treating the subphase as complete enough to run validation and auto-repair."
+                        )
+                        out.success(msg)
+                        finish_warning = None
+                        last_finish_reason = "graceful_forgiveness"
+                    else:
+                        returncode = 2
                 else:
-                    returncode = 2
+                    # _FINISH_BUDGET: fail only if artifacts are incomplete
+                    if not phase_ok:
+                        returncode = 2
+                    else:
+                        finish_warning = None
             else:
                 returncode = 2
 
@@ -573,7 +587,10 @@ def _run_subphase(
 
             break
 
-        if returncode == 2 and last_finish_reason in _FINISH_MID_TURN:
+        if returncode == 2 and (
+            last_finish_reason in _FINISH_MID_TURN
+            or last_finish_reason in _FINISH_BUDGET
+        ):
             import os
             max_iteration_retries = int(os.environ.get("CODECOME_MAX_ITERATION_RETRIES", "1"))
             if iteration_retry_count < max_iteration_retries:

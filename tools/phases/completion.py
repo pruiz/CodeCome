@@ -496,6 +496,7 @@ def _resume_opener_for_reason(reason: str) -> str:
       the gate still failed, so required artifacts are missing.
     """
     from rendering.events import (
+        _FINISH_BUDGET,
         _FINISH_FAILURE,
         _FINISH_MID_TURN,
         _FINISH_TERMINAL_OK,
@@ -506,6 +507,11 @@ def _resume_opener_for_reason(reason: str) -> str:
     if reason in _FINISH_MID_TURN:
         return (
             f"Your previous run was cut off mid-turn (finish reason '{reason}') "
+            "before completing all required artifacts."
+        )
+    if reason in _FINISH_BUDGET:
+        return (
+            f"Your previous run exhausted its output budget (finish reason '{reason}') "
             "before completing all required artifacts."
         )
     if reason in _FINISH_FAILURE:

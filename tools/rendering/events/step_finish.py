@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from rendering.events.base import EventRenderer, _FINISH_FAILURE, _clear_hidden_reasoning_state
+from rendering.events.base import EventRenderer, _FINISH_FAILURE, _FINISH_BUDGET, _clear_hidden_reasoning_state
 import _colors as C
 
 
@@ -21,13 +21,13 @@ class StepFinishRenderer(EventRenderer):
         tokens = self._format_tokens(part.get("tokens", {}))
         suffix = f" ({tokens})" if tokens else ""
         style = "dim"
-        if reason in _FINISH_FAILURE:
+        if reason in _FINISH_FAILURE or reason in _FINISH_BUDGET:
             style = "bold red"
         if self.rich:
             from rich.text import Text
             self.sink.write(Text(f"step finished: {reason}{suffix}", style=style))
         elif self.plain:
-            if reason in _FINISH_FAILURE:
+            if reason in _FINISH_FAILURE or reason in _FINISH_BUDGET:
                 self.sink.write_text(C.fail(f"step finished: {reason}{suffix}"))
             else:
                 self.sink.write_text(f"step finished: {reason}{suffix}")

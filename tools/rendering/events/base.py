@@ -27,7 +27,18 @@ _FINISH_TERMINAL_OK = {"stop", "end_turn"}
 # incomplete signal that warrants retry/resume handling.
 _FINISH_MID_TURN = {"tool-calls", "tool_use", "unknown"}
 
-_FINISH_FAILURE = {"content-filter", "content_filter", "length", "max_tokens", "error"}
+# Budget-exhaustion — the model/provider stopped because the output budget was
+# consumed (token limit reached).  The session is still viable; auto-resume can
+# let the model continue from where it was cut off.
+_FINISH_BUDGET = {"length", "max_tokens"}
+
+# Hard failure — the model/provider stopped with a non-recoverable error
+# (safety filter, internal error).  Retrying the same session is unlikely to
+# succeed.
+_FINISH_HARD_FAILURE = {"content-filter", "content_filter", "error"}
+
+# Legacy alias; kept for backward compatibility.
+_FINISH_FAILURE = _FINISH_BUDGET | _FINISH_HARD_FAILURE
 
 # Per-session dedup state for subagent update events.
 _SUBAGENT_LAST_STATE: dict[str, tuple[dict[str, Any], float]] = {}
