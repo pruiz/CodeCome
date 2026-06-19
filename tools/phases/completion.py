@@ -135,13 +135,12 @@ def _fresh_pending_findings(run_start_time: float) -> list[Path]:
     )
 
 
-def _latest_summary_declares_no_phase2_findings(run_start_time: float) -> bool:
+def _latest_summary_declares_no_phase2_findings(fresh_summaries: list[Path]) -> bool:
     from findings.quality import phase2_summary_declares_no_findings
 
-    summaries = _fresh_run_summaries("2", run_start_time)
-    if not summaries:
+    if not fresh_summaries:
         return False
-    return phase2_summary_declares_no_findings(summaries[0])
+    return phase2_summary_declares_no_findings(fresh_summaries[0])
 
 
 def _find_finding_file(status_dir: Path, finding_id: str, run_start_time: float) -> Path | None:
@@ -311,7 +310,7 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                             f"Invalid: {rel} — Phase 2 finding is incomplete: "
                             + "; ".join(quality_errors)
                         )
-            elif fresh_summaries and not _latest_summary_declares_no_phase2_findings(run_start_time):
+            elif fresh_summaries and not _latest_summary_declares_no_phase2_findings(fresh_summaries):
                 failures.append(
                     "Missing: itemdb/findings/PENDING/ — no finding was created or updated during this run, "
                     "and the fresh Phase 2 summary does not explicitly state that no findings were found"

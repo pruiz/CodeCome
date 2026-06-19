@@ -74,3 +74,26 @@ def test_phase2_quality_rejects_test_template_artifact(tmp_path: Path) -> None:
 
     assert any("test/template artifact" in error for error in errors), errors
     assert any("not an actual target vulnerability" in error for error in errors), errors
+
+
+def test_phase2_quality_rejects_case_insensitive_template_markers(tmp_path: Path) -> None:
+    from findings.quality import validate_phase2_finding_quality
+
+    finding = tmp_path / "itemdb" / "findings" / "PENDING" / "CC-0099-case-variant.md"
+    _write_phase2_finding(
+        finding,
+        title="IPP identity bypass in request parser",
+        category="Auth",
+        target_area="Scheduler",
+        summary="A remote client may inject identity attributes.",
+    )
+    content = finding.read_text(encoding="utf-8")
+    content = content.replace(
+        "A remote client may control the user identity attribute",
+        "briefly describe the suspected vulnerability. the parser accepts unvalidated identity attributes.",
+    )
+    finding.write_text(content, encoding="utf-8")
+
+    errors = validate_phase2_finding_quality(finding)
+
+    assert any("contains template guidance" in error for error in errors), errors

@@ -66,7 +66,8 @@ def _is_placeholder(value: Any) -> bool:
 
 
 def _contains_template_marker(value: str) -> bool:
-    return any(marker in value for marker in _TEMPLATE_MARKERS)
+    lowered = value.lower()
+    return any(marker.lower() in lowered for marker in _TEMPLATE_MARKERS)
 
 
 def _contains_non_finding_marker(value: str) -> bool:

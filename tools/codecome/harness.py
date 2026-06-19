@@ -38,20 +38,20 @@ def _pending_finding_count() -> int:
     pending_dir = ROOT / "itemdb" / "findings" / "PENDING"
     if not pending_dir.exists():
         return 0
-    return len([p for p in pending_dir.glob("CC-*.md") if p.is_file()])
+    return sum(1 for p in pending_dir.glob("CC-*.md") if p.is_file())
 
 
 def _write_phase3_noop_summary() -> Path:
     runs_dir = ROOT / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+    now = datetime.now()
+    timestamp = now.strftime("%Y-%m-%d-%H%M%S")
     path = runs_dir / f"phase-3-summary-{timestamp}.md"
     path.write_text(
         "# CodeCome Run Summary\n\n"
-        f"Date: {datetime.now().date().isoformat()}  \n"
+        f"Date: {now.date().isoformat()}  \n"
         "Phase: counter_analysis  \n"
-        "Agent: reviewer  \n"
-        "Target path: `./src`\n\n"
+        "Agent: reviewer  \n\n"
         "# Goal\n\n"
         "Review pending findings.\n\n"
         "# Prompt\n\n"
