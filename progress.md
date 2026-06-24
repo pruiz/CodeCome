@@ -76,8 +76,8 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Add audit update support for `question_owner_user_id`.
 - [x] Add question APIs: list by audit, list by phase execution, answer, dismiss.
 - [ ] Add question APIs: auto-answer and continue-after-questions.
-- [ ] Add question extraction/detection after successful phase completion.
-- [ ] Add auto-continue gate: do not queue next phase while blocking questions are open.
+- [x] Add question extraction/detection after successful phase completion.
+- [x] Add auto-continue gate: do not queue next phase while blocking questions are open.
 - [ ] Add fake AI auto-answer Celery task using the assigned fake AI user's model/context.
 - [ ] Inject answered questions into subsequent phase runs via `PROMPT_EXTRA_FILE` or merged env.
 

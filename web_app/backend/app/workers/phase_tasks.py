@@ -4,6 +4,7 @@ from app import crud
 from app import models
 from app.utils.codecome_wrapper import CodeComeExecutor
 from app.utils.ssh_executor import SSHCodeComeExecutor
+from app.workers.question_detection import create_questions_for_phase, has_open_blocking_questions
 from pathlib import Path
 from datetime import datetime
 import logging
@@ -329,6 +330,11 @@ def run_phase_task(
             crud.create_audit_log(db, audit_id, "INFO", 
                                     f"Phase {phase} completed successfully in {result.duration:.1f}s",
                                     phase=phase, source="system")
+            created_questions = create_questions_for_phase(db, audit, phase_exec, result.stdout, result.stderr, workspace_path)
+            if created_questions:
+                crud.create_audit_log(db, audit_id, "WARN",
+                                      f"Detected {len(created_questions)} blocking question(s) for user review",
+                                      phase=phase, source="questions")
         else:
             crud.create_audit_log(db, audit_id, "ERROR",
                                     f"Phase {phase} failed with exit code {result.exit_code}",
@@ -336,6 +342,13 @@ def run_phase_task(
         
         # Decide next action
         if result.exit_code == 0:
+            db.refresh(phase_exec)
+            if has_open_blocking_questions(db, phase_exec.id):
+                crud.update_audit_status(db, audit_id, "paused_for_questions")
+                audit.current_phase = phase
+                db.commit()
+                logger.info("Phase %s paused for blocking questions", phase)
+                return
             if audit.auto_continue:
                 # Queue next phase
                 next_phase = _get_next_phase(phase, audit.model_settings)

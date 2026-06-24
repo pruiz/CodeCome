@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 from app import crud, schemas
+from app.workers.question_detection import extract_open_questions, has_open_blocking_questions
 
 
 class FakeQuery:
@@ -91,3 +92,30 @@ def test_dismiss_phase_question_marks_dismissed():
 
     assert dismissed.status == "DISMISSED"
     assert dismissed.answered_at is not None
+
+
+def test_extract_open_questions_from_phase_output():
+    output = """
+Open questions for the user:
+
+1 Should CC-0007 be rejected since the schema is already visible from source code review?
+2 Should the information-disclosure findings be validated first?
+
+Files modified:
+- itemdb/findings/PENDING/CC-0001.md
+"""
+
+    assert extract_open_questions(output) == [
+        "Should CC-0007 be rejected since the schema is already visible from source code review?",
+        "Should the information-disclosure findings be validated first?",
+    ]
+
+
+def test_has_open_blocking_questions_uses_open_status(monkeypatch):
+    class Question:
+        def __init__(self, blocking):
+            self.blocking = blocking
+
+    monkeypatch.setattr(crud, "get_phase_questions", lambda db, phase_execution_id=None, status_filter=None: (1, [Question(True)]))
+
+    assert has_open_blocking_questions(object(), 7) is True
