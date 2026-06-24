@@ -239,8 +239,23 @@ class WorkerCreate(BaseModel):
     config: Optional[Dict[str, Any]] = None
 
 
+class WorkerSelfRegister(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    type: str = Field("ssh", pattern="^(ssh|proxmox-vm|proxmox-lxc)$")
+    host: Optional[str] = None
+    port: int = Field(22, ge=1, le=65535)
+    username: str = Field(..., min_length=1, max_length=255)
+    workspace_base_path: str = Field(..., min_length=1)
+    max_concurrent_jobs: int = Field(1, ge=1, le=64)
+    capabilities: Optional[Dict[str, Any]] = None
+    config: Optional[Dict[str, Any]] = None
+    requirements: Optional[List[Dict[str, Any]]] = None
+    opencode_models: Optional[List[Any]] = None
+
+
 class WorkerUpdate(BaseModel):
     name: Optional[str] = None
+    type: Optional[str] = Field(None, pattern="^(local|ssh|proxmox-vm|proxmox-lxc)$")
     status: Optional[str] = Field(None, pattern="^(idle|running|offline|error|disabled)$")
     host: Optional[str] = None
     port: Optional[int] = None

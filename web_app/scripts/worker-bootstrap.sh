@@ -9,15 +9,22 @@
 # Usage examples:
 #   sudo bash worker-bootstrap.sh
 #   sudo CODECOME_WORKER_NAME=runner-01 CODECOME_WORKSPACE_BASE=/srv/codecome/workspaces bash worker-bootstrap.sh
+#   sudo CODECOME_WEB_URL=http://codecome-web:8000 CODECOME_WORKER_REGISTRATION_TOKEN=... bash worker-bootstrap.sh
 #   sudo OPENCODE_CONFIG_URL=https://example.local/opencode.jsonc bash worker-bootstrap.sh
 #   sudo OPENCODE_CONFIG_B64=$(base64 -w0 opencode.jsonc) bash worker-bootstrap.sh
 
 set -euo pipefail
 
 CODECOME_WORKER_NAME="${CODECOME_WORKER_NAME:-$(hostname -s)}"
+CODECOME_WORKER_TYPE="${CODECOME_WORKER_TYPE:-ssh}"
 CODECOME_WORKER_USER="${CODECOME_WORKER_USER:-codecome}"
 CODECOME_HOME="${CODECOME_HOME:-/opt/codecome}"
 CODECOME_WORKSPACE_BASE="${CODECOME_WORKSPACE_BASE:-/opt/codecome/workspaces}"
+CODECOME_WEB_URL="${CODECOME_WEB_URL:-}"
+CODECOME_WORKER_REGISTRATION_TOKEN="${CODECOME_WORKER_REGISTRATION_TOKEN:-}"
+CODECOME_REGISTER="${CODECOME_REGISTER:-1}"
+CODECOME_MAX_CONCURRENT_JOBS="${CODECOME_MAX_CONCURRENT_JOBS:-1}"
+CODECOME_GENERATE_SSH_KEY="${CODECOME_GENERATE_SSH_KEY:-1}"
 CODECOME_REPO_URL="${CODECOME_REPO_URL:-}"
 CODECOME_REPO_REF="${CODECOME_REPO_REF:-}"
 OPENCODE_CONFIG_URL="${OPENCODE_CONFIG_URL:-}"
@@ -36,6 +43,14 @@ log() {
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1
+}
+
+curl_with_worker_token() {
+  if [ -n "$CODECOME_WORKER_REGISTRATION_TOKEN" ]; then
+    curl -fsSL -H "X-CodeCome-Worker-Token: $CODECOME_WORKER_REGISTRATION_TOKEN" "$@"
+  else
+    curl -fsSL "$@"
+  fi
 }
 
 install_packages() {
@@ -98,6 +113,35 @@ prepare_directories() {
   chown -R "$CODECOME_WORKER_USER:$CODECOME_WORKER_USER" "$CODECOME_HOME" "$CODECOME_WORKSPACE_BASE"
 }
 
+prepare_ssh_access() {
+  if [ "$CODECOME_GENERATE_SSH_KEY" != "1" ]; then
+    log "Skipping worker SSH key generation (CODECOME_GENERATE_SSH_KEY=$CODECOME_GENERATE_SSH_KEY)."
+    return
+  fi
+
+  local user_home
+  user_home="$(getent passwd "$CODECOME_WORKER_USER" | cut -d: -f6)"
+  local ssh_dir="$user_home/.ssh"
+  local key_path="$ssh_dir/codecome_worker_ed25519"
+  local authorized_keys="$ssh_dir/authorized_keys"
+
+  mkdir -p "$ssh_dir"
+  chown "$CODECOME_WORKER_USER:$CODECOME_WORKER_USER" "$ssh_dir"
+  chmod 700 "$ssh_dir"
+
+  if [ ! -f "$key_path" ]; then
+    log "Generating SSH key for CodeCome Web to reach this worker."
+    sudo -u "$CODECOME_WORKER_USER" ssh-keygen -t ed25519 -N '' -f "$key_path" -C "codecome-worker-$CODECOME_WORKER_NAME" >/dev/null
+  fi
+
+  touch "$authorized_keys"
+  if ! grep -qxF "$(cat "$key_path.pub")" "$authorized_keys"; then
+    cat "$key_path.pub" >> "$authorized_keys"
+  fi
+  chown "$CODECOME_WORKER_USER:$CODECOME_WORKER_USER" "$authorized_keys"
+  chmod 600 "$authorized_keys"
+}
+
 install_opencode_config() {
   local user_home
   user_home="$(getent passwd "$CODECOME_WORKER_USER" | cut -d: -f6)"
@@ -111,7 +155,14 @@ install_opencode_config() {
     printf '%s' "$OPENCODE_CONFIG_B64" | base64 -d > "$config_path"
   elif [ -n "$OPENCODE_CONFIG_URL" ]; then
     log "Installing OpenCode config from URL: $OPENCODE_CONFIG_URL"
-    curl -fsSL "$OPENCODE_CONFIG_URL" -o "$config_path"
+    curl_with_worker_token "$OPENCODE_CONFIG_URL" -o "$config_path"
+  elif [ -n "$CODECOME_WEB_URL" ]; then
+    local web_url="${CODECOME_WEB_URL%/}"
+    log "Pulling OpenCode config from CodeCome Web: $web_url"
+    if ! curl_with_worker_token "$web_url/api/workers/opencode-config/raw" -o "$config_path"; then
+      log "No OpenCode config available from CodeCome Web. Leaving $config_path untouched."
+      rm -f "$config_path"
+    fi
   else
     log "No OpenCode config provided. Leaving $config_path untouched."
   fi
@@ -235,7 +286,44 @@ collect_requirements() {
 EOF
 }
 
-print_registration() {
+collect_opencode_models() {
+  local user_home
+  user_home="$(getent passwd "$CODECOME_WORKER_USER" | cut -d: -f6)"
+  local config_path=""
+  if [ -f "$user_home/.config/opencode/opencode.jsonc" ]; then
+    config_path="$user_home/.config/opencode/opencode.jsonc"
+  elif [ -f "$user_home/.config/opencode/opencode.json" ]; then
+    config_path="$user_home/.config/opencode/opencode.json"
+  fi
+  if [ -z "$config_path" ]; then
+    printf '[]\n'
+    return
+  fi
+  python3 - "$config_path" <<'PY'
+import json, re, sys
+path = sys.argv[1]
+text = open(path, encoding='utf-8').read()
+text = re.sub(r'/\*.*?\*/', '', text, flags=re.S)
+text = re.sub(r'(^|\s)//.*$', '', text, flags=re.M)
+try:
+    data = json.loads(text)
+except Exception:
+    print('[]')
+    raise SystemExit(0)
+items = []
+for provider_id, provider in (data.get('provider') or {}).items():
+    models = (provider or {}).get('models') or {}
+    if isinstance(models, dict):
+        for model_id in models:
+            items.append(f'{provider_id}/{model_id}')
+    elif isinstance(models, list):
+        for model_id in models:
+            items.append(f'{provider_id}/{model_id}')
+print(json.dumps(sorted(set(items))))
+PY
+}
+
+register_with_web() {
   local host_ip
   host_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
   if [ -z "$host_ip" ]; then
@@ -244,35 +332,67 @@ print_registration() {
 
   local requirements_json
   requirements_json="$(collect_requirements | jq -c .)"
+  local models_json
+  models_json="$(collect_opencode_models | jq -c .)"
   mkdir -p "$CODECOME_HOME"
   printf '%s\n' "$requirements_json" > "$CODECOME_HOME/worker-requirements.json"
   chown "$CODECOME_WORKER_USER:$CODECOME_WORKER_USER" "$CODECOME_HOME/worker-requirements.json" || true
+
+  local private_key=""
+  local user_home
+  user_home="$(getent passwd "$CODECOME_WORKER_USER" | cut -d: -f6)"
+  local key_path="$user_home/.ssh/codecome_worker_ed25519"
+  if [ -f "$key_path" ]; then
+    private_key="$(cat "$key_path")"
+  fi
+
+  if [ -n "$CODECOME_WEB_URL" ] && [ "$CODECOME_REGISTER" = "1" ]; then
+    local web_url="${CODECOME_WEB_URL%/}"
+    local payload_path="$CODECOME_HOME/worker-registration.json"
+    jq -n \
+      --arg name "$CODECOME_WORKER_NAME" \
+      --arg type "$CODECOME_WORKER_TYPE" \
+      --arg host "$host_ip" \
+      --arg username "$CODECOME_WORKER_USER" \
+      --arg workspace_base_path "$CODECOME_WORKSPACE_BASE" \
+      --arg codecome_home "$CODECOME_HOME" \
+      --arg private_key "$private_key" \
+      --argjson port 22 \
+      --argjson max_concurrent_jobs "$CODECOME_MAX_CONCURRENT_JOBS" \
+      --argjson requirements "$requirements_json" \
+      --argjson opencode_models "$models_json" \
+      '{name: $name, type: $type, host: $host, port: $port, username: $username, workspace_base_path: $workspace_base_path, max_concurrent_jobs: $max_concurrent_jobs, capabilities: {docker: true, codecome: true}, requirements: $requirements, opencode_models: $opencode_models, config: ({codecome_home: $codecome_home} + (if $private_key != "" then {ssh_auth: {method: "key", private_key: $private_key}} else {} end))}' > "$payload_path"
+    log "Registering worker with CodeCome Web: $web_url"
+    curl_with_worker_token -X POST "$web_url/api/workers/register" -H 'Content-Type: application/json' --data-binary "@$payload_path" >/dev/null
+    chown "$CODECOME_WORKER_USER:$CODECOME_WORKER_USER" "$payload_path" || true
+    chmod 600 "$payload_path" || true
+  fi
 
   cat <<EOF
 
 Bootstrap complete.
 
-Register this worker in CodeCome Web:
+Worker metadata was written to:
+  $CODECOME_HOME/worker-requirements.json
+
+If automatic registration was not enabled, register this worker in CodeCome Web:
 
 curl -X POST http://<CODECOME_WEB_HOST>:8000/api/workers/ \\
   -H 'Content-Type: application/json' \\
   -d '{
     "name": "$CODECOME_WORKER_NAME",
-    "type": "ssh",
+    "type": "$CODECOME_WORKER_TYPE",
     "host": "$host_ip",
     "port": 22,
     "username": "$CODECOME_WORKER_USER",
     "workspace_base_path": "$CODECOME_WORKSPACE_BASE",
-    "max_concurrent_jobs": 1,
+    "max_concurrent_jobs": $CODECOME_MAX_CONCURRENT_JOBS,
     "capabilities": {"docker": true, "codecome": true},
     "config": {"codecome_home": "$CODECOME_HOME", "requirements": $requirements_json}
   }'
 
-Requirement metadata was also written to:
-  $CODECOME_HOME/worker-requirements.json
-
 Important:
-- Add your web host SSH public key to ~$CODECOME_WORKER_USER/.ssh/authorized_keys.
+- Set CODECOME_WEB_URL and CODECOME_WORKER_REGISTRATION_TOKEN to auto-register on future runs.
 - If this is an LXC and Docker must run inside it, Proxmox nesting/privileged settings may be required.
 - VMs are recommended for untrusted targets.
 EOF
@@ -287,12 +407,14 @@ main() {
   create_worker_user
   log "Preparing directories."
   prepare_directories
+  log "Preparing SSH access."
+  prepare_ssh_access
   log "Installing OpenCode config if provided."
   install_opencode_config
   log "Installing CodeCome repo if provided."
   install_codecome_repo
   write_profile
-  print_registration
+  register_with_web
 }
 
 main "$@"

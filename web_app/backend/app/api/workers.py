@@ -1,9 +1,11 @@
 from pathlib import Path
+from datetime import datetime, timezone
 import json
 import shutil
 import subprocess
+import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
@@ -197,6 +199,28 @@ def model_options_from_worker(worker) -> list[dict]:
     return sorted(options, key=lambda item: item["id"])
 
 
+def validate_worker_registration_token(header_token: str | None = None, query_token: str | None = None) -> None:
+    expected = settings.WORKER_REGISTRATION_TOKEN
+    if not expected:
+        if settings.DEBUG:
+            return
+        raise HTTPException(status_code=503, detail="Worker registration token is not configured")
+    supplied = header_token or query_token or ""
+    if not secrets.compare_digest(supplied, expected):
+        raise HTTPException(status_code=401, detail="Invalid worker registration token")
+
+
+def registered_worker_config(registration: schemas.WorkerSelfRegister) -> dict:
+    config = dict(registration.config or {})
+    config.update({
+        "registered_by_bootstrap": True,
+        "requirements": registration.requirements or [],
+    })
+    if registration.opencode_models is not None:
+        config["opencode_models"] = registration.opencode_models
+    return config
+
+
 def redacted_config(config: dict | None) -> dict:
     safe = dict(config or {})
     auth = safe.get("ssh_auth")
@@ -257,12 +281,62 @@ def update_worker_opencode_config(config: schemas.WorkerOpenCodeConfig):
 
 
 @router.get("/opencode-config/raw", response_class=PlainTextResponse)
-def get_worker_opencode_config_raw():
+def get_worker_opencode_config_raw(
+    x_codecome_worker_token: str | None = Header(None),
+    token: str | None = Query(None),
+):
     """Return raw OpenCode config for OPENCODE_CONFIG_URL in worker bootstrap."""
+    validate_worker_registration_token(x_codecome_worker_token, token)
     config_path = worker_opencode_config_path()
     if not config_path.exists():
         raise HTTPException(status_code=404, detail="Worker OpenCode config not configured")
     return PlainTextResponse(config_path.read_text(), media_type="application/json")
+
+
+@router.post("/register", response_model=schemas.WorkerResponse, status_code=201)
+def register_worker(
+    registration: schemas.WorkerSelfRegister,
+    request: Request,
+    x_codecome_worker_token: str | None = Header(None),
+    token: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Register or refresh a bootstrap-managed remote worker."""
+    validate_worker_registration_token(x_codecome_worker_token, token)
+    host = registration.host or (request.client.host if request.client else None)
+    config = registered_worker_config(registration)
+
+    existing = crud.get_worker_by_name(db, registration.name)
+    if existing:
+        worker = crud.update_worker(db, existing.id, schemas.WorkerUpdate(
+            type=registration.type,
+            status="idle",
+            host=host,
+            port=registration.port,
+            username=registration.username,
+            workspace_base_path=registration.workspace_base_path,
+            max_concurrent_jobs=registration.max_concurrent_jobs,
+            capabilities=registration.capabilities or {},
+            config=config,
+        ))
+    else:
+        worker = crud.create_worker(db, schemas.WorkerCreate(
+            name=registration.name,
+            type=registration.type,
+            host=host,
+            port=registration.port,
+            username=registration.username,
+            workspace_base_path=registration.workspace_base_path,
+            max_concurrent_jobs=registration.max_concurrent_jobs,
+            capabilities=registration.capabilities or {},
+            config=config,
+        ))
+        worker.status = "idle"
+
+    worker.last_seen = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(worker)
+    return worker_response(worker)
 
 
 @router.post("/", response_model=schemas.WorkerResponse, status_code=201)

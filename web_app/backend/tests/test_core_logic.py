@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from app import crud, schemas
 from app.api.audits import audit_response, next_audit_step, sandbox_runtime_env, sandbox_start_command
-from app.api.workers import model_options_from_worker
+from app.api.workers import model_options_from_worker, registered_worker_config, validate_worker_registration_token
 from app.utils.codecome_wrapper import CodeComeExecutor
 from app.api import logs, workers
 from app.workers.phase_tasks import build_command_line, status_phase
@@ -227,6 +227,99 @@ def test_remote_worker_model_options_from_config():
         {"id": "remote/model-a", "provider": "remote", "model": "model-a"},
         {"id": "remote/model-b", "provider": "remote", "model": "model-b"},
     ]
+
+
+def test_worker_registration_token_rejects_wrong_token(monkeypatch):
+    monkeypatch.setattr(workers.settings, "WORKER_REGISTRATION_TOKEN", "secret")
+
+    try:
+        validate_worker_registration_token("wrong", None)
+        raised = False
+    except Exception as exc:
+        raised = True
+        assert getattr(exc, "status_code") == 401
+
+    assert raised is True
+
+
+def test_worker_registration_token_requires_configuration_when_not_debug(monkeypatch):
+    monkeypatch.setattr(workers.settings, "WORKER_REGISTRATION_TOKEN", "")
+    monkeypatch.setattr(workers.settings, "DEBUG", False)
+
+    try:
+        validate_worker_registration_token(None, None)
+        raised = False
+    except Exception as exc:
+        raised = True
+        assert getattr(exc, "status_code") == 503
+
+    assert raised is True
+
+
+def test_registered_worker_config_stores_bootstrap_metadata():
+    registration = schemas.WorkerSelfRegister(
+        name="runner-01",
+        username="codecome",
+        workspace_base_path="/opt/codecome/workspaces",
+        config={"ssh_auth": {"method": "key", "private_key": "secret-key"}},
+        requirements=[{"key": "docker", "label": "Docker", "required": True, "ok": True, "detail": "ok"}],
+        opencode_models=["remote/model-a"],
+    )
+
+    config = registered_worker_config(registration)
+
+    assert config["registered_by_bootstrap"] is True
+    assert config["requirements"][0]["key"] == "docker"
+    assert config["opencode_models"] == ["remote/model-a"]
+    assert config["ssh_auth"]["private_key"] == "secret-key"
+
+
+def test_register_worker_creates_remote_worker(monkeypatch):
+    captured = {}
+    db = FakeDb()
+    registration = schemas.WorkerSelfRegister(
+        name="runner-01",
+        type="proxmox-vm",
+        username="codecome",
+        workspace_base_path="/opt/codecome/workspaces",
+        requirements=[{"key": "docker", "label": "Docker", "required": True, "ok": True, "detail": "ok"}],
+    )
+
+    def fake_create_worker(db_arg, worker_data):
+        captured["worker_data"] = worker_data
+        return SimpleNamespace(
+            id=12,
+            name=worker_data.name,
+            type=worker_data.type,
+            status="idle",
+            host=worker_data.host,
+            port=worker_data.port,
+            username=worker_data.username,
+            workspace_base_path=worker_data.workspace_base_path,
+            max_concurrent_jobs=worker_data.max_concurrent_jobs,
+            current_jobs=0,
+            capabilities=worker_data.capabilities,
+            config=worker_data.config,
+            last_seen=None,
+            created_at=None,
+            updated_at=None,
+        )
+
+    monkeypatch.setattr(workers.settings, "WORKER_REGISTRATION_TOKEN", "secret")
+    monkeypatch.setattr(workers.crud, "get_worker_by_name", lambda db_arg, name: None)
+    monkeypatch.setattr(workers.crud, "create_worker", fake_create_worker)
+
+    response = workers.register_worker(
+        registration,
+        request=SimpleNamespace(client=SimpleNamespace(host="10.0.0.5")),
+        x_codecome_worker_token="secret",
+        db=db,
+    )
+
+    assert response["name"] == "runner-01"
+    assert response["type"] == "proxmox-vm"
+    assert response["host"] == "10.0.0.5"
+    assert captured["worker_data"].config["registered_by_bootstrap"] is True
 
 
 def test_phase_command_line_includes_env_and_target():

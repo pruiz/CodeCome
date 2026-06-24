@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     
     # Security
     SECRET_KEY: str = "change-me-in-production"
+    WORKER_REGISTRATION_TOKEN: str = ""
     
 
 settings = Settings()

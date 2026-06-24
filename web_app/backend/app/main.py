@@ -152,7 +152,14 @@ async def require_api_auth(request, call_next):
         return await call_next(request)
     if not path.startswith("/api/"):
         return await call_next(request)
-    if path in ("/api/auth/login", "/api/auth/bootstrap", "/api/auth/status"):
+    if path in (
+        "/api/auth/login",
+        "/api/auth/bootstrap",
+        "/api/auth/status",
+        "/api/workers/bootstrap-script",
+        "/api/workers/opencode-config/raw",
+        "/api/workers/register",
+    ):
         return await call_next(request)
     auth_header = request.headers.get("authorization") or ""
     from app.database import SessionLocal
