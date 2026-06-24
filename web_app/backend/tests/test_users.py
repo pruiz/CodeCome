@@ -107,6 +107,23 @@ def test_opencode_model_options_reads_provider_models(tmp_path):
     ]
 
 
+def test_opencode_model_options_reads_jsonc_comments():
+    text = '''{
+      // local provider
+      "provider": {
+        "local": {
+          "models": {
+            "qwen": {}
+          }
+        }
+      }
+    }'''
+
+    assert users_api.opencode_model_options_from_text(text) == [
+        {"id": "local/qwen", "provider": "local", "model": "qwen"},
+    ]
+
+
 def test_user_model_options_endpoint(monkeypatch):
     monkeypatch.setattr(users_api, "opencode_model_options", lambda: [{"id": "local/qwen", "provider": "local", "model": "qwen"}])
 

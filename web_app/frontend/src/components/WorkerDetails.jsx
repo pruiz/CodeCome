@@ -24,6 +24,7 @@ export default function WorkerDetails() {
   const { id } = useParams();
   const [worker, setWorker] = useState(null);
   const [checks, setChecks] = useState(null);
+  const [models, setModels] = useState(null);
   const [form, setForm] = useState(null);
   const [error, setError] = useState('');
   const [saveMessage, setSaveMessage] = useState('');
@@ -42,9 +43,10 @@ export default function WorkerDetails() {
     setError('');
     setLoading(true);
     try {
-      const [workerData, checkData] = await Promise.all([
+      const [workerData, checkData, modelData] = await Promise.all([
         workersApi.get(id),
         workersApi.checks(id),
+        workersApi.models(id),
       ]);
       setWorker(workerData);
       setForm({
@@ -57,6 +59,7 @@ export default function WorkerDetails() {
         status: workerData.status || 'idle',
       });
       setChecks(checkData);
+      setModels(modelData);
       setCredentialForm({
         method: workerData.config?.ssh_auth?.method || 'key',
         password: '',
@@ -163,6 +166,33 @@ export default function WorkerDetails() {
             {allRequiredOk ? 'Ready' : 'Missing required'}
           </div>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-cyan-900/60 bg-cyan-950/20 p-5">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-xl font-semibold text-cyan-100">Available Models</h3>
+            <p className="mt-1 text-sm text-gray-400">
+              Models discovered from this worker's OpenCode configuration. These are used by audit creation when this worker is selected.
+            </p>
+          </div>
+          <span className="rounded bg-gray-900 px-2 py-1 text-xs text-gray-300">{models?.total ?? 0} models</span>
+        </div>
+
+        {models?.models?.length ? (
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            {models.models.map((model) => (
+              <div key={model.id} className="rounded border border-gray-800 bg-gray-950 px-3 py-2">
+                <div className="font-mono text-sm text-cyan-100">{model.id}</div>
+                <div className="mt-1 text-xs text-gray-500">Provider: {model.provider} · Model: {model.model}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-yellow-700/50 bg-yellow-500/10 p-4 text-yellow-200">
+            No models were discovered for this worker. Check the worker's OpenCode config and SSH credentials for remote workers.
+          </div>
+        )}
       </div>
 
       <div className="rounded-xl border border-blue-900/60 bg-blue-950/20 p-5">

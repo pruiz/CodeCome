@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 from app import crud, schemas
 from app.config import settings
 from app.database import get_db
-from app.api.users import opencode_model_options
+from app.api.users import opencode_model_options, opencode_model_options_from_text
+from app.utils.ssh_executor import SSHCodeComeExecutor
 
 router = APIRouter()
 
@@ -183,7 +184,25 @@ def checks_from_worker_config(worker) -> list[schemas.WorkerRequirementCheck]:
 
 def model_options_from_worker(worker) -> list[dict]:
     if worker.type == "local":
-        return opencode_model_options()
+        config_paths = [
+            Path.home() / ".config" / "opencode" / "opencode.jsonc",
+            Path.home() / ".config" / "opencode" / "opencode.json",
+            Path(settings.CODECOME_ROOT) / "opencode.json",
+        ]
+        for config_path in config_paths:
+            models = opencode_model_options(config_path)
+            if models:
+                return models
+        return []
+
+    try:
+        config_text = SSHCodeComeExecutor(worker).read_opencode_config()
+        models = opencode_model_options_from_text(config_text)
+        if models:
+            return models
+    except Exception:
+        pass
+
     config = worker.config or {}
     raw_models = config.get("opencode_models") or config.get("models") or []
     options = []

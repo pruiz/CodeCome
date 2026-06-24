@@ -88,3 +88,30 @@ def test_upload_tree_copies_workspace_source_to_remote_worker(tmp_path):
     remote_paths = {remote for _, remote in sftp.puts}
     assert "/srv/workspaces/audit-1/src/app.py" in remote_paths
     assert "/srv/workspaces/audit-1/Makefile" in remote_paths
+
+
+def test_read_opencode_config_uses_remote_worker(monkeypatch):
+    worker = SimpleNamespace(
+        host="192.0.2.10",
+        port=22,
+        username="codecome",
+        workspace_base_path="/srv/workspaces",
+        config={"ssh_auth": {"method": "password", "password": "secret"}},
+    )
+    executor = SSHCodeComeExecutor(worker)
+    commands = []
+
+    class FakeClient:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(executor, "_connect", lambda: FakeClient())
+
+    def fake_run(client, command, timeout):
+        commands.append(command)
+        return 0, '{"provider":{"remote":{"models":{"live":{}}}}}', ""
+
+    monkeypatch.setattr(executor, "_run", fake_run)
+
+    assert executor.read_opencode_config() == '{"provider":{"remote":{"models":{"live":{}}}}}'
+    assert "~/.config/opencode/opencode.jsonc" in commands[0]

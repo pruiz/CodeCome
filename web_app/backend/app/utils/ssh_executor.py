@@ -169,6 +169,19 @@ class SSHCodeComeExecutor:
             if client:
                 client.close()
 
+    def read_opencode_config(self) -> str:
+        client = None
+        try:
+            client = self._connect()
+            command = "bash -lc 'for path in ~/.config/opencode/opencode.jsonc ~/.config/opencode/opencode.json; do if [ -f \"$path\" ]; then cat \"$path\"; exit 0; fi; done; exit 1'"
+            exit_code, stdout, stderr = self._run(client, command, timeout=20)
+            if exit_code != 0:
+                raise SSHExecutionError(stderr or "Remote OpenCode config not found")
+            return stdout
+        finally:
+            if client:
+                client.close()
+
     def parse_findings(self, workspace_path: Path):
         return self.parser.parse_findings(workspace_path)
 

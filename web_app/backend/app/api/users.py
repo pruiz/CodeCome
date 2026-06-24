@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 import json
+import re
 
 from app import crud, schemas
 from app.config import settings
@@ -9,12 +10,14 @@ from app.database import get_db
 router = APIRouter()
 
 
-def opencode_model_options(config_path=None) -> list[dict]:
-    path = config_path or (settings.CODECOME_ROOT / "opencode.json")
-    if not path.exists():
-        return []
+def strip_json_comments(text: str) -> str:
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+    return re.sub(r"(^|\s)//.*$", "", text, flags=re.M)
+
+
+def opencode_model_options_from_text(text: str) -> list[dict]:
     try:
-        config = json.loads(path.read_text(encoding="utf-8"))
+        config = json.loads(strip_json_comments(text))
     except Exception:
         return []
     providers = config.get("provider") or {}
@@ -32,6 +35,13 @@ def opencode_model_options(config_path=None) -> list[dict]:
                 "model": str(model_name),
             })
     return sorted(options, key=lambda item: item["id"])
+
+
+def opencode_model_options(config_path=None) -> list[dict]:
+    path = config_path or (settings.CODECOME_ROOT / "opencode.json")
+    if not path.exists():
+        return []
+    return opencode_model_options_from_text(path.read_text(encoding="utf-8"))
 
 
 @router.get("/models", response_model=schemas.ModelOptionListResponse)

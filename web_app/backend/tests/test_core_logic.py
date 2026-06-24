@@ -297,6 +297,40 @@ def test_remote_worker_model_options_from_config():
     ]
 
 
+def test_remote_worker_model_options_reads_live_ssh_config(monkeypatch):
+    worker = SimpleNamespace(type="ssh", config={"opencode_models": ["stale/model"]})
+
+    class FakeExecutor:
+        def __init__(self, worker_arg):
+            assert worker_arg is worker
+
+        def read_opencode_config(self):
+            return '{"provider":{"remote":{"models":{"live-model":{}}}}}'
+
+    monkeypatch.setattr(workers, "SSHCodeComeExecutor", FakeExecutor)
+
+    assert model_options_from_worker(worker) == [
+        {"id": "remote/live-model", "provider": "remote", "model": "live-model"},
+    ]
+
+
+def test_remote_worker_model_options_falls_back_to_bootstrap_metadata(monkeypatch):
+    worker = SimpleNamespace(type="ssh", config={"opencode_models": ["bootstrap/model"]})
+
+    class FailingExecutor:
+        def __init__(self, worker_arg):
+            pass
+
+        def read_opencode_config(self):
+            raise RuntimeError("offline")
+
+    monkeypatch.setattr(workers, "SSHCodeComeExecutor", FailingExecutor)
+
+    assert model_options_from_worker(worker) == [
+        {"id": "bootstrap/model", "provider": "bootstrap", "model": "model"},
+    ]
+
+
 def test_worker_registration_token_rejects_wrong_token(monkeypatch):
     monkeypatch.setattr(workers.settings, "WORKER_REGISTRATION_TOKEN", "secret")
 
