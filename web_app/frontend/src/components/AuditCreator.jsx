@@ -39,7 +39,7 @@ export default function AuditCreator() {
     setLoading(true);
     try {
       if (formData.sourceType === 'zip' && file) {
-        const result = await auditsApi.uploadZip(formData);
+        const result = await auditsApi.uploadZip({ ...formData, file });
         navigate(`/audit/${result.id}`);
       } else {
         const result = await auditsApi.create({

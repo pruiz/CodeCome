@@ -62,4 +62,28 @@ describe('AuditCreator', () => {
       });
     });
   });
+
+  it('passes selected zip file and settings to upload API', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<MemoryRouter><AuditCreator /></MemoryRouter>);
+    const zipFile = new File(['zip-bytes'], 'SmallCompany.zip', { type: 'application/zip' });
+
+    await user.click(screen.getByRole('radio', { name: 'Upload ZIP' }));
+    await user.upload(container.querySelector('input[type="file"]'), zipFile);
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    await user.type(screen.getByPlaceholderText('My Audit'), 'Zip Question Audit');
+    await screen.findByText('AI Owner (AI)');
+    await user.selectOptions(screen.getByLabelText('Question Owner'), '7');
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    await user.click(screen.getByRole('button', { name: 'Create Audit' }));
+
+    await waitFor(() => {
+      const uploadCall = global.fetch.mock.calls.find(([url, options]) => String(url).includes('/api/audits/upload-zip') && options?.method === 'POST');
+      expect(uploadCall).toBeTruthy();
+      expect(uploadCall[1].body).toBeInstanceOf(FormData);
+      expect(uploadCall[1].body.get('file')).toBe(zipFile);
+      expect(uploadCall[1].body.get('name')).toBe('Zip Question Audit');
+      expect(uploadCall[1].body.get('question_owner_user_id')).toBe('7');
+    });
+  });
 });
