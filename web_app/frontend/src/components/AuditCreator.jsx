@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auditsApi, workersApi } from '../services/api';
+import { auditsApi, usersApi, workersApi } from '../services/api';
 
 export default function AuditCreator() {
   const navigate = useNavigate();
@@ -12,11 +12,13 @@ export default function AuditCreator() {
     sourceLocation: '',
     codecomeYml: '',
     workerId: '',
+    questionOwnerUserId: '',
     aiReviewEnabled: false,
     autoContinue: false,
   });
   const [file, setFile] = useState(null);
   const [workers, setWorkers] = useState([]);
+  const [users, setUsers] = useState([]);
 
   useEffect(() => {
     workersApi.list()
@@ -28,6 +30,9 @@ export default function AuditCreator() {
         }
       })
       .catch((error) => console.error('Failed to load workers:', error));
+    usersApi.list({ active: true, limit: 500 })
+      .then((data) => setUsers(data.users || []))
+      .catch((error) => console.error('Failed to load users:', error));
   }, []);
   
   const handleSubmit = async () => {
@@ -43,6 +48,7 @@ export default function AuditCreator() {
           source_location: formData.sourceLocation,
           codecome_yml: formData.codecomeYml,
           worker_id: formData.workerId ? Number(formData.workerId) : undefined,
+          question_owner_user_id: formData.questionOwnerUserId ? Number(formData.questionOwnerUserId) : undefined,
           ai_review_enabled: formData.aiReviewEnabled,
           auto_continue: formData.autoContinue,
         });
@@ -204,7 +210,23 @@ export default function AuditCreator() {
                 Workers can be local, SSH hosts, Proxmox VMs, or Proxmox LXCs. This build executes local workers first; remote execution is the next adapter.
               </p>
             </div>
-            
+
+            <div>
+              <label htmlFor="questionOwner" className="block text-sm font-medium text-gray-400 mb-1">Question Owner</label>
+              <select
+                id="questionOwner"
+                value={formData.questionOwnerUserId}
+                onChange={(e) => setFormData({ ...formData, questionOwnerUserId: e.target.value })}
+                className="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600"
+              >
+                <option value="">No owner</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>{user.display_name} ({user.is_llm_user ? 'AI' : 'Human'})</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">Blocking phase questions are assigned to this user. AI users can auto-answer.</p>
+            </div>
+             
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -253,6 +275,7 @@ export default function AuditCreator() {
             <p><span className="text-gray-400">Name:</span> {formData.name}</p>
             <p><span className="text-gray-400">Source:</span> {formData.sourceType === 'zip' ? (file?.name || 'ZIP file') : formData.sourceLocation}</p>
             <p><span className="text-gray-400">Worker:</span> {workers.find((worker) => String(worker.id) === formData.workerId)?.name || 'Auto-select'}</p>
+            <p><span className="text-gray-400">Question Owner:</span> {users.find((user) => String(user.id) === formData.questionOwnerUserId)?.display_name || 'None'}</p>
             <p><span className="text-gray-400">Auto-continue:</span> {formData.autoContinue ? 'Yes' : 'No'}</p>
             <p><span className="text-gray-400">AI Review:</span> {formData.aiReviewEnabled ? 'Yes' : 'No'}</p>
           </div>
