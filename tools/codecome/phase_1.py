@@ -17,11 +17,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from opencode.serve import ServerRunner, ServerRunnerError
+from opencode.serve import ServerRunner, make_liveness_check
 
 from codecome.console import build_console, _emit_fatal_error
 from codecome.config import ROOT, resolve_color_mode, load_prompt, resolve_runtime_config
 from codecome.runner import _run_single_attempt
+from codecome.status import RunStatus, normalize_status
 from phases.phase_1_gates import (
     check_phase_1a,
     check_phase_1b,
@@ -50,6 +51,16 @@ class _SubphaseOutcome:
     returncode: int
     session_id: str
     transcript_path: Path
+
+
+@dataclass(frozen=True)
+class Phase1Outcome:
+    status: RunStatus
+    failed_subphase: str | None = None
+
+
+def _phase1_outcome(status: int | RunStatus, failed_subphase: str | None = None) -> Phase1Outcome:
+    return Phase1Outcome(status=normalize_status(status), failed_subphase=failed_subphase)
 # ---------------------------------------------------------------------------
 # CodeQL analysis (between 1a gate and 1b)
 # ---------------------------------------------------------------------------
@@ -353,7 +364,7 @@ def _run_subphase(
     existing_session_id: str | None = None,
     initial_prompt: str | None = None,
     return_outcome: bool = False,
-) -> int | _SubphaseOutcome:
+) -> int | RunStatus | _SubphaseOutcome:
     """Run a single subphase agent session with retry/resume."""
     prompt_path = ROOT / prompt_file
     prompt = initial_prompt if initial_prompt is not None else load_prompt(prompt_path, finding, phase=phase_id)
@@ -405,6 +416,7 @@ def _run_subphase(
     subphase_start_time = time.time()
 
     password = runner.info.password if runner.info else ""
+    liveness_check = make_liveness_check(runner)
 
     # --- Retry loop (mirrors harness.run_phase_mode) ---
     while True:
@@ -423,9 +435,10 @@ def _run_subphase(
             transcript_phase=phase_id,
             phase_override=phase_id,
             label_override=label,
+            liveness_check=liveness_check,
         )
 
-        if returncode == 2 and run_result.last_finish_reason == "resume_not_ready":
+        if returncode == RunStatus.INCOMPLETE and run_result.last_finish_reason == "resume_not_ready":
             last_session_id = session_id or last_session_id
             last_finish_reason = run_result.last_finish_reason
             finish_warning = (
@@ -434,7 +447,26 @@ def _run_subphase(
             )
             break
 
-        if returncode != 0:
+        if returncode == RunStatus.INCOMPLETE and run_result.last_finish_reason == "server_unreachable":
+            returncode = RunStatus.SERVER_UNREACHABLE
+            finish_warning = (
+                "CodeCome detected that the opencode server is unreachable or unresponsive. "
+                "The phase harness will attempt to restart the server and retry "
+                "the subphase."
+            )
+            break
+
+        if (returncode == RunStatus.OK and getattr(run_result, "session_stalled", False)) or \
+                run_result.last_finish_reason == "session_stalled":
+            returncode = RunStatus.SESSION_STALLED
+            finish_warning = (
+                "CodeCome detected that the model turn produced no activity for an "
+                "extended period (stalled). The phase harness will attempt to restart "
+                "the server and retry the subphase."
+            )
+            break
+
+        if returncode != RunStatus.OK:
             break
 
         last_session_id = session_id
@@ -501,17 +533,17 @@ def _run_subphase(
                         finish_warning = None
                         last_finish_reason = "graceful_forgiveness"
                     else:
-                        returncode = 2
+                        returncode = RunStatus.INCOMPLETE
                 else:
                     # _FINISH_BUDGET: fail only if artifacts are incomplete
                     if not phase_ok:
-                        returncode = 2
+                        returncode = RunStatus.INCOMPLETE
                     else:
                         finish_warning = None
             else:
-                returncode = 2
+                returncode = RunStatus.INCOMPLETE
 
-        if returncode == 0:
+        if returncode == RunStatus.OK:
             from findings.checks_entry import run_frontmatter_validation
 
             validation_rc, validation_output = run_frontmatter_validation()
@@ -529,14 +561,14 @@ def _run_subphase(
                         prompt = build_frontmatter_resume_prompt(phase_id, finding, validation_output)
                         continue
                     else:
-                        returncode = 2
+                        returncode = RunStatus.INCOMPLETE
                         finish_warning = (
                             "The model output failed local frontmatter validation, and CodeCome could not determine a "
                             "session ID to resume for repair. Treating the subphase as incomplete so the validator output "
                             "can be reported back with the saved transcript."
                         )
                 else:
-                    returncode = 2
+                    returncode = RunStatus.INCOMPLETE
                     finish_warning = (
                         f"The model output still fails local frontmatter validation after {max_frontmatter_retries} "
                         "auto-repair attempts. Treating the subphase as incomplete so the validation errors can be reported back."
@@ -566,14 +598,14 @@ def _run_subphase(
                             )
                             continue
                         else:
-                            returncode = 2
+                            returncode = RunStatus.INCOMPLETE
                             finish_warning = (
                                 "The model output failed Phase 1b artifact validation, and CodeCome "
                                 "could not determine a session ID to resume for repair. Treating the "
                                 "subphase as incomplete so the validation output can be reported back."
                             )
                     else:
-                        returncode = 2
+                        returncode = RunStatus.INCOMPLETE
                         finish_warning = (
                             f"Phase 1b artifact validation still fails after {max_artifact_retries} "
                             "auto-repair attempts. Treating the subphase as incomplete so the "
@@ -587,11 +619,10 @@ def _run_subphase(
 
             break
 
-        if returncode == 2 and (
+        if returncode == RunStatus.INCOMPLETE and (
             last_finish_reason in _FINISH_MID_TURN
             or last_finish_reason in _FINISH_BUDGET
         ):
-            import os
             max_iteration_retries = int(os.environ.get("CODECOME_MAX_ITERATION_RETRIES", "1"))
             if iteration_retry_count < max_iteration_retries:
                 iteration_retry_count += 1
@@ -625,14 +656,14 @@ def _run_subphase(
     # --- end retry loop ---
 
     # Report subphase outcome
-    if returncode == 0:
+    if returncode == RunStatus.OK:
         out.separator(tone=T.SUCCESS)
         out.success(f"Phase {phase_id} completed successfully", symbol=True)
         out.detail(
             f"  finish reason: {last_finish_reason!r}  "
             f"transcript: {transcript_path.relative_to(ROOT) if transcript_path.name else 'N/A'}"
         )
-    elif returncode == 130:
+    elif returncode == RunStatus.INTERRUPTED:
         out.separator(tone=T.WARNING)
         out.warn(f"Phase {phase_id} interrupted")
     else:
@@ -657,86 +688,99 @@ def run_phase_1(
     rendering_ctx: Any,
     runner: ServerRunner,
     base_url: str,
-) -> int:
+    *,
+    start_at: str = "1a",
+) -> Phase1Outcome:
     """Orchestrate Phase 1 subphases 1a → 1b → 1c with gates."""
     out = get_output(console)
+
+    if start_at not in {"1a", "1b", "1c"}:
+        out.error(f"Unsupported Phase 1 start point: {start_at}")
+        return _phase1_outcome(RunStatus.ERROR)
+
     # ---- Phase 1a: Target Profile ----
-    findings_snapshot_1a = count_findings_snapshot()
-    phase_1a_session_id: str | None = None
-    phase_1a_prompt: str | None = None
-    phase_1a_artifact_retries = 0
-    while True:
-        outcome = _run_subphase(
+    if start_at == "1a":
+        findings_snapshot_1a = count_findings_snapshot()
+        phase_1a_session_id: str | None = None
+        phase_1a_prompt: str | None = None
+        phase_1a_artifact_retries = 0
+        while True:
+            outcome = _run_subphase(
+                args=args,
+                console=console,
+                rendering_ctx=rendering_ctx,
+                runner=runner,
+                base_url=base_url,
+                phase_id="1a",
+                label="Target Profile",
+                agent="recon",
+                prompt_file="prompts/phase-1a-profile.md",
+                existing_session_id=phase_1a_session_id,
+                initial_prompt=phase_1a_prompt,
+                return_outcome=True,
+            )
+            if outcome.returncode in (RunStatus.SERVER_UNREACHABLE, RunStatus.SESSION_STALLED):
+                return _phase1_outcome(outcome.returncode, "1a")
+            if outcome.returncode != RunStatus.OK:
+                return _phase1_outcome(outcome.returncode)
+
+            gate_rc = check_phase_1a(console, findings_snapshot=findings_snapshot_1a)
+            if gate_rc == RunStatus.OK:
+                break
+
+            max_artifact_retries = 2
+            if phase_1a_artifact_retries >= max_artifact_retries or not outcome.session_id:
+                return _phase1_outcome(gate_rc)
+
+            phase_1a_artifact_retries += 1
+            out.warn(
+                "\n[Auto-Correction] Phase 1a artifacts failed Gate 1a validation. "
+                "CodeCome will resume the same session and ask for a minimal CodeQL plan repair "
+                f"(retry {phase_1a_artifact_retries}/{max_artifact_retries})."
+            )
+            phase_1a_session_id = outcome.session_id
+            phase_1a_prompt = build_artifact_repair_resume_prompt(
+                "1a", None, _phase_1a_codeql_plan_repair_output()
+            )
+
+    # ---- Phase 1b: Sandbox Bootstrap ----
+    if start_at in {"1a", "1b"}:
+        rc = _run_subphase(
             args=args,
             console=console,
             rendering_ctx=rendering_ctx,
             runner=runner,
             base_url=base_url,
-            phase_id="1a",
-            label="Target Profile",
+            phase_id="1b",
+            label="Sandbox Bootstrap",
             agent="recon",
-            prompt_file="prompts/phase-1a-profile.md",
-            existing_session_id=phase_1a_session_id,
-            initial_prompt=phase_1a_prompt,
-            return_outcome=True,
+            prompt_file="prompts/phase-1b-sandbox.md",
         )
-        if outcome.returncode != 0:
-            return outcome.returncode
+        if rc in (RunStatus.SERVER_UNREACHABLE, RunStatus.SESSION_STALLED):
+            return _phase1_outcome(rc, "1b")
+        if rc != RunStatus.OK:
+            return _phase1_outcome(rc)
 
-        gate_rc = check_phase_1a(console, findings_snapshot=findings_snapshot_1a)
-        if gate_rc == 0:
-            break
+        gate_rc = check_phase_1b(console)
+        if gate_rc != RunStatus.OK:
+            return _phase1_outcome(gate_rc)
 
-        max_artifact_retries = 2
-        if phase_1a_artifact_retries >= max_artifact_retries or not outcome.session_id:
-            return gate_rc
-
-        phase_1a_artifact_retries += 1
-        out.warn(
-            "\n[Auto-Correction] Phase 1a artifacts failed Gate 1a validation. "
-            "CodeCome will resume the same session and ask for a minimal CodeQL plan repair "
-            f"(retry {phase_1a_artifact_retries}/{max_artifact_retries})."
-        )
-        phase_1a_session_id = outcome.session_id
-        phase_1a_prompt = build_artifact_repair_resume_prompt(
-            "1a", None, _phase_1a_codeql_plan_repair_output()
-        )
-
-    # ---- Phase 1b: Sandbox Bootstrap ----
-    rc = _run_subphase(
-        args=args,
-        console=console,
-        rendering_ctx=rendering_ctx,
-        runner=runner,
-        base_url=base_url,
-        phase_id="1b",
-        label="Sandbox Bootstrap",
-        agent="recon",
-        prompt_file="prompts/phase-1b-sandbox.md",
-    )
-    if rc != 0:
-        return rc
-
-    gate_rc = check_phase_1b(console)
-    if gate_rc != 0:
-        return gate_rc
-
-    # ---- CodeQL analysis (post-sandbox) ----
-    import subprocess
-    has_sandbox = (ROOT / "sandbox").exists()
-    if has_sandbox:
-        out.info("Starting sandbox for CodeQL execution...")
-        subprocess.run(["make", "sandbox-up"], cwd=str(ROOT), check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        
-    try:
-        _run_codeql(console)
-        rc = _check_codeql_artifacts(console)
-        if rc != 0:
-            return rc
-    finally:
+        # ---- CodeQL analysis (post-sandbox) ----
+        import subprocess
+        has_sandbox = (ROOT / "sandbox").exists()
         if has_sandbox:
-            out.info("Stopping sandbox after CodeQL execution...")
-            subprocess.run(["make", "sandbox-down"], cwd=str(ROOT), check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            out.info("Starting sandbox for CodeQL execution...")
+            subprocess.run(["make", "sandbox-up"], cwd=str(ROOT), check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        try:
+            _run_codeql(console)
+            rc = _check_codeql_artifacts(console)
+            if rc != RunStatus.OK:
+                return _phase1_outcome(rc)
+        finally:
+            if has_sandbox:
+                out.info("Stopping sandbox after CodeQL execution...")
+                subprocess.run(["make", "sandbox-down"], cwd=str(ROOT), check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # Snapshot findings immediately before 1c so the warning scope matches 1c.
     findings_snapshot = count_findings_snapshot()
@@ -753,15 +797,17 @@ def run_phase_1(
         agent="recon",
         prompt_file="prompts/phase-1c-recon.md",
     )
-    if rc != 0:
-        return rc
+    if rc in (RunStatus.SERVER_UNREACHABLE, RunStatus.SESSION_STALLED):
+        return _phase1_outcome(rc, "1c")
+    if rc != RunStatus.OK:
+        return _phase1_outcome(rc)
 
     gate_rc = check_phase_1c(console, findings_snapshot=findings_snapshot)
-    if gate_rc != 0:
-        return gate_rc
+    if gate_rc != RunStatus.OK:
+        return _phase1_outcome(gate_rc)
 
     # ---- Phase 1 complete ----
     out.separator(tone=T.SUCCESS)
     out.success("Phase 1 complete — all subphases passed.", symbol=True)
 
-    return 0
+    return _phase1_outcome(RunStatus.OK)

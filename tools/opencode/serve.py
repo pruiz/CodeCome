@@ -28,11 +28,12 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -121,6 +122,24 @@ def _patch_json(base_url: str, path: str, payload: dict) -> dict:
         if not body:
             return {}
         return json.loads(body)
+
+
+def make_liveness_check(runner: "ServerRunner") -> "Callable[[], bool]":
+    """Return a callable reporting whether *runner*'s server process is alive.
+
+    The returned check consults the OS child-process handle, which is the
+    authoritative liveness signal. HTTP probes (/session/status, /global/health)
+    can block and time out while the process is perfectly alive during a long
+    busy turn, so they must not be used to declare server death.
+    """
+
+    def _alive() -> bool:
+        info = runner.info
+        if info is None:
+            return False
+        return info.proc.poll() is None
+
+    return _alive
 
 
 class ServerRunner:
@@ -215,6 +234,7 @@ class ServerRunner:
                     log_path=log_path,
                     password=password,
                 )
+                self._start_exit_monitor(proc, log_path)
                 return self._info
 
             # If we reach here, this attempt failed. Kill and retry.
@@ -243,6 +263,14 @@ class ServerRunner:
         self._kill(info.proc)
         self._info = None
 
+    def restart(self, **kwargs: Any) -> ServerInfo:
+        """Stop the current server and start a new one.
+        
+        Forwards *kwargs* to ``start()``.  Returns the new ``ServerInfo``.
+        """
+        self.stop()
+        return self.start(**kwargs)
+
     @property
     def info(self) -> Optional[ServerInfo]:
         return self._info
@@ -270,6 +298,29 @@ class ServerRunner:
                     proc.wait()
         except ProcessLookupError:
             pass
+
+    @staticmethod
+    def _start_exit_monitor(proc: subprocess.Popen[Any], log_path: Path) -> None:
+        """Spawn a daemon thread that logs the server process exit code."""
+        def _monitor_child() -> None:
+            exit_code = proc.wait()
+            line = (
+                f"opencode serve killed by signal {-exit_code} (exit code {exit_code})\n"
+                if exit_code < 0
+                else f"opencode serve exited with code {exit_code}\n"
+            )
+            try:
+                with open(log_path, "a") as f:
+                    f.write(line)
+            except OSError:
+                pass
+
+        t = threading.Thread(
+            target=_monitor_child,
+            name=f"serve-monitor-{proc.pid}",
+            daemon=True,
+        )
+        t.start()
 
 
 # ------------------------------------------------------------------

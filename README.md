@@ -501,6 +501,59 @@ CodeCome ships reusable phase prompts under `prompts/`:
     CODECOME_MODEL=<id>                 # pin model per phase, e.g. anthropic/claude-opus-4-7
     CODECOME_MODEL_VARIANT=<v>          # pin model variant, e.g. high, max
 
+### Resilience and recovery environment variables
+
+CodeCome consumes the opencode SSE event stream and owns the `opencode serve`
+lifecycle. These knobs tune how it detects a dead, unresponsive, or hung
+server/session and how it recovers. Defaults are sensible; override only if you
+hit edge cases.
+
+    # --- Stall detection (hung model turn while the session stays "busy") ---
+    CODECOME_BUSY_STALL_TIMEOUT=180        # seconds with no meaningful SSE event
+                                           #   (heartbeats/connected don't count)
+                                           #   before a busy turn is treated as
+                                           #   stalled. 0 disables.
+    CODECOME_SSE_READ_TICK=10              # SSE socket read tick (seconds). Forces
+                                           #   the reader to wake on a silent-but-
+                                           #   open stream so the stall watchdog
+                                           #   can run. Lower = faster detection.
+    CODECOME_HEARTBEAT_STALL_TIMEOUT=0     # optional diagnostic signal: if
+                                           #   server.heartbeat was flowing and
+                                           #   then stops for this long while busy,
+                                           #   flag a stall early. Disabled by
+                                           #   default because opencode can pause
+                                           #   heartbeats during valid long turns.
+
+    # --- Server restart / retry budget (shared by death + stall recovery) ---
+    CODECOME_MAX_SERVER_RESTARTS=2         # how many times CodeCome restarts
+                                           #   opencode serve and retries the
+                                           #   failed phase/subphase before giving
+                                           #   up (covers server death or
+                                           #   unresponsiveness and session stalls).
+    CODECOME_MAX_FATAL_RETRIES=2           # retries for transient infrastructure
+                                           #   errors (timeouts, connection blips).
+    CODECOME_MAX_ITERATION_RETRIES=<n>     # auto-resume budget for genuine mid-turn
+                                           #   model/provider cutoffs (default 1 for
+                                           #   Phase 1 subphases, 3 for phases 2-6).
+
+    # --- Resume readiness (waiting for an existing session to go idle) ---
+    CODECOME_RESUME_IDLE_TIMEOUT=120       # max seconds to wait for a resumed
+                                           #   session to report idle.
+    CODECOME_RESUME_IDLE_POLL=1            # poll interval (seconds) while waiting.
+    CODECOME_RESUME_PROBE_TIMEOUT=2        # per-probe HTTP timeout for
+                                           #   /session/status and /global/health.
+    CODECOME_RESUME_SERVER_UNAVAILABLE_THRESHOLD=3
+                                           # consecutive failed status+health probes
+                                           #   (no process-liveness signal) before
+                                           #   declaring the server unreachable.
+
+Recovery behavior: when a server death or a session stall is detected, CodeCome
+restarts `opencode serve` and retries the affected phase (Phase 1 re-enters at the
+failed subphase `1a`/`1b`/`1c`); both conditions draw from the single
+`CODECOME_MAX_SERVER_RESTARTS` budget. A long but healthy model turn is never
+abandoned — CodeCome keeps consuming the stream as long as the session is `busy`
+and the server process is alive, up to the stall timeout.
+
 ### Model resolution and thinking display
 
 The wrapper resolves the effective model in this order:

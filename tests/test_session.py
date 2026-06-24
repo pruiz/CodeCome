@@ -101,6 +101,35 @@ class TestCreateSession:
         with pytest.raises(RuntimeError, match="empty session ID"):
             module.create_session("http://localhost:8080", "1", "recon", None, None, None)
 
+    @patch("time.sleep")
+    @patch("urllib.request.urlopen")
+    def test_create_session_retries_on_timeout(self, mock_urlopen, mock_sleep):
+        module = _load_session_module()
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"id": "sess-after-retry"}).encode("utf-8")
+        mock_urlopen.side_effect = [TimeoutError("timed out"), mock_resp]
+
+        sid = module.create_session("http://localhost:8080", "1", "recon", None, None, None)
+
+        assert sid == "sess-after-retry"
+        assert mock_urlopen.call_count == 2
+        assert mock_sleep.call_count == 1
+
+    @patch("time.sleep")
+    @patch("urllib.request.urlopen")
+    def test_create_session_exhausted_timeout_is_retriable_request_error(self, mock_urlopen, mock_sleep):
+        module = _load_session_module()
+        mock_urlopen.side_effect = TimeoutError("timed out")
+
+        with pytest.raises(module.OpenCodeRequestError) as excinfo:
+            module.create_session("http://localhost:8080", "1", "recon", None, None, None)
+
+        assert excinfo.value.retriable is True
+        assert excinfo.value.operation == "create_session"
+        assert "Failed to create session: timed out" in str(excinfo.value)
+        assert mock_urlopen.call_count == 3
+        assert mock_sleep.call_count == 2
+
 
 class TestCreateChatSession:
     @patch("urllib.request.urlopen")
@@ -209,6 +238,20 @@ class TestSendPromptToSession:
             )
 
         assert mock_urlopen.call_count == 3  # default max retries
+
+    @patch("time.sleep")
+    @patch("urllib.request.urlopen")
+    def test_send_prompt_exhausted_timeout_is_retriable_request_error(self, mock_urlopen, mock_sleep):
+        module = _load_session_module()
+        mock_urlopen.side_effect = TimeoutError("timed out")
+
+        with pytest.raises(module.OpenCodeRequestError) as excinfo:
+            module.send_prompt_to_session(
+                "http://localhost:8080", "sess-1", "hello", "recon", None, None, None, None
+            )
+
+        assert excinfo.value.retriable is True
+        assert excinfo.value.operation == "send_prompt"
 
     @patch("time.sleep")
     @patch("urllib.request.urlopen")

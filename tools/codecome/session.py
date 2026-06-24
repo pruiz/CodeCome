@@ -19,6 +19,20 @@ from typing import Any
 # Retry config for transient failures on prompt submission.
 _PROMPT_MAX_RETRIES = 3
 _PROMPT_BACKOFF_SCHEDULE = (5.0, 15.0, 30.0)  # seconds between retries
+_SESSION_CREATE_MAX_RETRIES = 3
+
+
+class OpenCodeRequestError(RuntimeError):
+    """Raised when an opencode HTTP operation fails.
+
+    ``retriable`` distinguishes transient control-plane failures (timeouts,
+    5xx, 429, connection errors) from hard request/schema errors.
+    """
+
+    def __init__(self, message: str, *, retriable: bool, operation: str) -> None:
+        super().__init__(message)
+        self.retriable = retriable
+        self.operation = operation
 
 
 def _is_retriable_error(exc: Exception) -> bool:
@@ -41,6 +55,18 @@ def _get_headers(auth_token: str | None, workspace_dir: str | None) -> dict[str,
     if workspace_dir:
         headers["x-opencode-directory"] = workspace_dir
     return headers
+
+
+def _describe_http_error(prefix: str, exc: urllib.error.HTTPError) -> str:
+    body = ""
+    try:
+        body = exc.read().decode("utf-8", errors="replace").strip()
+    except Exception:
+        body = ""
+    detail = f"{prefix}: HTTP {exc.code}"
+    if body:
+        detail = f"{detail}: {body}"
+    return detail
 
 
 def send_prompt_to_session(
@@ -100,16 +126,16 @@ def send_prompt_to_session(
 
     # All retries exhausted or non-retriable error
     if isinstance(last_exc, urllib.error.HTTPError):
-        body = ""
-        try:
-            body = last_exc.read().decode("utf-8", errors="replace").strip()
-        except Exception:
-            body = ""
-        detail = f"Failed to send prompt: HTTP {last_exc.code}"
-        if body:
-            detail = f"{detail}: {body}"
-        raise RuntimeError(detail) from last_exc
-    raise RuntimeError(f"Failed to send prompt: {last_exc}") from last_exc
+        raise OpenCodeRequestError(
+            _describe_http_error("Failed to send prompt", last_exc),
+            retriable=_is_retriable_error(last_exc),
+            operation="send_prompt",
+        ) from last_exc
+    raise OpenCodeRequestError(
+        f"Failed to send prompt: {last_exc}",
+        retriable=bool(last_exc and _is_retriable_error(last_exc)),
+        operation="send_prompt",
+    ) from last_exc
 
 
 def get_session_status(
@@ -117,6 +143,7 @@ def get_session_status(
     session_id: str,
     auth_token: str | None,
     workspace_dir: str | None,
+    timeout: float = 5.0,
 ) -> str | None:
     """Best-effort lookup of an opencode session status type."""
     req = urllib.request.Request(
@@ -125,7 +152,7 @@ def get_session_status(
         method="GET",
     )
     try:
-        with urllib.request.urlopen(req, timeout=5.0) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except Exception:
         return None
@@ -143,6 +170,27 @@ def get_session_status(
     if isinstance(status, str):
         return status
     return None
+
+
+def is_server_healthy(
+    base_url: str,
+    auth_token: str | None,
+    workspace_dir: str | None,
+    timeout: float = 5.0,
+) -> bool:
+    """Best-effort opencode health probe using the same auth context."""
+    req = urllib.request.Request(
+        f"{base_url}/global/health",
+        headers=_get_headers(auth_token, workspace_dir),
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return False
+
+    return isinstance(data, dict) and data.get("healthy") is True
 
 
 def create_session(
@@ -164,17 +212,50 @@ def create_session(
             payload["model"] = {"providerID": parts[0], "id": parts[1]}
         else:
             payload["model"] = {"id": model}
-    req = urllib.request.Request(
-        f"{base_url}/session",
-        data=json.dumps(payload).encode("utf-8"),
-        headers=_get_headers(auth_token, workspace_dir),
-        method="POST",
-    )
-    resp = urllib.request.urlopen(req, timeout=10.0)
-    data = json.loads(resp.read().decode("utf-8"))
+    data_bytes = json.dumps(payload).encode("utf-8")
+    url = f"{base_url}/session"
+    last_exc: Exception | None = None
+    for attempt in range(_SESSION_CREATE_MAX_RETRIES):
+        req = urllib.request.Request(
+            url,
+            data=data_bytes,
+            headers=_get_headers(auth_token, workspace_dir),
+            method="POST",
+        )
+        try:
+            resp = urllib.request.urlopen(req, timeout=10.0)
+            data = json.loads(resp.read().decode("utf-8"))
+            break
+        except Exception as exc:
+            last_exc = exc
+            if not _is_retriable_error(exc) or attempt == _SESSION_CREATE_MAX_RETRIES - 1:
+                if isinstance(exc, urllib.error.HTTPError):
+                    raise OpenCodeRequestError(
+                        _describe_http_error("Failed to create session", exc),
+                        retriable=_is_retriable_error(exc),
+                        operation="create_session",
+                    ) from exc
+                raise OpenCodeRequestError(
+                    f"Failed to create session: {exc}",
+                    retriable=_is_retriable_error(exc),
+                    operation="create_session",
+                ) from exc
+            backoff = _PROMPT_BACKOFF_SCHEDULE[min(attempt, len(_PROMPT_BACKOFF_SCHEDULE) - 1)]
+            time.sleep(backoff)
+    else:  # pragma: no cover - loop always returns or raises
+        raise OpenCodeRequestError(
+            f"Failed to create session: {last_exc}",
+            retriable=True,
+            operation="create_session",
+        ) from last_exc
+
     sid = str(data.get("id", ""))
     if not sid:
-        raise RuntimeError("Server returned empty session ID")
+        raise OpenCodeRequestError(
+            "Server returned empty session ID",
+            retriable=False,
+            operation="create_session",
+        )
     return sid
 
 
