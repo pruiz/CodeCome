@@ -45,6 +45,13 @@ function UserCard({ user, onChanged }) {
     setMessage('');
     try {
       const payload = { ...form };
+      if (user.is_llm_user) {
+        delete payload.password;
+      } else {
+        delete payload.llm_model;
+        delete payload.llm_context;
+        delete payload.auto_answer_enabled;
+      }
       if (!payload.password) delete payload.password;
       await usersApi.update(user.id, payload);
       setMessage('User saved.');

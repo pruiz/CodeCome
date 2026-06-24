@@ -191,6 +191,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Add active/inactive filters to the Users page.
 - [x] Show only relevant fields when creating human or fake AI users.
 - [x] Strip hidden user creation fields before submit.
+- [x] Strip hidden user edit fields before saving existing users.
 
 ## Notes
 

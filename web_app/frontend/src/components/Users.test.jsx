@@ -142,6 +142,25 @@ describe('Users', () => {
     });
   });
 
+  it('does not submit hidden fake AI fields when saving a human user', async () => {
+    const user = userEvent.setup();
+    render(<Users />);
+
+    expect(await screen.findByText('Human Owner')).toBeInTheDocument();
+    await user.click(screen.getAllByRole('button', { name: 'Save User' })[0]);
+
+    await waitFor(() => {
+      const updateCall = global.fetch.mock.calls.find(([, options]) => options?.method === 'PATCH');
+      expect(updateCall).toBeTruthy();
+      const payload = JSON.parse(updateCall[1].body);
+      expect(payload).toMatchObject({ display_name: 'Human Owner' });
+      expect(payload.llm_model).toBeUndefined();
+      expect(payload.llm_context).toBeUndefined();
+      expect(payload.auto_answer_enabled).toBeUndefined();
+      expect(payload.password).toBeUndefined();
+    });
+  });
+
   it('filters users by AI type', async () => {
     const user = userEvent.setup();
     render(<Users />);
