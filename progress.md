@@ -46,7 +46,7 @@ Continue from `progress.md` and implement the next unfinished TODO.
 - [x] Add tests for global findings API and preview config API.
 - [x] Add optional `make sweep` phase after `phase-2` without adding it to automatic progression.
 - [x] Replace web `phase-4`/`phase-5` steps with CodeCome batch commands `make validate-all` and `make exploit-all`.
-- [] Analyze what happens when the same agent have 2 or more audits, i saw an error messsage in one audit in phase 4 that ir failed beacuse the sandbox was from another audit.
+- [x] Analyze what happens when the same agent has 2 or more audits; local workers now force one active job to avoid shared sandbox/Docker conflicts across audits.
 ## Current Major Feature: Users, Question Owners, and Fake AI Answerers
 
 Goal: successful phases that produce questions for the user must pause the workflow until the audit's assigned question owner answers them. The owner may be a human user answering in the web app, or a fake AI user that answers automatically and allows the workflow to continue.

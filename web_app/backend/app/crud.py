@@ -216,21 +216,34 @@ def ensure_local_worker(db: Session) -> models.Worker:
     ))
 
 
+def worker_capacity_available(worker: models.Worker) -> bool:
+    if not worker or worker.status in ("offline", "disabled", "error"):
+        return False
+    current_jobs = worker.current_jobs or 0
+    if worker.type == "local":
+        # Local CodeCome runs share Docker/sandbox resources; force one active
+        # local job even if max_concurrent_jobs is configured higher.
+        return current_jobs < 1
+    return current_jobs < (worker.max_concurrent_jobs or 1)
+
+
 def select_available_worker(db: Session, preferred_worker_id: Optional[int] = None) -> Optional[models.Worker]:
     if preferred_worker_id:
         worker = get_worker(db, preferred_worker_id)
-        if worker and worker.status not in ("offline", "disabled", "error") and worker.current_jobs < worker.max_concurrent_jobs:
+        if worker_capacity_available(worker):
             return worker
 
-    worker = db.query(models.Worker).filter(
+    candidates = db.query(models.Worker).filter(
         models.Worker.status.in_(["idle", "running"]),
-        models.Worker.current_jobs < models.Worker.max_concurrent_jobs,
-    ).order_by(models.Worker.current_jobs.asc(), models.Worker.id.asc()).first()
+    ).order_by(models.Worker.current_jobs.asc(), models.Worker.id.asc()).all()
 
-    if worker:
-        return worker
+    for worker in candidates:
+        if worker_capacity_available(worker):
+            return worker
 
-    return ensure_local_worker(db)
+    if not candidates:
+        return ensure_local_worker(db)
+    return None
 
 
 def mark_worker_job_started(db: Session, worker_id: int) -> Optional[models.Worker]:

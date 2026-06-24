@@ -202,7 +202,9 @@ def start_audit(audit_id: UUID, db: Session = Depends(get_db)):
     audit = crud.get_audit(db, audit_id)
     if not audit:
         raise HTTPException(status_code=404, detail="Audit not found")
-    
+    if crud.audit_has_open_blocking_questions(db, audit_id):
+        raise HTTPException(status_code=409, detail="Audit has open blocking questions")
+
     phase_executions = crud.get_phase_executions(db, audit_id)
     starting_phase = next_audit_step(phase_executions, audit.model_settings)
     worker = queue_audit_phase(db, audit, starting_phase)

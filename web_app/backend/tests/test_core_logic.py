@@ -123,6 +123,18 @@ def test_worker_response_redacts_ssh_secrets():
     assert "private_key" not in response["config"]["ssh_auth"]
 
 
+def test_local_worker_capacity_is_forced_to_one_job():
+    worker = SimpleNamespace(type="local", status="running", current_jobs=1, max_concurrent_jobs=8)
+
+    assert crud.worker_capacity_available(worker) is False
+
+
+def test_remote_worker_respects_configured_capacity():
+    worker = SimpleNamespace(type="ssh", status="running", current_jobs=1, max_concurrent_jobs=2)
+
+    assert crud.worker_capacity_available(worker) is True
+
+
 def test_phase_command_line_includes_env_and_target():
     command = build_command_line(
         "phase-1",
