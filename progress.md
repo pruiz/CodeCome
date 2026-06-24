@@ -47,6 +47,9 @@ Continue from `progress.md` and implement the next unfinished TODO.
 - [x] Add optional `make sweep` phase after `phase-2` without adding it to automatic progression.
 - [x] Replace web `phase-4`/`phase-5` steps with CodeCome batch commands `make validate-all` and `make exploit-all`.
 - [x] Analyze what happens when the same agent has 2 or more audits; local workers now force one active job to avoid shared sandbox/Docker conflicts across audits.
+- [x] POSSIBLE BUG: Make sure one agent running two or more audits always uses the correct original CodeCome sandbox for each audit and never crosses audit workspaces or sandbox instances.
+- [x] TODO: Investigate and improve the worker bootstrap script so it registers the machine as a worker automatically, including creating/configuring a local execution user with Docker access when appropriate.
+- [x] BUG: In the latest SmallCompany audit, rerunning `make validate-all` fails with `Rerun failed: No available worker`; investigate worker availability/release state and ensure failed phase reruns can be queued when capacity should be free.
 ## Current Major Feature: Users, Question Owners, and Fake AI Answerers
 
 Goal: successful phases that produce questions for the user must pause the workflow until the audit's assigned question owner answers them. The owner may be a human user answering in the web app, or a fake AI user that answers automatically and allows the workflow to continue.
@@ -205,6 +208,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Improve Proxmox VM/LXC worker bootstrap so the target runs a self-registration script that pulls required configuration from the web app and registers itself as a worker automatically, avoiding manual keyfile/user/password entry when possible.
 - [x] BUG: Investigate audit `13555161-ddba-422d-bff8-47b149bac988` `make validate-all` failure from latest logs and add a durable guard so this failure mode cannot recur.
 - [x] CHECK: Verify audits created from a local folder are copied to the selected worker before execution; remote workers receive the materialized workspace snapshot via SFTP upload, not the original local path.
+- [x] POSSIBLE BUG: Make sure one agent running two or more audits always uses the correct original CodeCome sandbox for each audit and never crosses audit workspaces or sandbox instances.
 
 ## Notes
 

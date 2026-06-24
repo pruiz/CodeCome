@@ -13,6 +13,7 @@ import logging
 import queue
 import re
 import shlex
+import socket
 import threading
 
 logger = logging.getLogger(__name__)
@@ -79,10 +80,10 @@ def audit_sandbox_host_port(audit_id: str) -> int:
     return 18080 + (int(digest[:8], 16) % 10000)
 
 
-def write_sandbox_env(workspace_path: Path, values: dict[str, str]) -> None:
+def read_sandbox_env(workspace_path: Path) -> dict[str, str]:
     sandbox_dir = workspace_path / "sandbox"
     if not sandbox_dir.exists():
-        return
+        return {}
     env_path = sandbox_dir / ".env"
     existing = {}
     if env_path.exists():
@@ -91,11 +92,42 @@ def write_sandbox_env(workspace_path: Path, values: dict[str, str]) -> None:
                 continue
             key, value = line.split("=", 1)
             existing[key.strip()] = value.strip()
+    return existing
+
+
+def write_sandbox_env(workspace_path: Path, values: dict[str, str]) -> None:
+    sandbox_dir = workspace_path / "sandbox"
+    if not sandbox_dir.exists():
+        return
+    env_path = sandbox_dir / ".env"
+    existing = read_sandbox_env(workspace_path)
     existing.update(values)
     env_path.write_text("".join(f"{key}={value}\n" for key, value in existing.items()))
 
 
-def rewrite_sandbox_compose_host_ports(workspace_path: Path, host_port: int) -> bool:
+def host_port_available(port: int) -> bool:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(("127.0.0.1", int(port)))
+        return True
+    except OSError:
+        return False
+
+
+def audit_sandbox_runtime_port(audit_id: str, workspace_path: Path) -> int:
+    existing_port = read_sandbox_env(workspace_path).get("CODECOME_SANDBOX_HOST_PORT")
+    if existing_port and existing_port.isdigit():
+        return int(existing_port)
+    preferred = audit_sandbox_host_port(audit_id)
+    for offset in range(10000):
+        candidate = 18080 + ((preferred - 18080 + offset) % 10000)
+        if host_port_available(candidate):
+            return candidate
+    return preferred
+
+
+def rewrite_sandbox_compose_for_audit(workspace_path: Path, host_port: int) -> bool:
     compose_path = workspace_path / "sandbox" / "docker-compose.yml"
     if not compose_path.exists():
         return False
@@ -111,16 +143,21 @@ def rewrite_sandbox_compose_host_ports(workspace_path: Path, host_port: int) -> 
         return match.group(0)
 
     updated = pattern.sub(replace, text)
+    updated = re.sub(r"(?m)^\s*container_name:\s*.*\n", "", updated)
     if updated != text:
         compose_path.write_text(updated)
         return True
     return False
 
 
+def rewrite_sandbox_compose_host_ports(workspace_path: Path, host_port: int) -> bool:
+    return rewrite_sandbox_compose_for_audit(workspace_path, host_port)
+
+
 def prepare_audit_sandbox_runtime(audit, workspace_path: Path, env_overrides: dict | None = None) -> dict:
     env = dict(env_overrides or {})
     project_name = audit_sandbox_project_name(str(audit.id))
-    host_port = audit_sandbox_host_port(str(audit.id))
+    host_port = audit_sandbox_runtime_port(str(audit.id), workspace_path)
     sandbox_url = f"http://localhost:{host_port}"
     runtime_values = {
         "COMPOSE_PROJECT_NAME": project_name,
@@ -130,7 +167,7 @@ def prepare_audit_sandbox_runtime(audit, workspace_path: Path, env_overrides: di
         "CODECOME_SANDBOX_URL": sandbox_url,
     }
     write_sandbox_env(workspace_path, runtime_values)
-    rewrite_sandbox_compose_host_ports(workspace_path, host_port)
+    rewrite_sandbox_compose_for_audit(workspace_path, host_port)
     prompt_extra = env.get("PROMPT_EXTRA", "")
     sandbox_hint = (
         f"CodeCome Web assigned this audit sandbox host URL: {sandbox_url}. "

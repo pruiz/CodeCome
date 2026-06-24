@@ -8,7 +8,7 @@ from app.api.workers import model_options_from_worker, registered_worker_config,
 from app.utils.codecome_wrapper import CodeComeExecutor
 from app.api import logs, workers
 from app.workers.phase_tasks import build_command_line, status_phase
-from app.workers.phase_tasks import audit_sandbox_host_port, audit_sandbox_project_name, merged_phase_env, prepare_audit_sandbox_runtime, rewrite_sandbox_compose_host_ports
+from app.workers.phase_tasks import audit_sandbox_project_name, audit_sandbox_runtime_port, merged_phase_env, prepare_audit_sandbox_runtime, rewrite_sandbox_compose_host_ports
 
 
 class FakeScalarQuery:
@@ -185,7 +185,7 @@ def test_phase_sandbox_runtime_rewrites_host_port_and_prompt(tmp_path):
     audit = SimpleNamespace(id="13555161-ddba-422d-bff8-47b149bac988")
 
     env = prepare_audit_sandbox_runtime(audit, workspace, {"PROMPT_EXTRA": "existing context"})
-    host_port = audit_sandbox_host_port(str(audit.id))
+    host_port = audit_sandbox_runtime_port(str(audit.id), workspace)
 
     assert env["COMPOSE_PROJECT_NAME"] == audit_sandbox_project_name(str(audit.id))
     assert env["CODECOME_SANDBOX_URL"] == f"http://localhost:{host_port}"
@@ -195,11 +195,25 @@ def test_phase_sandbox_runtime_rewrites_host_port_and_prompt(tmp_path):
     assert f"CODECOME_SANDBOX_HOST_PORT={host_port}" in (sandbox / ".env").read_text()
 
 
+def test_phase_sandbox_runtime_reuses_persisted_port(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    sandbox = workspace / "sandbox"
+    sandbox.mkdir(parents=True)
+    (sandbox / ".env").write_text("CODECOME_SANDBOX_HOST_PORT=19081\n")
+    audit = SimpleNamespace(id="22222222-2222-2222-2222-222222222222")
+    monkeypatch.setattr("app.workers.phase_tasks.host_port_available", lambda port: False)
+
+    env = prepare_audit_sandbox_runtime(audit, workspace)
+
+    assert env["CODECOME_SANDBOX_HOST_PORT"] == "19081"
+    assert env["CODECOME_SANDBOX_URL"] == "http://localhost:19081"
+
+
 def test_rewrite_sandbox_compose_host_ports_leaves_non_app_ports(tmp_path):
     sandbox = tmp_path / "sandbox"
     sandbox.mkdir()
     compose = sandbox / "docker-compose.yml"
-    compose.write_text('services:\n  app:\n    ports:\n      - "8080:8080"\n      - "5432:5432"\n')
+    compose.write_text('services:\n  app:\n    container_name: fixed-name\n    ports:\n      - "8080:8080"\n      - "5432:5432"\n')
 
     changed = rewrite_sandbox_compose_host_ports(tmp_path, 19001)
 
@@ -207,6 +221,7 @@ def test_rewrite_sandbox_compose_host_ports_leaves_non_app_ports(tmp_path):
     text = compose.read_text()
     assert '"19001:8080"' in text
     assert '"5432:5432"' in text
+    assert "container_name" not in text
 
 
 def test_worker_response_redacts_ssh_secrets():
@@ -250,6 +265,27 @@ def test_remote_worker_respects_configured_capacity():
     worker = SimpleNamespace(type="ssh", status="running", current_jobs=1, max_concurrent_jobs=2)
 
     assert crud.worker_capacity_available(worker) is True
+
+
+def test_worker_job_state_reconciliation_releases_stale_local_worker():
+    worker = SimpleNamespace(type="local", status="running", current_jobs=1, max_concurrent_jobs=1)
+
+    changed = crud.sync_worker_job_state(worker, running_jobs=0)
+
+    assert changed is True
+    assert worker.current_jobs == 0
+    assert worker.status == "idle"
+    assert crud.worker_capacity_available(worker) is True
+
+
+def test_worker_job_state_reconciliation_preserves_disabled_status():
+    worker = SimpleNamespace(type="ssh", status="disabled", current_jobs=1, max_concurrent_jobs=2)
+
+    crud.sync_worker_job_state(worker, running_jobs=0)
+
+    assert worker.current_jobs == 0
+    assert worker.status == "disabled"
+    assert crud.worker_capacity_available(worker) is False
 
 
 def test_remote_worker_model_options_from_config():

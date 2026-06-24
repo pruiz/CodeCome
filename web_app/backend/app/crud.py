@@ -258,7 +258,41 @@ def worker_capacity_available(worker: models.Worker) -> bool:
     return current_jobs < (worker.max_concurrent_jobs or 1)
 
 
+def sync_worker_job_state(worker: models.Worker, running_jobs: int) -> bool:
+    running_jobs = max(int(running_jobs or 0), 0)
+    changed = (worker.current_jobs or 0) != running_jobs
+    worker.current_jobs = running_jobs
+    if worker.status not in ("offline", "disabled", "error"):
+        next_status = "running" if running_jobs else "idle"
+        changed = changed or worker.status != next_status
+        worker.status = next_status
+    return changed
+
+
+def reconcile_worker_job_counts(db: Session, worker_ids: Optional[list[int]] = None) -> None:
+    query = db.query(models.Worker)
+    if worker_ids:
+        query = query.filter(models.Worker.id.in_(worker_ids))
+    workers = query.all()
+    if not workers:
+        return
+
+    running_counts = dict(
+        db.query(models.PhaseExecution.worker_id, func.count(models.PhaseExecution.id))
+        .filter(models.PhaseExecution.status == "running")
+        .filter(models.PhaseExecution.worker_id.in_([worker.id for worker in workers]))
+        .group_by(models.PhaseExecution.worker_id)
+        .all()
+    )
+    changed = False
+    for worker in workers:
+        changed = sync_worker_job_state(worker, running_counts.get(worker.id, 0)) or changed
+    if changed:
+        db.commit()
+
+
 def select_available_worker(db: Session, preferred_worker_id: Optional[int] = None) -> Optional[models.Worker]:
+    reconcile_worker_job_counts(db, [preferred_worker_id] if preferred_worker_id else None)
     if preferred_worker_id:
         worker = get_worker(db, preferred_worker_id)
         if worker_capacity_available(worker):
