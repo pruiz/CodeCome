@@ -131,6 +131,18 @@ def test_has_open_blocking_questions_uses_open_status(monkeypatch):
     assert has_open_blocking_questions(object(), 7) is True
 
 
+def test_audit_has_open_blocking_questions():
+    question = crud.create_phase_question(FakeDb(), schemas.PhaseQuestionCreate(
+        audit_id=uuid4(),
+        phase_execution_id=10,
+        phase="phase-3",
+        question="Should this block?",
+    ))
+    db = FakeDb(question)
+
+    assert crud.audit_has_open_blocking_questions(db, question.audit_id) is True
+
+
 def test_normalize_ai_answer_defaults_confidence():
     answer = question_answering.normalize_ai_answer({"answer": "Proceed with validation.", "confidence": "certain"})
 

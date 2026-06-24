@@ -395,6 +395,14 @@ def dismiss_phase_question(db: Session, question_id: int, answered_by_user_id: i
     ))
 
 
+def audit_has_open_blocking_questions(db: Session, audit_id: UUID) -> bool:
+    return db.query(models.PhaseQuestion).filter(
+        models.PhaseQuestion.audit_id == audit_id,
+        models.PhaseQuestion.status == "OPEN",
+        models.PhaseQuestion.blocking.is_(True),
+    ).first() is not None
+
+
 def update_audit_status(db: Session, audit_id: UUID, new_status: str) -> Optional[models.Audit]:
     db_audit = get_audit(db, audit_id)
     if not db_audit:
