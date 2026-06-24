@@ -172,7 +172,6 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Prevent disabling or converting the last active human user.
 - [x] Show audit-level open/blocking question counts in audit header.
 - [x] Show open/blocking question counts on dashboard audit cards.
-- [ ] Show open/blocking question counts on dashboard audit cards.
 
 ## Notes
 
