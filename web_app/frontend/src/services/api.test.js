@@ -24,6 +24,20 @@ describe('api auth handling', () => {
     window.removeEventListener(authApi.authChangedEvent, listener);
   });
 
+  it('clears stale token for raw response API calls', async () => {
+    window.localStorage.setItem(authApi.tokenKey, 'stale-token');
+    const listener = vi.fn();
+    window.addEventListener(authApi.authChangedEvent, listener);
+    global.fetch = vi.fn(() => Promise.resolve(new Response('', { status: 401 })));
+
+    const response = await auditsApi.delete('audit-1');
+
+    expect(response.status).toBe(401);
+    expect(window.localStorage.getItem(authApi.tokenKey)).toBeNull();
+    expect(listener).toHaveBeenCalledTimes(1);
+    window.removeEventListener(authApi.authChangedEvent, listener);
+  });
+
   it('sends bearer token on protected API calls', async () => {
     window.localStorage.setItem(authApi.tokenKey, 'fresh-token');
     global.fetch = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ total: 0, audits: [] }), { status: 200 })));

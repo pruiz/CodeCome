@@ -175,6 +175,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Clear stale frontend auth tokens when WebSocket auth is rejected.
 - [x] Pass selected ZIP file into multipart audit upload from AuditCreator.
 - [x] Omit large audit config blobs from audit list responses.
+- [x] Clear stale frontend auth tokens for raw-response API calls.
 
 ## Notes
 

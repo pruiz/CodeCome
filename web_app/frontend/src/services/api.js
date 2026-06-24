@@ -6,16 +6,23 @@ function notifyAuthChanged() {
   window.dispatchEvent?.(new Event(AUTH_CHANGED_EVENT));
 }
 
+function clearAuthToken() {
+  window.localStorage?.removeItem(TOKEN_KEY);
+  notifyAuthChanged();
+}
+
 function authHeaders(extra = {}) {
   const token = window.localStorage?.getItem(TOKEN_KEY);
   return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
 }
 
-function apiFetch(url, options = {}) {
-  return fetch(url, {
+async function apiFetch(url, options = {}) {
+  const res = await fetch(url, {
     ...options,
     headers: authHeaders(options.headers || {}),
   });
+  if (res.status === 401) clearAuthToken();
+  return res;
 }
 
 async function parseResponse(res, fallbackMessage = 'Request failed') {
@@ -31,10 +38,6 @@ async function parseResponse(res, fallbackMessage = 'Request failed') {
   }
 
   if (!res.ok) {
-    if (res.status === 401) {
-      window.localStorage?.removeItem(TOKEN_KEY);
-      notifyAuthChanged();
-    }
     throw new Error(data?.detail || fallbackMessage);
   }
 
@@ -224,10 +227,7 @@ export const authApi = {
     return data;
   }),
   me: () => apiFetch(`${API_BASE}/auth/me`).then(res => parseResponse(res, 'Failed to load current user')),
-  logout: () => {
-    window.localStorage?.removeItem(TOKEN_KEY);
-    notifyAuthChanged();
-  },
+  logout: clearAuthToken,
   getToken: () => window.localStorage?.getItem(TOKEN_KEY),
   authChangedEvent: AUTH_CHANGED_EVENT,
 };
