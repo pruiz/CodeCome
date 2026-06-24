@@ -201,6 +201,8 @@ class AuditResponse(BaseModel):
     auto_continue: bool
     total_findings: int
     findings_by_status: Dict[str, int]
+    open_questions: int = 0
+    blocking_questions: int = 0
     created_at: datetime
     updated_at: datetime
     phase_executions: Optional[List[PhaseExecutionResponse]] = None

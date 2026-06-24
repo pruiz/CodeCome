@@ -21,6 +21,33 @@ import zipfile
 router = APIRouter()
 
 
+def audit_response(audit, db: Session, phase_executions=None) -> schemas.AuditResponse:
+    question_counts = crud.question_counts_for_audit(db, audit.id)
+    return schemas.AuditResponse(
+        id=audit.id,
+        name=audit.name,
+        status=audit.status,
+        current_phase=audit.current_phase,
+        assigned_worker_id=audit.assigned_worker_id,
+        question_owner_user_id=audit.question_owner_user_id,
+        workspace_path=audit.workspace_path,
+        source_type=audit.source_type,
+        source_location=audit.source_location,
+        has_codecome_yml=bool(audit.codecome_yml),
+        codecome_yml=audit.codecome_yml,
+        model_settings=audit.model_settings or {},
+        ai_review_enabled=audit.ai_review_enabled,
+        auto_continue=audit.auto_continue,
+        total_findings=audit.total_findings,
+        findings_by_status=audit.findings_by_status or {},
+        open_questions=question_counts["open_questions"],
+        blocking_questions=question_counts["blocking_questions"],
+        created_at=audit.created_at,
+        updated_at=audit.updated_at,
+        phase_executions=phase_executions,
+    )
+
+
 def next_audit_step(phase_executions, model_settings: dict | None = None) -> str:
     by_phase = {execution.phase: execution for execution in phase_executions}
     legacy_aliases = {
@@ -135,7 +162,7 @@ def list_audits(
 ):
     """List all audits with pagination and status filtering."""
     total, audits = crud.get_audits(db, skip, limit, status)
-    return schemas.AuditListResponse(total=total, audits=audits)
+    return schemas.AuditListResponse(total=total, audits=[audit_response(audit, db) for audit in audits])
 
 
 @router.get("/{audit_id}", response_model=schemas.AuditResponse)
@@ -147,27 +174,7 @@ def get_audit(audit_id: UUID, db: Session = Depends(get_db)):
 
     phase_execs = crud.get_phase_executions(db, audit_id)
     
-    return schemas.AuditResponse(
-        id=audit.id,
-        name=audit.name,
-        status=audit.status,
-        current_phase=audit.current_phase,
-        assigned_worker_id=audit.assigned_worker_id,
-        question_owner_user_id=audit.question_owner_user_id,
-        workspace_path=audit.workspace_path,
-        source_type=audit.source_type,
-        source_location=audit.source_location,
-        has_codecome_yml=bool(audit.codecome_yml),
-        codecome_yml=audit.codecome_yml,
-        model_settings=audit.model_settings or {},
-        ai_review_enabled=audit.ai_review_enabled,
-        auto_continue=audit.auto_continue,
-        total_findings=audit.total_findings,
-        findings_by_status=audit.findings_by_status or {},
-        created_at=audit.created_at,
-        updated_at=audit.updated_at,
-        phase_executions=phase_execs
-    )
+    return audit_response(audit, db, phase_execs)
 
 
 @router.patch("/{audit_id}", response_model=schemas.AuditResponse)

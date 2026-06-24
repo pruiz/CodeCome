@@ -431,6 +431,14 @@ def audit_has_open_blocking_questions(db: Session, audit_id: UUID) -> bool:
     ).first() is not None
 
 
+def question_counts_for_audit(db: Session, audit_id: UUID) -> dict[str, int]:
+    _, open_questions = get_phase_questions(db, audit_id=audit_id, status_filter="OPEN")
+    return {
+        "open_questions": len(open_questions),
+        "blocking_questions": sum(1 for question in open_questions if question.blocking),
+    }
+
+
 def update_audit_status(db: Session, audit_id: UUID, new_status: str) -> Optional[models.Audit]:
     db_audit = get_audit(db, audit_id)
     if not db_audit:

@@ -67,6 +67,11 @@ function AuditCard({ audit, onDelete }) {
         <div className="text-sm text-gray-400">
           Total Findings: <span className="text-white font-semibold">{audit.total_findings}</span>
         </div>
+        <div className="mt-1 text-sm text-gray-400">
+          Open Questions: <span className={audit.open_questions ? 'font-semibold text-amber-200' : 'font-semibold text-white'}>{audit.open_questions || 0}</span>
+          <span className="mx-2 text-gray-700">/</span>
+          Blocking: <span className={audit.blocking_questions ? 'font-semibold text-red-200' : 'font-semibold text-white'}>{audit.blocking_questions || 0}</span>
+        </div>
         <div className="flex gap-2 mt-1">
           {audit.findings_by_status && (
             <>

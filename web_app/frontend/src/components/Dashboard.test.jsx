@@ -11,9 +11,11 @@ vi.mock('../hooks/useAudits', () => ({
       {
         id: 'audit-1',
         name: 'Demo Audit',
-        status: 'ready',
-        total_findings: 0,
-        findings_by_status: {},
+      status: 'ready',
+      total_findings: 0,
+      open_questions: 2,
+      blocking_questions: 1,
+      findings_by_status: {},
         created_at: '2026-01-01T00:00:00Z',
       },
       {
@@ -21,6 +23,8 @@ vi.mock('../hooks/useAudits', () => ({
         name: 'Production Review',
         status: 'completed',
         total_findings: 3,
+        open_questions: 0,
+        blocking_questions: 0,
         findings_by_status: { CONFIRMED: 1 },
         created_at: '2026-01-02T00:00:00Z',
       },
@@ -75,5 +79,12 @@ describe('Dashboard', () => {
 
     expect(screen.getByText('Production Review')).toBeInTheDocument();
     expect(screen.queryByText('Demo Audit')).not.toBeInTheDocument();
+  });
+
+  it('shows open and blocking question counts on audit cards', () => {
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+
+    expect(screen.getAllByText((_, element) => element?.textContent?.includes('Open Questions: 2')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText((_, element) => element?.textContent?.includes('Blocking: 1')).length).toBeGreaterThan(0);
   });
 });

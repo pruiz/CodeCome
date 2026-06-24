@@ -143,6 +143,19 @@ def test_audit_has_open_blocking_questions():
     assert crud.audit_has_open_blocking_questions(db, question.audit_id) is True
 
 
+def test_question_counts_for_audit_counts_only_open_questions(monkeypatch):
+    class Question:
+        def __init__(self, blocking):
+            self.blocking = blocking
+
+    monkeypatch.setattr(crud, "get_phase_questions", lambda db, audit_id=None, status_filter=None: (3, [Question(True), Question(False)]))
+
+    assert crud.question_counts_for_audit(object(), uuid4()) == {
+        "open_questions": 2,
+        "blocking_questions": 1,
+    }
+
+
 def test_normalize_ai_answer_defaults_confidence():
     answer = question_answering.normalize_ai_answer({"answer": "Proceed with validation.", "confidence": "certain"})
 
