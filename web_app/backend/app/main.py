@@ -8,6 +8,7 @@ import os
 from sqlalchemy import text
 
 from app.database import engine, Base
+from app import crud
 from app.api import audits, phases, findings, logs, preview, websockets, workers, users, questions, auth
 from app.auth import verify_access_token
 from app.config import settings
@@ -18,6 +19,17 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+
+def authenticated_user_from_bearer(auth_header: str, db):
+    scheme, _, token = (auth_header or "").partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    payload = verify_access_token(token)
+    user = crud.get_user(db, int(payload.get("sub") or 0))
+    if not user or not user.active:
+        raise HTTPException(status_code=401, detail="User not found or inactive")
+    return user
 
 
 def ensure_runtime_schema():
@@ -143,13 +155,14 @@ async def require_api_auth(request, call_next):
     if path in ("/api/auth/login", "/api/auth/bootstrap", "/api/auth/status"):
         return await call_next(request)
     auth_header = request.headers.get("authorization") or ""
-    scheme, _, token = auth_header.partition(" ")
-    if scheme.lower() != "bearer" or not token:
-        return JSONResponse(status_code=401, content={"detail": "Missing bearer token"})
+    from app.database import SessionLocal
+    db = SessionLocal()
     try:
-        verify_access_token(token)
+        authenticated_user_from_bearer(auth_header, db)
     except HTTPException as exc:
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    finally:
+        db.close()
     return await call_next(request)
 
 # Include routers

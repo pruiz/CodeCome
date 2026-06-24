@@ -7,6 +7,7 @@ from app import crud, schemas
 from app.auth import create_access_token, verify_access_token
 from app.api import auth as auth_api
 from app.api import websockets
+from app.main import authenticated_user_from_bearer
 
 
 def test_access_token_roundtrip():
@@ -57,3 +58,26 @@ def test_websocket_user_from_token_rejects_bad_token(monkeypatch):
     monkeypatch.setattr(crud, "get_user", lambda db, user_id: None)
 
     assert websockets.websocket_user_from_token("bad-token", object()) is None
+
+
+def test_authenticated_user_from_bearer_rejects_inactive_user(monkeypatch):
+    user = SimpleNamespace(id=7, username="derek", active=False)
+    token = create_access_token(user, expires_in_seconds=60)
+    monkeypatch.setattr(crud, "get_user", lambda db, user_id: user)
+
+    with pytest.raises(HTTPException) as exc:
+        authenticated_user_from_bearer(f"Bearer {token}", object())
+
+    assert exc.value.status_code == 401
+    assert "inactive" in exc.value.detail
+
+
+def test_authenticated_user_from_bearer_rejects_missing_user(monkeypatch):
+    user = SimpleNamespace(id=7, username="derek", active=True)
+    token = create_access_token(user, expires_in_seconds=60)
+    monkeypatch.setattr(crud, "get_user", lambda db, user_id: None)
+
+    with pytest.raises(HTTPException) as exc:
+        authenticated_user_from_bearer(f"Bearer {token}", object())
+
+    assert exc.value.status_code == 401
