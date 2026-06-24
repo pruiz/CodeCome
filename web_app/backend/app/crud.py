@@ -56,6 +56,13 @@ def get_user_by_username(db: Session, username: str) -> Optional[models.User]:
     return db.query(models.User).filter(models.User.username == username).first()
 
 
+def has_active_human_users(db: Session) -> bool:
+    return db.query(models.User).filter(
+        models.User.active.is_(True),
+        models.User.is_llm_user.is_(False),
+    ).first() is not None
+
+
 def get_users(db: Session, skip: int = 0, limit: int = 100, active: Optional[bool] = None, is_llm_user: Optional[bool] = None) -> tuple[int, List[models.User]]:
     query = db.query(models.User)
     count_query = db.query(func.count(models.User.id))

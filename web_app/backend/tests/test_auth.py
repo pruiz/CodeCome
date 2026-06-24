@@ -5,6 +5,7 @@ from fastapi import HTTPException
 
 from app import crud, schemas
 from app.auth import create_access_token, verify_access_token
+from app.api import auth as auth_api
 
 
 def test_access_token_roundtrip():
@@ -33,3 +34,9 @@ def test_human_user_can_verify_password():
     ))
 
     assert crud.verify_password("secret", user.password_hash) is True
+
+
+def test_auth_status_reports_bootstrap_required(monkeypatch):
+    monkeypatch.setattr(crud, "has_active_human_users", lambda db: False)
+
+    assert auth_api.auth_status(object()) == {"bootstrap_required": True}

@@ -9,6 +9,7 @@ from sqlalchemy import text
 
 from app.database import engine, Base
 from app.api import audits, phases, findings, logs, preview, websockets, workers, users, questions, auth
+from app.auth import verify_access_token
 from app.config import settings
 
 # Configure logging
@@ -130,6 +131,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def require_api_auth(request, call_next):
+    path = request.url.path
+    if request.method == "OPTIONS" or path in ("/", "/health"):
+        return await call_next(request)
+    if not path.startswith("/api/"):
+        return await call_next(request)
+    if path in ("/api/auth/login", "/api/auth/bootstrap", "/api/auth/status"):
+        return await call_next(request)
+    auth_header = request.headers.get("authorization") or ""
+    scheme, _, token = auth_header.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return JSONResponse(status_code=401, content={"detail": "Missing bearer token"})
+    try:
+        verify_access_token(token)
+    except HTTPException as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    return await call_next(request)
 
 # Include routers
 app.include_router(audits.router, prefix="/api/audits", tags=["audits"])
