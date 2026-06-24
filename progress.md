@@ -189,6 +189,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Add All/Human/AI filters to the Users page.
 - [x] Remove obsolete AI review badge from audit detail header.
 - [x] Add active/inactive filters to the Users page.
+- [x] Show only relevant fields when creating human or fake AI users.
 
 ## Notes
 

@@ -166,15 +166,17 @@ export default function Users() {
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
           <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="rounded border border-gray-800 bg-gray-950 px-3 py-2" placeholder="username" />
           <input value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} className="rounded border border-gray-800 bg-gray-950 px-3 py-2" placeholder="display name" />
-          <input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} type="password" className="rounded border border-gray-800 bg-gray-950 px-3 py-2" placeholder="password for human users" />
-          <input value={form.llm_model} onChange={(e) => setForm({ ...form, llm_model: e.target.value })} className="rounded border border-gray-800 bg-gray-950 px-3 py-2" placeholder="AI model, e.g. local/qwen3.6-27b" />
           <label className="flex items-center gap-2 rounded border border-gray-800 bg-gray-950 px-3 py-2 text-sm">
             <input type="checkbox" checked={form.is_llm_user} onChange={(e) => setForm({ ...form, is_llm_user: e.target.checked })} /> Fake AI user
           </label>
-          <label className="flex items-center gap-2 rounded border border-gray-800 bg-gray-950 px-3 py-2 text-sm">
-            <input type="checkbox" checked={form.auto_answer_enabled} onChange={(e) => setForm({ ...form, auto_answer_enabled: e.target.checked })} /> Auto-answer questions
-          </label>
-          <textarea value={form.llm_context} onChange={(e) => setForm({ ...form, llm_context: e.target.value })} className="h-28 rounded border border-gray-800 bg-gray-950 px-3 py-2 md:col-span-2" placeholder="Fake AI context/persona..." />
+          {!form.is_llm_user && <input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} type="password" className="rounded border border-gray-800 bg-gray-950 px-3 py-2" aria-label="New user password" placeholder="password for human users" />}
+          {form.is_llm_user && <input value={form.llm_model} onChange={(e) => setForm({ ...form, llm_model: e.target.value })} className="rounded border border-gray-800 bg-gray-950 px-3 py-2" aria-label="New fake AI model" placeholder="AI model, e.g. local/qwen3.6-27b" />}
+          {form.is_llm_user && (
+            <label className="flex items-center gap-2 rounded border border-gray-800 bg-gray-950 px-3 py-2 text-sm">
+              <input type="checkbox" checked={form.auto_answer_enabled} onChange={(e) => setForm({ ...form, auto_answer_enabled: e.target.checked })} /> Auto-answer questions
+            </label>
+          )}
+          {form.is_llm_user && <textarea value={form.llm_context} onChange={(e) => setForm({ ...form, llm_context: e.target.value })} className="h-28 rounded border border-gray-800 bg-gray-950 px-3 py-2 md:col-span-2" aria-label="New fake AI context" placeholder="Fake AI context/persona..." />}
         </div>
         <button onClick={createUser} disabled={!form.username.trim() || (!form.is_llm_user && !form.password.trim())} className="mt-4 rounded bg-blue-600 px-4 py-2 font-semibold hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-gray-700">Create User</button>
       </div>

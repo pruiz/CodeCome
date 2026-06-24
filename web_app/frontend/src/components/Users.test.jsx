@@ -35,8 +35,8 @@ describe('Users', () => {
     expect(await screen.findByText('Human Owner')).toBeInTheDocument();
     await user.type(screen.getByPlaceholderText('username'), 'ai-reviewer');
     await user.type(screen.getAllByPlaceholderText('display name')[0], 'AI Reviewer');
-    await user.type(screen.getByPlaceholderText(/AI model/i), 'local/qwen3.6-27b');
-    await user.type(screen.getAllByPlaceholderText(/context\/persona/i)[0], 'Answer carefully.');
+    await user.type(screen.getByLabelText('New fake AI model'), 'local/qwen3.6-27b');
+    await user.type(screen.getByLabelText('New fake AI context'), 'Answer carefully.');
     await user.click(screen.getByRole('button', { name: 'Create User' }));
 
     await waitFor(() => {
@@ -60,8 +60,20 @@ describe('Users', () => {
     await user.type(screen.getByPlaceholderText('username'), 'new-human');
     await user.click(screen.getByLabelText('Fake AI user'));
 
+    expect(screen.getByLabelText('New user password')).toBeInTheDocument();
+    expect(screen.queryByLabelText('New fake AI model')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('New fake AI context')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create User' })).toBeDisabled();
     expect(global.fetch.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+  });
+
+  it('shows fake AI fields only for fake AI users', async () => {
+    render(<Users />);
+
+    expect(await screen.findByText('Human Owner')).toBeInTheDocument();
+    expect(screen.getByLabelText('New fake AI model')).toBeInTheDocument();
+    expect(screen.getByLabelText('New fake AI context')).toBeInTheDocument();
+    expect(screen.queryByLabelText('New user password')).not.toBeInTheDocument();
   });
 
   it('edits fake AI user model and context', async () => {
