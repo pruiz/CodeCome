@@ -64,16 +64,16 @@ Goal: successful phases that produce questions for the user must pause the workf
 
 ### Data Model TODO
 
-- [ ] Add `users` table with username, password hash, display name, active flag, fake-AI fields, and timestamps.
-- [ ] Add `audits.question_owner_user_id` runtime-schema column and model/schema/API support.
+- [x] Add `users` table with username, password hash, display name, active flag, fake-AI fields, and timestamps.
+- [x] Add `audits.question_owner_user_id` runtime-schema column and model/schema/API support.
 - [ ] Add `phase_questions` table with audit, phase execution, phase, question, context, blocking flag, status, assignment, answer metadata, and timestamps.
 - [ ] Add durable answer context file generation at `runs/user-answers-context.md`.
 
 ### Backend/API TODO
 
-- [ ] Add user CRUD APIs for listing users and creating/editing fake AI users.
+- [x] Add user CRUD APIs for listing users and creating/editing fake AI users.
 - [ ] Add minimal auth foundation for human login users.
-- [ ] Add audit update support for `question_owner_user_id`.
+- [x] Add audit update support for `question_owner_user_id`.
 - [ ] Add question APIs: list by audit, list by phase execution, answer, dismiss, auto-answer, continue-after-questions.
 - [ ] Add question extraction/detection after successful phase completion.
 - [ ] Add auto-continue gate: do not queue next phase while blocking questions are open.
@@ -93,7 +93,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 
 ### Testing/Quality TODO
 
-- [ ] Add backend tests for user/fake-AI CRUD.
+- [x] Add backend tests for user/fake-AI CRUD.
 - [ ] Add backend tests for question creation, answer, dismiss, and blocking gate.
 - [ ] Add backend tests for fake AI answer normalization and continuation.
 - [ ] Add frontend tests for question owner selector and question answer UI.

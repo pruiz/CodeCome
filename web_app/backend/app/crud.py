@@ -3,11 +3,86 @@ from sqlalchemy import select, func, update, delete
 from typing import List, Dict, Any, Optional
 from uuid import UUID
 from datetime import datetime
+import hashlib
+import hmac
+import secrets
 from app import models, schemas
 from app.config import settings
 
 
 # === Audit CRUD ===
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 120_000).hex()
+    return f"pbkdf2_sha256${salt}${digest}"
+
+
+def verify_password(password: str, password_hash: str | None) -> bool:
+    if not password_hash:
+        return False
+    try:
+        algorithm, salt, digest = password_hash.split("$", 2)
+    except ValueError:
+        return False
+    if algorithm != "pbkdf2_sha256":
+        return False
+    candidate = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 120_000).hex()
+    return hmac.compare_digest(candidate, digest)
+
+
+def create_user(db: Session, user_data: schemas.UserCreate) -> models.User:
+    db_user = models.User(
+        username=user_data.username,
+        display_name=user_data.display_name or user_data.username,
+        password_hash=hash_password(user_data.password) if user_data.password else None,
+        is_llm_user=user_data.is_llm_user,
+        llm_model=user_data.llm_model,
+        llm_context=user_data.llm_context,
+        auto_answer_enabled=user_data.auto_answer_enabled,
+        active=user_data.active,
+    )
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+
+def get_user(db: Session, user_id: int) -> Optional[models.User]:
+    return db.query(models.User).filter(models.User.id == user_id).first()
+
+
+def get_user_by_username(db: Session, username: str) -> Optional[models.User]:
+    return db.query(models.User).filter(models.User.username == username).first()
+
+
+def get_users(db: Session, skip: int = 0, limit: int = 100, active: Optional[bool] = None, is_llm_user: Optional[bool] = None) -> tuple[int, List[models.User]]:
+    query = db.query(models.User)
+    count_query = db.query(func.count(models.User.id))
+    if active is not None:
+        query = query.filter(models.User.active == active)
+        count_query = count_query.filter(models.User.active == active)
+    if is_llm_user is not None:
+        query = query.filter(models.User.is_llm_user == is_llm_user)
+        count_query = count_query.filter(models.User.is_llm_user == is_llm_user)
+    total = count_query.scalar()
+    users = query.order_by(models.User.username.asc()).offset(skip).limit(limit).all()
+    return total, users
+
+
+def update_user(db: Session, user_id: int, user_data: schemas.UserUpdate) -> Optional[models.User]:
+    db_user = get_user(db, user_id)
+    if not db_user:
+        return None
+    data = user_data.model_dump(exclude_unset=True)
+    password = data.pop("password", None)
+    if password:
+        db_user.password_hash = hash_password(password)
+    for key, value in data.items():
+        setattr(db_user, key, value)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
 
 def create_audit(db: Session, audit_data: schemas.AuditCreate) -> models.Audit:
     db_audit = models.Audit(
@@ -18,6 +93,7 @@ def create_audit(db: Session, audit_data: schemas.AuditCreate) -> models.Audit:
         codecome_yml=audit_data.codecome_yml,
         model_settings=audit_data.model_settings,
         assigned_worker_id=audit_data.worker_id,
+        question_owner_user_id=audit_data.question_owner_user_id,
         ai_review_enabled=audit_data.ai_review_enabled,
         auto_continue=audit_data.auto_continue,
         status="initializing",

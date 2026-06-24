@@ -105,6 +105,9 @@ def create_audit(audit_data: schemas.AuditCreate, db: Session = Depends(get_db))
     if audit_data.worker_id and not worker:
         workspace_manager.cleanup_workspace(workspace_path)
         raise HTTPException(status_code=404, detail="Worker not found")
+    if audit_data.question_owner_user_id and not crud.get_user(db, audit_data.question_owner_user_id):
+        workspace_manager.cleanup_workspace(workspace_path)
+        raise HTTPException(status_code=404, detail="Question owner user not found")
 
     db_audit = crud.create_audit(db, schemas.AuditCreate(
         name=audit_data.name,
@@ -115,6 +118,7 @@ def create_audit(audit_data: schemas.AuditCreate, db: Session = Depends(get_db))
         ai_review_enabled=audit_data.ai_review_enabled,
         auto_continue=audit_data.auto_continue,
         worker_id=audit_data.worker_id,
+        question_owner_user_id=audit_data.question_owner_user_id,
         workspace_path=str(workspace_path),
     ))
     
@@ -148,6 +152,7 @@ def get_audit(audit_id: UUID, db: Session = Depends(get_db)):
         status=audit.status,
         current_phase=audit.current_phase,
         assigned_worker_id=audit.assigned_worker_id,
+        question_owner_user_id=audit.question_owner_user_id,
         workspace_path=audit.workspace_path,
         source_type=audit.source_type,
         source_location=audit.source_location,
@@ -167,6 +172,9 @@ def get_audit(audit_id: UUID, db: Session = Depends(get_db)):
 @router.patch("/{audit_id}", response_model=schemas.AuditResponse)
 def update_audit(audit_id: UUID, audit_data: schemas.AuditUpdate, db: Session = Depends(get_db)):
     """Update audit configuration."""
+    update_payload = audit_data.model_dump(exclude_unset=True)
+    if update_payload.get("question_owner_user_id") and not crud.get_user(db, update_payload["question_owner_user_id"]):
+        raise HTTPException(status_code=404, detail="Question owner user not found")
     audit = crud.update_audit(db, audit_id, audit_data)
     if not audit:
         raise HTTPException(status_code=404, detail="Audit not found")

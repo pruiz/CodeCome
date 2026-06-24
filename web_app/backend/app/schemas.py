@@ -15,6 +15,7 @@ class AuditCreate(BaseModel):
     ai_review_enabled: bool = False
     auto_continue: bool = True
     worker_id: Optional[int] = None
+    question_owner_user_id: Optional[int] = None
     workspace_path: str = ""
 
 
@@ -25,7 +26,50 @@ class AuditUpdate(BaseModel):
     ai_review_enabled: Optional[bool] = None
     auto_continue: Optional[bool] = None
     worker_id: Optional[int] = None
+    question_owner_user_id: Optional[int] = None
     user_notes: Optional[str] = None
+
+
+class UserCreate(BaseModel):
+    username: str = Field(..., min_length=1, max_length=255)
+    display_name: Optional[str] = Field(None, max_length=255)
+    password: Optional[str] = Field(None, min_length=1)
+    is_llm_user: bool = False
+    llm_model: Optional[str] = None
+    llm_context: Optional[str] = None
+    auto_answer_enabled: bool = True
+    active: bool = True
+
+
+class UserUpdate(BaseModel):
+    display_name: Optional[str] = Field(None, max_length=255)
+    password: Optional[str] = Field(None, min_length=1)
+    is_llm_user: Optional[bool] = None
+    llm_model: Optional[str] = None
+    llm_context: Optional[str] = None
+    auto_answer_enabled: Optional[bool] = None
+    active: Optional[bool] = None
+
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    display_name: str
+    is_llm_user: bool
+    llm_model: Optional[str] = None
+    llm_context: Optional[str] = None
+    auto_answer_enabled: bool
+    active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class UserListResponse(BaseModel):
+    total: int
+    users: List[UserResponse]
 
 
 class PhaseExecutionResponse(BaseModel):
@@ -83,6 +127,7 @@ class AuditResponse(BaseModel):
     status: str
     current_phase: Optional[str] = None
     assigned_worker_id: Optional[int] = None
+    question_owner_user_id: Optional[int] = None
     workspace_path: str
     source_type: Optional[str] = None
     source_location: Optional[str] = None

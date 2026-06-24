@@ -8,7 +8,7 @@ import os
 from sqlalchemy import text
 
 from app.database import engine, Base
-from app.api import audits, phases, findings, logs, preview, websockets, workers
+from app.api import audits, phases, findings, logs, preview, websockets, workers, users
 from app.config import settings
 
 # Configure logging
@@ -23,12 +23,14 @@ def ensure_runtime_schema():
     """Apply lightweight schema additions when running without Alembic."""
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE audits ADD COLUMN IF NOT EXISTS assigned_worker_id INTEGER"))
+        conn.execute(text("ALTER TABLE audits ADD COLUMN IF NOT EXISTS question_owner_user_id INTEGER"))
         conn.execute(text("ALTER TABLE phase_executions ADD COLUMN IF NOT EXISTS worker_id INTEGER"))
         conn.execute(text("ALTER TABLE phase_executions ADD COLUMN IF NOT EXISTS command_line TEXT"))
         conn.execute(text("ALTER TABLE phase_executions ADD COLUMN IF NOT EXISTS remote_job_dir TEXT"))
         conn.execute(text("ALTER TABLE phase_executions ADD COLUMN IF NOT EXISTS remote_pid VARCHAR(64)"))
         conn.execute(text("ALTER TABLE phase_executions ADD COLUMN IF NOT EXISTS local_pid INTEGER"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_audits_worker ON audits(assigned_worker_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_audits_question_owner ON audits(question_owner_user_id)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_phase_executions_worker ON phase_executions(worker_id)"))
 
 
@@ -135,6 +137,7 @@ app.include_router(phases.router, prefix="/api/phases", tags=["phases"])
 app.include_router(findings.router, prefix="/api/findings", tags=["findings"])
 app.include_router(logs.router, prefix="/api/logs", tags=["logs"])
 app.include_router(workers.router, prefix="/api/workers", tags=["workers"])
+app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(preview.router, prefix="/api/preview", tags=["preview"])
 app.include_router(websockets.router, prefix="/ws", tags=["websockets"])
 

@@ -76,6 +76,7 @@ def test_create_audit_sets_worker_and_workspace():
         source_location="/src.zip",
         workspace_path="/workspaces/audit-demo",
         worker_id=7,
+        question_owner_user_id=3,
         auto_continue=False,
     )
 
@@ -84,6 +85,7 @@ def test_create_audit_sets_worker_and_workspace():
     assert audit.name == "demo"
     assert audit.workspace_path.endswith("/audit-demo")
     assert audit.assigned_worker_id == 7
+    assert audit.question_owner_user_id == 3
     assert audit.auto_continue is False
     assert audit.status == "initializing"
     assert db.added == [audit]

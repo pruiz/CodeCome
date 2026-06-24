@@ -30,6 +30,7 @@ class Audit(Base):
     # Orchestration
     current_phase = Column(String(20))
     assigned_worker_id = Column(Integer, ForeignKey("workers.id", ondelete="SET NULL"))
+    question_owner_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     ai_review_enabled = Column(Boolean, default=False)
     auto_continue = Column(Boolean, default=True)
     
@@ -48,6 +49,29 @@ class Audit(Base):
         Index("idx_audits_created_at", "created_at", postgresql_using="brin"),
         Index("idx_audits_current_phase", "current_phase"),
         Index("idx_audits_worker", "assigned_worker_id"),
+        Index("idx_audits_question_owner", "question_owner_user_id"),
+    )
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(255), nullable=False, unique=True)
+    display_name = Column(String(255), nullable=False)
+    password_hash = Column(Text)
+    is_llm_user = Column(Boolean, default=False, nullable=False)
+    llm_model = Column(String(255))
+    llm_context = Column(Text)
+    auto_answer_enabled = Column(Boolean, default=True, nullable=False)
+    active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("idx_users_username", "username"),
+        Index("idx_users_is_llm", "is_llm_user"),
+        Index("idx_users_active", "active"),
     )
 
 

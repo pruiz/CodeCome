@@ -4,11 +4,17 @@ import pytest
 
 from app.api import findings as findings_api
 from app.database import SessionLocal
+from app.main import ensure_runtime_schema
 from app.models import Audit, Finding
 from app.schemas import FindingUpdate
 
 
 def test_update_finding_api_with_real_session(tmp_path):
+    try:
+      ensure_runtime_schema()
+    except Exception as exc:
+      pytest.skip(f"database unavailable for integration-style test: {exc}")
+
     db = SessionLocal()
     audit_id = uuid4()
     finding_id = "CC-TST1"
@@ -49,9 +55,13 @@ def test_update_finding_api_with_real_session(tmp_path):
       assert updated.frontmatter["status"] == "CONFIRMED"
       assert updated.frontmatter["review_history"][0]["note"] == "integration note"
     except Exception as exc:
+      db.rollback()
       pytest.skip(f"database unavailable for integration-style test: {exc}")
     finally:
-      db.query(Finding).filter(Finding.id == finding_id).delete()
-      db.query(Audit).filter(Audit.id == audit_id).delete()
-      db.commit()
+      try:
+        db.query(Finding).filter(Finding.id == finding_id).delete()
+        db.query(Audit).filter(Audit.id == audit_id).delete()
+        db.commit()
+      except Exception:
+        db.rollback()
       db.close()
