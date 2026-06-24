@@ -20,6 +20,23 @@ function UserBadge({ user }) {
   );
 }
 
+function ToggleSwitch({ checked, label, onChange }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className="flex items-center justify-between gap-4 rounded border border-gray-800 bg-gray-950 px-3 py-2 text-sm hover:border-cyan-800"
+    >
+      <span>{label}</span>
+      <span className={`relative h-6 w-11 rounded-full border transition ${checked ? 'border-cyan-500 bg-cyan-500/40' : 'border-gray-700 bg-gray-800'}`}>
+        <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
+      </span>
+    </button>
+  );
+}
+
 function UserCard({ user, onChanged }) {
   const [form, setForm] = useState({
     display_name: user.display_name || '',
@@ -180,15 +197,11 @@ export default function Users() {
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
           <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="rounded border border-gray-800 bg-gray-950 px-3 py-2" placeholder="username" />
           <input value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} className="rounded border border-gray-800 bg-gray-950 px-3 py-2" placeholder="display name" />
-          <label className="flex items-center gap-2 rounded border border-gray-800 bg-gray-950 px-3 py-2 text-sm">
-            <input type="checkbox" checked={form.is_llm_user} onChange={(e) => setForm({ ...form, is_llm_user: e.target.checked })} /> Fake AI user
-          </label>
+          <ToggleSwitch checked={form.is_llm_user} label="Fake AI user" onChange={(value) => setForm({ ...form, is_llm_user: value })} />
           {!form.is_llm_user && <input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} type="password" className="rounded border border-gray-800 bg-gray-950 px-3 py-2" aria-label="New user password" placeholder="password for human users" />}
           {form.is_llm_user && <input value={form.llm_model} onChange={(e) => setForm({ ...form, llm_model: e.target.value })} className="rounded border border-gray-800 bg-gray-950 px-3 py-2" aria-label="New fake AI model" placeholder="AI model, e.g. local/qwen3.6-27b" />}
           {form.is_llm_user && (
-            <label className="flex items-center gap-2 rounded border border-gray-800 bg-gray-950 px-3 py-2 text-sm">
-              <input type="checkbox" checked={form.auto_answer_enabled} onChange={(e) => setForm({ ...form, auto_answer_enabled: e.target.checked })} /> Auto-answer questions
-            </label>
+            <ToggleSwitch checked={form.auto_answer_enabled} label="Auto-answer questions" onChange={(value) => setForm({ ...form, auto_answer_enabled: value })} />
           )}
           {form.is_llm_user && <textarea value={form.llm_context} onChange={(e) => setForm({ ...form, llm_context: e.target.value })} className="h-28 rounded border border-gray-800 bg-gray-950 px-3 py-2 md:col-span-2" aria-label="New fake AI context" placeholder="Fake AI context/persona..." />}
         </div>

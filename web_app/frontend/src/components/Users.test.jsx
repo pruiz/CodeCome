@@ -58,7 +58,7 @@ describe('Users', () => {
 
     expect(await screen.findByText('Human Owner')).toBeInTheDocument();
     await user.type(screen.getByPlaceholderText('username'), 'new-human');
-    await user.click(screen.getByLabelText('Fake AI user'));
+    await user.click(screen.getByRole('switch', { name: 'Fake AI user' }));
 
     expect(screen.getByLabelText('New user password')).toBeInTheDocument();
     expect(screen.queryByLabelText('New fake AI model')).not.toBeInTheDocument();
@@ -83,7 +83,7 @@ describe('Users', () => {
     expect(await screen.findByText('Human Owner')).toBeInTheDocument();
     await user.type(screen.getByLabelText('New fake AI model'), 'local/hidden-model');
     await user.type(screen.getByLabelText('New fake AI context'), 'Hidden context.');
-    await user.click(screen.getByLabelText('Fake AI user'));
+    await user.click(screen.getByRole('switch', { name: 'Fake AI user' }));
     await user.type(screen.getByPlaceholderText('username'), 'new-human');
     await user.type(screen.getByLabelText('New user password'), 'secret-password');
     await user.click(screen.getByRole('button', { name: 'Create User' }));
