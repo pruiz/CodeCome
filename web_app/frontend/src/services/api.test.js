@@ -34,4 +34,32 @@ describe('api auth handling', () => {
       headers: expect.objectContaining({ Authorization: 'Bearer fresh-token' }),
     }));
   });
+
+  it('uploads zip audits as multipart with audit settings', async () => {
+    window.localStorage.setItem(authApi.tokenKey, 'fresh-token');
+    const file = new File(['zip-bytes'], 'target.zip', { type: 'application/zip' });
+    global.fetch = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ id: 'audit-1' }), { status: 200 })));
+
+    await auditsApi.uploadZip({
+      file,
+      name: 'Zip Audit',
+      workerId: '2',
+      questionOwnerUserId: '7',
+      aiReviewEnabled: true,
+      autoContinue: true,
+      codecomeYml: 'project: demo',
+    });
+
+    const [, options] = global.fetch.mock.calls[0];
+    expect(String(global.fetch.mock.calls[0][0])).toContain('/api/audits/upload-zip');
+    expect(options.headers.Authorization).toBe('Bearer fresh-token');
+    expect(options.body).toBeInstanceOf(FormData);
+    expect(options.body.get('file')).toBe(file);
+    expect(options.body.get('name')).toBe('Zip Audit');
+    expect(options.body.get('worker_id')).toBe('2');
+    expect(options.body.get('question_owner_user_id')).toBe('7');
+    expect(options.body.get('ai_review_enabled')).toBe('true');
+    expect(options.body.get('auto_continue')).toBe('true');
+    expect(options.body.get('codecome_yml')).toBe('project: demo');
+  });
 });

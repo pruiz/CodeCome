@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from uuid import UUID
@@ -305,9 +305,13 @@ def pause_audit(audit_id: UUID, db: Session = Depends(get_db)):
 
 @router.post("/upload-zip", response_model=schemas.AuditResponse)
 async def upload_zip(
-    name: str,
+    name: str = Form(...),
     file: UploadFile = File(...),
-    codecome_yml: Optional[str] = Query(None),
+    codecome_yml: Optional[str] = Form(None),
+    worker_id: Optional[int] = Form(None),
+    question_owner_user_id: Optional[int] = Form(None),
+    ai_review_enabled: bool = Form(False),
+    auto_continue: bool = Form(False),
     db: Session = Depends(get_db)
 ):
     """Upload ZIP file and create audit."""
@@ -344,13 +348,24 @@ async def upload_zip(
             yml_content = default_yml.read_text()
     
     workspace_manager.write_codecome_yml(workspace_path, yml_content)
-    
+
+    if worker_id and not crud.get_worker(db, worker_id):
+        workspace_manager.cleanup_workspace(workspace_path)
+        raise HTTPException(status_code=404, detail="Worker not found")
+    if question_owner_user_id and not crud.get_user(db, question_owner_user_id):
+        workspace_manager.cleanup_workspace(workspace_path)
+        raise HTTPException(status_code=404, detail="Question owner user not found")
+     
     # Create audit record
     db_audit = crud.create_audit(db, schemas.AuditCreate(
         name=name,
         source_type="zip",
         source_location=file.filename,
         codecome_yml=yml_content,
+        worker_id=worker_id,
+        question_owner_user_id=question_owner_user_id,
+        ai_review_enabled=ai_review_enabled,
+        auto_continue=auto_continue,
         workspace_path=str(workspace_path),
     ))
     

@@ -50,9 +50,17 @@ export const auditsApi = {
     }).then(res => parseResponse(res, 'Failed to create audit'));
   },
   uploadZip: (formData) => {
-    return apiFetch(`${API_BASE}/audits/upload-zip/?name=${encodeURIComponent(formData.name)}`, {
+    const body = new FormData();
+    body.append('file', formData.file);
+    body.append('name', formData.name);
+    if (formData.codecomeYml) body.append('codecome_yml', formData.codecomeYml);
+    if (formData.workerId) body.append('worker_id', String(formData.workerId));
+    if (formData.questionOwnerUserId) body.append('question_owner_user_id', String(formData.questionOwnerUserId));
+    body.append('ai_review_enabled', String(!!formData.aiReviewEnabled));
+    body.append('auto_continue', String(!!formData.autoContinue));
+    return apiFetch(`${API_BASE}/audits/upload-zip`, {
       method: 'POST',
-      body: formData.file
+      body
     }).then(res => parseResponse(res, 'Failed to upload audit'));
   },
   list: (params = {}) => {
