@@ -3,7 +3,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from app import crud, schemas
-from app.api.audits import audit_response, next_audit_step, sandbox_start_command
+from app.api.audits import audit_response, next_audit_step, sandbox_runtime_env, sandbox_start_command
 from app.utils.codecome_wrapper import CodeComeExecutor
 from app.api import logs, workers
 from app.workers.phase_tasks import build_command_line, status_phase
@@ -164,6 +164,16 @@ def test_sandbox_start_command_defaults_when_missing():
     audit = SimpleNamespace(codecome_yml="project:\n  name: demo\n")
 
     assert sandbox_start_command(audit) == "./sandbox/scripts/up.sh"
+
+
+def test_sandbox_runtime_env_is_audit_specific(tmp_path):
+    audit = SimpleNamespace(id="11111111-2222-3333-4444-555555555555")
+
+    env = sandbox_runtime_env(audit, tmp_path)
+
+    assert env["COMPOSE_PROJECT_NAME"] == "codecome_11111111222233334444555555555555"
+    assert env["CODECOME_AUDIT_ID"] == str(audit.id)
+    assert env["CODECOME_WORKSPACE"] == str(tmp_path)
 
 
 def test_worker_response_redacts_ssh_secrets():

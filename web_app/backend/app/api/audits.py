@@ -6,6 +6,8 @@ from pathlib import Path
 from fastapi.responses import FileResponse, StreamingResponse
 import io
 from datetime import datetime
+import os
+import re
 import subprocess
 
 from app.database import get_db
@@ -30,6 +32,18 @@ def sandbox_start_command(audit) -> str:
         config = {}
     command = ((config.get("environment") or {}).get("startup_command") or "./sandbox/scripts/up.sh")
     return str(command).strip() or "./sandbox/scripts/up.sh"
+
+
+def sandbox_runtime_env(audit, workspace_path: Path) -> dict:
+    audit_slug = re.sub(r"[^a-z0-9]+", "", str(audit.id).lower()) or "audit"
+    project_name = f"codecome_{audit_slug}"[:63]
+    env = os.environ.copy()
+    env.update({
+        "COMPOSE_PROJECT_NAME": project_name,
+        "CODECOME_AUDIT_ID": str(audit.id),
+        "CODECOME_WORKSPACE": str(workspace_path),
+    })
+    return env
 
 
 def audit_response(audit, db: Session, phase_executions=None, include_config: bool = True) -> schemas.AuditResponse:
@@ -302,6 +316,7 @@ def start_audit_sandbox(audit_id: UUID, db: Session = Depends(get_db)):
             shell=True,
             text=True,
             capture_output=True,
+            env=sandbox_runtime_env(audit, workspace_path),
             timeout=900,
         )
     except subprocess.TimeoutExpired as exc:
