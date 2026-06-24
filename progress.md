@@ -170,6 +170,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Add question owner selection to audit creation.
 - [x] Add tests for API auth middleware route enforcement.
 - [x] Prevent disabling or converting the last active human user.
+- [x] Show audit-level open/blocking question counts in audit header.
 
 ## Notes
 

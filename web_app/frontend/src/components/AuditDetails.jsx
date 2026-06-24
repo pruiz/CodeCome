@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAudit } from '../hooks/useAudits';
-import { auditsApi, logsApi, phasesApi, usersApi } from '../services/api';
+import { auditsApi, logsApi, phasesApi, questionsApi, usersApi } from '../services/api';
 import LiveLogs from './LiveLogs';
 import FindingsList from './FindingsList';
 import AuditQuestions from './AuditQuestions';
@@ -1009,6 +1009,7 @@ export default function AuditDetails() {
   const [selectedExecutionId, setSelectedExecutionId] = useState(null);
   const [phaseSelectedByUser, setPhaseSelectedByUser] = useState(false);
   const [phaseActionMessage, setPhaseActionMessage] = useState('');
+  const [questionSummary, setQuestionSummary] = useState({ open: 0, blocking: 0 });
 
   useEffect(() => {
     if (!audit) return;
@@ -1029,6 +1030,19 @@ export default function AuditDetails() {
     setSelectedPhase('make init');
     setSelectedExecutionId(null);
   }, [audit, phaseSelectedByUser, selectedPhase]);
+
+  useEffect(() => {
+    if (!id) return;
+    questionsApi.list({ audit_id: id })
+      .then((data) => {
+        const questions = data.questions || [];
+        setQuestionSummary({
+          open: questions.filter((question) => question.status === 'OPEN').length,
+          blocking: questions.filter((question) => question.status === 'OPEN' && question.blocking).length,
+        });
+      })
+      .catch(() => setQuestionSummary({ open: 0, blocking: 0 }));
+  }, [id, audit?.updated_at, audit?.status]);
   
   if (loading) {
     return (
@@ -1106,6 +1120,12 @@ export default function AuditDetails() {
             </span>
             <span className="rounded-full border border-gray-700 bg-gray-900 px-2.5 py-1 text-gray-300">
               Findings: <span className="text-white">{audit.total_findings}</span>
+            </span>
+            <span className={`rounded-full border px-2.5 py-1 text-gray-300 ${questionSummary.open ? 'border-amber-700 bg-amber-950/40' : 'border-gray-700 bg-gray-900'}`}>
+              Questions: <span className="text-white">{questionSummary.open}</span>
+            </span>
+            <span className={`rounded-full border px-2.5 py-1 text-gray-300 ${questionSummary.blocking ? 'border-red-700 bg-red-950/40' : 'border-gray-700 bg-gray-900'}`}>
+              Blocking: <span className="text-white">{questionSummary.blocking}</span>
             </span>
             <span className="rounded-full border border-gray-700 bg-gray-900 px-2.5 py-1 text-gray-300">
               Auto: <span className="text-white">{audit.auto_continue ? 'yes' : 'no'}</span>
