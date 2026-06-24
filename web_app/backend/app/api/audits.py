@@ -23,6 +23,7 @@ router = APIRouter()
 
 def audit_response(audit, db: Session, phase_executions=None, include_config: bool = True) -> schemas.AuditResponse:
     question_counts = crud.question_counts_for_audit(db, audit.id)
+    question_owner = crud.get_user(db, audit.question_owner_user_id) if audit.question_owner_user_id else None
     return schemas.AuditResponse(
         id=audit.id,
         name=audit.name,
@@ -30,6 +31,8 @@ def audit_response(audit, db: Session, phase_executions=None, include_config: bo
         current_phase=audit.current_phase,
         assigned_worker_id=audit.assigned_worker_id,
         question_owner_user_id=audit.question_owner_user_id,
+        question_owner_name=question_owner.display_name if question_owner else None,
+        question_owner_is_llm=question_owner.is_llm_user if question_owner else None,
         workspace_path=audit.workspace_path,
         source_type=audit.source_type,
         source_location=audit.source_location,

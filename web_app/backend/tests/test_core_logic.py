@@ -115,12 +115,43 @@ def test_audit_list_response_omits_heavy_config(monkeypatch):
         updated_at=datetime.now(),
     )
     monkeypatch.setattr(crud, "question_counts_for_audit", lambda db, audit_id: {"open_questions": 0, "blocking_questions": 0})
+    monkeypatch.setattr(crud, "get_user", lambda db, user_id: None)
 
     response = audit_response(audit, object(), include_config=False)
 
     assert response.has_codecome_yml is True
     assert response.codecome_yml is None
     assert response.model_settings == {}
+
+
+def test_audit_response_includes_question_owner_name(monkeypatch):
+    audit = SimpleNamespace(
+        id=uuid4(),
+        name="demo",
+        status="ready",
+        current_phase=None,
+        assigned_worker_id=None,
+        question_owner_user_id=7,
+        workspace_path="/work/audit-1",
+        source_type="local",
+        source_location="/src.zip",
+        codecome_yml=None,
+        model_settings={},
+        ai_review_enabled=False,
+        auto_continue=True,
+        total_findings=0,
+        findings_by_status={},
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+    owner = SimpleNamespace(display_name="AI Owner", is_llm_user=True)
+    monkeypatch.setattr(crud, "question_counts_for_audit", lambda db, audit_id: {"open_questions": 0, "blocking_questions": 0})
+    monkeypatch.setattr(crud, "get_user", lambda db, user_id: owner if user_id == 7 else None)
+
+    response = audit_response(audit, object())
+
+    assert response.question_owner_name == "AI Owner"
+    assert response.question_owner_is_llm is True
 
 
 def test_worker_response_redacts_ssh_secrets():

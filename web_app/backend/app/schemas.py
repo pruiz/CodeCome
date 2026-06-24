@@ -191,6 +191,8 @@ class AuditResponse(BaseModel):
     current_phase: Optional[str] = None
     assigned_worker_id: Optional[int] = None
     question_owner_user_id: Optional[int] = None
+    question_owner_name: Optional[str] = None
+    question_owner_is_llm: Optional[bool] = None
     workspace_path: str
     source_type: Optional[str] = None
     source_location: Optional[str] = None

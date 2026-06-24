@@ -11,6 +11,8 @@ const audit = {
   current_phase: 'phase-3',
   assigned_worker_id: 1,
   question_owner_user_id: 7,
+  question_owner_name: 'AI Owner',
+  question_owner_is_llm: true,
   workspace_path: '/work/audit-1',
   source_type: 'local',
   source_location: '/src.zip',
@@ -66,6 +68,7 @@ describe('AuditDetails', () => {
     expect(await screen.findByText('Question Audit')).toBeInTheDocument();
     expect(await screen.findByText('Questions:')).toBeInTheDocument();
     expect(screen.getByText('Blocking:')).toBeInTheDocument();
+    expect(screen.getByText('AI Owner (AI)')).toBeInTheDocument();
     expect(screen.getAllByText('1').length).toBeGreaterThan(0);
   });
 });

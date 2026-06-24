@@ -1128,6 +1128,9 @@ export default function AuditDetails() {
               Blocking: <span className="text-white">{questionSummary.blocking}</span>
             </span>
             <span className="rounded-full border border-gray-700 bg-gray-900 px-2.5 py-1 text-gray-300">
+              Owner: <span className="text-white">{audit.question_owner_name ? `${audit.question_owner_name} (${audit.question_owner_is_llm ? 'AI' : 'Human'})` : 'None'}</span>
+            </span>
+            <span className="rounded-full border border-gray-700 bg-gray-900 px-2.5 py-1 text-gray-300">
               Auto: <span className="text-white">{audit.auto_continue ? 'yes' : 'no'}</span>
             </span>
             <span className="rounded-full border border-gray-700 bg-gray-900 px-2.5 py-1 text-gray-300">
