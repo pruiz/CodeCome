@@ -157,7 +157,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 
 - [x] Replace deprecated Pydantic class-based `Config` with `ConfigDict`.
 - [x] Replace SQLAlchemy `declarative_base()` import with `sqlalchemy.orm.declarative_base`.
-- [ ] Add coverage thresholds once the test suite is broader.
+- [x] Add coverage thresholds once the test suite is broader.
 
 ## Notes
 
