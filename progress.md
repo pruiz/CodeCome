@@ -180,6 +180,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Force first-user bootstrap to create an active human user.
 - [x] Show assigned question owner name/type in audit header.
 - [x] Show assigned question owner name/type on dashboard audit cards.
+- [x] Include question owner names in dashboard audit search.
 
 ## Notes
 

@@ -141,7 +141,7 @@ export default function Dashboard() {
 
   const normalizedSearch = search.trim().toLowerCase();
   const visibleAudits = normalizedSearch
-    ? audits.filter((audit) => [audit.name, audit.id, audit.status, audit.source_location]
+    ? audits.filter((audit) => [audit.name, audit.id, audit.status, audit.source_location, audit.question_owner_name]
       .filter(Boolean)
       .some((value) => String(value).toLowerCase().includes(normalizedSearch)))
     : audits;

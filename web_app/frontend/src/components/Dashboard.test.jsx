@@ -95,4 +95,14 @@ describe('Dashboard', () => {
 
     expect(screen.getByText('AI Owner (AI)')).toBeInTheDocument();
   });
+
+  it('filters the audit card list by question owner', async () => {
+    const user = userEvent.setup();
+
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    await user.type(screen.getByPlaceholderText(/search by audit name/i), 'AI Owner');
+
+    expect(screen.getByText('Demo Audit')).toBeInTheDocument();
+    expect(screen.queryByText('Production Review')).not.toBeInTheDocument();
+  });
 });
