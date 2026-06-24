@@ -13,11 +13,15 @@ describe('api auth handling', () => {
 
   it('clears stale token on protected API 401', async () => {
     window.localStorage.setItem(authApi.tokenKey, 'stale-token');
+    const listener = vi.fn();
+    window.addEventListener(authApi.authChangedEvent, listener);
     global.fetch = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ detail: 'Token expired' }), { status: 401 })));
 
     await expect(auditsApi.list()).rejects.toThrow('Token expired');
 
     expect(window.localStorage.getItem(authApi.tokenKey)).toBeNull();
+    expect(listener).toHaveBeenCalledTimes(1);
+    window.removeEventListener(authApi.authChangedEvent, listener);
   });
 
   it('sends bearer token on protected API calls', async () => {

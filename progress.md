@@ -164,6 +164,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Add frontend auth gate before loading protected app routes.
 - [x] Reject API bearer tokens for inactive or missing users.
 - [x] Clear stale frontend auth tokens on protected API 401 responses.
+- [x] Refresh frontend auth gate immediately on logout or stale-token cleanup.
 - [x] Prevent disabling or converting the last active human user.
 
 ## Notes

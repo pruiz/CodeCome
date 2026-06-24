@@ -1,5 +1,10 @@
 const API_BASE = '/api';
 const TOKEN_KEY = 'codecome_access_token';
+const AUTH_CHANGED_EVENT = 'codecome-auth-changed';
+
+function notifyAuthChanged() {
+  window.dispatchEvent?.(new Event(AUTH_CHANGED_EVENT));
+}
 
 function authHeaders(extra = {}) {
   const token = window.localStorage?.getItem(TOKEN_KEY);
@@ -28,6 +33,7 @@ async function parseResponse(res, fallbackMessage = 'Request failed') {
   if (!res.ok) {
     if (res.status === 401) {
       window.localStorage?.removeItem(TOKEN_KEY);
+      notifyAuthChanged();
     }
     throw new Error(data?.detail || fallbackMessage);
   }
@@ -191,7 +197,10 @@ export const authApi = {
     body: JSON.stringify(data),
   }).then(async (res) => {
     const payload = await parseResponse(res, 'Failed to bootstrap user');
-    if (payload.access_token) window.localStorage?.setItem(TOKEN_KEY, payload.access_token);
+    if (payload.access_token) {
+      window.localStorage?.setItem(TOKEN_KEY, payload.access_token);
+      notifyAuthChanged();
+    }
     return payload;
   }),
   login: (username, password) => fetch(`${API_BASE}/auth/login`, {
@@ -200,12 +209,19 @@ export const authApi = {
     body: JSON.stringify({ username, password }),
   }).then(async (res) => {
     const data = await parseResponse(res, 'Failed to login');
-    if (data.access_token) window.localStorage?.setItem(TOKEN_KEY, data.access_token);
+    if (data.access_token) {
+      window.localStorage?.setItem(TOKEN_KEY, data.access_token);
+      notifyAuthChanged();
+    }
     return data;
   }),
   me: () => apiFetch(`${API_BASE}/auth/me`).then(res => parseResponse(res, 'Failed to load current user')),
-  logout: () => window.localStorage?.removeItem(TOKEN_KEY),
+  logout: () => {
+    window.localStorage?.removeItem(TOKEN_KEY);
+    notifyAuthChanged();
+  },
   getToken: () => window.localStorage?.getItem(TOKEN_KEY),
+  authChangedEvent: AUTH_CHANGED_EVENT,
 };
 
 export const workersApi = {

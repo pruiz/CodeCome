@@ -55,4 +55,25 @@ describe('AuthGate', () => {
     expect(await screen.findByText('Protected App')).toBeInTheDocument();
     expect(window.localStorage.getItem('codecome_access_token')).toBe('new-token');
   });
+
+  it('returns to login when auth token is cleared', async () => {
+    window.localStorage.setItem('codecome_access_token', 'token-123');
+    global.fetch = vi.fn((url) => {
+      if (String(url).includes('/api/auth/status')) {
+        return Promise.resolve(new Response(JSON.stringify({ bootstrap_required: false }), { status: 200 }));
+      }
+      if (String(url).includes('/api/auth/me')) {
+        return Promise.resolve(new Response(JSON.stringify({ id: 1, username: 'derek', display_name: 'Derek', is_llm_user: false, active: true, auto_answer_enabled: true, created_at: '2026-01-01T00:00:00', updated_at: '2026-01-01T00:00:00' }), { status: 200 }));
+      }
+      return Promise.resolve(new Response(JSON.stringify({ detail: 'not found' }), { status: 404 }));
+    });
+
+    render(<AuthGate><div>Protected App</div></AuthGate>);
+
+    expect(await screen.findByText('Protected App')).toBeInTheDocument();
+    window.localStorage.removeItem('codecome_access_token');
+    window.dispatchEvent(new Event('codecome-auth-changed'));
+
+    expect(await screen.findByText('Sign In')).toBeInTheDocument();
+  });
 });

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { authApi } from '../services/api';
 
 export default function AuthGate({ children }) {
@@ -8,6 +8,7 @@ export default function AuthGate({ children }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
+  const ignoreNextAuthChange = useRef(false);
 
   const load = async () => {
     setLoading(true);
@@ -29,11 +30,26 @@ export default function AuthGate({ children }) {
 
   useEffect(() => {
     load();
+    const onAuthChanged = () => {
+      if (ignoreNextAuthChange.current) {
+        ignoreNextAuthChange.current = false;
+        return;
+      }
+      if (!authApi.getToken()) {
+        setUser(null);
+        authApi.status().then((status) => setBootstrapRequired(!!status.bootstrap_required)).catch(() => {});
+        return;
+      }
+      load();
+    };
+    window.addEventListener(authApi.authChangedEvent, onAuthChanged);
+    return () => window.removeEventListener(authApi.authChangedEvent, onAuthChanged);
   }, []);
 
   const submit = async () => {
     setMessage('');
     try {
+      ignoreNextAuthChange.current = true;
       const data = bootstrapRequired
         ? await authApi.bootstrap({ username, password, display_name: username, is_llm_user: false })
         : await authApi.login(username, password);
@@ -41,6 +57,7 @@ export default function AuthGate({ children }) {
       setPassword('');
       setBootstrapRequired(false);
     } catch (error) {
+      ignoreNextAuthChange.current = false;
       setMessage(error.message);
     }
   };
