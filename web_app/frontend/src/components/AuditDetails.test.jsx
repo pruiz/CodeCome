@@ -1,6 +1,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import AuditDetails from './AuditDetails';
 
@@ -70,5 +71,21 @@ describe('AuditDetails', () => {
     expect(screen.getByText('Blocking:')).toBeInTheDocument();
     expect(screen.getByText('AI Owner (AI)')).toBeInTheDocument();
     expect(screen.getAllByText('1').length).toBeGreaterThan(0);
+  });
+
+  it('shows answer questions instead of start when blocking questions are open', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/audit/audit-1']}>
+        <Routes>
+          <Route path="/audit/:id" element={<AuditDetails />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Question Audit')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Answer Questions' }));
+    expect(screen.getByRole('button', { name: 'Questions' })).toHaveClass('bg-blue-600');
   });
 });

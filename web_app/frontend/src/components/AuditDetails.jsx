@@ -1068,8 +1068,9 @@ export default function AuditDetails() {
   
   const isRunning = audit.status.includes('_running');
   const canPause = isRunning;
-  const canStart = !isRunning && audit.status !== 'completed';
-  const canContinue = audit.status.includes('_complete');
+  const hasBlockingQuestions = questionSummary.blocking > 0;
+  const canStart = !isRunning && audit.status !== 'completed' && !hasBlockingQuestions;
+  const canContinue = audit.status.includes('_complete') && !hasBlockingQuestions;
 
   const rerunSelectedPhase = async (execution) => {
     if (!execution) return;
@@ -1153,6 +1154,14 @@ export default function AuditDetails() {
               className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded font-semibold"
             >
               Continue
+            </button>
+          )}
+          {!isRunning && audit.status !== 'completed' && hasBlockingQuestions && (
+            <button
+              onClick={() => setActiveTab('questions')}
+              className="px-4 py-2 bg-amber-700 hover:bg-amber-600 text-white rounded font-semibold"
+            >
+              Answer Questions
             </button>
           )}
           {canPause && (
