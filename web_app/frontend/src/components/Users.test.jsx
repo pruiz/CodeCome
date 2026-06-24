@@ -76,6 +76,29 @@ describe('Users', () => {
     expect(screen.queryByLabelText('New user password')).not.toBeInTheDocument();
   });
 
+  it('does not submit hidden fake AI fields for human users', async () => {
+    const user = userEvent.setup();
+    render(<Users />);
+
+    expect(await screen.findByText('Human Owner')).toBeInTheDocument();
+    await user.type(screen.getByLabelText('New fake AI model'), 'local/hidden-model');
+    await user.type(screen.getByLabelText('New fake AI context'), 'Hidden context.');
+    await user.click(screen.getByLabelText('Fake AI user'));
+    await user.type(screen.getByPlaceholderText('username'), 'new-human');
+    await user.type(screen.getByLabelText('New user password'), 'secret-password');
+    await user.click(screen.getByRole('button', { name: 'Create User' }));
+
+    await waitFor(() => {
+      const createCall = global.fetch.mock.calls.find(([, options]) => options?.method === 'POST');
+      expect(createCall).toBeTruthy();
+      const payload = JSON.parse(createCall[1].body);
+      expect(payload).toMatchObject({ username: 'new-human', is_llm_user: false, password: 'secret-password' });
+      expect(payload.llm_model).toBeUndefined();
+      expect(payload.llm_context).toBeUndefined();
+      expect(payload.auto_answer_enabled).toBeUndefined();
+    });
+  });
+
   it('edits fake AI user model and context', async () => {
     const user = userEvent.setup();
     render(<Users />);

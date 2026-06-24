@@ -130,8 +130,15 @@ export default function Users() {
     }
     try {
       const payload = { ...form };
-      if (!payload.password) delete payload.password;
       if (!payload.display_name) payload.display_name = payload.username;
+      if (payload.is_llm_user) {
+        delete payload.password;
+      } else {
+        delete payload.llm_model;
+        delete payload.llm_context;
+        delete payload.auto_answer_enabled;
+      }
+      if (!payload.password) delete payload.password;
       await usersApi.create(payload);
       setForm(blankForm);
       setMessage('User created.');
