@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from uuid import UUID
@@ -52,6 +52,8 @@ class UserUpdate(BaseModel):
 
 
 class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     username: str
     display_name: str
@@ -62,10 +64,6 @@ class UserResponse(BaseModel):
     active: bool
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
-
 
 class UserListResponse(BaseModel):
     total: int
@@ -84,6 +82,8 @@ class AuthResponse(BaseModel):
 
 
 class PhaseExecutionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     audit_id: UUID
     worker_id: Optional[int] = None
@@ -101,11 +101,9 @@ class PhaseExecutionResponse(BaseModel):
     model_used: Optional[str] = None
     run_summary_path: Optional[str] = None
     
-    class Config:
-        from_attributes = True
-
-
 class PhaseTriageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     audit_id: UUID
     phase_execution_id: int
@@ -123,10 +121,6 @@ class PhaseTriageResponse(BaseModel):
     applied_at: Optional[datetime] = None
     created_at: datetime
     completed_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
-
 
 class PhaseTriageApplyRequest(BaseModel):
     apply_env: bool = True
@@ -164,6 +158,8 @@ class PhaseQuestionUpdate(BaseModel):
 
 
 class PhaseQuestionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     audit_id: UUID
     phase_execution_id: int
@@ -181,16 +177,14 @@ class PhaseQuestionResponse(BaseModel):
     created_at: datetime
     answered_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
-
-
 class PhaseQuestionListResponse(BaseModel):
     total: int
     questions: List[PhaseQuestionResponse]
 
 
 class AuditResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     name: str
     status: str
@@ -211,10 +205,6 @@ class AuditResponse(BaseModel):
     updated_at: datetime
     phase_executions: Optional[List[PhaseExecutionResponse]] = None
     
-    class Config:
-        from_attributes = True
-
-
 class AuditListResponse(BaseModel):
     total: int
     audits: List[AuditResponse]
@@ -247,6 +237,8 @@ class WorkerUpdate(BaseModel):
 
 
 class WorkerResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
     type: str
@@ -262,10 +254,6 @@ class WorkerResponse(BaseModel):
     last_seen: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
-
 
 class WorkerListResponse(BaseModel):
     total: int
@@ -300,6 +288,8 @@ class PreviewAnalysisConfig(BaseModel):
 # === Finding Schemas ===
 
 class FindingResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     audit_id: UUID
     audit_name: Optional[str] = None
@@ -317,10 +307,6 @@ class FindingResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
-
-
 class FindingListResponse(BaseModel):
     total: int
     findings: List[FindingResponse]
@@ -337,6 +323,8 @@ class FindingUpdate(BaseModel):
 # === Log Schemas ===
 
 class AuditLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     audit_id: UUID
     timestamp: datetime
@@ -347,10 +335,6 @@ class AuditLogResponse(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     source: Optional[str] = None
     
-    class Config:
-        from_attributes = True
-
-
 class LogExportResponse(BaseModel):
     audit_id: UUID
     total: int
@@ -365,6 +349,8 @@ class AIReviewRequest(BaseModel):
 
 
 class AIReviewResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     audit_id: UUID
     phase: str
@@ -376,10 +362,6 @@ class AIReviewResponse(BaseModel):
     action_result: Optional[str] = None
     reviewed_at: datetime
     
-    class Config:
-        from_attributes = True
-
-
 # === Template Schemas ===
 
 class TemplateCreate(BaseModel):
@@ -391,6 +373,8 @@ class TemplateCreate(BaseModel):
 
 
 class TemplateResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
     description: Optional[str] = None
@@ -400,10 +384,6 @@ class TemplateResponse(BaseModel):
     tags: Optional[List[str]] = None
     is_builtin: bool
     
-    class Config:
-        from_attributes = True
-
-
 # === Evidence ===
 
 class EvidenceFile(BaseModel):
