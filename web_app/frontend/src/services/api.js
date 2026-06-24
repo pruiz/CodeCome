@@ -93,6 +93,9 @@ export const auditsApi = {
   pause: (id) => {
     return apiFetch(`${API_BASE}/audits/${id}/pause`, { method: 'POST' }).then(res => parseResponse(res, 'Failed to pause audit'));
   },
+  startSandbox: (id) => {
+    return apiFetch(`${API_BASE}/audits/${id}/sandbox/start`, { method: 'POST' }).then(res => parseResponse(res, 'Failed to start sandbox'));
+  },
 };
 
 export const findingsApi = {

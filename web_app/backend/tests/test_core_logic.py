@@ -3,7 +3,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from app import crud, schemas
-from app.api.audits import audit_response, next_audit_step
+from app.api.audits import audit_response, next_audit_step, sandbox_start_command
 from app.utils.codecome_wrapper import CodeComeExecutor
 from app.api import logs, workers
 from app.workers.phase_tasks import build_command_line, status_phase
@@ -152,6 +152,18 @@ def test_audit_response_includes_question_owner_name(monkeypatch):
 
     assert response.question_owner_name == "AI Owner"
     assert response.question_owner_is_llm is True
+
+
+def test_sandbox_start_command_reads_codecome_yml():
+    audit = SimpleNamespace(codecome_yml="environment:\n  startup_command: ./sandbox/scripts/up.sh\n")
+
+    assert sandbox_start_command(audit) == "./sandbox/scripts/up.sh"
+
+
+def test_sandbox_start_command_defaults_when_missing():
+    audit = SimpleNamespace(codecome_yml="project:\n  name: demo\n")
+
+    assert sandbox_start_command(audit) == "./sandbox/scripts/up.sh"
 
 
 def test_worker_response_redacts_ssh_secrets():

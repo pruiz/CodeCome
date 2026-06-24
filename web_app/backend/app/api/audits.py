@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi.responses import FileResponse, StreamingResponse
 import io
 from datetime import datetime
+import subprocess
 
 from app.database import get_db
 from app import crud, models, schemas
@@ -17,8 +18,18 @@ from app.utils.ssh_executor import SSHCodeComeExecutor
 from app.config import settings
 import shutil
 import zipfile
+import yaml
 
 router = APIRouter()
+
+
+def sandbox_start_command(audit) -> str:
+    try:
+        config = yaml.safe_load(audit.codecome_yml or "") or {}
+    except Exception:
+        config = {}
+    command = ((config.get("environment") or {}).get("startup_command") or "./sandbox/scripts/up.sh")
+    return str(command).strip() or "./sandbox/scripts/up.sh"
 
 
 def audit_response(audit, db: Session, phase_executions=None, include_config: bool = True) -> schemas.AuditResponse:
@@ -269,6 +280,54 @@ def continue_after_questions(audit_id: UUID, db: Session = Depends(get_db)):
         "worker_id": worker.id,
         "worker_name": worker.name,
         "message": "Audit continued after questions",
+    }
+
+
+@router.post("/{audit_id}/sandbox/start")
+def start_audit_sandbox(audit_id: UUID, db: Session = Depends(get_db)):
+    """Launch the audit sandbox using codecome.yml environment.startup_command."""
+    audit = crud.get_audit(db, audit_id)
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    workspace_path = Path(audit.workspace_path)
+    if not workspace_path.exists():
+        raise HTTPException(status_code=404, detail="Audit workspace not found")
+    command = sandbox_start_command(audit)
+    started_at = datetime.now()
+    crud.create_audit_log(db, audit_id, "INFO", f"Starting sandbox: {command}", source="sandbox")
+    try:
+        result = subprocess.run(
+            command,
+            cwd=str(workspace_path),
+            shell=True,
+            text=True,
+            capture_output=True,
+            timeout=900,
+        )
+    except subprocess.TimeoutExpired as exc:
+        crud.create_audit_log(db, audit_id, "ERROR", f"Sandbox start timed out after {exc.timeout}s", source="sandbox")
+        return {
+            "audit_id": str(audit_id),
+            "command": command,
+            "exit_code": -1,
+            "duration_seconds": int((datetime.now() - started_at).total_seconds()),
+            "stdout": (exc.stdout or "")[-4000:] if isinstance(exc.stdout, str) else "",
+            "stderr": (exc.stderr or "")[-4000:] if isinstance(exc.stderr, str) else "Command timed out",
+        }
+    duration = int((datetime.now() - started_at).total_seconds())
+    level = "INFO" if result.returncode == 0 else "ERROR"
+    crud.create_audit_log(db, audit_id, level, f"Sandbox start finished with exit code {result.returncode} in {duration}s", source="sandbox")
+    if result.stdout.strip():
+        crud.create_audit_log(db, audit_id, "INFO", result.stdout[-2000:], source="sandbox")
+    if result.stderr.strip():
+        crud.create_audit_log(db, audit_id, "WARN" if result.returncode == 0 else "ERROR", result.stderr[-2000:], source="sandbox")
+    return {
+        "audit_id": str(audit_id),
+        "command": command,
+        "exit_code": result.returncode,
+        "duration_seconds": duration,
+        "stdout": result.stdout[-4000:],
+        "stderr": result.stderr[-4000:],
     }
 
 

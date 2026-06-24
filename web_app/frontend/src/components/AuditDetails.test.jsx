@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import AuditDetails from './AuditDetails';
@@ -31,8 +31,11 @@ const audit = {
 
 describe('AuditDetails', () => {
   beforeEach(() => {
-    global.fetch = vi.fn((url) => {
+    global.fetch = vi.fn((url, options = {}) => {
       const requested = new URL(String(url), 'http://localhost');
+      if (requested.pathname.includes('/api/audits/audit-1/sandbox/start')) {
+        return Promise.resolve(new Response(JSON.stringify({ command: './sandbox/scripts/up.sh', exit_code: 0, stdout: 'ok', stderr: '' }), { status: 200 }));
+      }
       if (requested.pathname.includes('/api/audits/audit-1')) {
         return Promise.resolve(new Response(JSON.stringify(audit), { status: 200 }));
       }
@@ -107,5 +110,25 @@ describe('AuditDetails', () => {
     expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Answer Questions' }));
     expect(screen.getByRole('button', { name: 'Questions' })).toHaveClass('bg-blue-600');
+  });
+
+  it('launches sandbox from audit overview', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/audit/audit-1']}>
+        <Routes>
+          <Route path="/audit/:id" element={<AuditDetails />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Question Audit')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Launch Sandbox' }));
+
+    await waitFor(() => {
+      const sandboxCall = global.fetch.mock.calls.find(([url, options]) => String(url).includes('/sandbox/start') && options?.method === 'POST');
+      expect(sandboxCall).toBeTruthy();
+    });
+    expect(await screen.findByText(/Sandbox command finished with exit code 0/i)).toBeInTheDocument();
   });
 });

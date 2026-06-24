@@ -91,7 +91,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Add answer/dismiss controls for human users.
 - [x] Add fake AI answer/regenerate controls for fake-AI-owned questions.
 - [x] Add paused-for-questions status display and continue-after-questions button.
-- [] Add an option top launch the "sandbox" in an active audit
+- [x] Add an option to launch the "sandbox" in an active audit.
  
 ### Testing/Quality TODO
 
@@ -196,6 +196,8 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Normalize hidden human/fake-AI user fields on the backend.
 - [x] Raise backend coverage floor to 48%.
 - [x] Default new audits to the first active human question owner when none is selected.
+- [ ] Replace checkbox-style controls in the user creation form with coherent toggle switches matching the project UI.
+- [ ] Replace checkbox-style controls in the audit creation form with coherent toggle switches matching the project UI.
 
 ## Notes
 

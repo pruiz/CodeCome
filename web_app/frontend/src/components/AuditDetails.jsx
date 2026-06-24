@@ -865,6 +865,7 @@ function InfoItem({ label, value, mono = false }) {
 function AuditOverview({ audit, onRefresh }) {
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [sandboxStarting, setSandboxStarting] = useState(false);
   const [users, setUsers] = useState([]);
 
   useEffect(() => {
@@ -894,6 +895,19 @@ function AuditOverview({ audit, onRefresh }) {
     const nextSettings = { ...(audit.model_settings || {}) };
     nextSettings.__audit_options = { ...(nextSettings.__audit_options || {}), [key]: value };
     await updateAudit({ model_settings: nextSettings });
+  };
+
+  const startSandbox = async () => {
+    setSandboxStarting(true);
+    setMessage('');
+    try {
+      const result = await auditsApi.startSandbox(audit.id);
+      setMessage(`Sandbox command finished with exit code ${result.exit_code}: ${result.command}`);
+    } catch (error) {
+      setMessage(`Sandbox start failed: ${error.message}`);
+    } finally {
+      setSandboxStarting(false);
+    }
   };
 
   return (
@@ -979,6 +993,16 @@ function AuditOverview({ audit, onRefresh }) {
                   <option key={user.id} value={user.id}>{user.display_name} ({user.is_llm_user ? 'AI' : 'Human'})</option>
                 ))}
               </select>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-gray-800 bg-gray-950/70 px-4 py-4">
+              <div>
+                <div className="font-semibold">Sandbox</div>
+                <div className="text-sm text-gray-500">Run the audit workspace sandbox startup command from <code>codecome.yml</code>.</div>
+              </div>
+              <button onClick={startSandbox} disabled={sandboxStarting} className="rounded bg-cyan-700 px-3 py-2 text-sm font-semibold text-white hover:bg-cyan-600 disabled:cursor-not-allowed disabled:bg-gray-700">
+                {sandboxStarting ? 'Starting...' : 'Launch Sandbox'}
+              </button>
             </div>
 
           </div>
