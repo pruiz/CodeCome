@@ -70,6 +70,17 @@ class UserListResponse(BaseModel):
     users: List[UserResponse]
 
 
+class ModelOption(BaseModel):
+    id: str
+    provider: str
+    model: str
+
+
+class ModelOptionListResponse(BaseModel):
+    total: int
+    models: List[ModelOption]
+
+
 class AuthLoginRequest(BaseModel):
     username: str = Field(..., min_length=1)
     password: str = Field(..., min_length=1)

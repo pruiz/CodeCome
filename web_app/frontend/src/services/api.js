@@ -184,6 +184,7 @@ export const auditQuestionApi = {
 };
 
 export const usersApi = {
+  models: () => apiFetch(`${API_BASE}/users/models`).then(res => parseResponse(res, 'Failed to list models')),
   list: (params = {}) => {
     const query = new URLSearchParams({ skip: params.skip || 0, limit: params.limit || 100 });
     if (params.active !== undefined) query.set('active', String(params.active));

@@ -97,6 +97,16 @@ def test_default_question_owner_returns_first_active_human():
     assert crud.default_question_owner(FakeDb(owner)) is owner
 
 
+def test_opencode_model_options_reads_provider_models(tmp_path):
+    config = tmp_path / "opencode.json"
+    config.write_text('{"provider":{"local":{"models":{"qwen":{},"llama":{}}}}}')
+
+    assert users_api.opencode_model_options(config) == [
+        {"id": "local/llama", "provider": "local", "model": "llama"},
+        {"id": "local/qwen", "provider": "local", "model": "qwen"},
+    ]
+
+
 def test_update_human_user_clears_llm_fields():
     existing = type("User", (), {
         "id": 1,

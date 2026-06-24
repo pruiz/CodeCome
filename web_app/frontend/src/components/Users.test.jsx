@@ -13,6 +13,15 @@ describe('Users', () => {
       if (options.method === 'PATCH') {
         return Promise.resolve(new Response(JSON.stringify({ id: 2, username: 'ai-owner', display_name: 'AI Owner Updated', is_llm_user: true, active: true, auto_answer_enabled: false, llm_model: 'local/new-model', llm_context: 'Updated context.', created_at: '2026-01-01T00:00:00', updated_at: '2026-01-01T00:00:00' }), { status: 200 }));
       }
+      if (String(url).includes('/api/users/models')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          total: 2,
+          models: [
+            { id: 'local/qwen3.6-27b', provider: 'local', model: 'qwen3.6-27b' },
+            { id: 'local/new-model', provider: 'local', model: 'new-model' },
+          ],
+        }), { status: 200 }));
+      }
       return Promise.resolve(new Response(JSON.stringify({
         total: 2,
         users: [
@@ -35,7 +44,7 @@ describe('Users', () => {
     expect(await screen.findByText('Human Owner')).toBeInTheDocument();
     await user.type(screen.getByPlaceholderText('username'), 'ai-reviewer');
     await user.type(screen.getAllByPlaceholderText('display name')[0], 'AI Reviewer');
-    await user.type(screen.getByLabelText('New fake AI model'), 'local/qwen3.6-27b');
+    await user.selectOptions(screen.getByLabelText('New fake AI model'), 'local/qwen3.6-27b');
     await user.type(screen.getByLabelText('New fake AI context'), 'Answer carefully.');
     await user.click(screen.getByRole('button', { name: 'Create User' }));
 
@@ -71,7 +80,9 @@ describe('Users', () => {
     render(<Users />);
 
     expect(await screen.findByText('Human Owner')).toBeInTheDocument();
-    expect(screen.getByLabelText('New fake AI model')).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Fake AI user' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('switch', { name: 'Auto-answer questions' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getAllByRole('option', { name: 'local/qwen3.6-27b' }).length).toBeGreaterThan(0);
     expect(screen.getByLabelText('New fake AI context')).toBeInTheDocument();
     expect(screen.queryByLabelText('New user password')).not.toBeInTheDocument();
   });
@@ -105,8 +116,7 @@ describe('Users', () => {
 
     expect(await screen.findByText('AI Owner')).toBeInTheDocument();
     const modelInput = screen.getByLabelText('AI model for ai-owner');
-    await user.clear(modelInput);
-    await user.type(modelInput, 'local/new-model');
+    await user.selectOptions(modelInput, 'local/new-model');
     const contextInput = screen.getByLabelText('AI context for ai-owner');
     await user.clear(contextInput);
     await user.type(contextInput, 'Updated context.');

@@ -1,10 +1,43 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+import json
 
 from app import crud, schemas
+from app.config import settings
 from app.database import get_db
 
 router = APIRouter()
+
+
+def opencode_model_options(config_path=None) -> list[dict]:
+    path = config_path or (settings.CODECOME_ROOT / "opencode.json")
+    if not path.exists():
+        return []
+    try:
+        config = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    providers = config.get("provider") or {}
+    options = []
+    if not isinstance(providers, dict):
+        return options
+    for provider_name, provider_config in providers.items():
+        models = (provider_config or {}).get("models") if isinstance(provider_config, dict) else None
+        if not isinstance(models, dict):
+            continue
+        for model_name in models.keys():
+            options.append({
+                "id": f"{provider_name}/{model_name}",
+                "provider": str(provider_name),
+                "model": str(model_name),
+            })
+    return sorted(options, key=lambda item: item["id"])
+
+
+@router.get("/models", response_model=schemas.ModelOptionListResponse)
+def list_model_options():
+    models = opencode_model_options()
+    return schemas.ModelOptionListResponse(total=len(models), models=models)
 
 
 @router.get("/", response_model=schemas.UserListResponse)

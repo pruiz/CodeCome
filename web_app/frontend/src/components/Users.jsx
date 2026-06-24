@@ -37,7 +37,20 @@ function ToggleSwitch({ checked, label, onChange }) {
   );
 }
 
-function UserCard({ user, onChanged }) {
+function ModelSelect({ value, onChange, models, label, className = '' }) {
+  if (!models.length) {
+    return <input value={value} onChange={(event) => onChange(event.target.value)} className={`rounded border border-gray-800 bg-gray-900 px-3 py-2 text-sm ${className}`} aria-label={label} placeholder="model" />;
+  }
+  return (
+    <select value={value} onChange={(event) => onChange(event.target.value)} className={`rounded border border-gray-800 bg-gray-900 px-3 py-2 text-sm ${className}`} aria-label={label}>
+      <option value="">Select model</option>
+      {models.map((model) => <option key={model.id} value={model.id}>{model.id}</option>)}
+      {value && !models.some((model) => model.id === value) && <option value={value}>{value}</option>}
+    </select>
+  );
+}
+
+function UserCard({ user, onChanged, models }) {
   const [form, setForm] = useState({
     display_name: user.display_name || '',
     password: '',
@@ -99,7 +112,7 @@ function UserCard({ user, onChanged }) {
           <input value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} type="password" className="rounded border border-gray-800 bg-gray-900 px-3 py-2 text-sm" aria-label={`New password for ${user.username}`} placeholder="new password" />
         )}
         {user.is_llm_user && (
-          <input value={form.llm_model} onChange={(event) => setForm({ ...form, llm_model: event.target.value })} className="rounded border border-gray-800 bg-gray-900 px-3 py-2 text-sm" aria-label={`AI model for ${user.username}`} placeholder="model" />
+          <ModelSelect value={form.llm_model} onChange={(value) => setForm({ ...form, llm_model: value })} models={models} label={`AI model for ${user.username}`} />
         )}
         {user.is_llm_user && (
           <label className="flex items-center gap-2 rounded border border-gray-800 bg-gray-900 px-3 py-2 text-sm">
@@ -120,6 +133,7 @@ function UserCard({ user, onChanged }) {
 
 export default function Users() {
   const [users, setUsers] = useState([]);
+  const [models, setModels] = useState([]);
   const [form, setForm] = useState(blankForm);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
@@ -145,6 +159,10 @@ export default function Users() {
   useEffect(() => {
     load();
   }, [typeFilter, statusFilter]);
+
+  useEffect(() => {
+    usersApi.models().then((data) => setModels(data.models || [])).catch(() => setModels([]));
+  }, []);
 
   const createUser = async () => {
     setMessage('');
@@ -199,7 +217,7 @@ export default function Users() {
           <input value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} className="rounded border border-gray-800 bg-gray-950 px-3 py-2" placeholder="display name" />
           <ToggleSwitch checked={form.is_llm_user} label="Fake AI user" onChange={(value) => setForm({ ...form, is_llm_user: value })} />
           {!form.is_llm_user && <input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} type="password" className="rounded border border-gray-800 bg-gray-950 px-3 py-2" aria-label="New user password" placeholder="password for human users" />}
-          {form.is_llm_user && <input value={form.llm_model} onChange={(e) => setForm({ ...form, llm_model: e.target.value })} className="rounded border border-gray-800 bg-gray-950 px-3 py-2" aria-label="New fake AI model" placeholder="AI model, e.g. local/qwen3.6-27b" />}
+          {form.is_llm_user && <ModelSelect value={form.llm_model} onChange={(value) => setForm({ ...form, llm_model: value })} models={models} label="New fake AI model" className="bg-gray-950" />}
           {form.is_llm_user && (
             <ToggleSwitch checked={form.auto_answer_enabled} label="Auto-answer questions" onChange={(value) => setForm({ ...form, auto_answer_enabled: value })} />
           )}
@@ -253,7 +271,7 @@ export default function Users() {
         </div>
         {loading ? <div className="text-gray-500">Loading users...</div> : (
           <div className="space-y-2">
-            {visibleUsers.map((user) => <UserCard key={user.id} user={user} onChanged={load} />)}
+            {visibleUsers.map((user) => <UserCard key={user.id} user={user} onChanged={load} models={models} />)}
             {!visibleUsers.length && <div className="text-center text-gray-500">No users match the current filters.</div>}
           </div>
         )}
