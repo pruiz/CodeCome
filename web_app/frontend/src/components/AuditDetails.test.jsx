@@ -69,9 +69,28 @@ describe('AuditDetails', () => {
     expect(await screen.findByText('Question Audit')).toBeInTheDocument();
     expect(await screen.findByText('Questions:')).toBeInTheDocument();
     expect(screen.getByText('Blocking:')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refresh Questions' })).toBeInTheDocument();
     expect(screen.getByText('AI Owner (AI)')).toBeInTheDocument();
     expect(screen.queryByText('AI Review:')).not.toBeInTheDocument();
     expect(screen.getAllByText('1').length).toBeGreaterThan(0);
+  });
+
+  it('refreshes audit-level question counts on demand', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/audit/audit-1']}>
+        <Routes>
+          <Route path="/audit/:id" element={<AuditDetails />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Question Audit')).toBeInTheDocument();
+    const before = global.fetch.mock.calls.filter(([url]) => String(url).includes('/api/questions')).length;
+    await user.click(screen.getByRole('button', { name: 'Refresh Questions' }));
+    const after = global.fetch.mock.calls.filter(([url]) => String(url).includes('/api/questions')).length;
+
+    expect(after).toBeGreaterThan(before);
   });
 
   it('shows answer questions instead of start when blocking questions are open', async () => {

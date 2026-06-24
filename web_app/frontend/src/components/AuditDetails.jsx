@@ -1011,6 +1011,20 @@ export default function AuditDetails() {
   const [phaseActionMessage, setPhaseActionMessage] = useState('');
   const [questionSummary, setQuestionSummary] = useState({ open: 0, blocking: 0 });
 
+  const loadQuestionSummary = async () => {
+    if (!id) return;
+    try {
+      const data = await questionsApi.list({ audit_id: id });
+      const questions = data.questions || [];
+      setQuestionSummary({
+        open: questions.filter((question) => question.status === 'OPEN').length,
+        blocking: questions.filter((question) => question.status === 'OPEN' && question.blocking).length,
+      });
+    } catch (_) {
+      setQuestionSummary({ open: 0, blocking: 0 });
+    }
+  };
+
   useEffect(() => {
     if (!audit) return;
     if (phaseSelectedByUser) return;
@@ -1032,16 +1046,7 @@ export default function AuditDetails() {
   }, [audit, phaseSelectedByUser, selectedPhase]);
 
   useEffect(() => {
-    if (!id) return;
-    questionsApi.list({ audit_id: id })
-      .then((data) => {
-        const questions = data.questions || [];
-        setQuestionSummary({
-          open: questions.filter((question) => question.status === 'OPEN').length,
-          blocking: questions.filter((question) => question.status === 'OPEN' && question.blocking).length,
-        });
-      })
-      .catch(() => setQuestionSummary({ open: 0, blocking: 0 }));
+    loadQuestionSummary();
   }, [id, audit?.updated_at, audit?.status]);
   
   if (loading) {
@@ -1128,6 +1133,9 @@ export default function AuditDetails() {
             <span className={`rounded-full border px-2.5 py-1 text-gray-300 ${questionSummary.blocking ? 'border-red-700 bg-red-950/40' : 'border-gray-700 bg-gray-900'}`}>
               Blocking: <span className="text-white">{questionSummary.blocking}</span>
             </span>
+            <button onClick={loadQuestionSummary} className="rounded-full border border-gray-700 bg-gray-900 px-2.5 py-1 text-gray-300 hover:bg-gray-800">
+              Refresh Questions
+            </button>
             <span className="rounded-full border border-gray-700 bg-gray-900 px-2.5 py-1 text-gray-300">
               Owner: <span className="text-white">{audit.question_owner_name ? `${audit.question_owner_name} (${audit.question_owner_is_llm ? 'AI' : 'Human'})` : 'None'}</span>
             </span>
