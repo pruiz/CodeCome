@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "[web_app] Backend unit tests"
 cd "$ROOT_DIR/backend"
-venv/bin/python3 -m pytest -q tests --cov=app --cov-report=term-missing:skip-covered --cov-fail-under=45
+venv/bin/python3 -m pytest -q tests --cov=app --cov-report=term-missing:skip-covered --cov-fail-under=48
 
 echo "[web_app] Backend compile"
 venv/bin/python3 -m compileall -q app

@@ -193,6 +193,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Strip hidden user creation fields before submit.
 - [x] Strip hidden user edit fields before saving existing users.
 - [x] Normalize hidden human/fake-AI user fields on the backend.
+- [x] Raise backend coverage floor to 48%.
 
 ## Notes
 
