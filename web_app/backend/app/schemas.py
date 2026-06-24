@@ -121,6 +121,64 @@ class PhaseTriageApplyRequest(BaseModel):
     apply_env: bool = True
 
 
+class PhaseQuestionCreate(BaseModel):
+    audit_id: UUID
+    phase_execution_id: int
+    phase: str
+    question: str = Field(..., min_length=1)
+    context: Optional[str] = None
+    source: str = "llm_detector"
+    blocking: bool = True
+    assigned_user_id: Optional[int] = None
+
+
+class PhaseQuestionAnswer(BaseModel):
+    answer: str = Field(..., min_length=1)
+    answered_by_user_id: Optional[int] = None
+    status: str = Field("ANSWERED", pattern="^(ANSWERED|AUTO_ANSWERED)$")
+    answer_model: Optional[str] = None
+    answer_confidence: Optional[str] = None
+
+
+class PhaseQuestionUpdate(BaseModel):
+    question: Optional[str] = None
+    context: Optional[str] = None
+    status: Optional[str] = Field(None, pattern="^(OPEN|ANSWERED|AUTO_ANSWERED|DISMISSED)$")
+    blocking: Optional[bool] = None
+    assigned_user_id: Optional[int] = None
+    answer: Optional[str] = None
+    answered_by_user_id: Optional[int] = None
+    answer_model: Optional[str] = None
+    answer_confidence: Optional[str] = None
+
+
+class PhaseQuestionResponse(BaseModel):
+    id: int
+    audit_id: UUID
+    phase_execution_id: int
+    phase: str
+    question: str
+    context: Optional[str] = None
+    source: Optional[str] = None
+    status: str
+    blocking: bool
+    assigned_user_id: Optional[int] = None
+    answer: Optional[str] = None
+    answered_by_user_id: Optional[int] = None
+    answer_model: Optional[str] = None
+    answer_confidence: Optional[str] = None
+    created_at: datetime
+    answered_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class PhaseQuestionListResponse(BaseModel):
+    total: int
+    questions: List[PhaseQuestionResponse]
+
+
 class AuditResponse(BaseModel):
     id: UUID
     name: str

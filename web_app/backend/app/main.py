@@ -8,7 +8,7 @@ import os
 from sqlalchemy import text
 
 from app.database import engine, Base
-from app.api import audits, phases, findings, logs, preview, websockets, workers, users
+from app.api import audits, phases, findings, logs, preview, websockets, workers, users, questions
 from app.config import settings
 
 # Configure logging
@@ -138,6 +138,7 @@ app.include_router(findings.router, prefix="/api/findings", tags=["findings"])
 app.include_router(logs.router, prefix="/api/logs", tags=["logs"])
 app.include_router(workers.router, prefix="/api/workers", tags=["workers"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
+app.include_router(questions.router, prefix="/api/questions", tags=["questions"])
 app.include_router(preview.router, prefix="/api/preview", tags=["preview"])
 app.include_router(websockets.router, prefix="/ws", tags=["websockets"])
 

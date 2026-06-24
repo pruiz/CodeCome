@@ -125,6 +125,22 @@ export const phasesApi = {
   }).then(res => parseResponse(res, 'Failed to retry phase')),
 };
 
+export const questionsApi = {
+  list: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.audit_id) query.set('audit_id', params.audit_id);
+    if (params.phase_execution_id) query.set('phase_execution_id', params.phase_execution_id);
+    if (params.status) query.set('status', params.status);
+    return fetch(`${API_BASE}/questions/?${query}`).then(res => parseResponse(res, 'Failed to list questions'));
+  },
+  answer: (id, data) => fetch(`${API_BASE}/questions/${id}/answer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }).then(res => parseResponse(res, 'Failed to answer question')),
+  dismiss: (id) => fetch(`${API_BASE}/questions/${id}/dismiss`, { method: 'POST' }).then(res => parseResponse(res, 'Failed to dismiss question')),
+};
+
 export const workersApi = {
   list: () => fetch(`${API_BASE}/workers/`).then(res => parseResponse(res, 'Failed to list workers')),
   get: (id) => fetch(`${API_BASE}/workers/${id}`).then(res => parseResponse(res, 'Failed to load worker')),

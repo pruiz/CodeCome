@@ -179,6 +179,34 @@ class PhaseTriage(Base):
     )
 
 
+class PhaseQuestion(Base):
+    __tablename__ = "phase_questions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    audit_id = Column(UUID(as_uuid=True), ForeignKey("audits.id", ondelete="CASCADE"), nullable=False)
+    phase_execution_id = Column(Integer, ForeignKey("phase_executions.id", ondelete="CASCADE"), nullable=False)
+    phase = Column(String(20), nullable=False)
+    question = Column(Text, nullable=False)
+    context = Column(Text)
+    source = Column(String(50), default="llm_detector")
+    status = Column(String(20), nullable=False, default="OPEN")  # OPEN, ANSWERED, AUTO_ANSWERED, DISMISSED
+    blocking = Column(Boolean, default=True, nullable=False)
+    assigned_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    answer = Column(Text)
+    answered_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    answer_model = Column(String(255))
+    answer_confidence = Column(String(20))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    answered_at = Column(DateTime(timezone=True))
+
+    __table_args__ = (
+        Index("idx_phase_questions_audit", "audit_id"),
+        Index("idx_phase_questions_execution", "phase_execution_id"),
+        Index("idx_phase_questions_status", "status"),
+        Index("idx_phase_questions_assigned", "assigned_user_id"),
+    )
+
+
 class Finding(Base):
     __tablename__ = "findings"
     

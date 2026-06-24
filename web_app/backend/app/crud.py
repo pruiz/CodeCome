@@ -330,6 +330,71 @@ def latest_phase_triage(db: Session, phase_execution_id: int) -> Optional[models
     )
 
 
+def create_phase_question(db: Session, question_data: schemas.PhaseQuestionCreate) -> models.PhaseQuestion:
+    question = models.PhaseQuestion(status="OPEN", **question_data.model_dump())
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+    return question
+
+
+def get_phase_question(db: Session, question_id: int) -> Optional[models.PhaseQuestion]:
+    return db.query(models.PhaseQuestion).filter(models.PhaseQuestion.id == question_id).first()
+
+
+def get_phase_questions(
+    db: Session,
+    audit_id: Optional[UUID] = None,
+    phase_execution_id: Optional[int] = None,
+    status_filter: Optional[str] = None,
+) -> tuple[int, List[models.PhaseQuestion]]:
+    query = db.query(models.PhaseQuestion)
+    count_query = db.query(func.count(models.PhaseQuestion.id))
+    if audit_id:
+        query = query.filter(models.PhaseQuestion.audit_id == audit_id)
+        count_query = count_query.filter(models.PhaseQuestion.audit_id == audit_id)
+    if phase_execution_id:
+        query = query.filter(models.PhaseQuestion.phase_execution_id == phase_execution_id)
+        count_query = count_query.filter(models.PhaseQuestion.phase_execution_id == phase_execution_id)
+    if status_filter:
+        query = query.filter(models.PhaseQuestion.status == status_filter)
+        count_query = count_query.filter(models.PhaseQuestion.status == status_filter)
+    total = count_query.scalar()
+    questions = query.order_by(models.PhaseQuestion.created_at.desc(), models.PhaseQuestion.id.desc()).all()
+    return total, questions
+
+
+def update_phase_question(db: Session, question_id: int, updates: schemas.PhaseQuestionUpdate) -> Optional[models.PhaseQuestion]:
+    question = get_phase_question(db, question_id)
+    if not question:
+        return None
+    data = updates.model_dump(exclude_unset=True)
+    for key, value in data.items():
+        setattr(question, key, value)
+    if data.get("status") in ("ANSWERED", "AUTO_ANSWERED", "DISMISSED") and not question.answered_at:
+        question.answered_at = datetime.now()
+    db.commit()
+    db.refresh(question)
+    return question
+
+
+def answer_phase_question(db: Session, question_id: int, answer_data: schemas.PhaseQuestionAnswer) -> Optional[models.PhaseQuestion]:
+    return update_phase_question(db, question_id, schemas.PhaseQuestionUpdate(
+        status=answer_data.status,
+        answer=answer_data.answer,
+        answered_by_user_id=answer_data.answered_by_user_id,
+        answer_model=answer_data.answer_model,
+        answer_confidence=answer_data.answer_confidence,
+    ))
+
+
+def dismiss_phase_question(db: Session, question_id: int, answered_by_user_id: int | None = None) -> Optional[models.PhaseQuestion]:
+    return update_phase_question(db, question_id, schemas.PhaseQuestionUpdate(
+        status="DISMISSED",
+        answered_by_user_id=answered_by_user_id,
+    ))
+
+
 def update_audit_status(db: Session, audit_id: UUID, new_status: str) -> Optional[models.Audit]:
     db_audit = get_audit(db, audit_id)
     if not db_audit:

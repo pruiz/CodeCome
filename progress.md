@@ -46,7 +46,7 @@ Continue from `progress.md` and implement the next unfinished TODO.
 - [x] Add tests for global findings API and preview config API.
 - [x] Add optional `make sweep` phase after `phase-2` without adding it to automatic progression.
 - [x] Replace web `phase-4`/`phase-5` steps with CodeCome batch commands `make validate-all` and `make exploit-all`.
-
+- [] Analyze what happens when the same agent have 2 or more audits, i saw an error messsage in one audit in phase 4 that ir failed beacuse the sandbox was from another audit.
 ## Current Major Feature: Users, Question Owners, and Fake AI Answerers
 
 Goal: successful phases that produce questions for the user must pause the workflow until the audit's assigned question owner answers them. The owner may be a human user answering in the web app, or a fake AI user that answers automatically and allows the workflow to continue.
@@ -66,7 +66,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 
 - [x] Add `users` table with username, password hash, display name, active flag, fake-AI fields, and timestamps.
 - [x] Add `audits.question_owner_user_id` runtime-schema column and model/schema/API support.
-- [ ] Add `phase_questions` table with audit, phase execution, phase, question, context, blocking flag, status, assignment, answer metadata, and timestamps.
+- [x] Add `phase_questions` table with audit, phase execution, phase, question, context, blocking flag, status, assignment, answer metadata, and timestamps.
 - [ ] Add durable answer context file generation at `runs/user-answers-context.md`.
 
 ### Backend/API TODO
@@ -74,7 +74,8 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Add user CRUD APIs for listing users and creating/editing fake AI users.
 - [ ] Add minimal auth foundation for human login users.
 - [x] Add audit update support for `question_owner_user_id`.
-- [ ] Add question APIs: list by audit, list by phase execution, answer, dismiss, auto-answer, continue-after-questions.
+- [x] Add question APIs: list by audit, list by phase execution, answer, dismiss.
+- [ ] Add question APIs: auto-answer and continue-after-questions.
 - [ ] Add question extraction/detection after successful phase completion.
 - [ ] Add auto-continue gate: do not queue next phase while blocking questions are open.
 - [ ] Add fake AI auto-answer Celery task using the assigned fake AI user's model/context.
@@ -85,18 +86,19 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [ ] Add login/logout UI once auth API exists.
 - [ ] Add users/fake-AI user management UI.
 - [ ] Add audit question owner selector in audit overview/config.
-- [ ] Add audit Questions tab listing open/answered/dismissed questions by phase.
-- [ ] Add question panel to Current Phase for selected execution questions.
-- [ ] Add answer/dismiss controls for human users.
+- [x] Add audit Questions tab listing open/answered/dismissed questions by phase.
+- [x] Add question panel to Current Phase for selected execution questions.
+- [x] Add answer/dismiss controls for human users.
 - [ ] Add fake AI answer/regenerate controls for fake-AI-owned questions.
 - [ ] Add paused-for-questions status display and continue-after-questions button.
 
 ### Testing/Quality TODO
 
 - [x] Add backend tests for user/fake-AI CRUD.
-- [ ] Add backend tests for question creation, answer, dismiss, and blocking gate.
+- [x] Add backend tests for question creation, answer, and dismiss.
+- [ ] Add backend tests for question blocking gate.
 - [ ] Add backend tests for fake AI answer normalization and continuation.
-- [ ] Add frontend tests for question owner selector and question answer UI.
+- [x] Add frontend tests for question owner selector and question answer UI.
 - [ ] Add frontend tests for fake AI user management or auto-answer controls.
 - [ ] Run `web_app/run-checks.sh` before each implementation commit when practical.
 - [ ] Smoke test locally through `http://localhost:3000` and `http://localhost:8000/health`.

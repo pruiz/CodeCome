@@ -4,6 +4,7 @@ import { useAudit } from '../hooks/useAudits';
 import { auditsApi, logsApi, phasesApi } from '../services/api';
 import LiveLogs from './LiveLogs';
 import FindingsList from './FindingsList';
+import AuditQuestions from './AuditQuestions';
 import { formatSpainDateTime, formatSpainTime } from '../utils/dates';
 
 function cleanTerminalText(value) {
@@ -527,6 +528,8 @@ function SelectedPhasePanel({ audit, selectedPhase, selectedExecutionId, onRerun
         </div>
       )}
 
+      {execution && <div className="mt-4"><AuditQuestions auditId={audit.id} phaseExecutionId={execution.id} /></div>}
+
       {phaseDetails && (
         <div className="mt-4 rounded bg-gray-950/70 p-3">
           <div className="mb-3 text-sm font-semibold">Captured command output</div>
@@ -1020,6 +1023,7 @@ export default function AuditDetails() {
     { key: 'phaseHistory', label: 'Phase History' },
     { key: 'logs', label: 'Live Logs' },
     { key: 'findings', label: 'Findings' },
+    { key: 'questions', label: 'Questions' },
     { key: 'config', label: 'Config' },
   ];
   
@@ -1165,6 +1169,7 @@ export default function AuditDetails() {
         
         {activeTab === 'logs' && <LiveLogs auditId={id} />}
         {activeTab === 'findings' && <FindingsList auditId={id} />}
+        {activeTab === 'questions' && <AuditQuestions auditId={id} />}
         {activeTab === 'config' && <ConfigEditor audit={audit} onRefresh={refetch} />}
       </div>
     </div>
