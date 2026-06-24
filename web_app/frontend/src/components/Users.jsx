@@ -99,11 +99,15 @@ export default function Users() {
   const [form, setForm] = useState(blankForm);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [typeFilter, setTypeFilter] = useState('all');
 
   const load = async () => {
     setLoading(true);
     try {
-      const data = await usersApi.list({ limit: 500 });
+      const params = { limit: 500 };
+      if (typeFilter === 'human') params.is_llm_user = false;
+      if (typeFilter === 'ai') params.is_llm_user = true;
+      const data = await usersApi.list(params);
       setUsers(data.users || []);
     } finally {
       setLoading(false);
@@ -112,7 +116,7 @@ export default function Users() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [typeFilter]);
 
   const createUser = async () => {
     setMessage('');
@@ -167,7 +171,22 @@ export default function Users() {
       <div className="vortex-card rounded-xl p-5">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-semibold">Existing Users</h3>
-          <button onClick={load} className="rounded bg-gray-800 px-3 py-2 text-sm hover:bg-gray-700">Refresh</button>
+          <div className="flex flex-wrap gap-2">
+            {[
+              ['all', 'All'],
+              ['human', 'Human'],
+              ['ai', 'AI'],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setTypeFilter(value)}
+                className={`rounded px-3 py-2 text-sm ${typeFilter === value ? 'bg-blue-700 text-white' : 'bg-gray-800 hover:bg-gray-700'}`}
+              >
+                {label}
+              </button>
+            ))}
+            <button onClick={load} className="rounded bg-gray-800 px-3 py-2 text-sm hover:bg-gray-700">Refresh</button>
+          </div>
         </div>
         {loading ? <div className="text-gray-500">Loading users...</div> : (
           <div className="space-y-2">

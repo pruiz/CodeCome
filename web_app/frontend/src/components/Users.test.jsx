@@ -106,4 +106,17 @@ describe('Users', () => {
       });
     });
   });
+
+  it('filters users by AI type', async () => {
+    const user = userEvent.setup();
+    render(<Users />);
+
+    expect(await screen.findByText('Human Owner')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'AI' }));
+
+    await waitFor(() => {
+      const urls = global.fetch.mock.calls.map(([url]) => String(url));
+      expect(urls.some((url) => url.includes('is_llm_user=true'))).toBe(true);
+    });
+  });
 });
