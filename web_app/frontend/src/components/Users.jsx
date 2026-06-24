@@ -23,6 +23,7 @@ function UserBadge({ user }) {
 function UserCard({ user, onChanged }) {
   const [form, setForm] = useState({
     display_name: user.display_name || '',
+    password: '',
     llm_model: user.llm_model || '',
     llm_context: user.llm_context || '',
     auto_answer_enabled: !!user.auto_answer_enabled,
@@ -32,6 +33,7 @@ function UserCard({ user, onChanged }) {
   useEffect(() => {
     setForm({
       display_name: user.display_name || '',
+      password: '',
       llm_model: user.llm_model || '',
       llm_context: user.llm_context || '',
       auto_answer_enabled: !!user.auto_answer_enabled,
@@ -42,7 +44,9 @@ function UserCard({ user, onChanged }) {
   const save = async () => {
     setMessage('');
     try {
-      await usersApi.update(user.id, form);
+      const payload = { ...form };
+      if (!payload.password) delete payload.password;
+      await usersApi.update(user.id, payload);
       setMessage('User saved.');
       await onChanged?.();
     } catch (error) {
@@ -67,6 +71,9 @@ function UserCard({ user, onChanged }) {
 
       <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
         <input value={form.display_name} onChange={(event) => setForm({ ...form, display_name: event.target.value })} className="rounded border border-gray-800 bg-gray-900 px-3 py-2 text-sm" aria-label={`Display name for ${user.username}`} placeholder="display name" />
+        {!user.is_llm_user && (
+          <input value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} type="password" className="rounded border border-gray-800 bg-gray-900 px-3 py-2 text-sm" aria-label={`New password for ${user.username}`} placeholder="new password" />
+        )}
         {user.is_llm_user && (
           <input value={form.llm_model} onChange={(event) => setForm({ ...form, llm_model: event.target.value })} className="rounded border border-gray-800 bg-gray-900 px-3 py-2 text-sm" aria-label={`AI model for ${user.username}`} placeholder="model" />
         )}

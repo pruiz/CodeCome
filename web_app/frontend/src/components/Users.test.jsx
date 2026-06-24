@@ -88,4 +88,22 @@ describe('Users', () => {
       });
     });
   });
+
+  it('updates a human user password', async () => {
+    const user = userEvent.setup();
+    render(<Users />);
+
+    expect(await screen.findByText('Human Owner')).toBeInTheDocument();
+    await user.type(screen.getByLabelText('New password for human'), 'new-secret');
+    await user.click(screen.getAllByRole('button', { name: 'Save User' })[0]);
+
+    await waitFor(() => {
+      const updateCall = global.fetch.mock.calls.find(([, options]) => options?.method === 'PATCH');
+      expect(updateCall).toBeTruthy();
+      expect(JSON.parse(updateCall[1].body)).toMatchObject({
+        display_name: 'Human Owner',
+        password: 'new-secret',
+      });
+    });
+  });
 });
