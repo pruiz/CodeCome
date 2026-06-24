@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.18), transparent 28rem),
+    radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.10), transparent 24rem),
+    #0f172a;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+.scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollbar::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+
+.scrollbar::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 4px;
+}
+
+.scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+.vortex-card {
+  background: rgba(30, 41, 59, 0.78);
+  border: 1px solid rgba(71, 85, 105, 0.55);
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.35), 0 8px 10px -6px rgb(0 0 0 / 0.35);
+  backdrop-filter: blur(10px);
+}
+
+.vortex-panel {
+  background: rgba(15, 23, 42, 0.86);
+  border: 1px solid rgba(51, 65, 85, 0.75);
+}
+
+.vortex-stat-blue {
+  background: linear-gradient(135deg, #2563eb, #0ea5e9);
+  box-shadow: 0 20px 30px -12px rgba(37, 99, 235, 0.7);
+}
+
+.vortex-stat-green {
+  background: linear-gradient(135deg, #16a34a, #14b8a6);
+  box-shadow: 0 20px 30px -12px rgba(20, 184, 166, 0.55);
+}
+
+.vortex-stat-amber {
+  background: linear-gradient(135deg, #d97706, #facc15);
+  box-shadow: 0 20px 30px -12px rgba(217, 119, 6, 0.55);
+}
+
+.vortex-stat-red {
+  background: linear-gradient(135deg, #dc2626, #f97316);
+  box-shadow: 0 20px 30px -12px rgba(220, 38, 38, 0.55);
+}
