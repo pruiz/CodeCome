@@ -138,6 +138,35 @@ class BaseEventLoop:
 
         return messages
 
+    def _fetch_session_status(self, timeout: float = 2.0) -> str | None:
+        """Best-effort lookup of this session's current opencode status.
+
+        opencode's /session/status endpoint only returns non-idle sessions; if
+        this session is absent from the response map, treat that as idle.
+        """
+        try:
+            req = urllib.request.Request(
+                f"{self.base_url}/session/status",
+                headers=self._get_headers(),
+                method="GET",
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except Exception:  # noqa: BLE001
+            return None
+
+        if not isinstance(data, dict):
+            return None
+        status = data.get(self.session_id)
+        if status is None:
+            return "idle"
+        if isinstance(status, dict):
+            status_type = status.get("type")
+            return status_type if isinstance(status_type, str) else None
+        if isinstance(status, str):
+            return status
+        return None
+
     def _messages_to_events(self, messages: list[Any]) -> list[dict[str, Any]]:
         events: list[dict[str, Any]] = []
 

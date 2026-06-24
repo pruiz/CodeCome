@@ -485,6 +485,10 @@ def _resume_opener_for_reason(reason: str) -> str:
     treated as incomplete:
 
     - ``"infrastructure_error"`` — harness fatal-retry path.
+    - ``"server_unreachable"`` — the opencode server was unreachable or
+      unresponsive and was restarted.
+    - ``"session_stalled"`` — the model turn produced no activity for an
+      extended period (hung); the server was restarted.
     - A finish reason from ``rendering.events._FINISH_MID_TURN`` (e.g.
       ``"tool_use"``, ``"unknown"``) — the model/provider cut off mid-turn.
     - A finish reason from ``rendering.events._FINISH_BUDGET`` (e.g.
@@ -507,6 +511,17 @@ def _resume_opener_for_reason(reason: str) -> str:
 
     if reason == "infrastructure_error":
         return "Your previous attempt failed with an infrastructure error and was retried."
+    if reason == "server_unreachable":
+        return (
+            "The opencode server that was hosting your previous session died unexpectedly. "
+            "CodeCome has restarted the server. Your previous session was lost."
+        )
+    if reason == "session_stalled":
+        return (
+            "Your previous session stalled: the model turn produced no activity for an "
+            "extended period and did not complete. CodeCome has restarted the server. "
+            "Your previous session was lost."
+        )
     if reason in _FINISH_MID_TURN:
         return (
             f"Your previous run was cut off mid-turn (finish reason '{reason}') "

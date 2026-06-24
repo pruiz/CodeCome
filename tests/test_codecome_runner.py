@@ -162,7 +162,11 @@ def test_run_single_attempt_records_prompt_timeout(mock_args, mock_console, monk
     monkeypatch.setattr(runner, "_consume_events", lambda *a, **kw: RunResult())
 
     def fake_send(*_a, **_kw):
-        raise TimeoutError("timed out")
+        raise runner.OpenCodeRequestError(
+            "Failed to send prompt: timed out",
+            retriable=True,
+            operation="send_prompt",
+        )
 
     monkeypatch.setattr(runner, "send_prompt_to_session", fake_send)
 
@@ -172,23 +176,55 @@ def test_run_single_attempt_records_prompt_timeout(mock_args, mock_console, monk
     fake_transcript.write_event.side_effect = events.append
     monkeypatch.setattr(Transcript, "for_phase", classmethod(lambda cls, p, f: fake_transcript))
 
-    fatal_errors = []
     code, session_id, _res, _path = runner._run_single_attempt(
         mock_args, mock_console, "do work", "model", "var",
         "http://base", "auth", "dir", lambda *a: None,
-        emit_fatal_error_fn=lambda _console, _title, msg: fatal_errors.append(msg),
+        emit_fatal_error_fn=lambda *_a: pytest.fail("retriable prompt timeout should not be fatal"),
     )
 
-    assert code == 1
-    assert session_id == ""
-    assert fatal_errors == ["timed out"]
+    assert code == 2
+    assert session_id == "new_session"
     event_types = [event["type"] for event in events]
     assert "codecome.prompt.send_started" in event_types
     assert "codecome.prompt.send_failed" in event_types
-    assert "codecome.attempt.failed" in event_types
+    assert "codecome.attempt.incomplete" in event_types
+    assert "codecome.attempt.failed" not in event_types
     failed = next(event for event in events if event["type"] == "codecome.prompt.send_failed")
-    assert failed["properties"]["errorType"] == "TimeoutError"
-    assert failed["properties"]["message"] == "timed out"
+    assert failed["properties"]["errorType"] == "OpenCodeRequestError"
+    assert failed["properties"]["message"] == "Failed to send prompt: timed out"
+
+
+def test_run_single_attempt_create_session_timeout_is_recoverable(mock_args, mock_console, monkeypatch):
+    def fake_create(*_a, **_kw):
+        raise runner.OpenCodeRequestError(
+            "Failed to create session: timed out",
+            retriable=True,
+            operation="create_session",
+        )
+
+    monkeypatch.setattr(runner, "create_session", fake_create)
+    monkeypatch.setattr(runner, "_consume_events", lambda *a, **kw: pytest.fail("should not consume events"))
+    monkeypatch.setattr(runner, "send_prompt_to_session", lambda *a, **kw: pytest.fail("should not send prompt"))
+
+    events = []
+    fake_transcript = MagicMock(spec=Transcript)
+    fake_transcript.path = Path("fake.jsonl")
+    fake_transcript.write_event.side_effect = events.append
+    monkeypatch.setattr(Transcript, "for_phase", classmethod(lambda cls, p, f: fake_transcript))
+
+    code, session_id, res, _path = runner._run_single_attempt(
+        mock_args, mock_console, "do work", "model", "var",
+        "http://base", "auth", "dir", lambda *a: None,
+        emit_fatal_error_fn=lambda *_a: pytest.fail("retriable create timeout should not be fatal"),
+    )
+
+    assert code == 2
+    assert session_id == ""
+    assert res.last_finish_reason == "server_unreachable"
+    event_types = [event["type"] for event in events]
+    assert "codecome.session.create_failed" in event_types
+    assert "codecome.attempt.incomplete" in event_types
+    assert "codecome.session.ready" not in event_types
 
 
 def test_existing_session_busy_guard_blocks_resume_prompt(mock_args, mock_console, monkeypatch):

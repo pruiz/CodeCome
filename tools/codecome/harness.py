@@ -20,13 +20,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-from opencode.serve import ServerRunner, ServerRunnerError
+from opencode.serve import ServerRunner, ServerRunnerError, make_liveness_check
 
 from codecome.console import build_console, _emit_fatal_error
 from rendering.dispatch import _get_rendering_ctx, configure_rendering, render_event
 from rendering.output import get_output, T
 from rendering.events import _FINISH_TERMINAL_OK, _FINISH_MID_TURN, _FINISH_BUDGET, _FINISH_FAILURE
 from codecome.config import ROOT, resolve_color_mode, load_prompt, resolve_runtime_config
+from codecome.status import RunStatus
 from phases.completion import (
     check_phase_graceful_completion,
     build_phase_resume_prompt, build_frontmatter_resume_prompt,
@@ -93,6 +94,28 @@ def _write_phase3_noop_summary() -> Path:
     return path
 
 
+# Recovery conditions that are handled by restarting the opencode server and
+# retrying. Maps the finish reason to its user-facing recovery wording.
+_RECOVERABLE_RESTART_REASONS: dict[str, str] = {
+    "server_unreachable": (
+        "The opencode server is unreachable or unresponsive."
+    ),
+    "session_stalled": (
+        "The model turn produced no activity for an extended period (stalled)."
+    ),
+}
+
+
+def _restart_server(runner: ServerRunner, *, log_level: str) -> Any:
+    """Restart the opencode server, returning the new ServerInfo.
+
+    Centralizes the single stop/start invocation so the Phase 1 and Phase 2-6
+    recovery paths never duplicate the restart call. Raises ServerRunnerError on
+    failure (the caller decides how to surface it).
+    """
+    return runner.restart(hostname="127.0.0.1", log_level=log_level)
+
+
 def run_phase_mode(args: argparse.Namespace) -> int:
     """Run a single phase with auto-retry/resume.
 
@@ -143,7 +166,48 @@ def run_phase_mode(args: argparse.Namespace) -> int:
         _p1_prev_sigterm = signal.signal(signal.SIGTERM, _p1_forward_signal)
         try:
             from codecome.phase_1 import run_phase_1 as _run_phase_1
-            return _run_phase_1(args, console, _rendering_ctx, _p1_runner, _p1_server_info.base_url)
+            _p1_base_url = _p1_server_info.base_url
+            _p1_start_at = "1a"
+            _p1_restart_count = 0
+            _p1_max_server_restarts = int(os.environ.get("CODECOME_MAX_SERVER_RESTARTS", "2"))
+
+            while True:
+                outcome = _run_phase_1(
+                    args,
+                    console,
+                    _rendering_ctx,
+                    _p1_runner,
+                    _p1_base_url,
+                    start_at=_p1_start_at,
+                )
+                if outcome.status not in (RunStatus.SERVER_UNREACHABLE, RunStatus.SESSION_STALLED):
+                    return int(outcome.status)
+
+                if _p1_restart_count >= _p1_max_server_restarts:
+                    get_output(console).error(
+                        f"Server restart budget exhausted ({_p1_restart_count}/{_p1_max_server_restarts}). "
+                        "Cannot continue Phase 1."
+                    )
+                    return int(RunStatus.ERROR)
+
+                _p1_restart_count += 1
+                _p1_start_at = outcome.failed_subphase or _p1_start_at
+                _p1_reason = (
+                    "session_stalled"
+                    if outcome.status == RunStatus.SESSION_STALLED
+                    else "server_unreachable"
+                )
+                get_output(console).warn(
+                    f"\n[Auto-Recovery] {_RECOVERABLE_RESTART_REASONS[_p1_reason]} "
+                    f"CodeCome will restart the opencode server and retry from Phase {_p1_start_at} "
+                    f"(server restart {_p1_restart_count}/{_p1_max_server_restarts})."
+                )
+                try:
+                    _p1_server_info = _restart_server(_p1_runner, log_level=args.log_level)
+                except ServerRunnerError as exc:
+                    _emit_fatal_error(console, "Server Restart Error", str(exc))
+                    return int(RunStatus.ERROR)
+                _p1_base_url = _p1_server_info.base_url
         finally:
             signal.signal(signal.SIGINT, _p1_prev_sigint)
             signal.signal(signal.SIGTERM, _p1_prev_sigterm)
@@ -204,6 +268,8 @@ def run_phase_mode(args: argparse.Namespace) -> int:
     finish_warning: Optional[str] = None
     phase_failures: list[str] = []
     phase_ok: bool = False  # defensive default; assigned in D.2 or D.3 before use in D.3b
+    server_restart_count = 0
+    max_server_restarts = int(os.environ.get("CODECOME_MAX_SERVER_RESTARTS", "2"))
 
     os.environ["_CODECOME_INSIDE_HARNESS"] = "1"
 
@@ -232,6 +298,7 @@ def run_phase_mode(args: argparse.Namespace) -> int:
 
     from codecome.runner import _run_single_attempt
     from rendering.events import _reset_subagent_state
+    liveness_check = make_liveness_check(runner)
     try:
         while True:
             attempt_number += 1
@@ -245,10 +312,11 @@ def run_phase_mode(args: argparse.Namespace) -> int:
                 server_info.password, str(ROOT),
                 render_event_fn=render_event,
                 emit_fatal_error_fn=_emit_fatal_error,
-                existing_session_id=last_session_id or None
+                existing_session_id=last_session_id or None,
+                liveness_check=liveness_check,
             )
 
-            if returncode == 2 and run_result.last_finish_reason == "resume_not_ready":
+            if returncode == RunStatus.INCOMPLETE and run_result.last_finish_reason == "resume_not_ready":
                 last_session_id = session_id or last_session_id
                 last_finish_reason = run_result.last_finish_reason
                 finish_warning = (
@@ -257,7 +325,43 @@ def run_phase_mode(args: argparse.Namespace) -> int:
                 )
                 break
 
-            if returncode != 0:
+            _recovery_reason = None
+            if returncode == RunStatus.INCOMPLETE and run_result.last_finish_reason == "server_unreachable":
+                _recovery_reason = "server_unreachable"
+            elif getattr(run_result, "session_stalled", False) or run_result.last_finish_reason == "session_stalled":
+                _recovery_reason = "session_stalled"
+
+            if _recovery_reason is not None:
+                if server_restart_count < max_server_restarts:
+                    server_restart_count += 1
+                    out.warn(
+                        f"\n[Auto-Recovery] {_RECOVERABLE_RESTART_REASONS[_recovery_reason]} "
+                        f"CodeCome will restart the opencode server and retry with a fresh session "
+                        f"(server restart {server_restart_count}/{max_server_restarts})."
+                    )
+                    try:
+                        server_info = _restart_server(runner, log_level=args.log_level)
+                    except ServerRunnerError as exc:
+                        _emit_fatal_error(console, "Server Restart Error", str(exc))
+                        return int(RunStatus.ERROR)
+                    base_url = server_info.base_url
+                    last_session_id = ""
+                    prompt = build_phase_resume_prompt(
+                        str(args.phase), args.finding,
+                        _recovery_reason, step_finish_count,
+                        failure_details=phase_failures if phase_failures else None,
+                    )
+                    continue
+                last_session_id = session_id or last_session_id
+                last_finish_reason = _recovery_reason
+                finish_warning = (
+                    f"CodeCome attempted {server_restart_count} server restart(s) after a "
+                    f"'{_recovery_reason}' condition, but the restart budget is exhausted. "
+                    "The phase cannot continue."
+                )
+                break
+
+            if returncode != RunStatus.OK:
                 # Infrastructure/transient failure (timeout, connection error, etc.)
                 # Retry with a separate budget so infra blips don't consume the
                 # "model needs more turns" iteration retry budget.
@@ -342,28 +446,28 @@ def run_phase_mode(args: argparse.Namespace) -> int:
                             finish_warning = None
                             last_finish_reason = "graceful_forgiveness"
                         else:
-                            returncode = 2
+                            returncode = RunStatus.INCOMPLETE
                     else:
                         # _FINISH_BUDGET: fail only if artifacts are incomplete
                         if not phase_ok:
-                            returncode = 2
+                            returncode = RunStatus.INCOMPLETE
                         else:
                             finish_warning = None
                 else:
-                    returncode = 2
+                    returncode = RunStatus.INCOMPLETE
 
-            if returncode == 0:
+            if returncode == RunStatus.OK:
                 if last_finish_reason in _FINISH_TERMINAL_OK:
                     phase_ok, phase_failures = check_phase_graceful_completion(
                         str(args.phase), args.finding, RUN_START_TIME)
                     if not phase_ok:
-                        returncode = 2
+                        returncode = RunStatus.INCOMPLETE
                         finish_warning = (
                             f"Phase {args.phase} reported terminal finish reason '{last_finish_reason}', "
                             "but required durable artifacts were not produced. Treating as incomplete."
                         )
 
-                if returncode == 0:
+                if returncode == RunStatus.OK:
                     from findings.checks_entry import run_frontmatter_validation
 
                     validation_rc, validation_output = run_frontmatter_validation()
@@ -381,14 +485,14 @@ def run_phase_mode(args: argparse.Namespace) -> int:
                                 prompt = build_frontmatter_resume_prompt(args.phase, args.finding, validation_output)
                                 continue
                             else:
-                                returncode = 2
+                                returncode = RunStatus.INCOMPLETE
                                 finish_warning = (
                                     "The model output failed local frontmatter validation, and CodeCome could not determine a "
                                     "session ID to resume for repair. Treating the phase as incomplete so the validator output "
                                     "can be reported back with the saved transcript."
                                 )
                         else:
-                            returncode = 2
+                            returncode = RunStatus.INCOMPLETE
                             finish_warning = (
                                 f"The model output still fails local frontmatter validation after {max_frontmatter_retries} "
                                 "auto-repair attempts. Treating the phase as incomplete so the validation errors can be reported back."
@@ -397,10 +501,10 @@ def run_phase_mode(args: argparse.Namespace) -> int:
                             out.error(msg)
                             print(validation_output)
                         break
-                if returncode == 0:
+                if returncode == RunStatus.OK:
                     break
 
-            if returncode == 2 and (
+            if returncode == RunStatus.INCOMPLETE and (
                 last_finish_reason in _FINISH_MID_TURN
                 or last_finish_reason in _FINISH_BUDGET
                 or (last_finish_reason in _FINISH_TERMINAL_OK and not phase_ok)
@@ -442,14 +546,14 @@ def run_phase_mode(args: argparse.Namespace) -> int:
         signal.signal(signal.SIGTERM, previous_sigterm)
         runner.stop()
 
-    if returncode == 0:
+    if returncode == RunStatus.OK:
         out.separator(tone=T.SUCCESS)
         out.success(f"Phase {args.phase} completed successfully", symbol=True)
         out.detail(
             f"  finish reason: {last_finish_reason!r}  "
             f"transcript: {transcript_path.relative_to(ROOT)}"
         )
-    elif returncode == 130:
+    elif returncode == RunStatus.INTERRUPTED:
         out.separator(tone=T.WARNING)
         out.warn(f"Phase {args.phase} interrupted")
     else:

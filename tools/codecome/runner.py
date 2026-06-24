@@ -18,13 +18,24 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import _colors as C
 from events.phase_loop import PhaseEventLoop, RunResult
 from codecome.config import ROOT
-from codecome.session import create_session, get_session_status, send_prompt_to_session
+from codecome.session import (
+    OpenCodeRequestError,
+    create_session,
+    get_session_status,
+    is_server_healthy,
+    send_prompt_to_session,
+)
+from codecome.status import RunStatus
 from codecome.transcript import Transcript
 from codecome.recording import EventRecorder
 
 
 class ResumeSessionNotReady(RuntimeError):
     """Raised when an existing session is not ready for a resume prompt."""
+
+
+class ResumeSessionServerUnreachable(ResumeSessionNotReady):
+    """Raised when the server appears to be dead/unreachable during resume wait."""
 
 
 def _consume_events(
@@ -39,6 +50,7 @@ def _consume_events(
     workspace_dir: str | None,
     render_event_fn: Callable[..., None],
     event_loop_box: dict[str, Any] | None = None,
+    liveness_check: Callable[[], bool] | None = None,
 ) -> RunResult:
     event_loop = PhaseEventLoop(
         base_url=base_url,
@@ -48,6 +60,7 @@ def _consume_events(
         label=label,
         auth_token=auth_token,
         workspace_dir=workspace_dir,
+        liveness_check=liveness_check,
     )
     if event_loop_box is not None:
         event_loop_box["loop"] = event_loop
@@ -74,16 +87,74 @@ def _wait_for_resume_idle(
     auth_token: str | None,
     workspace_dir: str | None,
     transcript: Transcript,
+    liveness_check: Callable[[], bool] | None = None,
 ) -> None:
     timeout_s = float(os.environ.get("CODECOME_RESUME_IDLE_TIMEOUT", "120"))
     poll_s = float(os.environ.get("CODECOME_RESUME_IDLE_POLL", "1"))
+    probe_timeout_s = float(os.environ.get("CODECOME_RESUME_PROBE_TIMEOUT", "2"))
     deadline = time.monotonic() + max(timeout_s, 0.0)
 
+    server_unavailable_threshold = int(
+        os.environ.get("CODECOME_RESUME_SERVER_UNAVAILABLE_THRESHOLD", "3")
+    )
+    consecutive_unavailable = 0
+
     while True:
-        status = get_session_status(base_url, session_id, auth_token, workspace_dir)
+        status = get_session_status(
+            base_url, session_id, auth_token, workspace_dir, timeout=probe_timeout_s
+        )
         if status == "idle":
             _record_codecome_event(transcript, "codecome.resume.status_ready", sessionID=session_id, status=status)
             return
+
+        if status is None:
+            # The session-status endpoint is unavailable. This is NOT proof the
+            # server is dead: under a long busy turn opencode's HTTP control
+            # plane (including /global/health) can block and time out while the
+            # process is perfectly alive. The authoritative death signal is the
+            # child process handle, supplied via liveness_check.
+            if liveness_check is not None:
+                if liveness_check():
+                    consecutive_unavailable = 0
+                    _record_codecome_event(
+                        transcript,
+                        "codecome.resume.status_unavailable_process_alive",
+                        sessionID=session_id,
+                    )
+                else:
+                    _record_codecome_event(
+                        transcript,
+                        "codecome.resume.server_unreachable",
+                        sessionID=session_id,
+                        processExited=True,
+                    )
+                    raise ResumeSessionServerUnreachable(
+                        f"server at {base_url} process has exited; "
+                        f"session {session_id} cannot be resumed"
+                    )
+            elif is_server_healthy(base_url, auth_token, workspace_dir, timeout=probe_timeout_s):
+                consecutive_unavailable = 0
+                _record_codecome_event(
+                    transcript,
+                    "codecome.resume.status_unavailable_server_healthy",
+                    sessionID=session_id,
+                )
+            else:
+                consecutive_unavailable += 1
+                if consecutive_unavailable >= server_unavailable_threshold:
+                    _record_codecome_event(
+                        transcript,
+                        "codecome.resume.server_unreachable",
+                        sessionID=session_id,
+                        consecutiveNone=consecutive_unavailable,
+                    )
+                    raise ResumeSessionServerUnreachable(
+                        f"server at {base_url} appears to be unreachable or dead "
+                        f"after {consecutive_unavailable} consecutive failed status and health checks; "
+                        f"session {session_id} cannot be resumed"
+                    )
+        else:
+            consecutive_unavailable = 0
 
         event_type = "codecome.resume.blocked_busy" if status == "busy" else "codecome.resume.blocked_unknown"
         _record_codecome_event(transcript, event_type, sessionID=session_id, status=status)
@@ -118,6 +189,7 @@ def _run_single_attempt(
     transcript_phase: str | None = None,
     phase_override: str | None = None,
     label_override: str | None = None,
+    liveness_check: Callable[[], bool] | None = None,
 ) -> tuple[int, str, RunResult, Path]:
 
     transcript: Transcript
@@ -142,9 +214,35 @@ def _run_single_attempt(
         )
         if existing_session_id:
             session_id = existing_session_id
-            _wait_for_resume_idle(base_url, session_id, auth_token, workspace_dir, transcript)
+            _wait_for_resume_idle(
+                base_url, session_id, auth_token, workspace_dir, transcript,
+                liveness_check=liveness_check,
+            )
         else:
-            session_id = create_session(base_url, str(args.phase), args.agent, model, auth_token, workspace_dir)
+            try:
+                session_id = create_session(base_url, str(args.phase), args.agent, model, auth_token, workspace_dir)
+            except OpenCodeRequestError as exc:
+                _record_codecome_event(
+                    transcript,
+                    "codecome.session.create_failed",
+                    errorType=type(exc).__name__,
+                    message=str(exc),
+                    retriable=exc.retriable,
+                    operation=exc.operation,
+                )
+                if exc.retriable:
+                    _record_codecome_event(
+                        transcript,
+                        "codecome.attempt.incomplete",
+                        errorType=type(exc).__name__,
+                        message=str(exc),
+                        existingSession=False,
+                    )
+                    return RunStatus.INCOMPLETE, "", RunResult(
+                        last_finish_reason="server_unreachable",
+                        last_session_id="",
+                    ), transcript.path
+                raise
 
         _record_codecome_event(
             transcript,
@@ -168,6 +266,7 @@ def _run_single_attempt(
                     auth_token, workspace_dir,
                     render_event_fn=render_event_fn,
                     event_loop_box=event_loop_box,
+                    liveness_check=liveness_check,
                 )
             except Exception as exc:  # noqa: BLE001
                 consume_error_box["error"] = exc
@@ -195,6 +294,18 @@ def _run_single_attempt(
             consumer.join(timeout=5.0)
             if consumer.is_alive():
                 _record_codecome_event(transcript, "codecome.event_loop.stop_timeout", sessionID=session_id)
+            if isinstance(exc, OpenCodeRequestError) and exc.retriable:
+                _record_codecome_event(
+                    transcript,
+                    "codecome.attempt.incomplete",
+                    errorType=type(exc).__name__,
+                    message=str(exc),
+                    existingSession=bool(existing_session_id),
+                )
+                return RunStatus.INCOMPLETE, session_id, RunResult(
+                    last_finish_reason="server_unreachable",
+                    last_session_id=session_id,
+                ), transcript.path
             raise
         _record_codecome_event(transcript, "codecome.prompt.send_completed", sessionID=session_id)
         consumer.join()
@@ -212,6 +323,25 @@ def _run_single_attempt(
         run_result = run_result_box.get("result")
         if not isinstance(run_result, RunResult):
             raise RuntimeError("Event loop ended without a RunResult")
+        if getattr(run_result, "session_stalled", False):
+            _record_codecome_event(
+                transcript,
+                "codecome.session.stalled",
+                sessionID=session_id,
+                existingSession=bool(existing_session_id),
+            )
+    except ResumeSessionServerUnreachable as exc:
+        _record_codecome_event(
+            transcript,
+            "codecome.attempt.incomplete",
+            errorType=type(exc).__name__,
+            message=str(exc),
+            existingSession=bool(existing_session_id),
+        )
+        return RunStatus.INCOMPLETE, existing_session_id or "", RunResult(
+            last_finish_reason="server_unreachable",
+            last_session_id=existing_session_id,
+        ), transcript.path
     except ResumeSessionNotReady as exc:
         _record_codecome_event(
             transcript,
@@ -220,7 +350,7 @@ def _run_single_attempt(
             message=str(exc),
             existingSession=bool(existing_session_id),
         )
-        return 2, existing_session_id or "", RunResult(
+        return RunStatus.INCOMPLETE, existing_session_id or "", RunResult(
             last_finish_reason="resume_not_ready",
             last_session_id=existing_session_id,
         ), transcript.path
@@ -239,8 +369,8 @@ def _run_single_attempt(
                 console.print(f"Fatal error: {exc}")
             except Exception:
                 print(C.error(f"Fatal error: {exc}"), file=sys.stderr)
-        return 1, existing_session_id or "", RunResult(), transcript.path
+        return RunStatus.ERROR, existing_session_id or "", RunResult(), transcript.path
     finally:
         transcript.close()
 
-    return 0, session_id, run_result, transcript.path
+    return RunStatus.OK, session_id, run_result, transcript.path
