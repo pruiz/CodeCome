@@ -184,7 +184,6 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Disable dashboard start/retry action while blocking questions are open.
 - [x] Disable audit detail start/continue action while blocking questions are open.
 - [x] Remove obsolete AI review checkbox from audit creation.
-- [ ] Remove placeholder AI review option from audit creation UI.
 
 ## Notes
 
