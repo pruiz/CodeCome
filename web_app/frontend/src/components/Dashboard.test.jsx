@@ -11,11 +11,13 @@ vi.mock('../hooks/useAudits', () => ({
       {
         id: 'audit-1',
         name: 'Demo Audit',
-      status: 'ready',
-      total_findings: 0,
-      open_questions: 2,
-      blocking_questions: 1,
-      findings_by_status: {},
+        status: 'ready',
+        total_findings: 0,
+        question_owner_name: 'AI Owner',
+        question_owner_is_llm: true,
+        open_questions: 2,
+        blocking_questions: 1,
+        findings_by_status: {},
         created_at: '2026-01-01T00:00:00Z',
       },
       {
@@ -86,5 +88,11 @@ describe('Dashboard', () => {
 
     expect(screen.getAllByText((_, element) => element?.textContent?.includes('Open Questions: 2')).length).toBeGreaterThan(0);
     expect(screen.getAllByText((_, element) => element?.textContent?.includes('Blocking: 1')).length).toBeGreaterThan(0);
+  });
+
+  it('shows question owner on audit cards', () => {
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+
+    expect(screen.getByText('AI Owner (AI)')).toBeInTheDocument();
   });
 });

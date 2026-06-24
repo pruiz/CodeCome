@@ -179,6 +179,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Add human user password reset in Users page.
 - [x] Force first-user bootstrap to create an active human user.
 - [x] Show assigned question owner name/type in audit header.
+- [x] Show assigned question owner name/type on dashboard audit cards.
 
 ## Notes
 
