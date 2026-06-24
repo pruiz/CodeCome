@@ -192,6 +192,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Show only relevant fields when creating human or fake AI users.
 - [x] Strip hidden user creation fields before submit.
 - [x] Strip hidden user edit fields before saving existing users.
+- [x] Normalize hidden human/fake-AI user fields on the backend.
 
 ## Notes
 

@@ -66,7 +66,13 @@ def test_create_fake_ai_user_sets_llm_fields():
 
 def test_create_human_user_hashes_password():
     db = FakeDb()
-    data = schemas.UserCreate(username="derek", password="secret-password")
+    data = schemas.UserCreate(
+        username="derek",
+        password="secret-password",
+        llm_model="local/hidden",
+        llm_context="hidden context",
+        auto_answer_enabled=True,
+    )
 
     user = crud.create_user(db, data)
 
@@ -74,6 +80,69 @@ def test_create_human_user_hashes_password():
     assert user.is_llm_user is False
     assert user.password_hash != "secret-password"
     assert crud.verify_password("secret-password", user.password_hash) is True
+    assert user.llm_model is None
+    assert user.llm_context is None
+    assert user.auto_answer_enabled is False
+
+
+def test_update_human_user_clears_llm_fields():
+    existing = type("User", (), {
+        "id": 1,
+        "display_name": "Human",
+        "active": True,
+        "is_llm_user": False,
+        "password_hash": "hash",
+        "llm_model": "local/old",
+        "llm_context": "old context",
+        "auto_answer_enabled": True,
+    })()
+
+    class Db(FakeDb):
+        def query(self, *args):
+            class Query:
+                def filter(self, *filter_args):
+                    return self
+
+                def first(self):
+                    return existing
+
+            return Query()
+
+    updated = crud.update_user(Db(), 1, schemas.UserUpdate(display_name="Human Updated"))
+
+    assert updated.display_name == "Human Updated"
+    assert updated.llm_model is None
+    assert updated.llm_context is None
+    assert updated.auto_answer_enabled is False
+
+
+def test_update_fake_ai_user_clears_password_hash():
+    existing = type("User", (), {
+        "id": 2,
+        "display_name": "AI",
+        "active": True,
+        "is_llm_user": True,
+        "password_hash": "hash",
+        "llm_model": None,
+        "llm_context": None,
+        "auto_answer_enabled": True,
+    })()
+
+    class Db(FakeDb):
+        def query(self, *args):
+            class Query:
+                def filter(self, *filter_args):
+                    return self
+
+                def first(self):
+                    return existing
+
+            return Query()
+
+    updated = crud.update_user(Db(), 2, schemas.UserUpdate(llm_model="local/model"))
+
+    assert updated.llm_model == "local/model"
+    assert updated.password_hash is None
 
 
 def test_create_active_human_user_requires_password():

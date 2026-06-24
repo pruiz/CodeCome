@@ -32,14 +32,15 @@ def verify_password(password: str, password_hash: str | None) -> bool:
 
 
 def create_user(db: Session, user_data: schemas.UserCreate) -> models.User:
+    is_llm_user = user_data.is_llm_user
     db_user = models.User(
         username=user_data.username,
         display_name=user_data.display_name or user_data.username,
         password_hash=hash_password(user_data.password) if user_data.password else None,
-        is_llm_user=user_data.is_llm_user,
-        llm_model=user_data.llm_model,
-        llm_context=user_data.llm_context,
-        auto_answer_enabled=user_data.auto_answer_enabled,
+        is_llm_user=is_llm_user,
+        llm_model=user_data.llm_model if is_llm_user else None,
+        llm_context=user_data.llm_context if is_llm_user else None,
+        auto_answer_enabled=user_data.auto_answer_enabled if is_llm_user else False,
         active=user_data.active,
     )
     db.add(db_user)
@@ -95,6 +96,12 @@ def update_user(db: Session, user_id: int, user_data: schemas.UserUpdate) -> Opt
         db_user.password_hash = hash_password(password)
     for key, value in data.items():
         setattr(db_user, key, value)
+    if not db_user.is_llm_user:
+        db_user.llm_model = None
+        db_user.llm_context = None
+        db_user.auto_answer_enabled = False
+    else:
+        db_user.password_hash = None
     db.commit()
     db.refresh(db_user)
     return db_user
