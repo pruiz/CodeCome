@@ -118,6 +118,12 @@ def queue_audit_phase(db: Session, audit, phase: str):
     return worker
 
 
+def start_created_audit_if_requested(db: Session, audit):
+    if not audit.auto_continue:
+        return None
+    return queue_audit_phase(db, audit, next_audit_step([], audit.model_settings))
+
+
 @router.post("/", response_model=schemas.AuditResponse, status_code=201)
 def create_audit(audit_data: schemas.AuditCreate, db: Session = Depends(get_db)):
     """Create a new audit from source code."""
@@ -181,6 +187,7 @@ def create_audit(audit_data: schemas.AuditCreate, db: Session = Depends(get_db))
         question_owner_user_id=question_owner_user_id,
         workspace_path=str(workspace_path),
     ))
+    start_created_audit_if_requested(db, db_audit)
     
     return db_audit
 
@@ -459,5 +466,6 @@ async def upload_zip(
         auto_continue=auto_continue,
         workspace_path=str(workspace_path),
     ))
+    start_created_audit_if_requested(db, db_audit)
     
     return db_audit
