@@ -21,7 +21,7 @@ import zipfile
 router = APIRouter()
 
 
-def audit_response(audit, db: Session, phase_executions=None) -> schemas.AuditResponse:
+def audit_response(audit, db: Session, phase_executions=None, include_config: bool = True) -> schemas.AuditResponse:
     question_counts = crud.question_counts_for_audit(db, audit.id)
     return schemas.AuditResponse(
         id=audit.id,
@@ -34,8 +34,8 @@ def audit_response(audit, db: Session, phase_executions=None) -> schemas.AuditRe
         source_type=audit.source_type,
         source_location=audit.source_location,
         has_codecome_yml=bool(audit.codecome_yml),
-        codecome_yml=audit.codecome_yml,
-        model_settings=audit.model_settings or {},
+        codecome_yml=audit.codecome_yml if include_config else None,
+        model_settings=(audit.model_settings or {}) if include_config else {},
         ai_review_enabled=audit.ai_review_enabled,
         auto_continue=audit.auto_continue,
         total_findings=audit.total_findings,
@@ -162,7 +162,7 @@ def list_audits(
 ):
     """List all audits with pagination and status filtering."""
     total, audits = crud.get_audits(db, skip, limit, status)
-    return schemas.AuditListResponse(total=total, audits=[audit_response(audit, db) for audit in audits])
+    return schemas.AuditListResponse(total=total, audits=[audit_response(audit, db, include_config=False) for audit in audits])
 
 
 @router.get("/{audit_id}", response_model=schemas.AuditResponse)

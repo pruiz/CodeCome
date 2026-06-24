@@ -174,6 +174,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Show open/blocking question counts on dashboard audit cards.
 - [x] Clear stale frontend auth tokens when WebSocket auth is rejected.
 - [x] Pass selected ZIP file into multipart audit upload from AuditCreator.
+- [x] Omit large audit config blobs from audit list responses.
 
 ## Notes
 

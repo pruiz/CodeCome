@@ -1,7 +1,9 @@
 from types import SimpleNamespace
+from datetime import datetime
+from uuid import uuid4
 
 from app import crud, schemas
-from app.api.audits import next_audit_step
+from app.api.audits import audit_response, next_audit_step
 from app.utils.codecome_wrapper import CodeComeExecutor
 from app.api import logs, workers
 from app.workers.phase_tasks import build_command_line, status_phase
@@ -90,6 +92,35 @@ def test_create_audit_sets_worker_and_workspace():
     assert audit.status == "initializing"
     assert db.added == [audit]
     assert db.commits >= 1
+
+
+def test_audit_list_response_omits_heavy_config(monkeypatch):
+    audit = SimpleNamespace(
+        id=uuid4(),
+        name="demo",
+        status="ready",
+        current_phase=None,
+        assigned_worker_id=None,
+        question_owner_user_id=None,
+        workspace_path="/work/audit-1",
+        source_type="local",
+        source_location="/src.zip",
+        codecome_yml="large yml body",
+        model_settings={"secret": "large settings"},
+        ai_review_enabled=False,
+        auto_continue=True,
+        total_findings=0,
+        findings_by_status={},
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+    monkeypatch.setattr(crud, "question_counts_for_audit", lambda db, audit_id: {"open_questions": 0, "blocking_questions": 0})
+
+    response = audit_response(audit, object(), include_config=False)
+
+    assert response.has_codecome_yml is True
+    assert response.codecome_yml is None
+    assert response.model_settings == {}
 
 
 def test_worker_response_redacts_ssh_secrets():
