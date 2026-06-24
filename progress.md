@@ -160,6 +160,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Add coverage thresholds once the test suite is broader.
 - [x] Enforce authentication on API routes with first-user bootstrap.
 - [x] Prevent creating active human users without passwords.
+- [x] Enforce authentication on WebSocket log/status streams.
 - [x] Prevent disabling or converting the last active human user.
 
 ## Notes

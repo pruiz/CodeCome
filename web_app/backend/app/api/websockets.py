@@ -6,6 +6,7 @@ import json
 
 from app.database import SessionLocal
 from app import crud
+from app.auth import verify_access_token
 
 router = APIRouter()
 
@@ -21,9 +22,37 @@ async def safe_send_json(websocket: WebSocket, payload: dict) -> bool:
         return False
 
 
+def websocket_user_from_token(token: str | None, db: Session):
+    if not token:
+        return None
+    try:
+        payload = verify_access_token(token)
+    except Exception:
+        return None
+    user = crud.get_user(db, int(payload.get("sub") or 0))
+    if not user or not user.active:
+        return None
+    return user
+
+
+async def require_websocket_auth(websocket: WebSocket) -> bool:
+    token = websocket.query_params.get("token")
+    db = SessionLocal()
+    try:
+        user = websocket_user_from_token(token, db)
+    finally:
+        db.close()
+    if user:
+        return True
+    await websocket.close(code=1008)
+    return False
+
+
 @router.websocket("/audits/{audit_id}/logs")
 async def websocket_logs(websocket: WebSocket, audit_id: str):
     """Stream real-time logs for an audit."""
+    if not await require_websocket_auth(websocket):
+        return
     await websocket.accept()
     
     if audit_id not in active_connections:
@@ -89,6 +118,8 @@ async def websocket_logs(websocket: WebSocket, audit_id: str):
 @router.websocket("/audits/{audit_id}/status")
 async def websocket_status(websocket: WebSocket, audit_id: str):
     """Stream audit status updates."""
+    if not await require_websocket_auth(websocket):
+        return
     await websocket.accept()
     
     try:

@@ -1,11 +1,15 @@
 import { useEffect, useRef } from 'react';
+import { authApi } from '../services/api';
 
 export function useWebSocket(url, onMessage) {
   const wsRef = useRef(null);
   
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}${url}`;
+    const token = authApi.getToken();
+    const separator = url.includes('?') ? '&' : '?';
+    const authSuffix = token ? `${separator}token=${encodeURIComponent(token)}` : '';
+    const wsUrl = `${protocol}//${window.location.host}${url}${authSuffix}`;
     
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
