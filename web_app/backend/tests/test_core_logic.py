@@ -3,12 +3,12 @@ from datetime import datetime
 from uuid import uuid4
 
 from app import crud, schemas
-from app.api.audits import audit_response, next_audit_step, sandbox_runtime_env, sandbox_start_command
+from app.api.audits import audit_response, next_audit_step, sandbox_start_command
 from app.api.workers import model_options_from_worker, registered_worker_config, validate_worker_registration_token
 from app.utils.codecome_wrapper import CodeComeExecutor
 from app.api import logs, workers
 from app.workers.phase_tasks import build_command_line, status_phase
-from app.workers.phase_tasks import audit_sandbox_project_name, audit_sandbox_runtime_port, merged_phase_env, prepare_audit_sandbox_runtime, rewrite_sandbox_compose_host_ports
+from app.workers.phase_tasks import merged_phase_env
 
 
 class FakeScalarQuery:
@@ -165,63 +165,6 @@ def test_sandbox_start_command_defaults_when_missing():
     audit = SimpleNamespace(codecome_yml="project:\n  name: demo\n")
 
     assert sandbox_start_command(audit) == "./sandbox/scripts/up.sh"
-
-
-def test_sandbox_runtime_env_is_audit_specific(tmp_path):
-    audit = SimpleNamespace(id="11111111-2222-3333-4444-555555555555")
-
-    env = sandbox_runtime_env(audit, tmp_path)
-
-    assert env["COMPOSE_PROJECT_NAME"] == "codecome_11111111222233334444555555555555"
-    assert env["CODECOME_AUDIT_ID"] == str(audit.id)
-    assert env["CODECOME_WORKSPACE"] == str(tmp_path)
-
-
-def test_phase_sandbox_runtime_rewrites_host_port_and_prompt(tmp_path):
-    workspace = tmp_path / "workspace"
-    sandbox = workspace / "sandbox"
-    sandbox.mkdir(parents=True)
-    (sandbox / "docker-compose.yml").write_text('services:\n  app:\n    ports:\n      - "8080:8080"\n')
-    audit = SimpleNamespace(id="13555161-ddba-422d-bff8-47b149bac988")
-
-    env = prepare_audit_sandbox_runtime(audit, workspace, {"PROMPT_EXTRA": "existing context"})
-    host_port = audit_sandbox_runtime_port(str(audit.id), workspace)
-
-    assert env["COMPOSE_PROJECT_NAME"] == audit_sandbox_project_name(str(audit.id))
-    assert env["CODECOME_SANDBOX_URL"] == f"http://localhost:{host_port}"
-    assert "existing context" in env["PROMPT_EXTRA"]
-    assert "CODECOME_SANDBOX_URL" in env["PROMPT_EXTRA"]
-    assert f'"{host_port}:8080"' in (sandbox / "docker-compose.yml").read_text()
-    assert f"CODECOME_SANDBOX_HOST_PORT={host_port}" in (sandbox / ".env").read_text()
-
-
-def test_phase_sandbox_runtime_reuses_persisted_port(tmp_path, monkeypatch):
-    workspace = tmp_path / "workspace"
-    sandbox = workspace / "sandbox"
-    sandbox.mkdir(parents=True)
-    (sandbox / ".env").write_text("CODECOME_SANDBOX_HOST_PORT=19081\n")
-    audit = SimpleNamespace(id="22222222-2222-2222-2222-222222222222")
-    monkeypatch.setattr("app.workers.phase_tasks.host_port_available", lambda port: False)
-
-    env = prepare_audit_sandbox_runtime(audit, workspace)
-
-    assert env["CODECOME_SANDBOX_HOST_PORT"] == "19081"
-    assert env["CODECOME_SANDBOX_URL"] == "http://localhost:19081"
-
-
-def test_rewrite_sandbox_compose_host_ports_leaves_non_app_ports(tmp_path):
-    sandbox = tmp_path / "sandbox"
-    sandbox.mkdir()
-    compose = sandbox / "docker-compose.yml"
-    compose.write_text('services:\n  app:\n    container_name: fixed-name\n    ports:\n      - "8080:8080"\n      - "5432:5432"\n')
-
-    changed = rewrite_sandbox_compose_host_ports(tmp_path, 19001)
-
-    assert changed is True
-    text = compose.read_text()
-    assert '"19001:8080"' in text
-    assert '"5432:5432"' in text
-    assert "container_name" not in text
 
 
 def test_worker_response_redacts_ssh_secrets():

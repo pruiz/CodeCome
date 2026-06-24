@@ -124,6 +124,22 @@ def test_opencode_model_options_reads_jsonc_comments():
     ]
 
 
+def test_opencode_model_options_prefers_user_config_over_project_config(tmp_path):
+    home_config = tmp_path / "home" / ".config" / "opencode" / "opencode.json"
+    home_config.parent.mkdir(parents=True)
+    home_config.write_text('{"provider":{"real":{"models":{"model-a":{}}}}}')
+    project_config = tmp_path / "project" / "opencode.json"
+    project_config.parent.mkdir(parents=True)
+    project_config.write_text('{"provider":{"test":{"models":{"mockmodel":{}}}}}')
+
+    models = users_api.opencode_model_options_from_paths(users_api.opencode_config_paths(
+        home_dir=tmp_path / "home",
+        codecome_root=tmp_path / "project",
+    ))
+
+    assert models == [{"id": "real/model-a", "provider": "real", "model": "model-a"}]
+
+
 def test_user_model_options_endpoint(monkeypatch):
     monkeypatch.setattr(users_api, "opencode_model_options", lambda: [{"id": "local/qwen", "provider": "local", "model": "qwen"}])
 

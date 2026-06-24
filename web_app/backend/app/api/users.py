@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 import json
 import re
+from pathlib import Path
 
 from app import crud, schemas
 from app.config import settings
@@ -37,8 +38,30 @@ def opencode_model_options_from_text(text: str) -> list[dict]:
     return sorted(options, key=lambda item: item["id"])
 
 
+def opencode_config_paths(home_dir: Path | None = None, codecome_root: Path | None = None) -> list[Path]:
+    home = home_dir or Path.home()
+    root = codecome_root or settings.CODECOME_ROOT
+    return [
+        home / ".config" / "opencode" / "opencode.jsonc",
+        home / ".config" / "opencode" / "opencode.json",
+        root / "opencode.json",
+    ]
+
+
+def opencode_model_options_from_paths(paths: list[Path]) -> list[dict]:
+    for path in paths:
+        if not path.exists():
+            continue
+        models = opencode_model_options_from_text(path.read_text(encoding="utf-8"))
+        if models:
+            return models
+    return []
+
+
 def opencode_model_options(config_path=None) -> list[dict]:
-    path = config_path or (settings.CODECOME_ROOT / "opencode.json")
+    if config_path is None:
+        return opencode_model_options_from_paths(opencode_config_paths())
+    path = config_path
     if not path.exists():
         return []
     return opencode_model_options_from_text(path.read_text(encoding="utf-8"))
