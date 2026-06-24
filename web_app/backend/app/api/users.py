@@ -48,5 +48,8 @@ def update_user(user_id: int, user_data: schemas.UserUpdate, db: Session = Depen
     has_password = bool(data.get("password") or existing.password_hash)
     if will_be_human and will_be_active and not has_password:
         raise HTTPException(status_code=400, detail="Password is required for active human users")
+    if existing.active and not existing.is_llm_user and (not will_be_active or not will_be_human):
+        if not crud.has_other_active_human_users(db, user_id):
+            raise HTTPException(status_code=400, detail="Cannot disable or convert the last active human user")
     user = crud.update_user(db, user_id, user_data)
     return user

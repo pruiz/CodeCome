@@ -86,3 +86,46 @@ def test_create_active_human_user_requires_password():
         assert "Password is required" in exc.detail
     else:
         raise AssertionError("Expected HTTPException")
+
+
+def test_cannot_disable_last_active_human_user(monkeypatch):
+    existing = type("User", (), {
+        "id": 1,
+        "active": True,
+        "is_llm_user": False,
+        "password_hash": "hash",
+    })()
+    monkeypatch.setattr(crud, "get_user", lambda db, user_id: existing)
+    monkeypatch.setattr(crud, "has_other_active_human_users", lambda db, user_id: False)
+
+    try:
+        users_api.update_user(1, schemas.UserUpdate(active=False), db=FakeDb())
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert "last active human" in exc.detail
+    else:
+        raise AssertionError("Expected HTTPException")
+
+
+def test_can_disable_human_user_when_another_active_human_exists(monkeypatch):
+    existing = type("User", (), {
+        "id": 1,
+        "active": True,
+        "is_llm_user": False,
+        "password_hash": "hash",
+    })()
+    updated = type("User", (), {
+        "id": 1,
+        "username": "human",
+        "display_name": "Human",
+        "active": False,
+        "is_llm_user": False,
+        "auto_answer_enabled": True,
+        "created_at": None,
+        "updated_at": None,
+    })()
+    monkeypatch.setattr(crud, "get_user", lambda db, user_id: existing)
+    monkeypatch.setattr(crud, "has_other_active_human_users", lambda db, user_id: True)
+    monkeypatch.setattr(crud, "update_user", lambda db, user_id, user_data: updated)
+
+    assert users_api.update_user(1, schemas.UserUpdate(active=False), db=FakeDb()) is updated
