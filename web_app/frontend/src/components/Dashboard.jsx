@@ -51,7 +51,8 @@ function StatusBadge({ status }) {
 function AuditCard({ audit, onDelete }) {
   const isRunning = audit.status.includes('_running');
   const canPause = isRunning;
-  const canStart = !isRunning && audit.status !== 'completed';
+  const hasBlockingQuestions = (audit.blocking_questions || 0) > 0;
+  const canStart = !isRunning && audit.status !== 'completed' && !hasBlockingQuestions;
   const canDelete = !isRunning;
   
   return (
@@ -100,6 +101,11 @@ function AuditCard({ audit, onDelete }) {
           >
             {audit.status.includes('_failed') ? 'Retry / Continue' : 'Start'}
           </button>
+        )}
+        {!isRunning && audit.status !== 'completed' && hasBlockingQuestions && (
+          <Link to={`/audit/${audit.id}`} className="px-3 py-1 bg-amber-700 hover:bg-amber-600 text-white text-sm rounded">
+            Answer Questions
+          </Link>
         )}
         {canPause && (
           <button

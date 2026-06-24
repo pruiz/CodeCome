@@ -96,6 +96,13 @@ describe('Dashboard', () => {
     expect(screen.getByText('AI Owner (AI)')).toBeInTheDocument();
   });
 
+  it('links to audit questions instead of starting when blocking questions exist', () => {
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+
+    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Answer Questions' })).toHaveAttribute('href', '/audit/audit-1');
+  });
+
   it('filters the audit card list by question owner', async () => {
     const user = userEvent.setup();
 

@@ -181,6 +181,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Show assigned question owner name/type in audit header.
 - [x] Show assigned question owner name/type on dashboard audit cards.
 - [x] Include question owner names in dashboard audit search.
+- [x] Disable dashboard start/retry action while blocking questions are open.
 
 ## Notes
 
