@@ -26,6 +26,9 @@ async function parseResponse(res, fallbackMessage = 'Request failed') {
   }
 
   if (!res.ok) {
+    if (res.status === 401) {
+      window.localStorage?.removeItem(TOKEN_KEY);
+    }
     throw new Error(data?.detail || fallbackMessage);
   }
 
