@@ -141,6 +141,25 @@ export const questionsApi = {
   dismiss: (id) => fetch(`${API_BASE}/questions/${id}/dismiss`, { method: 'POST' }).then(res => parseResponse(res, 'Failed to dismiss question')),
 };
 
+export const usersApi = {
+  list: (params = {}) => {
+    const query = new URLSearchParams({ skip: params.skip || 0, limit: params.limit || 100 });
+    if (params.active !== undefined) query.set('active', String(params.active));
+    if (params.is_llm_user !== undefined) query.set('is_llm_user', String(params.is_llm_user));
+    return fetch(`${API_BASE}/users/?${query}`).then(res => parseResponse(res, 'Failed to list users'));
+  },
+  create: (data) => fetch(`${API_BASE}/users/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }).then(res => parseResponse(res, 'Failed to create user')),
+  update: (id, data) => fetch(`${API_BASE}/users/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }).then(res => parseResponse(res, 'Failed to update user')),
+};
+
 export const workersApi = {
   list: () => fetch(`${API_BASE}/workers/`).then(res => parseResponse(res, 'Failed to list workers')),
   get: (id) => fetch(`${API_BASE}/workers/${id}`).then(res => parseResponse(res, 'Failed to load worker')),

@@ -84,8 +84,8 @@ Goal: successful phases that produce questions for the user must pause the workf
 ### Frontend TODO
 
 - [ ] Add login/logout UI once auth API exists.
-- [ ] Add users/fake-AI user management UI.
-- [ ] Add audit question owner selector in audit overview/config.
+- [x] Add users/fake-AI user management UI.
+- [x] Add audit question owner selector in audit overview/config.
 - [x] Add audit Questions tab listing open/answered/dismissed questions by phase.
 - [x] Add question panel to Current Phase for selected execution questions.
 - [x] Add answer/dismiss controls for human users.

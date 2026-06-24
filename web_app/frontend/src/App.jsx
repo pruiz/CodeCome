@@ -6,6 +6,7 @@ import AuditCreator from './components/AuditCreator';
 import AuditDetails from './components/AuditDetails';
 import FindingDetails from './components/FindingDetails';
 import PreviewAnalysis from './components/PreviewAnalysis';
+import Users from './components/Users';
 import Workers from './components/Workers';
 import WorkerDetails from './components/WorkerDetails';
 
@@ -40,6 +41,9 @@ function Icon({ name, className = 'h-6 w-6' }) {
   }
   if (name === 'preview') {
     return <svg {...common}><path d="M4 5h16v14H4z" /><path d="M8 9h8M8 13h5M16 13l2 2-2 2" /></svg>;
+  }
+  if (name === 'users') {
+    return <svg {...common}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>;
   }
   return null;
 }
@@ -83,6 +87,10 @@ function App() {
               <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center"><Icon name="workers" /></span>
               <span className="whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover:opacity-100">Workers</span>
             </NavLink>
+            <NavLink to="/users" className={navLinkClass}>
+              <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center"><Icon name="users" /></span>
+              <span className="whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover:opacity-100">Users</span>
+            </NavLink>
             <NavLink to="/findings" className={navLinkClass}>
               <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center"><Icon name="findings" /></span>
               <span className="whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover:opacity-100">Findings</span>
@@ -108,6 +116,7 @@ function App() {
               <Route path="/findings" element={<AllFindings />} />
               <Route path="/preview" element={<PreviewAnalysis />} />
               <Route path="/workers" element={<Workers />} />
+              <Route path="/users" element={<Users />} />
               <Route path="/workers/:id" element={<WorkerDetails />} />
               <Route path="/audit/create" element={<AuditCreator />} />
               <Route path="/audit/:id" element={<AuditDetails />} />

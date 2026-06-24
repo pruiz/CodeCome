@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAudit } from '../hooks/useAudits';
-import { auditsApi, logsApi, phasesApi } from '../services/api';
+import { auditsApi, logsApi, phasesApi, usersApi } from '../services/api';
 import LiveLogs from './LiveLogs';
 import FindingsList from './FindingsList';
 import AuditQuestions from './AuditQuestions';
@@ -865,6 +865,13 @@ function InfoItem({ label, value, mono = false }) {
 function AuditOverview({ audit, onRefresh }) {
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [users, setUsers] = useState([]);
+
+  useEffect(() => {
+    usersApi.list({ active: true, limit: 500 })
+      .then((data) => setUsers(data.users || []))
+      .catch(() => setUsers([]));
+  }, []);
 
   const updateAudit = async (changes) => {
     setSaving(true);
@@ -954,6 +961,24 @@ function AuditOverview({ audit, onRefresh }) {
                 disabled={saving}
                 onChange={(value) => updateAuditOption('failure_triage_enabled', value)}
               />
+            </div>
+
+            <div className="rounded-xl border border-gray-800 bg-gray-950/70 px-4 py-4">
+              <div className="mb-2">
+                <div className="font-semibold">Question owner</div>
+                <div className="text-sm text-gray-500">Blocking phase questions are assigned here. Fake AI users auto-answer and allow auto-continue.</div>
+              </div>
+              <select
+                value={audit.question_owner_user_id || ''}
+                disabled={saving}
+                onChange={(event) => updateAudit({ question_owner_user_id: event.target.value ? Number(event.target.value) : null })}
+                className="w-full rounded border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-gray-200"
+              >
+                <option value="">No owner</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>{user.display_name} ({user.is_llm_user ? 'AI' : 'Human'})</option>
+                ))}
+              </select>
             </div>
 
           </div>

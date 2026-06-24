@@ -1,0 +1,115 @@
+import React, { useEffect, useState } from 'react';
+import { usersApi } from '../services/api';
+
+const blankForm = {
+  username: '',
+  display_name: '',
+  password: '',
+  is_llm_user: true,
+  llm_model: '',
+  llm_context: '',
+  auto_answer_enabled: true,
+  active: true,
+};
+
+function UserBadge({ user }) {
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${user.is_llm_user ? 'bg-purple-500/20 text-purple-200' : 'bg-cyan-500/20 text-cyan-200'}`}>
+      {user.is_llm_user ? 'AI' : 'Human'}
+    </span>
+  );
+}
+
+export default function Users() {
+  const [users, setUsers] = useState([]);
+  const [form, setForm] = useState(blankForm);
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const data = await usersApi.list({ limit: 500 });
+      setUsers(data.users || []);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const createUser = async () => {
+    setMessage('');
+    try {
+      const payload = { ...form };
+      if (!payload.password) delete payload.password;
+      if (!payload.display_name) payload.display_name = payload.username;
+      await usersApi.create(payload);
+      setForm(blankForm);
+      setMessage('User created.');
+      await load();
+    } catch (error) {
+      setMessage(`Create failed: ${error.message}`);
+    }
+  };
+
+  const toggleActive = async (user) => {
+    await usersApi.update(user.id, { active: !user.active });
+    await load();
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-4xl font-bold">Users</h2>
+        <p className="mt-1 text-sm text-gray-400">Human and fake AI users for audit question ownership.</p>
+      </div>
+
+      <div className="vortex-card rounded-xl p-5">
+        <h3 className="text-lg font-semibold">Create User</h3>
+        {message && <div className="mt-3 rounded bg-gray-900 px-3 py-2 text-sm text-gray-300">{message}</div>}
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="rounded border border-gray-800 bg-gray-950 px-3 py-2" placeholder="username" />
+          <input value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} className="rounded border border-gray-800 bg-gray-950 px-3 py-2" placeholder="display name" />
+          <input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} type="password" className="rounded border border-gray-800 bg-gray-950 px-3 py-2" placeholder="password for human users" />
+          <input value={form.llm_model} onChange={(e) => setForm({ ...form, llm_model: e.target.value })} className="rounded border border-gray-800 bg-gray-950 px-3 py-2" placeholder="AI model, e.g. local/qwen3.6-27b" />
+          <label className="flex items-center gap-2 rounded border border-gray-800 bg-gray-950 px-3 py-2 text-sm">
+            <input type="checkbox" checked={form.is_llm_user} onChange={(e) => setForm({ ...form, is_llm_user: e.target.checked })} /> Fake AI user
+          </label>
+          <label className="flex items-center gap-2 rounded border border-gray-800 bg-gray-950 px-3 py-2 text-sm">
+            <input type="checkbox" checked={form.auto_answer_enabled} onChange={(e) => setForm({ ...form, auto_answer_enabled: e.target.checked })} /> Auto-answer questions
+          </label>
+          <textarea value={form.llm_context} onChange={(e) => setForm({ ...form, llm_context: e.target.value })} className="h-28 rounded border border-gray-800 bg-gray-950 px-3 py-2 md:col-span-2" placeholder="Fake AI context/persona..." />
+        </div>
+        <button onClick={createUser} disabled={!form.username.trim()} className="mt-4 rounded bg-blue-600 px-4 py-2 font-semibold hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-gray-700">Create User</button>
+      </div>
+
+      <div className="vortex-card rounded-xl p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold">Existing Users</h3>
+          <button onClick={load} className="rounded bg-gray-800 px-3 py-2 text-sm hover:bg-gray-700">Refresh</button>
+        </div>
+        {loading ? <div className="text-gray-500">Loading users...</div> : (
+          <div className="space-y-2">
+            {users.map((user) => (
+              <div key={user.id} className="rounded border border-gray-800 bg-gray-950/70 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-gray-100">{user.display_name}</span>
+                  <span className="font-mono text-xs text-gray-500">@{user.username}</span>
+                  <UserBadge user={user} />
+                  <span className={`rounded-full px-2 py-0.5 text-xs ${user.active ? 'bg-green-500/15 text-green-200' : 'bg-gray-700 text-gray-300'}`}>{user.active ? 'active' : 'inactive'}</span>
+                  <button onClick={() => toggleActive(user)} className="ml-auto rounded bg-gray-800 px-2 py-1 text-xs hover:bg-gray-700">{user.active ? 'Disable' : 'Enable'}</button>
+                </div>
+                {user.llm_model && <div className="mt-2 text-xs text-purple-300">Model: {user.llm_model}</div>}
+                {user.llm_context && <div className="mt-1 text-xs text-gray-400">{user.llm_context}</div>}
+              </div>
+            ))}
+            {!users.length && <div className="text-center text-gray-500">No users created yet.</div>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
