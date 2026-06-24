@@ -4,6 +4,7 @@ from app import crud
 from app import models
 from app.utils.codecome_wrapper import CodeComeExecutor
 from app.utils.ssh_executor import SSHCodeComeExecutor
+from app.workers.question_answering import auto_answer_open_questions, with_user_answers_env
 from app.workers.question_detection import create_questions_for_phase, has_open_blocking_questions
 from pathlib import Path
 from datetime import datetime
@@ -335,6 +336,18 @@ def run_phase_task(
                 crud.create_audit_log(db, audit_id, "WARN",
                                       f"Detected {len(created_questions)} blocking question(s) for user review",
                                       phase=phase, source="questions")
+                fake_owner = crud.get_user(db, audit.question_owner_user_id) if audit.question_owner_user_id else None
+                if fake_owner and fake_owner.is_llm_user:
+                    try:
+                        answered_count = auto_answer_open_questions(db, audit, phase_exec, fake_owner, workspace_path, result.stdout)
+                        crud.create_audit_log(db, audit_id, "INFO",
+                                              f"Fake AI question owner answered {answered_count} question(s)",
+                                              phase=phase, source="questions")
+                    except Exception as exc:
+                        logger.exception("Fake AI question answering failed")
+                        crud.create_audit_log(db, audit_id, "ERROR",
+                                              f"Fake AI question answering failed: {exc}",
+                                              phase=phase, source="questions")
         else:
             crud.create_audit_log(db, audit_id, "ERROR",
                                     f"Phase {phase} failed with exit code {result.exit_code}",
@@ -356,7 +369,7 @@ def run_phase_task(
                     crud.update_audit_status(db, audit_id, f"{status_phase(phase)}_complete")
                     audit.current_phase = next_phase
                     db.commit()
-                    next_env = merged_phase_env(audit.model_settings, next_phase)
+                    next_env = with_user_answers_env(workspace_path, merged_phase_env(audit.model_settings, next_phase))
                     run_phase_task.delay(audit_id, next_phase, model, variant, None, 1, worker.id, next_env)
                 else:
                     # All phases complete
@@ -445,7 +458,7 @@ def recover_remote_phase_task(self, phase_execution_id: int):
                 crud.update_audit_status(db, audit.id, f"{status_phase(phase_exec.phase)}_complete")
                 audit.current_phase = next_phase
                 db.commit()
-                next_env = merged_phase_env(audit.model_settings, next_phase)
+                next_env = with_user_answers_env(workspace_path, merged_phase_env(audit.model_settings, next_phase))
                 run_phase_task.delay(str(audit.id), next_phase, None, None, None, 1, worker.id, next_env)
             else:
                 crud.update_audit_status(db, audit.id, "completed")

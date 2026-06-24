@@ -59,7 +59,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [ ] The question owner can be a human user or a fake AI user.
 - [ ] More than one fake AI user can exist globally.
 - [ ] If the owner is human, blocking questions pause the audit until answered or dismissed in the web UI.
-- [ ] If the owner is a fake AI user, the backend auto-answers assigned questions and continues the workflow when all blocking questions are resolved.
+- [x] If the owner is a fake AI user, the backend auto-answers assigned questions and continues the workflow when all blocking questions are resolved.
 - [ ] Telegram and Office Teams notifications are deferred until after web UI and fake AI users work.
 
 ### Data Model TODO
@@ -67,7 +67,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Add `users` table with username, password hash, display name, active flag, fake-AI fields, and timestamps.
 - [x] Add `audits.question_owner_user_id` runtime-schema column and model/schema/API support.
 - [x] Add `phase_questions` table with audit, phase execution, phase, question, context, blocking flag, status, assignment, answer metadata, and timestamps.
-- [ ] Add durable answer context file generation at `runs/user-answers-context.md`.
+- [x] Add durable answer context file generation at `runs/user-answers-context.md`.
 
 ### Backend/API TODO
 
@@ -78,8 +78,8 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [ ] Add question APIs: auto-answer and continue-after-questions.
 - [x] Add question extraction/detection after successful phase completion.
 - [x] Add auto-continue gate: do not queue next phase while blocking questions are open.
-- [ ] Add fake AI auto-answer Celery task using the assigned fake AI user's model/context.
-- [ ] Inject answered questions into subsequent phase runs via `PROMPT_EXTRA_FILE` or merged env.
+- [x] Add fake AI auto-answer flow using the assigned fake AI user's model/context.
+- [x] Inject answered questions into subsequent phase runs via `PROMPT_EXTRA_FILE` or merged env.
 
 ### Frontend TODO
 
@@ -97,7 +97,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Add backend tests for user/fake-AI CRUD.
 - [x] Add backend tests for question creation, answer, and dismiss.
 - [ ] Add backend tests for question blocking gate.
-- [ ] Add backend tests for fake AI answer normalization and continuation.
+- [x] Add backend tests for fake AI answer normalization and continuation.
 - [x] Add frontend tests for question owner selector and question answer UI.
 - [ ] Add frontend tests for fake AI user management or auto-answer controls.
 - [ ] Run `web_app/run-checks.sh` before each implementation commit when practical.
