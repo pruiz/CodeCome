@@ -120,6 +120,19 @@ describe('Users', () => {
     });
   });
 
+  it('filters users by inactive status', async () => {
+    const user = userEvent.setup();
+    render(<Users />);
+
+    expect(await screen.findByText('Human Owner')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Inactive' }));
+
+    await waitFor(() => {
+      const urls = global.fetch.mock.calls.map(([url]) => String(url));
+      expect(urls.some((url) => url.includes('active=false'))).toBe(true);
+    });
+  });
+
   it('searches users by model text', async () => {
     const user = userEvent.setup();
     render(<Users />);

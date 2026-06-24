@@ -100,6 +100,7 @@ export default function Users() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
 
   const load = async () => {
@@ -108,6 +109,8 @@ export default function Users() {
       const params = { limit: 500 };
       if (typeFilter === 'human') params.is_llm_user = false;
       if (typeFilter === 'ai') params.is_llm_user = true;
+      if (statusFilter === 'active') params.active = true;
+      if (statusFilter === 'inactive') params.active = false;
       const data = await usersApi.list(params);
       setUsers(data.users || []);
     } finally {
@@ -117,7 +120,7 @@ export default function Users() {
 
   useEffect(() => {
     load();
-  }, [typeFilter]);
+  }, [typeFilter, statusFilter]);
 
   const createUser = async () => {
     setMessage('');
@@ -189,6 +192,20 @@ export default function Users() {
                 key={value}
                 onClick={() => setTypeFilter(value)}
                 className={`rounded px-3 py-2 text-sm ${typeFilter === value ? 'bg-blue-700 text-white' : 'bg-gray-800 hover:bg-gray-700'}`}
+              >
+                {label}
+              </button>
+            ))}
+            <span className="mx-1 h-9 border-l border-gray-700" />
+            {[
+              ['all', 'All status'],
+              ['active', 'Active'],
+              ['inactive', 'Inactive'],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setStatusFilter(value)}
+                className={`rounded px-3 py-2 text-sm ${statusFilter === value ? 'bg-green-700 text-white' : 'bg-gray-800 hover:bg-gray-700'}`}
               >
                 {label}
               </button>
