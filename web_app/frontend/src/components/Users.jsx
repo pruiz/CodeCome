@@ -20,6 +20,73 @@ function UserBadge({ user }) {
   );
 }
 
+function UserCard({ user, onChanged }) {
+  const [form, setForm] = useState({
+    display_name: user.display_name || '',
+    llm_model: user.llm_model || '',
+    llm_context: user.llm_context || '',
+    auto_answer_enabled: !!user.auto_answer_enabled,
+  });
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    setForm({
+      display_name: user.display_name || '',
+      llm_model: user.llm_model || '',
+      llm_context: user.llm_context || '',
+      auto_answer_enabled: !!user.auto_answer_enabled,
+    });
+    setMessage('');
+  }, [user.id, user.display_name, user.llm_model, user.llm_context, user.auto_answer_enabled]);
+
+  const save = async () => {
+    setMessage('');
+    try {
+      await usersApi.update(user.id, form);
+      setMessage('User saved.');
+      await onChanged?.();
+    } catch (error) {
+      setMessage(`Save failed: ${error.message}`);
+    }
+  };
+
+  const toggleActive = async () => {
+    await usersApi.update(user.id, { active: !user.active });
+    await onChanged?.();
+  };
+
+  return (
+    <div className="rounded border border-gray-800 bg-gray-950/70 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold text-gray-100">{user.display_name}</span>
+        <span className="font-mono text-xs text-gray-500">@{user.username}</span>
+        <UserBadge user={user} />
+        <span className={`rounded-full px-2 py-0.5 text-xs ${user.active ? 'bg-green-500/15 text-green-200' : 'bg-gray-700 text-gray-300'}`}>{user.active ? 'active' : 'inactive'}</span>
+        <button onClick={toggleActive} className="ml-auto rounded bg-gray-800 px-2 py-1 text-xs hover:bg-gray-700">{user.active ? 'Disable' : 'Enable'}</button>
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+        <input value={form.display_name} onChange={(event) => setForm({ ...form, display_name: event.target.value })} className="rounded border border-gray-800 bg-gray-900 px-3 py-2 text-sm" aria-label={`Display name for ${user.username}`} placeholder="display name" />
+        {user.is_llm_user && (
+          <input value={form.llm_model} onChange={(event) => setForm({ ...form, llm_model: event.target.value })} className="rounded border border-gray-800 bg-gray-900 px-3 py-2 text-sm" aria-label={`AI model for ${user.username}`} placeholder="model" />
+        )}
+        {user.is_llm_user && (
+          <label className="flex items-center gap-2 rounded border border-gray-800 bg-gray-900 px-3 py-2 text-sm">
+            <input type="checkbox" checked={form.auto_answer_enabled} onChange={(event) => setForm({ ...form, auto_answer_enabled: event.target.checked })} /> Auto-answer
+          </label>
+        )}
+        {user.is_llm_user && (
+          <textarea value={form.llm_context} onChange={(event) => setForm({ ...form, llm_context: event.target.value })} className="h-24 rounded border border-gray-800 bg-gray-900 px-3 py-2 text-sm md:col-span-2" aria-label={`AI context for ${user.username}`} placeholder="AI context/persona" />
+        )}
+      </div>
+      <div className="mt-3 flex items-center gap-3">
+        <button onClick={save} className="rounded bg-blue-700 px-3 py-1.5 text-xs font-semibold hover:bg-blue-600">Save User</button>
+        {message && <span className="text-xs text-gray-400">{message}</span>}
+      </div>
+    </div>
+  );
+}
+
 export default function Users() {
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState(blankForm);
@@ -97,19 +164,7 @@ export default function Users() {
         </div>
         {loading ? <div className="text-gray-500">Loading users...</div> : (
           <div className="space-y-2">
-            {users.map((user) => (
-              <div key={user.id} className="rounded border border-gray-800 bg-gray-950/70 p-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold text-gray-100">{user.display_name}</span>
-                  <span className="font-mono text-xs text-gray-500">@{user.username}</span>
-                  <UserBadge user={user} />
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${user.active ? 'bg-green-500/15 text-green-200' : 'bg-gray-700 text-gray-300'}`}>{user.active ? 'active' : 'inactive'}</span>
-                  <button onClick={() => toggleActive(user)} className="ml-auto rounded bg-gray-800 px-2 py-1 text-xs hover:bg-gray-700">{user.active ? 'Disable' : 'Enable'}</button>
-                </div>
-                {user.llm_model && <div className="mt-2 text-xs text-purple-300">Model: {user.llm_model}</div>}
-                {user.llm_context && <div className="mt-1 text-xs text-gray-400">{user.llm_context}</div>}
-              </div>
-            ))}
+            {users.map((user) => <UserCard key={user.id} user={user} onChanged={load} />)}
             {!users.length && <div className="text-center text-gray-500">No users created yet.</div>}
           </div>
         )}

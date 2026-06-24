@@ -166,6 +166,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Clear stale frontend auth tokens on protected API 401 responses.
 - [x] Refresh frontend auth gate immediately on logout or stale-token cleanup.
 - [x] Preserve audit settings when creating audits from uploaded ZIP files.
+- [x] Add inline editing for fake AI user model/context.
 - [x] Add question owner selection to audit creation.
 - [x] Add tests for API auth middleware route enforcement.
 - [x] Prevent disabling or converting the last active human user.
