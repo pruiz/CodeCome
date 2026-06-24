@@ -48,6 +48,20 @@ def test_auth_status_reports_bootstrap_required(monkeypatch):
     assert auth_api.auth_status(object()) == {"bootstrap_required": True}
 
 
+def test_bootstrap_rejects_inactive_first_user(monkeypatch):
+    monkeypatch.setattr(crud, "has_active_human_users", lambda db: False)
+
+    with pytest.raises(HTTPException) as exc:
+        auth_api.bootstrap_first_user(schemas.UserCreate(
+            username="admin",
+            password="secret",
+            active=False,
+        ), db=object())
+
+    assert exc.value.status_code == 400
+    assert "must be active" in exc.value.detail
+
+
 def test_websocket_user_from_token_accepts_active_user(monkeypatch):
     user = SimpleNamespace(id=7, username="derek", active=True)
     token = create_access_token(user, expires_in_seconds=60)

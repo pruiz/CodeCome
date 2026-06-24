@@ -177,6 +177,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Omit large audit config blobs from audit list responses.
 - [x] Clear stale frontend auth tokens for raw-response API calls.
 - [x] Add human user password reset in Users page.
+- [x] Force first-user bootstrap to create an active human user.
 
 ## Notes
 

@@ -30,6 +30,8 @@ def bootstrap_first_user(user_data: schemas.UserCreate, db: Session = Depends(ge
         raise HTTPException(status_code=409, detail="Bootstrap is disabled after first active human user exists")
     if user_data.is_llm_user:
         raise HTTPException(status_code=400, detail="Bootstrap user must be human")
+    if user_data.active is False:
+        raise HTTPException(status_code=400, detail="Bootstrap user must be active")
     if not user_data.password:
         raise HTTPException(status_code=400, detail="Password is required")
     if crud.get_user_by_username(db, user_data.username):
