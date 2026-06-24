@@ -145,6 +145,12 @@ export const questionsApi = {
     body: JSON.stringify(data),
   }).then(res => parseResponse(res, 'Failed to answer question')),
   dismiss: (id) => fetch(`${API_BASE}/questions/${id}/dismiss`, { method: 'POST' }).then(res => parseResponse(res, 'Failed to dismiss question')),
+  autoAnswer: (id) => fetch(`${API_BASE}/questions/${id}/auto-answer`, { method: 'POST' }).then(res => parseResponse(res, 'Failed to auto-answer question')),
+  writeAnswerContext: (auditId) => fetch(`${API_BASE}/questions/audits/${auditId}/write-answer-context`, { method: 'POST' }).then(res => parseResponse(res, 'Failed to write answer context')),
+};
+
+export const auditQuestionApi = {
+  continueAfterQuestions: (auditId) => fetch(`${API_BASE}/audits/${auditId}/continue-after-questions`, { method: 'POST' }).then(res => parseResponse(res, 'Failed to continue audit')),
 };
 
 export const usersApi = {

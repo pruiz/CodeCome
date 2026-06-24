@@ -55,12 +55,12 @@ Goal: successful phases that produce questions for the user must pause the workf
 
 - [x] Add web app users for authentication and question ownership.
 - [x] All authenticated users can see everything; no roles are needed for now.
-- [ ] Each audit can be associated with one question owner user.
-- [ ] The question owner can be a human user or a fake AI user.
-- [ ] More than one fake AI user can exist globally.
-- [ ] If the owner is human, blocking questions pause the audit until answered or dismissed in the web UI.
+- [x] Each audit can be associated with one question owner user.
+- [x] The question owner can be a human user or a fake AI user.
+- [x] More than one fake AI user can exist globally.
+- [x] If the owner is human, blocking questions pause the audit until answered or dismissed in the web UI.
 - [x] If the owner is a fake AI user, the backend auto-answers assigned questions and continues the workflow when all blocking questions are resolved.
-- [ ] Telegram and Office Teams notifications are deferred until after web UI and fake AI users work.
+- [x] Telegram and Office Teams notifications are deferred until after web UI and fake AI users work.
 
 ### Data Model TODO
 
@@ -75,7 +75,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Add minimal auth foundation for human login users.
 - [x] Add audit update support for `question_owner_user_id`.
 - [x] Add question APIs: list by audit, list by phase execution, answer, dismiss.
-- [ ] Add question APIs: auto-answer and continue-after-questions.
+- [x] Add question APIs: auto-answer and continue-after-questions.
 - [x] Add question extraction/detection after successful phase completion.
 - [x] Add auto-continue gate: do not queue next phase while blocking questions are open.
 - [x] Add fake AI auto-answer flow using the assigned fake AI user's model/context.
@@ -89,29 +89,29 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Add audit Questions tab listing open/answered/dismissed questions by phase.
 - [x] Add question panel to Current Phase for selected execution questions.
 - [x] Add answer/dismiss controls for human users.
-- [ ] Add fake AI answer/regenerate controls for fake-AI-owned questions.
-- [ ] Add paused-for-questions status display and continue-after-questions button.
+- [x] Add fake AI answer/regenerate controls for fake-AI-owned questions.
+- [x] Add paused-for-questions status display and continue-after-questions button.
 
 ### Testing/Quality TODO
 
 - [x] Add backend tests for user/fake-AI CRUD.
 - [x] Add backend tests for question creation, answer, and dismiss.
-- [ ] Add backend tests for question blocking gate.
+- [x] Add backend tests for question blocking gate.
 - [x] Add backend tests for fake AI answer normalization and continuation.
 - [x] Add frontend tests for question owner selector and question answer UI.
-- [ ] Add frontend tests for fake AI user management or auto-answer controls.
-- [ ] Run `web_app/run-checks.sh` before each implementation commit when practical.
-- [ ] Smoke test locally through `http://localhost:3000` and `http://localhost:8000/health`.
+- [x] Add frontend tests for fake AI user management or auto-answer controls.
+- [x] Run `web_app/run-checks.sh` before each implementation commit when practical.
+- [x] Smoke test locally through `http://localhost:3000` and `http://localhost:8000/health`.
 - [ ] Use `/opt/tools/08_TETools/SmallCompany.zip` for manual audit smoke tests when an end-to-end workflow is needed.
 
 ### Commit Policy For This Feature
 
-- [ ] Commit 1: progress tracking and explicit implementation plan.
-- [ ] Commit 2: user/fake-AI and audit question-owner backend foundation with tests.
-- [ ] Commit 3: phase-question model/API and web answering UI with tests.
-- [ ] Commit 4: successful-phase question detector and pause gate with tests.
-- [ ] Commit 5: fake AI auto-answer and resume workflow with tests.
-- [ ] Commit 6: end-to-end UI polish and local smoke-test fixes, if needed.
+- [x] Commit 1: progress tracking and explicit implementation plan.
+- [x] Commit 2: user/fake-AI and audit question-owner backend foundation with tests.
+- [x] Commit 3: phase-question model/API and web answering UI with tests.
+- [x] Commit 4: successful-phase question detector and pause gate with tests.
+- [x] Commit 5: fake AI auto-answer and resume workflow with tests.
+- [x] Commit 6: end-to-end UI polish and local smoke-test fixes, if needed.
 
 ## Done Recently
 

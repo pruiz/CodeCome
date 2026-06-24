@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { questionsApi } from '../services/api';
+import { auditQuestionApi, questionsApi } from '../services/api';
 import { formatSpainDateTime } from '../utils/dates';
 
 const statusStyles = {
@@ -42,6 +42,20 @@ function QuestionCard({ question, onChanged }) {
     }
   };
 
+  const autoAnswer = async () => {
+    setSaving(true);
+    setMessage('');
+    try {
+      await questionsApi.autoAnswer(question.id);
+      setMessage('Fake AI answer generated.');
+      await onChanged?.();
+    } catch (error) {
+      setMessage(`Auto-answer failed: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -64,6 +78,7 @@ function QuestionCard({ question, onChanged }) {
           <div className="flex gap-2">
             <button onClick={saveAnswer} disabled={saving || !answer.trim()} className="rounded bg-green-700 px-3 py-1.5 text-sm font-semibold hover:bg-green-600 disabled:cursor-not-allowed disabled:bg-gray-700">Save Answer</button>
             <button onClick={dismiss} disabled={saving} className="rounded bg-gray-800 px-3 py-1.5 text-sm hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-60">Dismiss</button>
+            <button onClick={autoAnswer} disabled={saving} className="rounded bg-purple-700 px-3 py-1.5 text-sm font-semibold hover:bg-purple-600 disabled:cursor-not-allowed disabled:bg-gray-700">Ask Fake AI</button>
           </div>
         </div>
       ) : (
@@ -76,7 +91,7 @@ function QuestionCard({ question, onChanged }) {
   );
 }
 
-export default function AuditQuestions({ auditId, phaseExecutionId = null }) {
+export default function AuditQuestions({ auditId, phaseExecutionId = null, auditStatus = '' }) {
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -96,6 +111,17 @@ export default function AuditQuestions({ auditId, phaseExecutionId = null }) {
 
   const openCount = questions.filter((question) => question.status === 'OPEN').length;
   const blockingCount = questions.filter((question) => question.status === 'OPEN' && question.blocking).length;
+  const [continueMessage, setContinueMessage] = useState('');
+
+  const continueAfterQuestions = async () => {
+    setContinueMessage('');
+    try {
+      const response = await auditQuestionApi.continueAfterQuestions(auditId);
+      setContinueMessage(response.message || 'Audit continued.');
+    } catch (error) {
+      setContinueMessage(`Continue failed: ${error.message}`);
+    }
+  };
 
   return (
     <section className="vortex-card rounded-xl p-5">
@@ -107,9 +133,12 @@ export default function AuditQuestions({ auditId, phaseExecutionId = null }) {
         <div className="flex gap-2 text-xs">
           <span className="rounded-full bg-amber-500/15 px-2 py-1 text-amber-200">open {openCount}</span>
           <span className="rounded-full bg-red-500/15 px-2 py-1 text-red-200">blocking {blockingCount}</span>
+          {auditStatus === 'paused_for_questions' && blockingCount === 0 && <button onClick={continueAfterQuestions} className="rounded bg-blue-700 px-3 py-1 font-semibold text-white hover:bg-blue-600">Continue</button>}
           <button onClick={load} className="rounded bg-gray-800 px-3 py-1 text-gray-200 hover:bg-gray-700">Refresh</button>
         </div>
       </div>
+      {auditStatus === 'paused_for_questions' && blockingCount > 0 && <div className="mb-3 rounded border border-amber-800 bg-amber-950/40 px-3 py-2 text-sm text-amber-100">Audit is paused until blocking questions are answered or dismissed.</div>}
+      {continueMessage && <div className="mb-3 rounded bg-gray-900 px-3 py-2 text-sm text-gray-300">{continueMessage}</div>}
       {loading ? <div className="text-gray-500">Loading questions...</div> : (
         <div className="space-y-3">
           {questions.map((question) => <QuestionCard key={question.id} question={question} onChanged={load} />)}

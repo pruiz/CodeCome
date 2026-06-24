@@ -11,6 +11,7 @@ from app.database import get_db
 from app import crud, models, schemas
 from app.services.workspace import workspace_manager
 from app.workers.phase_tasks import ALL_PHASES, PHASE_ORDER, merged_phase_env, phase_order_for_settings, run_phase_task, run_sequential_workflow
+from app.workers.question_answering import write_user_answers_context, with_user_answers_env
 from app.utils.codecome_wrapper import CodeComeExecutor, codecome_executor
 from app.utils.ssh_executor import SSHCodeComeExecutor
 from app.config import settings
@@ -54,7 +55,7 @@ def queue_audit_phase(db: Session, audit, phase: str):
     phase_config = model_settings.get(phase, {})
     model = phase_config.get("model")
     variant = phase_config.get("variant")
-    env_overrides = merged_phase_env(model_settings, phase)
+    env_overrides = with_user_answers_env(Path(audit.workspace_path), merged_phase_env(model_settings, phase))
 
     audit.current_phase = phase
     db.commit()
@@ -143,9 +144,7 @@ def get_audit(audit_id: UUID, db: Session = Depends(get_db)):
     audit = crud.get_audit(db, audit_id)
     if not audit:
         raise HTTPException(status_code=404, detail="Audit not found")
-    if crud.audit_has_open_blocking_questions(db, audit_id):
-        raise HTTPException(status_code=409, detail="Audit has open blocking questions")
-    
+
     phase_execs = crud.get_phase_executions(db, audit_id)
     
     return schemas.AuditResponse(
@@ -233,6 +232,27 @@ def run_audit_phase(audit_id: UUID, phase: str = Query(...), db: Session = Depen
         "worker_id": worker.id,
         "worker_name": worker.name,
         "message": "Audit phase queued",
+    }
+
+
+@router.post("/{audit_id}/continue-after-questions")
+def continue_after_questions(audit_id: UUID, db: Session = Depends(get_db)):
+    """Continue an audit once all blocking questions are answered or dismissed."""
+    audit = crud.get_audit(db, audit_id)
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    if crud.audit_has_open_blocking_questions(db, audit_id):
+        raise HTTPException(status_code=409, detail="Audit has open blocking questions")
+    write_user_answers_context(db, audit, Path(audit.workspace_path))
+    phase_executions = crud.get_phase_executions(db, audit_id)
+    starting_phase = next_audit_step(phase_executions, audit.model_settings)
+    worker = queue_audit_phase(db, audit, starting_phase)
+    return {
+        "audit_id": str(audit_id),
+        "phase": starting_phase,
+        "worker_id": worker.id,
+        "worker_name": worker.name,
+        "message": "Audit continued after questions",
     }
 
 

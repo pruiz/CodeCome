@@ -528,7 +528,7 @@ function SelectedPhasePanel({ audit, selectedPhase, selectedExecutionId, onRerun
         </div>
       )}
 
-      {execution && <div className="mt-4"><AuditQuestions auditId={audit.id} phaseExecutionId={execution.id} /></div>}
+      {execution && <div className="mt-4"><AuditQuestions auditId={audit.id} phaseExecutionId={execution.id} auditStatus={audit.status} /></div>}
 
       {phaseDetails && (
         <div className="mt-4 rounded bg-gray-950/70 p-3">
@@ -1194,7 +1194,7 @@ export default function AuditDetails() {
         
         {activeTab === 'logs' && <LiveLogs auditId={id} />}
         {activeTab === 'findings' && <FindingsList auditId={id} />}
-        {activeTab === 'questions' && <AuditQuestions auditId={id} />}
+        {activeTab === 'questions' && <AuditQuestions auditId={id} auditStatus={audit.status} />}
         {activeTab === 'config' && <ConfigEditor audit={audit} onRefresh={refetch} />}
       </div>
     </div>
