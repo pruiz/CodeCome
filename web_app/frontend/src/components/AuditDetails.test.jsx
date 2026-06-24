@@ -72,7 +72,7 @@ describe('AuditDetails', () => {
     expect(await screen.findByText('Question Audit')).toBeInTheDocument();
     expect(await screen.findByText('Questions:')).toBeInTheDocument();
     expect(screen.getByText('Blocking:')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Refresh Questions' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Refresh Questions' })).not.toBeInTheDocument();
     expect(screen.getByText('AI Owner (AI)')).toBeInTheDocument();
     expect(screen.queryByText('AI Review:')).not.toBeInTheDocument();
     expect(screen.getAllByText('1').length).toBeGreaterThan(0);
@@ -89,6 +89,8 @@ describe('AuditDetails', () => {
     );
 
     expect(await screen.findByText('Question Audit')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Questions' }));
+    expect(await screen.findByRole('button', { name: 'Refresh Questions' })).toBeInTheDocument();
     const before = global.fetch.mock.calls.filter(([url]) => String(url).includes('/api/questions')).length;
     await user.click(screen.getByRole('button', { name: 'Refresh Questions' }));
     const after = global.fetch.mock.calls.filter(([url]) => String(url).includes('/api/questions')).length;

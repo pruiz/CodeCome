@@ -91,7 +91,7 @@ function QuestionCard({ question, onChanged }) {
   );
 }
 
-export default function AuditQuestions({ auditId, phaseExecutionId = null, auditStatus = '' }) {
+export default function AuditQuestions({ auditId, phaseExecutionId = null, auditStatus = '', onRefreshSummary = null }) {
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -108,6 +108,11 @@ export default function AuditQuestions({ auditId, phaseExecutionId = null, audit
   useEffect(() => {
     load();
   }, [auditId, phaseExecutionId]);
+
+  const refreshQuestions = async () => {
+    await load();
+    await onRefreshSummary?.();
+  };
 
   const openCount = questions.filter((question) => question.status === 'OPEN').length;
   const blockingCount = questions.filter((question) => question.status === 'OPEN' && question.blocking).length;
@@ -134,7 +139,7 @@ export default function AuditQuestions({ auditId, phaseExecutionId = null, audit
           <span className="rounded-full bg-amber-500/15 px-2 py-1 text-amber-200">open {openCount}</span>
           <span className="rounded-full bg-red-500/15 px-2 py-1 text-red-200">blocking {blockingCount}</span>
           {auditStatus === 'paused_for_questions' && blockingCount === 0 && <button onClick={continueAfterQuestions} className="rounded bg-blue-700 px-3 py-1 font-semibold text-white hover:bg-blue-600">Continue</button>}
-          <button onClick={load} className="rounded bg-gray-800 px-3 py-1 text-gray-200 hover:bg-gray-700">Refresh</button>
+          <button onClick={refreshQuestions} className="rounded bg-cyan-800 px-3 py-1 font-semibold text-cyan-50 hover:bg-cyan-700">Refresh Questions</button>
         </div>
       </div>
       {auditStatus === 'paused_for_questions' && blockingCount > 0 && <div className="mb-3 rounded border border-amber-800 bg-amber-950/40 px-3 py-2 text-sm text-amber-100">Audit is paused until blocking questions are answered or dismissed.</div>}

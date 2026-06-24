@@ -1157,13 +1157,6 @@ export default function AuditDetails() {
             <span className={`rounded-full border px-2.5 py-1 text-gray-300 ${questionSummary.blocking ? 'border-red-700 bg-red-950/40' : 'border-gray-700 bg-gray-900'}`}>
               Blocking: <span className="text-white">{questionSummary.blocking}</span>
             </span>
-            <button
-              type="button"
-              onClick={loadQuestionSummary}
-              className="inline-flex items-center rounded-md border border-cyan-700 bg-cyan-900/50 px-3 py-1.5 text-xs font-semibold text-cyan-100 shadow-sm hover:bg-cyan-800 focus:outline-none focus:ring-2 focus:ring-cyan-500/60"
-            >
-              Refresh Questions
-            </button>
             <span className="rounded-full border border-gray-700 bg-gray-900 px-2.5 py-1 text-gray-300">
               Owner: <span className="text-white">{audit.question_owner_name ? `${audit.question_owner_name} (${audit.question_owner_is_llm ? 'AI' : 'Human'})` : 'None'}</span>
             </span>
@@ -1259,7 +1252,7 @@ export default function AuditDetails() {
         
         {activeTab === 'logs' && <LiveLogs auditId={id} />}
         {activeTab === 'findings' && <FindingsList auditId={id} />}
-        {activeTab === 'questions' && <AuditQuestions auditId={id} auditStatus={audit.status} />}
+        {activeTab === 'questions' && <AuditQuestions auditId={id} auditStatus={audit.status} onRefreshSummary={loadQuestionSummary} />}
         {activeTab === 'config' && <ConfigEditor audit={audit} onRefresh={refetch} />}
       </div>
     </div>
