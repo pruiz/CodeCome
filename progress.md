@@ -102,7 +102,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Add frontend tests for fake AI user management or auto-answer controls.
 - [x] Run `web_app/run-checks.sh` before each implementation commit when practical.
 - [x] Smoke test locally through `http://localhost:3000` and `http://localhost:8000/health`.
-- [ ] Use `/opt/tools/08_TETools/SmallCompany.zip` for manual audit smoke tests when an end-to-end workflow is needed.
+- [x] Use `/opt/tools/08_TETools/SmallCompany.zip` for manual audit smoke tests when an end-to-end workflow is needed.
 
 ### Commit Policy For This Feature
 
