@@ -34,4 +34,18 @@ describe('useWebSocket', () => {
     expect(global.WebSocket).toHaveBeenCalledTimes(1);
     expect(global.WebSocket.mock.calls[0][0]).toContain('/ws/audits/audit-1/logs?token=token%20123');
   });
+
+  it('clears token when websocket auth is rejected', () => {
+    const listener = vi.fn();
+    window.addEventListener('codecome-auth-changed', listener);
+    render(<Harness />);
+
+    const ws = global.WebSocket.mock.instances[0];
+    ws.onclose({ code: 1008 });
+
+    expect(window.localStorage.getItem('codecome_access_token')).toBeNull();
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(ws.close).not.toHaveBeenCalled();
+    window.removeEventListener('codecome-auth-changed', listener);
+  });
 });

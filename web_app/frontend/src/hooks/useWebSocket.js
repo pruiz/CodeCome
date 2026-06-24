@@ -20,8 +20,12 @@ export function useWebSocket(url, onMessage) {
       onMessage(data);
     };
     ws.onerror = (error) => console.error('WebSocket error:', error);
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       console.log('WebSocket closed');
+      if (event?.code === 1008) {
+        authApi.logout();
+        return;
+      }
       // Reconnect after 3 seconds
       setTimeout(() => {
         if (wsRef.current === ws) {
