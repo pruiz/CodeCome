@@ -197,7 +197,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Raise backend coverage floor to 48%.
 - [x] Default new audits to the first active human question owner when none is selected.
 - [x] Replace checkbox-style controls in the user creation form with coherent toggle switches matching the project UI.
-- [ ] Replace checkbox-style controls in the audit creation form with coherent toggle switches matching the project UI.
+- [x] Replace checkbox-style controls in the audit creation form with coherent toggle switches matching the project UI.
 - [ ] Ensure Launch Sandbox starts the audit-specific Docker sandbox instance; each audit must use its own sandbox, not a shared/global sandbox.
 - [ ] BUG: Audits created with auto-continue enabled can remain stuck in `initializing` instead of automatically starting the first phase.
 - [ ] Let fake AI users choose an available model from the assigned agent/OpenCode JSON configuration instead of manually typing the model name.

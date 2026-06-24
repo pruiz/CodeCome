@@ -2,6 +2,26 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auditsApi, usersApi, workersApi } from '../services/api';
 
+function ToggleSwitch({ checked, label, description, onChange }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className="flex w-full items-center justify-between gap-4 rounded border border-gray-700 bg-gray-700 px-3 py-2 text-left text-sm hover:border-cyan-700"
+    >
+      <span>
+        <span className="block text-gray-100">{label}</span>
+        {description && <span className="mt-0.5 block text-xs text-gray-400">{description}</span>}
+      </span>
+      <span className={`relative h-6 w-11 flex-shrink-0 rounded-full border transition ${checked ? 'border-cyan-500 bg-cyan-500/40' : 'border-gray-600 bg-gray-800'}`}>
+        <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
+      </span>
+    </button>
+  );
+}
+
 export default function AuditCreator() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
@@ -225,15 +245,12 @@ export default function AuditCreator() {
               <p className="text-xs text-gray-500 mt-1">Blocking phase questions are assigned to this user. AI users can auto-answer.</p>
             </div>
              
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="autoContinue"
-                checked={formData.autoContinue}
-                onChange={(e) => setFormData({ ...formData, autoContinue: e.target.checked })}
-              />
-              <label htmlFor="autoContinue" className="text-sm">Auto-continue to next phase</label>
-            </div>
+            <ToggleSwitch
+              checked={formData.autoContinue}
+              label="Auto-continue to next phase"
+              description="Automatically queue the next CodeCome command after successful phases unless blocking questions are found."
+              onChange={(value) => setFormData({ ...formData, autoContinue: value })}
+            />
           </div>
           
           <div className="flex justify-between mt-6">

@@ -50,6 +50,7 @@ describe('AuditCreator', () => {
     await user.type(screen.getByPlaceholderText('My Audit'), 'Question Owner Audit');
     await screen.findByText('AI Owner (AI)');
     expect(screen.queryByText(/AI review between phases/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('switch', { name: /Auto-continue to next phase/i }));
     await user.selectOptions(screen.getByLabelText('Question Owner'), '7');
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.click(screen.getByRole('button', { name: 'Create Audit' }));
@@ -60,6 +61,7 @@ describe('AuditCreator', () => {
       expect(JSON.parse(createCall[1].body)).toMatchObject({
         name: 'Question Owner Audit',
         question_owner_user_id: 7,
+        auto_continue: true,
       });
     });
   });
