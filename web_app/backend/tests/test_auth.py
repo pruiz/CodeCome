@@ -1,13 +1,15 @@
 from types import SimpleNamespace
+import asyncio
 
 import pytest
 from fastapi import HTTPException
+from fastapi.responses import JSONResponse
 
 from app import crud, schemas
 from app.auth import create_access_token, verify_access_token
 from app.api import auth as auth_api
 from app.api import websockets
-from app.main import authenticated_user_from_bearer
+from app.main import authenticated_user_from_bearer, require_api_auth
 
 
 def test_access_token_roundtrip():
@@ -81,3 +83,44 @@ def test_authenticated_user_from_bearer_rejects_missing_user(monkeypatch):
         authenticated_user_from_bearer(f"Bearer {token}", object())
 
     assert exc.value.status_code == 401
+
+
+class FakeUrl:
+    def __init__(self, path):
+        self.path = path
+
+
+class FakeRequest:
+    def __init__(self, path, headers=None, method="GET"):
+        self.url = FakeUrl(path)
+        self.headers = headers or {}
+        self.method = method
+
+
+def test_api_auth_middleware_allows_health_without_token():
+    async def call_next(request):
+        return JSONResponse({"ok": True})
+
+    response = asyncio.run(require_api_auth(FakeRequest("/health"), call_next))
+
+    assert response.status_code == 200
+    assert response.body == b'{"ok":true}'
+
+
+def test_api_auth_middleware_rejects_protected_route_without_token():
+    async def call_next(request):
+        return JSONResponse({"ok": True})
+
+    response = asyncio.run(require_api_auth(FakeRequest("/api/audits/"), call_next))
+
+    assert response.status_code == 401
+    assert b"Missing bearer token" in response.body
+
+
+def test_api_auth_middleware_rejects_invalid_token():
+    async def call_next(request):
+        return JSONResponse({"ok": True})
+
+    response = asyncio.run(require_api_auth(FakeRequest("/api/audits/", {"authorization": "Bearer invalid-token"}), call_next))
+
+    assert response.status_code == 401
