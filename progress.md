@@ -203,7 +203,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Let fake AI users choose an available model from the assigned agent/OpenCode JSON configuration instead of manually typing the model name.
 - [x] Add worker-aware model selection during audit creation: when a worker is selected, load the models supported by that worker from its OpenCode config, allow choosing one, and apply it as an audit-wide environment setting for every phase.
 - [x] Improve Proxmox VM/LXC worker bootstrap so the target runs a self-registration script that pulls required configuration from the web app and registers itself as a worker automatically, avoiding manual keyfile/user/password entry when possible.
-- [ ] BUG: Investigate audit `13555161-ddba-422d-bff8-47b149bac988` `make validate-all` failure from latest logs and add a durable guard so this failure mode cannot recur.
+- [x] BUG: Investigate audit `13555161-ddba-422d-bff8-47b149bac988` `make validate-all` failure from latest logs and add a durable guard so this failure mode cannot recur.
 - [ ] CHECK: Verify audits created from a local folder are copied to the selected worker before execution; remote workers should receive the workspace via SCP/rsync or equivalent, not assume the local path exists remotely.
 
 ## Notes

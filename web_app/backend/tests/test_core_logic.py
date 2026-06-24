@@ -8,7 +8,7 @@ from app.api.workers import model_options_from_worker, registered_worker_config,
 from app.utils.codecome_wrapper import CodeComeExecutor
 from app.api import logs, workers
 from app.workers.phase_tasks import build_command_line, status_phase
-from app.workers.phase_tasks import merged_phase_env
+from app.workers.phase_tasks import audit_sandbox_host_port, audit_sandbox_project_name, merged_phase_env, prepare_audit_sandbox_runtime, rewrite_sandbox_compose_host_ports
 
 
 class FakeScalarQuery:
@@ -175,6 +175,38 @@ def test_sandbox_runtime_env_is_audit_specific(tmp_path):
     assert env["COMPOSE_PROJECT_NAME"] == "codecome_11111111222233334444555555555555"
     assert env["CODECOME_AUDIT_ID"] == str(audit.id)
     assert env["CODECOME_WORKSPACE"] == str(tmp_path)
+
+
+def test_phase_sandbox_runtime_rewrites_host_port_and_prompt(tmp_path):
+    workspace = tmp_path / "workspace"
+    sandbox = workspace / "sandbox"
+    sandbox.mkdir(parents=True)
+    (sandbox / "docker-compose.yml").write_text('services:\n  app:\n    ports:\n      - "8080:8080"\n')
+    audit = SimpleNamespace(id="13555161-ddba-422d-bff8-47b149bac988")
+
+    env = prepare_audit_sandbox_runtime(audit, workspace, {"PROMPT_EXTRA": "existing context"})
+    host_port = audit_sandbox_host_port(str(audit.id))
+
+    assert env["COMPOSE_PROJECT_NAME"] == audit_sandbox_project_name(str(audit.id))
+    assert env["CODECOME_SANDBOX_URL"] == f"http://localhost:{host_port}"
+    assert "existing context" in env["PROMPT_EXTRA"]
+    assert "CODECOME_SANDBOX_URL" in env["PROMPT_EXTRA"]
+    assert f'"{host_port}:8080"' in (sandbox / "docker-compose.yml").read_text()
+    assert f"CODECOME_SANDBOX_HOST_PORT={host_port}" in (sandbox / ".env").read_text()
+
+
+def test_rewrite_sandbox_compose_host_ports_leaves_non_app_ports(tmp_path):
+    sandbox = tmp_path / "sandbox"
+    sandbox.mkdir()
+    compose = sandbox / "docker-compose.yml"
+    compose.write_text('services:\n  app:\n    ports:\n      - "8080:8080"\n      - "5432:5432"\n')
+
+    changed = rewrite_sandbox_compose_host_ports(tmp_path, 19001)
+
+    assert changed is True
+    text = compose.read_text()
+    assert '"19001:8080"' in text
+    assert '"5432:5432"' in text
 
 
 def test_worker_response_redacts_ssh_secrets():

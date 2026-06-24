@@ -8,8 +8,10 @@ from app.workers.question_answering import auto_answer_open_questions, with_user
 from app.workers.question_detection import create_questions_for_phase, has_open_blocking_questions
 from pathlib import Path
 from datetime import datetime
+import hashlib
 import logging
 import queue
+import re
 import shlex
 import threading
 
@@ -65,6 +67,78 @@ def build_command_line(phase: str, model: str = None, variant: str = None, findi
     if worker_type != "local":
         command = f"ssh remote-worker -- {command}"
     return command
+
+
+def audit_sandbox_project_name(audit_id: str) -> str:
+    audit_slug = re.sub(r"[^a-z0-9]+", "", str(audit_id).lower()) or "audit"
+    return f"codecome_{audit_slug}"[:63]
+
+
+def audit_sandbox_host_port(audit_id: str) -> int:
+    digest = hashlib.sha256(str(audit_id).encode()).hexdigest()
+    return 18080 + (int(digest[:8], 16) % 10000)
+
+
+def write_sandbox_env(workspace_path: Path, values: dict[str, str]) -> None:
+    sandbox_dir = workspace_path / "sandbox"
+    if not sandbox_dir.exists():
+        return
+    env_path = sandbox_dir / ".env"
+    existing = {}
+    if env_path.exists():
+        for line in env_path.read_text().splitlines():
+            if not line.strip() or line.lstrip().startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            existing[key.strip()] = value.strip()
+    existing.update(values)
+    env_path.write_text("".join(f"{key}={value}\n" for key, value in existing.items()))
+
+
+def rewrite_sandbox_compose_host_ports(workspace_path: Path, host_port: int) -> bool:
+    compose_path = workspace_path / "sandbox" / "docker-compose.yml"
+    if not compose_path.exists():
+        return False
+    text = compose_path.read_text()
+    common_app_ports = {3000, 5000, 5173, 8000, 8080, 8081, 8443, 9000}
+    pattern = re.compile(r"(?m)^(\s*-\s*)([\"']?)(\d+):(\d+)((?:/[a-zA-Z]+)?)(\2)(\s*)$")
+
+    def replace(match):
+        current_host = int(match.group(3))
+        container_port = int(match.group(4))
+        if current_host == container_port and container_port in common_app_ports and current_host != host_port:
+            return f"{match.group(1)}{match.group(2)}{host_port}:{container_port}{match.group(5)}{match.group(6)}{match.group(7)}"
+        return match.group(0)
+
+    updated = pattern.sub(replace, text)
+    if updated != text:
+        compose_path.write_text(updated)
+        return True
+    return False
+
+
+def prepare_audit_sandbox_runtime(audit, workspace_path: Path, env_overrides: dict | None = None) -> dict:
+    env = dict(env_overrides or {})
+    project_name = audit_sandbox_project_name(str(audit.id))
+    host_port = audit_sandbox_host_port(str(audit.id))
+    sandbox_url = f"http://localhost:{host_port}"
+    runtime_values = {
+        "COMPOSE_PROJECT_NAME": project_name,
+        "CODECOME_AUDIT_ID": str(audit.id),
+        "CODECOME_WORKSPACE": str(workspace_path),
+        "CODECOME_SANDBOX_HOST_PORT": str(host_port),
+        "CODECOME_SANDBOX_URL": sandbox_url,
+    }
+    write_sandbox_env(workspace_path, runtime_values)
+    rewrite_sandbox_compose_host_ports(workspace_path, host_port)
+    prompt_extra = env.get("PROMPT_EXTRA", "")
+    sandbox_hint = (
+        f"CodeCome Web assigned this audit sandbox host URL: {sandbox_url}. "
+        "When interacting with the sandbox from the host, use CODECOME_SANDBOX_URL instead of hard-coded localhost:8080."
+    )
+    env.update(runtime_values)
+    env["PROMPT_EXTRA"] = f"{prompt_extra}\n\n{sandbox_hint}".strip() if prompt_extra else sandbox_hint
+    return env
 
 
 def status_phase(phase: str) -> str:
@@ -207,7 +281,7 @@ def run_phase_task(
             raise RuntimeError("No available worker")
 
         workspace_path = Path(audit.workspace_path)
-        env_overrides = env_overrides or {}
+        env_overrides = prepare_audit_sandbox_runtime(audit, workspace_path, env_overrides)
         command_line = build_command_line(phase, model, variant, finding_id, worker.type, env_overrides)
 
         audit.assigned_worker_id = worker.id

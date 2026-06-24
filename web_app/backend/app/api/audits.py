@@ -14,7 +14,7 @@ import subprocess
 from app.database import get_db
 from app import crud, models, schemas
 from app.services.workspace import workspace_manager
-from app.workers.phase_tasks import ALL_PHASES, PHASE_ORDER, merged_phase_env, phase_order_for_settings, run_phase_task, run_sequential_workflow
+from app.workers.phase_tasks import ALL_PHASES, PHASE_ORDER, merged_phase_env, phase_order_for_settings, prepare_audit_sandbox_runtime, run_phase_task, run_sequential_workflow
 from app.workers.question_answering import write_user_answers_context, with_user_answers_env
 from app.utils.codecome_wrapper import CodeComeExecutor, codecome_executor
 from app.utils.ssh_executor import SSHCodeComeExecutor
@@ -315,8 +315,10 @@ def start_audit_sandbox(audit_id: UUID, db: Session = Depends(get_db)):
     if not workspace_path.exists():
         raise HTTPException(status_code=404, detail="Audit workspace not found")
     command = sandbox_start_command(audit)
+    runtime_env = os.environ.copy()
+    runtime_env.update(prepare_audit_sandbox_runtime(audit, workspace_path))
     started_at = datetime.now()
-    crud.create_audit_log(db, audit_id, "INFO", f"Starting sandbox: {command}", source="sandbox")
+    crud.create_audit_log(db, audit_id, "INFO", f"Starting sandbox: {command} ({runtime_env.get('CODECOME_SANDBOX_URL')})", source="sandbox")
     try:
         result = subprocess.run(
             command,
@@ -324,7 +326,7 @@ def start_audit_sandbox(audit_id: UUID, db: Session = Depends(get_db)):
             shell=True,
             text=True,
             capture_output=True,
-            env=sandbox_runtime_env(audit, workspace_path),
+            env=runtime_env,
             timeout=900,
         )
     except subprocess.TimeoutExpired as exc:
