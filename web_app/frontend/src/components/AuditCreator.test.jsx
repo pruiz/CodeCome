@@ -73,7 +73,7 @@ describe('AuditCreator', () => {
         name: 'Question Owner Audit',
         question_owner_user_id: 7,
         auto_continue: true,
-        model_settings: { __audit_env: { env: { CODECOME_MODEL: 'local/qwen3.6-27b' } } },
+        model_settings: { __audit_options: { worker_model: 'local/qwen3.6-27b' } },
       });
     });
   });
@@ -101,7 +101,7 @@ describe('AuditCreator', () => {
       expect(uploadCall[1].body.get('file')).toBe(zipFile);
       expect(uploadCall[1].body.get('name')).toBe('Zip Question Audit');
       expect(uploadCall[1].body.get('question_owner_user_id')).toBe('7');
-      expect(JSON.parse(uploadCall[1].body.get('model_settings'))).toEqual({ __audit_env: { env: { CODECOME_MODEL: 'local/qwen3.6-27b' } } });
+      expect(JSON.parse(uploadCall[1].body.get('model_settings'))).toEqual({ __audit_options: { worker_model: 'local/qwen3.6-27b' } });
     });
   });
 });

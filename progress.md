@@ -50,6 +50,7 @@ Continue from `progress.md` and implement the next unfinished TODO.
 - [x] POSSIBLE BUG: Make sure one agent running two or more audits always uses the correct original CodeCome sandbox for each audit and never crosses audit workspaces or sandbox instances.
 - [x] TODO: Investigate and improve the worker bootstrap script so it registers the machine as a worker automatically, including creating/configuring a local execution user with Docker access when appropriate.
 - [x] BUG: In the latest SmallCompany audit, rerunning `make validate-all` fails with `Rerun failed: No available worker`; investigate worker availability/release state and ensure failed phase reruns can be queued when capacity should be free.
+- [x] TEST: Run full web app checks plus a live SmallCompany ZIP upload from `/opt/tools/08_TETools/SmallCompany.zip`, including general UI/API verification, before committing current model-selection changes.
 ## Current Major Feature: Users, Question Owners, and Fake AI Answerers
 
 Goal: successful phases that produce questions for the user must pause the workflow until the audit's assigned question owner answers them. The owner may be a human user answering in the web app, or a fake AI user that answers automatically and allows the workflow to continue.

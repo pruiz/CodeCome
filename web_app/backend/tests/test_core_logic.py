@@ -440,16 +440,35 @@ def test_phase_command_line_includes_env_and_target():
     assert command.endswith("make phase-1")
 
 
+def test_phase_command_line_shows_env_overrides_after_model_defaults():
+    command = build_command_line(
+        "phase-1",
+        model="worker/default",
+        worker_type="local",
+        env_overrides={"CODECOME_MODEL": "audit/override"},
+    )
+
+    assert command.index("CODECOME_MODEL=worker/default") < command.index("CODECOME_MODEL=audit/override")
+
+
 def test_merged_phase_env_phase_overrides_audit_defaults():
     settings = {
-        "__audit_env": {"env": {"PROMPT_EXTRA": "audit prompt", "CODECOME_THINKING": "0"}},
-        "phase-1": {"env": {"PROMPT_EXTRA": "phase prompt"}},
+        "__audit_options": {"worker_model": "worker/default"},
+        "__audit_env": {"env": {"PROMPT_EXTRA": "audit prompt", "CODECOME_THINKING": "0", "CODECOME_MODEL": "audit/model"}},
+        "phase-1": {"env": {"PROMPT_EXTRA": "phase prompt", "CODECOME_MODEL": "phase/model"}},
     }
 
     assert merged_phase_env(settings, "phase-1") == {
         "PROMPT_EXTRA": "phase prompt",
         "CODECOME_THINKING": "0",
+        "CODECOME_MODEL": "phase/model",
     }
+
+
+def test_merged_phase_env_uses_worker_model_as_lowest_priority_default():
+    settings = {"__audit_options": {"worker_model": "worker/default"}}
+
+    assert merged_phase_env(settings, "phase-1")["CODECOME_MODEL"] == "worker/default"
 
 
 def test_status_phase_normalizes_make_and_phase_names():

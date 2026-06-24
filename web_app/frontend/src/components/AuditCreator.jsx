@@ -68,7 +68,7 @@ export default function AuditCreator() {
   }, [formData.workerId]);
 
   const modelSettings = formData.modelId
-    ? { __audit_env: { env: { CODECOME_MODEL: formData.modelId } } }
+    ? { __audit_options: { worker_model: formData.modelId } }
     : undefined;
   
   const handleSubmit = async () => {
@@ -240,7 +240,7 @@ export default function AuditCreator() {
                 <option value="">Use default model</option>
                 {workerModels.map((model) => <option key={model.id} value={model.id}>{model.id}</option>)}
               </select>
-              <p className="text-xs text-gray-500 mt-1">When selected, saved as audit-wide <code>CODECOME_MODEL</code> for every phase.</p>
+              <p className="text-xs text-gray-500 mt-1">When selected, passed as the default <code>CODECOME_MODEL</code>. Audit-wide and per-phase environment settings can override it.</p>
             </div>
 
             <div>

@@ -40,21 +40,25 @@ def phase_order_for_settings(model_settings: dict | None) -> list[str]:
 
 def merged_phase_env(model_settings: dict | None, phase: str) -> dict:
     settings = model_settings or {}
+    default_env = {}
+    selected_model = audit_options(settings).get("worker_model")
+    if selected_model:
+        default_env["CODECOME_MODEL"] = selected_model
     audit_env_block = settings.get(AUDIT_ENV_KEY) or {}
     audit_env = audit_env_block.get("env") if isinstance(audit_env_block, dict) else {}
     phase_config = settings.get(phase) or {}
     phase_env = phase_config.get("env") or phase_config.get("env_overrides") or {}
-    return {**(audit_env or {}), **(phase_env or {})}
+    return {**default_env, **(audit_env or {}), **(phase_env or {})}
 
 
 def build_command_line(phase: str, model: str = None, variant: str = None, finding_id: str = None, worker_type: str = "local", env_overrides: dict = None) -> str:
     env_parts = []
-    for key, value in (env_overrides or {}).items():
-        env_parts.append(f"{shlex.quote(str(key))}={shlex.quote(str(value))}")
     if model:
         env_parts.append(f"CODECOME_MODEL={shlex.quote(model)}")
     if variant:
         env_parts.append(f"CODECOME_MODEL_VARIANT={shlex.quote(variant)}")
+    for key, value in (env_overrides or {}).items():
+        env_parts.append(f"{shlex.quote(str(key))}={shlex.quote(str(value))}")
     if phase.startswith("make "):
         cmd = ["make", phase.split(" ", 1)[1]]
     else:
