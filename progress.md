@@ -185,6 +185,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Disable audit detail start/continue action while blocking questions are open.
 - [x] Remove obsolete AI review checkbox from audit creation.
 - [x] Add manual refresh for audit detail question counts.
+- [x] Add text search to Users page.
 - [x] Add All/Human/AI filters to the Users page.
 - [x] Remove obsolete AI review badge from audit detail header.
 

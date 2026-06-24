@@ -100,6 +100,7 @@ export default function Users() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState('all');
+  const [search, setSearch] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -141,6 +142,13 @@ export default function Users() {
     await usersApi.update(user.id, { active: !user.active });
     await load();
   };
+
+  const normalizedSearch = search.trim().toLowerCase();
+  const visibleUsers = normalizedSearch
+    ? users.filter((user) => [user.display_name, user.username, user.llm_model, user.llm_context]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(normalizedSearch)))
+    : users;
 
   return (
     <div className="space-y-6">
@@ -188,10 +196,19 @@ export default function Users() {
             <button onClick={load} className="rounded bg-gray-800 px-3 py-2 text-sm hover:bg-gray-700">Refresh</button>
           </div>
         </div>
+        <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200"
+            placeholder="Search users by name, username, model, or context..."
+          />
+          {search && <button onClick={() => setSearch('')} className="rounded bg-gray-800 px-3 py-2 text-sm hover:bg-gray-700">Clear search</button>}
+        </div>
         {loading ? <div className="text-gray-500">Loading users...</div> : (
           <div className="space-y-2">
-            {users.map((user) => <UserCard key={user.id} user={user} onChanged={load} />)}
-            {!users.length && <div className="text-center text-gray-500">No users created yet.</div>}
+            {visibleUsers.map((user) => <UserCard key={user.id} user={user} onChanged={load} />)}
+            {!visibleUsers.length && <div className="text-center text-gray-500">No users match the current filters.</div>}
           </div>
         )}
       </div>

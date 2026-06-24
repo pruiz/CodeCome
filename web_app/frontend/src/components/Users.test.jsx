@@ -119,4 +119,15 @@ describe('Users', () => {
       expect(urls.some((url) => url.includes('is_llm_user=true'))).toBe(true);
     });
   });
+
+  it('searches users by model text', async () => {
+    const user = userEvent.setup();
+    render(<Users />);
+
+    expect(await screen.findByText('Human Owner')).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText(/search users/i), 'old-model');
+
+    expect(screen.getByText('AI Owner')).toBeInTheDocument();
+    expect(screen.queryByText('Human Owner')).not.toBeInTheDocument();
+  });
 });
