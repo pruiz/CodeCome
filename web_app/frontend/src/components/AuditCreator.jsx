@@ -13,7 +13,6 @@ export default function AuditCreator() {
     codecomeYml: '',
     workerId: '',
     questionOwnerUserId: '',
-    aiReviewEnabled: false,
     autoContinue: false,
   });
   const [file, setFile] = useState(null);
@@ -49,7 +48,6 @@ export default function AuditCreator() {
           codecome_yml: formData.codecomeYml,
           worker_id: formData.workerId ? Number(formData.workerId) : undefined,
           question_owner_user_id: formData.questionOwnerUserId ? Number(formData.questionOwnerUserId) : undefined,
-          ai_review_enabled: formData.aiReviewEnabled,
           auto_continue: formData.autoContinue,
         });
         navigate(`/audit/${result.id}`);
@@ -236,16 +234,6 @@ export default function AuditCreator() {
               />
               <label htmlFor="autoContinue" className="text-sm">Auto-continue to next phase</label>
             </div>
-            
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="aiReview"
-                checked={formData.aiReviewEnabled}
-                onChange={(e) => setFormData({ ...formData, aiReviewEnabled: e.target.checked })}
-              />
-              <label htmlFor="aiReview" className="text-sm">Enable AI review between phases</label>
-            </div>
           </div>
           
           <div className="flex justify-between mt-6">
@@ -277,7 +265,6 @@ export default function AuditCreator() {
             <p><span className="text-gray-400">Worker:</span> {workers.find((worker) => String(worker.id) === formData.workerId)?.name || 'Auto-select'}</p>
             <p><span className="text-gray-400">Question Owner:</span> {users.find((user) => String(user.id) === formData.questionOwnerUserId)?.display_name || 'None'}</p>
             <p><span className="text-gray-400">Auto-continue:</span> {formData.autoContinue ? 'Yes' : 'No'}</p>
-            <p><span className="text-gray-400">AI Review:</span> {formData.aiReviewEnabled ? 'Yes' : 'No'}</p>
           </div>
           
           <div className="flex justify-between mt-6">

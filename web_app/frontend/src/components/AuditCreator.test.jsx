@@ -49,6 +49,7 @@ describe('AuditCreator', () => {
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.type(screen.getByPlaceholderText('My Audit'), 'Question Owner Audit');
     await screen.findByText('AI Owner (AI)');
+    expect(screen.queryByText(/AI review between phases/i)).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText('Question Owner'), '7');
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.click(screen.getByRole('button', { name: 'Create Audit' }));
