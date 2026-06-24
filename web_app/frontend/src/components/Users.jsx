@@ -42,6 +42,10 @@ export default function Users() {
 
   const createUser = async () => {
     setMessage('');
+    if (!form.is_llm_user && !form.password.trim()) {
+      setMessage('Create failed: password is required for human users.');
+      return;
+    }
     try {
       const payload = { ...form };
       if (!payload.password) delete payload.password;
@@ -83,7 +87,7 @@ export default function Users() {
           </label>
           <textarea value={form.llm_context} onChange={(e) => setForm({ ...form, llm_context: e.target.value })} className="h-28 rounded border border-gray-800 bg-gray-950 px-3 py-2 md:col-span-2" placeholder="Fake AI context/persona..." />
         </div>
-        <button onClick={createUser} disabled={!form.username.trim()} className="mt-4 rounded bg-blue-600 px-4 py-2 font-semibold hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-gray-700">Create User</button>
+        <button onClick={createUser} disabled={!form.username.trim() || (!form.is_llm_user && !form.password.trim())} className="mt-4 rounded bg-blue-600 px-4 py-2 font-semibold hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-gray-700">Create User</button>
       </div>
 
       <div className="vortex-card rounded-xl p-5">

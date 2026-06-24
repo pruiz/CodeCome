@@ -24,6 +24,8 @@ def create_user(user_data: schemas.UserCreate, db: Session = Depends(get_db)):
     existing = crud.get_user_by_username(db, user_data.username)
     if existing:
         raise HTTPException(status_code=409, detail="Username already exists")
+    if not user_data.is_llm_user and user_data.active and not user_data.password:
+        raise HTTPException(status_code=400, detail="Password is required for active human users")
     return crud.create_user(db, user_data)
 
 
@@ -37,7 +39,14 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
 
 @router.patch("/{user_id}", response_model=schemas.UserResponse)
 def update_user(user_id: int, user_data: schemas.UserUpdate, db: Session = Depends(get_db)):
-    user = crud.update_user(db, user_id, user_data)
-    if not user:
+    existing = crud.get_user(db, user_id)
+    if not existing:
         raise HTTPException(status_code=404, detail="User not found")
+    data = user_data.model_dump(exclude_unset=True)
+    will_be_human = data.get("is_llm_user", existing.is_llm_user) is False
+    will_be_active = data.get("active", existing.active) is True
+    has_password = bool(data.get("password") or existing.password_hash)
+    if will_be_human and will_be_active and not has_password:
+        raise HTTPException(status_code=400, detail="Password is required for active human users")
+    user = crud.update_user(db, user_id, user_data)
     return user

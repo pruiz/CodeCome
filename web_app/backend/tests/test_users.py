@@ -1,4 +1,6 @@
 from app import crud, schemas
+from app.api import users as users_api
+from fastapi import HTTPException
 
 
 class FakeDb:
@@ -17,6 +19,16 @@ class FakeDb:
         if getattr(obj, "id", None) is None:
             obj.id = 1
         self.refreshed.append(obj)
+
+    def query(self, *args):
+        class Query:
+            def filter(self, *filter_args):
+                return self
+
+            def first(self):
+                return None
+
+        return Query()
 
 
 def test_password_hash_verification_roundtrip():
@@ -62,3 +74,15 @@ def test_create_human_user_hashes_password():
     assert user.is_llm_user is False
     assert user.password_hash != "secret-password"
     assert crud.verify_password("secret-password", user.password_hash) is True
+
+
+def test_create_active_human_user_requires_password():
+    db = FakeDb()
+
+    try:
+        users_api.create_user(schemas.UserCreate(username="human", is_llm_user=False, active=True), db=db)
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert "Password is required" in exc.detail
+    else:
+        raise AssertionError("Expected HTTPException")

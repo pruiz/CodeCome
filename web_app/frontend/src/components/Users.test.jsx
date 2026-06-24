@@ -48,4 +48,16 @@ describe('Users', () => {
       });
     });
   });
+
+  it('requires a password for human users', async () => {
+    const user = userEvent.setup();
+    render(<Users />);
+
+    expect(await screen.findByText('Human Owner')).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText('username'), 'new-human');
+    await user.click(screen.getByLabelText('Fake AI user'));
+
+    expect(screen.getByRole('button', { name: 'Create User' })).toBeDisabled();
+    expect(global.fetch.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+  });
 });

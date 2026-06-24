@@ -159,6 +159,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Replace SQLAlchemy `declarative_base()` import with `sqlalchemy.orm.declarative_base`.
 - [x] Add coverage thresholds once the test suite is broader.
 - [x] Enforce authentication on API routes with first-user bootstrap.
+- [x] Prevent creating active human users without passwords.
 
 ## Notes
 
