@@ -72,6 +72,17 @@ class UserListResponse(BaseModel):
     users: List[UserResponse]
 
 
+class AuthLoginRequest(BaseModel):
+    username: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=1)
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserResponse
+
+
 class PhaseExecutionResponse(BaseModel):
     id: int
     audit_id: UUID

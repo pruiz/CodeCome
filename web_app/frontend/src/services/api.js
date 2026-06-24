@@ -1,4 +1,10 @@
 const API_BASE = '/api';
+const TOKEN_KEY = 'codecome_access_token';
+
+function authHeaders(extra = {}) {
+  const token = window.localStorage?.getItem(TOKEN_KEY);
+  return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
+}
 
 async function parseResponse(res, fallbackMessage = 'Request failed') {
   const text = await res.text();
@@ -158,6 +164,22 @@ export const usersApi = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   }).then(res => parseResponse(res, 'Failed to update user')),
+};
+
+export const authApi = {
+  tokenKey: TOKEN_KEY,
+  login: (username, password) => fetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  }).then(async (res) => {
+    const data = await parseResponse(res, 'Failed to login');
+    if (data.access_token) window.localStorage?.setItem(TOKEN_KEY, data.access_token);
+    return data;
+  }),
+  me: () => fetch(`${API_BASE}/auth/me`, { headers: authHeaders() }).then(res => parseResponse(res, 'Failed to load current user')),
+  logout: () => window.localStorage?.removeItem(TOKEN_KEY),
+  getToken: () => window.localStorage?.getItem(TOKEN_KEY),
 };
 
 export const workersApi = {

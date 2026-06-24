@@ -53,8 +53,8 @@ Goal: successful phases that produce questions for the user must pause the workf
 
 ### Product Rules
 
-- [ ] Add web app users for authentication and question ownership.
-- [ ] All authenticated users can see everything; no roles are needed for now.
+- [x] Add web app users for authentication and question ownership.
+- [x] All authenticated users can see everything; no roles are needed for now.
 - [ ] Each audit can be associated with one question owner user.
 - [ ] The question owner can be a human user or a fake AI user.
 - [ ] More than one fake AI user can exist globally.
@@ -72,7 +72,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 ### Backend/API TODO
 
 - [x] Add user CRUD APIs for listing users and creating/editing fake AI users.
-- [ ] Add minimal auth foundation for human login users.
+- [x] Add minimal auth foundation for human login users.
 - [x] Add audit update support for `question_owner_user_id`.
 - [x] Add question APIs: list by audit, list by phase execution, answer, dismiss.
 - [ ] Add question APIs: auto-answer and continue-after-questions.
@@ -83,7 +83,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 
 ### Frontend TODO
 
-- [ ] Add login/logout UI once auth API exists.
+- [x] Add login/logout UI once auth API exists.
 - [x] Add users/fake-AI user management UI.
 - [x] Add audit question owner selector in audit overview/config.
 - [x] Add audit Questions tab listing open/answered/dismissed questions by phase.

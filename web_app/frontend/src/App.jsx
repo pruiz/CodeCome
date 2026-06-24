@@ -5,6 +5,7 @@ import AllFindings from './components/AllFindings';
 import AuditCreator from './components/AuditCreator';
 import AuditDetails from './components/AuditDetails';
 import FindingDetails from './components/FindingDetails';
+import AuthStatus from './components/AuthStatus';
 import PreviewAnalysis from './components/PreviewAnalysis';
 import Users from './components/Users';
 import Workers from './components/Workers';
@@ -104,6 +105,10 @@ function App() {
           <div className="mt-8 rounded-xl border border-slate-800 bg-slate-950/80 p-4 text-xs text-slate-400 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
             <div className="font-semibold text-slate-300">Execution Model</div>
             <div className="mt-2">DBs in Docker. Scans on native workers.</div>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/80 p-4 text-xs text-slate-400 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            <AuthStatus />
           </div>
 
           <div className="mt-auto whitespace-nowrap text-xs text-slate-600 opacity-0 transition-opacity duration-200 group-hover:opacity-100">CodeCome Web v1.0.0</div>
