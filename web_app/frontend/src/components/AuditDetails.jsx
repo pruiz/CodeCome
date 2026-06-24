@@ -1134,9 +1134,6 @@ export default function AuditDetails() {
             <span className="rounded-full border border-gray-700 bg-gray-900 px-2.5 py-1 text-gray-300">
               Auto: <span className="text-white">{audit.auto_continue ? 'yes' : 'no'}</span>
             </span>
-            <span className="rounded-full border border-gray-700 bg-gray-900 px-2.5 py-1 text-gray-300">
-              AI Review: <span className="text-white">{audit.ai_review_enabled ? 'yes' : 'no'}</span>
-            </span>
           </div>
         </div>
         <div className="flex gap-2">

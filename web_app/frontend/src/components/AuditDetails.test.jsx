@@ -70,6 +70,7 @@ describe('AuditDetails', () => {
     expect(await screen.findByText('Questions:')).toBeInTheDocument();
     expect(screen.getByText('Blocking:')).toBeInTheDocument();
     expect(screen.getByText('AI Owner (AI)')).toBeInTheDocument();
+    expect(screen.queryByText('AI Review:')).not.toBeInTheDocument();
     expect(screen.getAllByText('1').length).toBeGreaterThan(0);
   });
 
