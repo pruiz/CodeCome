@@ -72,6 +72,15 @@ def has_other_active_human_users(db: Session, user_id: int) -> bool:
     ).first() is not None
 
 
+def default_question_owner(db: Session) -> Optional[models.User]:
+    return (
+        db.query(models.User)
+        .filter(models.User.active.is_(True), models.User.is_llm_user.is_(False))
+        .order_by(models.User.id.asc())
+        .first()
+    )
+
+
 def get_users(db: Session, skip: int = 0, limit: int = 100, active: Optional[bool] = None, is_llm_user: Optional[bool] = None) -> tuple[int, List[models.User]]:
     query = db.query(models.User)
     count_query = db.query(func.count(models.User.id))

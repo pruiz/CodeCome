@@ -4,10 +4,11 @@ from fastapi import HTTPException
 
 
 class FakeDb:
-    def __init__(self):
+    def __init__(self, query_result=None):
         self.added = []
         self.commits = 0
         self.refreshed = []
+        self.query_result = query_result
 
     def add(self, obj):
         self.added.append(obj)
@@ -21,12 +22,17 @@ class FakeDb:
         self.refreshed.append(obj)
 
     def query(self, *args):
+        result = self.query_result
+
         class Query:
             def filter(self, *filter_args):
                 return self
 
+            def order_by(self, *order_args):
+                return self
+
             def first(self):
-                return None
+                return result
 
         return Query()
 
@@ -83,6 +89,12 @@ def test_create_human_user_hashes_password():
     assert user.llm_model is None
     assert user.llm_context is None
     assert user.auto_answer_enabled is False
+
+
+def test_default_question_owner_returns_first_active_human():
+    owner = type("User", (), {"id": 3, "username": "owner"})()
+
+    assert crud.default_question_owner(FakeDb(owner)) is owner
 
 
 def test_update_human_user_clears_llm_fields():

@@ -139,6 +139,10 @@ def create_audit(audit_data: schemas.AuditCreate, db: Session = Depends(get_db))
     if audit_data.question_owner_user_id and not crud.get_user(db, audit_data.question_owner_user_id):
         workspace_manager.cleanup_workspace(workspace_path)
         raise HTTPException(status_code=404, detail="Question owner user not found")
+    question_owner_user_id = audit_data.question_owner_user_id
+    if not question_owner_user_id:
+        default_owner = crud.default_question_owner(db)
+        question_owner_user_id = default_owner.id if default_owner else None
 
     db_audit = crud.create_audit(db, schemas.AuditCreate(
         name=audit_data.name,
@@ -149,7 +153,7 @@ def create_audit(audit_data: schemas.AuditCreate, db: Session = Depends(get_db))
         ai_review_enabled=audit_data.ai_review_enabled,
         auto_continue=audit_data.auto_continue,
         worker_id=audit_data.worker_id,
-        question_owner_user_id=audit_data.question_owner_user_id,
+        question_owner_user_id=question_owner_user_id,
         workspace_path=str(workspace_path),
     ))
     
@@ -365,6 +369,9 @@ async def upload_zip(
     if question_owner_user_id and not crud.get_user(db, question_owner_user_id):
         workspace_manager.cleanup_workspace(workspace_path)
         raise HTTPException(status_code=404, detail="Question owner user not found")
+    if not question_owner_user_id:
+        default_owner = crud.default_question_owner(db)
+        question_owner_user_id = default_owner.id if default_owner else None
      
     # Create audit record
     db_audit = crud.create_audit(db, schemas.AuditCreate(

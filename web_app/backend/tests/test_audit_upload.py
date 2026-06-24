@@ -49,3 +49,29 @@ def test_upload_zip_preserves_audit_settings(monkeypatch, tmp_path):
     assert captured["audit"].ai_review_enabled is True
     assert captured["audit"].auto_continue is True
     assert not any(Path(tmp_path / "uploads").glob("*target.zip"))
+
+
+def test_upload_zip_uses_default_question_owner(monkeypatch, tmp_path):
+    captured = {}
+    workspace = tmp_path / "workspace"
+    owner = SimpleNamespace(id=9)
+
+    monkeypatch.setattr(settings, "WORKSPACES_DIR", tmp_path)
+    monkeypatch.setattr(audits.workspace_manager, "create_workspace", lambda audit_id: workspace)
+    monkeypatch.setattr(audits.workspace_manager, "setup_source_from_zip", lambda path, zip_path: True)
+    monkeypatch.setattr(audits.workspace_manager, "write_codecome_yml", lambda path, yml: None)
+    monkeypatch.setattr(audits.crud, "default_question_owner", lambda db: owner)
+    monkeypatch.setattr(audits.crud, "create_audit", lambda db, audit_data: captured.setdefault("audit", audit_data) or SimpleNamespace(id="audit-1"))
+
+    asyncio.run(audits.upload_zip(
+        name="Zip Audit",
+        file=FakeUploadFile(),
+        codecome_yml="project: demo",
+        worker_id=None,
+        question_owner_user_id=None,
+        ai_review_enabled=False,
+        auto_continue=False,
+        db=object(),
+    ))
+
+    assert captured["audit"].question_owner_user_id == 9
