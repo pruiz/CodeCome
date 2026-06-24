@@ -161,6 +161,7 @@ Goal: successful phases that produce questions for the user must pause the workf
 - [x] Enforce authentication on API routes with first-user bootstrap.
 - [x] Prevent creating active human users without passwords.
 - [x] Enforce authentication on WebSocket log/status streams.
+- [x] Add frontend auth gate before loading protected app routes.
 - [x] Prevent disabling or converting the last active human user.
 
 ## Notes

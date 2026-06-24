@@ -5,6 +5,7 @@ import AllFindings from './components/AllFindings';
 import AuditCreator from './components/AuditCreator';
 import AuditDetails from './components/AuditDetails';
 import FindingDetails from './components/FindingDetails';
+import AuthGate from './components/AuthGate';
 import AuthStatus from './components/AuthStatus';
 import PreviewAnalysis from './components/PreviewAnalysis';
 import Users from './components/Users';
@@ -59,8 +60,9 @@ function App() {
 
   return (
     <BrowserRouter>
-      <div className="min-h-screen text-slate-100">
-        <aside className="group fixed inset-y-0 left-0 z-10 flex w-20 flex-col overflow-hidden border-r border-slate-800 bg-slate-900/95 px-3 py-5 shadow-2xl transition-all duration-300 hover:w-72">
+      <AuthGate>
+        <div className="min-h-screen text-slate-100">
+          <aside className="group fixed inset-y-0 left-0 z-10 flex w-20 flex-col overflow-hidden border-r border-slate-800 bg-slate-900/95 px-3 py-5 shadow-2xl transition-all duration-300 hover:w-72">
           <Link to="/" className="mb-7 flex h-14 items-center gap-4 px-2">
             <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 text-xl font-black text-white shadow-lg shadow-blue-950/50">
               <CodeComeLogo />
@@ -112,25 +114,26 @@ function App() {
           </div>
 
           <div className="mt-auto whitespace-nowrap text-xs text-slate-600 opacity-0 transition-opacity duration-200 group-hover:opacity-100">CodeCome Web v1.0.0</div>
-        </aside>
+          </aside>
 
-        <main className="ml-20 min-h-screen p-8 transition-all duration-300">
-          <div className="mx-auto max-w-screen-2xl">
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/findings" element={<AllFindings />} />
-              <Route path="/preview" element={<PreviewAnalysis />} />
-              <Route path="/workers" element={<Workers />} />
-              <Route path="/users" element={<Users />} />
-              <Route path="/workers/:id" element={<WorkerDetails />} />
-              <Route path="/audit/create" element={<AuditCreator />} />
-              <Route path="/audit/:id" element={<AuditDetails />} />
-              <Route path="/audit/:auditId/findings/:findingId" element={<FindingDetails />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </div>
-        </main>
-      </div>
+          <main className="ml-20 min-h-screen p-8 transition-all duration-300">
+            <div className="mx-auto max-w-screen-2xl">
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/findings" element={<AllFindings />} />
+                <Route path="/preview" element={<PreviewAnalysis />} />
+                <Route path="/workers" element={<Workers />} />
+                <Route path="/users" element={<Users />} />
+                <Route path="/workers/:id" element={<WorkerDetails />} />
+                <Route path="/audit/create" element={<AuditCreator />} />
+                <Route path="/audit/:id" element={<AuditDetails />} />
+                <Route path="/audit/:auditId/findings/:findingId" element={<FindingDetails />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </div>
+          </main>
+        </div>
+      </AuthGate>
     </BrowserRouter>
   );
 }

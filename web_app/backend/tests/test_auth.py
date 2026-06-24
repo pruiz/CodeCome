@@ -22,7 +22,9 @@ def test_access_token_roundtrip():
 def test_access_token_rejects_tampering():
     user = SimpleNamespace(id=7, username="derek")
     token = create_access_token(user, expires_in_seconds=60)
-    tampered = token[:-1] + ("a" if token[-1] != "a" else "b")
+    payload, signature = token.split(".", 1)
+    tampered_payload = ("a" if payload[0] != "a" else "b") + payload[1:]
+    tampered = f"{tampered_payload}.{signature}"
 
     with pytest.raises(HTTPException):
         verify_access_token(tampered)
