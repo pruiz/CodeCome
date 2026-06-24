@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from app.api import audits
 from app.config import settings
 from app import schemas
+from app.services.workspace import WorkspaceManager
 
 
 class FakeUploadFile:
@@ -118,6 +119,22 @@ def test_create_audit_auto_continue_queues_first_phase(monkeypatch, tmp_path):
     assert result.status == "initializing"
     assert captured["delay"][:3] == ("audit-1", "make init", None)
     assert captured["delay"][6] == 4
+
+
+def test_local_folder_audit_copies_source_into_workspace(tmp_path):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "app.py").write_text("print('local source')\n")
+    (source / "nested").mkdir()
+    (source / "nested" / "config.yml").write_text("name: demo\n")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    manager = WorkspaceManager()
+
+    assert manager.setup_source_from_local(workspace, str(source)) is True
+
+    assert (workspace / "src" / "app.py").read_text() == "print('local source')\n"
+    assert (workspace / "src" / "nested" / "config.yml").read_text() == "name: demo\n"
 
 
 def test_upload_zip_auto_continue_queues_first_phase(monkeypatch, tmp_path):

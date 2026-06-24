@@ -3,6 +3,22 @@ from types import SimpleNamespace
 from app.utils.ssh_executor import SSHCodeComeExecutor
 
 
+class FakeSftp:
+    def __init__(self):
+        self.dirs = set()
+        self.puts = []
+
+    def stat(self, path):
+        if path not in self.dirs:
+            raise FileNotFoundError(path)
+
+    def mkdir(self, path):
+        self.dirs.add(path)
+
+    def put(self, local_path, remote_path):
+        self.puts.append((local_path, remote_path))
+
+
 def test_ssh_executor_reads_worker_config_without_connecting():
     worker = SimpleNamespace(
         host="192.0.2.10",
@@ -49,3 +65,26 @@ def test_phase_script_contains_env_and_exit_code_file():
     assert "export PROMPT_EXTRA='focus auth'" in script
     assert "make phase-1" in script
     assert "exit_code" in script
+
+
+def test_upload_tree_copies_workspace_source_to_remote_worker(tmp_path):
+    worker = SimpleNamespace(
+        host="192.0.2.10",
+        port=22,
+        username="codecome",
+        workspace_base_path="/srv/workspaces",
+        config={"ssh_auth": {"method": "password", "password": "secret"}},
+    )
+    workspace = tmp_path / "audit-1"
+    (workspace / "src").mkdir(parents=True)
+    (workspace / "src" / "app.py").write_text("print('copied')\n")
+    (workspace / "Makefile").write_text("all:\n\ttrue\n")
+    sftp = FakeSftp()
+    executor = SSHCodeComeExecutor(worker)
+
+    executor._mkdir_p(sftp, "/srv/workspaces/audit-1")
+    executor._upload_tree(sftp, workspace, "/srv/workspaces/audit-1")
+
+    remote_paths = {remote for _, remote in sftp.puts}
+    assert "/srv/workspaces/audit-1/src/app.py" in remote_paths
+    assert "/srv/workspaces/audit-1/Makefile" in remote_paths
