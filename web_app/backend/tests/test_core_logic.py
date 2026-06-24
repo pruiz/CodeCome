@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from app import crud, schemas
 from app.api.audits import audit_response, next_audit_step, sandbox_runtime_env, sandbox_start_command
+from app.api.workers import model_options_from_worker
 from app.utils.codecome_wrapper import CodeComeExecutor
 from app.api import logs, workers
 from app.workers.phase_tasks import build_command_line, status_phase
@@ -217,6 +218,15 @@ def test_remote_worker_respects_configured_capacity():
     worker = SimpleNamespace(type="ssh", status="running", current_jobs=1, max_concurrent_jobs=2)
 
     assert crud.worker_capacity_available(worker) is True
+
+
+def test_remote_worker_model_options_from_config():
+    worker = SimpleNamespace(type="ssh", config={"opencode_models": ["remote/model-a", {"id": "remote/model-b"}]})
+
+    assert model_options_from_worker(worker) == [
+        {"id": "remote/model-a", "provider": "remote", "model": "model-a"},
+        {"id": "remote/model-b", "provider": "remote", "model": "model-b"},
+    ]
 
 
 def test_phase_command_line_includes_env_and_target():

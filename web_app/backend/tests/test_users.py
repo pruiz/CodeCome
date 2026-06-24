@@ -107,6 +107,15 @@ def test_opencode_model_options_reads_provider_models(tmp_path):
     ]
 
 
+def test_user_model_options_endpoint(monkeypatch):
+    monkeypatch.setattr(users_api, "opencode_model_options", lambda: [{"id": "local/qwen", "provider": "local", "model": "qwen"}])
+
+    response = users_api.list_model_options()
+
+    assert response.total == 1
+    assert response.models[0].id == "local/qwen"
+
+
 def test_update_human_user_clears_llm_fields():
     existing = type("User", (), {
         "id": 1,

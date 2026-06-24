@@ -18,6 +18,15 @@ describe('AuditCreator', () => {
     global.fetch = vi.fn((url, options = {}) => {
       const requested = new URL(String(url), 'http://localhost');
       if (requested.pathname.includes('/api/workers')) {
+        if (requested.pathname.includes('/models')) {
+          return Promise.resolve(new Response(JSON.stringify({
+            total: 2,
+            models: [
+              { id: 'local/qwen3.6-27b', provider: 'local', model: 'qwen3.6-27b' },
+              { id: 'local/fast', provider: 'local', model: 'fast' },
+            ],
+          }), { status: 200 }));
+        }
         return Promise.resolve(new Response(JSON.stringify({
           total: 1,
           workers: [{ id: 1, name: 'local', type: 'local', status: 'idle', current_jobs: 0, max_concurrent_jobs: 1, capabilities: {}, config: {}, created_at: '2026-01-01T00:00:00', updated_at: '2026-01-01T00:00:00' }],
@@ -51,6 +60,8 @@ describe('AuditCreator', () => {
     await screen.findByText('AI Owner (AI)');
     expect(screen.queryByText(/AI review between phases/i)).not.toBeInTheDocument();
     await user.click(screen.getByRole('switch', { name: /Auto-continue to next phase/i }));
+    await screen.findByText('local/qwen3.6-27b');
+    await user.selectOptions(screen.getByLabelText('Worker Model'), 'local/qwen3.6-27b');
     await user.selectOptions(screen.getByLabelText('Question Owner'), '7');
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.click(screen.getByRole('button', { name: 'Create Audit' }));
@@ -62,6 +73,7 @@ describe('AuditCreator', () => {
         name: 'Question Owner Audit',
         question_owner_user_id: 7,
         auto_continue: true,
+        model_settings: { __audit_env: { env: { CODECOME_MODEL: 'local/qwen3.6-27b' } } },
       });
     });
   });
@@ -76,6 +88,8 @@ describe('AuditCreator', () => {
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.type(screen.getByPlaceholderText('My Audit'), 'Zip Question Audit');
     await screen.findByText('AI Owner (AI)');
+    await screen.findByText('local/qwen3.6-27b');
+    await user.selectOptions(screen.getByLabelText('Worker Model'), 'local/qwen3.6-27b');
     await user.selectOptions(screen.getByLabelText('Question Owner'), '7');
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.click(screen.getByRole('button', { name: 'Create Audit' }));
@@ -87,6 +101,7 @@ describe('AuditCreator', () => {
       expect(uploadCall[1].body.get('file')).toBe(zipFile);
       expect(uploadCall[1].body.get('name')).toBe('Zip Question Audit');
       expect(uploadCall[1].body.get('question_owner_user_id')).toBe('7');
+      expect(JSON.parse(uploadCall[1].body.get('model_settings'))).toEqual({ __audit_env: { env: { CODECOME_MODEL: 'local/qwen3.6-27b' } } });
     });
   });
 });

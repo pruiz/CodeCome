@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app import crud, schemas
 from app.config import settings
 from app.database import get_db
+from app.api.users import opencode_model_options
 
 router = APIRouter()
 
@@ -178,6 +179,24 @@ def checks_from_worker_config(worker) -> list[schemas.WorkerRequirementCheck]:
     return checks
 
 
+def model_options_from_worker(worker) -> list[dict]:
+    if worker.type == "local":
+        return opencode_model_options()
+    config = worker.config or {}
+    raw_models = config.get("opencode_models") or config.get("models") or []
+    options = []
+    for item in raw_models:
+        if isinstance(item, str):
+            provider, _, model = item.partition("/")
+            options.append({"id": item, "provider": provider or "unknown", "model": model or item})
+        elif isinstance(item, dict):
+            model_id = str(item.get("id") or item.get("model") or "")
+            if model_id:
+                provider, _, model = model_id.partition("/")
+                options.append({"id": model_id, "provider": str(item.get("provider") or provider or "unknown"), "model": str(item.get("model") or model or model_id)})
+    return sorted(options, key=lambda item: item["id"])
+
+
 def redacted_config(config: dict | None) -> dict:
     safe = dict(config or {})
     auth = safe.get("ssh_auth")
@@ -300,6 +319,15 @@ def get_worker_checks(worker_id: int, db: Session = Depends(get_db)):
         source="bootstrap-metadata" if checks else "unreported",
         checks=checks,
     )
+
+
+@router.get("/{worker_id}/models", response_model=schemas.ModelOptionListResponse)
+def get_worker_models(worker_id: int, db: Session = Depends(get_db)):
+    worker = crud.get_worker(db, worker_id)
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    models = model_options_from_worker(worker)
+    return schemas.ModelOptionListResponse(total=len(models), models=models)
 
 
 @router.patch("/{worker_id}", response_model=schemas.WorkerResponse)

@@ -32,11 +32,13 @@ export default function AuditCreator() {
     sourceLocation: '',
     codecomeYml: '',
     workerId: '',
+    modelId: '',
     questionOwnerUserId: '',
     autoContinue: false,
   });
   const [file, setFile] = useState(null);
   const [workers, setWorkers] = useState([]);
+  const [workerModels, setWorkerModels] = useState([]);
   const [users, setUsers] = useState([]);
 
   useEffect(() => {
@@ -53,12 +55,27 @@ export default function AuditCreator() {
       .then((data) => setUsers(data.users || []))
       .catch((error) => console.error('Failed to load users:', error));
   }, []);
+
+  useEffect(() => {
+    if (!formData.workerId) {
+      setWorkerModels([]);
+      setFormData((current) => ({ ...current, modelId: '' }));
+      return;
+    }
+    workersApi.models(formData.workerId)
+      .then((data) => setWorkerModels(data.models || []))
+      .catch(() => setWorkerModels([]));
+  }, [formData.workerId]);
+
+  const modelSettings = formData.modelId
+    ? { __audit_env: { env: { CODECOME_MODEL: formData.modelId } } }
+    : undefined;
   
   const handleSubmit = async () => {
     setLoading(true);
     try {
       if (formData.sourceType === 'zip' && file) {
-        const result = await auditsApi.uploadZip({ ...formData, file });
+        const result = await auditsApi.uploadZip({ ...formData, file, modelSettings });
         navigate(`/audit/${result.id}`);
       } else {
         const result = await auditsApi.create({
@@ -66,6 +83,7 @@ export default function AuditCreator() {
           source_type: formData.sourceType,
           source_location: formData.sourceLocation,
           codecome_yml: formData.codecomeYml,
+          model_settings: modelSettings,
           worker_id: formData.workerId ? Number(formData.workerId) : undefined,
           question_owner_user_id: formData.questionOwnerUserId ? Number(formData.questionOwnerUserId) : undefined,
           auto_continue: formData.autoContinue,
@@ -211,6 +229,21 @@ export default function AuditCreator() {
             </div>
 
             <div>
+              <label htmlFor="workerModel" className="block text-sm font-medium text-gray-400 mb-1">Worker Model</label>
+              <select
+                id="workerModel"
+                value={formData.modelId}
+                onChange={(e) => setFormData({ ...formData, modelId: e.target.value })}
+                disabled={!formData.workerId || workerModels.length === 0}
+                className="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="">Use default model</option>
+                {workerModels.map((model) => <option key={model.id} value={model.id}>{model.id}</option>)}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">When selected, saved as audit-wide <code>CODECOME_MODEL</code> for every phase.</p>
+            </div>
+
+            <div>
               <label className="block text-sm font-medium text-gray-400 mb-1">Worker</label>
               <select
                 value={formData.workerId}
@@ -280,6 +313,7 @@ export default function AuditCreator() {
             <p><span className="text-gray-400">Name:</span> {formData.name}</p>
             <p><span className="text-gray-400">Source:</span> {formData.sourceType === 'zip' ? (file?.name || 'ZIP file') : formData.sourceLocation}</p>
             <p><span className="text-gray-400">Worker:</span> {workers.find((worker) => String(worker.id) === formData.workerId)?.name || 'Auto-select'}</p>
+            <p><span className="text-gray-400">Model:</span> {formData.modelId || 'Default'}</p>
             <p><span className="text-gray-400">Question Owner:</span> {users.find((user) => String(user.id) === formData.questionOwnerUserId)?.display_name || 'None'}</p>
             <p><span className="text-gray-400">Auto-continue:</span> {formData.autoContinue ? 'Yes' : 'No'}</p>
           </div>

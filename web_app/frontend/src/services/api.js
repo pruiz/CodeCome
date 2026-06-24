@@ -57,6 +57,7 @@ export const auditsApi = {
     body.append('file', formData.file);
     body.append('name', formData.name);
     if (formData.codecomeYml) body.append('codecome_yml', formData.codecomeYml);
+    if (formData.modelSettings) body.append('model_settings', JSON.stringify(formData.modelSettings));
     if (formData.workerId) body.append('worker_id', String(formData.workerId));
     if (formData.questionOwnerUserId) body.append('question_owner_user_id', String(formData.questionOwnerUserId));
     body.append('ai_review_enabled', String(!!formData.aiReviewEnabled));
@@ -240,6 +241,7 @@ export const workersApi = {
   list: () => apiFetch(`${API_BASE}/workers/`).then(res => parseResponse(res, 'Failed to list workers')),
   get: (id) => apiFetch(`${API_BASE}/workers/${id}`).then(res => parseResponse(res, 'Failed to load worker')),
   checks: (id) => apiFetch(`${API_BASE}/workers/${id}/checks`).then(res => parseResponse(res, 'Failed to load worker checks')),
+  models: (id) => apiFetch(`${API_BASE}/workers/${id}/models`).then(res => parseResponse(res, 'Failed to load worker models')),
   bootstrapScript: () => apiFetch(`${API_BASE}/workers/bootstrap-script`).then(res => {
     if (!res.ok) throw new Error('Failed to load bootstrap script');
     return res.text();

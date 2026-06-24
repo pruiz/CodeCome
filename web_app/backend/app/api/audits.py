@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi.responses import FileResponse, StreamingResponse
 import io
 from datetime import datetime
+import json
 import os
 import re
 import subprocess
@@ -403,6 +404,7 @@ async def upload_zip(
     name: str = Form(...),
     file: UploadFile = File(...),
     codecome_yml: Optional[str] = Form(None),
+    model_settings: Optional[str] = Form(None),
     worker_id: Optional[int] = Form(None),
     question_owner_user_id: Optional[int] = Form(None),
     ai_review_enabled: bool = Form(False),
@@ -453,13 +455,20 @@ async def upload_zip(
     if not question_owner_user_id:
         default_owner = crud.default_question_owner(db)
         question_owner_user_id = default_owner.id if default_owner else None
-     
+    parsed_model_settings = None
+    if isinstance(model_settings, (str, bytes, bytearray)) and model_settings:
+        try:
+            parsed_model_settings = json.loads(model_settings)
+        except Exception:
+            raise HTTPException(status_code=400, detail="model_settings must be valid JSON")
+      
     # Create audit record
     db_audit = crud.create_audit(db, schemas.AuditCreate(
         name=name,
         source_type="zip",
         source_location=file.filename,
         codecome_yml=yml_content,
+        model_settings=parsed_model_settings,
         worker_id=worker_id,
         question_owner_user_id=question_owner_user_id,
         ai_review_enabled=ai_review_enabled,
