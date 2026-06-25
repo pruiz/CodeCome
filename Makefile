@@ -3,7 +3,7 @@
 
 .PHONY: help init venv env-check check status next-id frontmatter check-phase-artifacts tests test-parity itemdb-reset codeql-clean index report
 .PHONY: findings findings-create findings-move findings-evidence findings-package
-.PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all opencode-raw
+.PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all gap-scan opencode-raw
 .PHONY: sandbox-setup sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-reset sandbox-build sandbox-test
 .PHONY: sandbox-list sandbox-inspect sandbox-detect sandbox-bootstrap sandbox-validate sandbox-regenerate sandbox-status show-model
 
@@ -64,6 +64,7 @@ help:
 	@printf "    $(BOLD)make phase-6$(RESET)                  Generate report\n"
 	@printf "    $(BOLD)make validate-all$(RESET)             Validate all PENDING findings\n"
 	@printf "    $(BOLD)make exploit-all$(RESET)              Exploit all CONFIRMED findings\n"
+	@printf "    $(BOLD)make gap-scan$(RESET)                 Optional post-exploit SAST gap scan\n"
 	@printf "\n"
 	@printf "  $(BOLD)$(CYAN)Deep Sweep (Optional):$(RESET)\n"
 	@printf "\n"
@@ -262,6 +263,9 @@ exploit-all: env-check
 		echo ""; \
 		$(MAKE) phase-5 FINDING=$$f; \
 	done
+
+gap-scan: env-check
+	@$(PYTHON) tools/run-agent.py --phase 2 --label "Gap Scan" --agent auditor --prompt-file prompts/phase-2-gap-sast.md
 
 # ---------------------------------------------------------------------------
 # Workspace tools

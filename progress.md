@@ -13,12 +13,13 @@ Continue from `progress.md` and implement the next unfinished TODO.
 - Keep going while work remains.
 - Every new implementation must include or update tests before committing.
 - Commit completed implementation increments when explicitly requested by the user. Current request requires each implementation increment to be committed separately after tests pass.
-- Keep web app work isolated on branch `web-app-control-plane`.
+- Keep web app work isolated on `web-app-control-plane` or feature branches created from it, such as `feature/gap-scan-loop`.
 - Keep web app separated from the CodeCome CLI core; prefer files under `web_app/` for the control plane.
 
 ## Current Branch
 
 - [x] Create dedicated branch: `web-app-control-plane`.
+- [x] Create feature branch for post-exploit gap scanning: `feature/gap-scan-loop`.
 
 ## TODO
 
@@ -51,6 +52,115 @@ Continue from `progress.md` and implement the next unfinished TODO.
 - [x] TODO: Investigate and improve the worker bootstrap script so it registers the machine as a worker automatically, including creating/configuring a local execution user with Docker access when appropriate.
 - [x] BUG: In the latest SmallCompany audit, rerunning `make validate-all` fails with `Rerun failed: No available worker`; investigate worker availability/release state and ensure failed phase reruns can be queued when capacity should be free.
 - [x] TEST: Run full web app checks plus a live SmallCompany ZIP upload from `/opt/tools/08_TETools/SmallCompany.zip`, including general UI/API verification, before committing current model-selection changes.
+
+## Current Major Feature: Post-Exploit Gap Scan Loop
+
+Goal: after CodeCome finishes the normal workflow through `make exploit-all`, optionally run an independent SAST-style LLM gap scan, compare its candidate findings against CodeCome's existing findings, add missing areas to durable notes, run targeted `make sweep FILE=...`, then reuse existing `phase-3`, `validate-all`, and `exploit-all` flow. This feature must improve missed-finding coverage without lowering the finding quality bar.
+
+### Product Rules
+
+- [x] Add a new optional workflow step named `gap-scan`; it must not run automatically unless explicitly enabled by audit settings or clicked in the UI.
+- [ ] Keep CodeCome CLI core behavior stable; add orchestration through web app and thin Make/tool wrappers only where needed.
+- [ ] Do not let the gap-scan LLM directly mark findings as confirmed, exploited, rejected, or duplicate.
+- [ ] Prefer creating durable candidate-gap artifacts first; targeted sweeps should create real `PENDING` findings using existing Phase 2 mechanisms.
+- [ ] Bound the loop to avoid infinite rescans: maximum scan rounds, maximum candidates, maximum sweep files, and maximum sweeps per audit must be configurable.
+- [ ] Never re-open `REJECTED` or `DUPLICATE` findings automatically; flag strong conflicts for human review.
+- [ ] Preserve existing CodeCome status lifecycle: `PENDING` -> Phase 3 counter-analysis -> Phase 4 validation -> Phase 5 exploitation.
+- [ ] Every gap-scan claim must distinguish notes-only evidence from active findings.
+- [ ] Store all gap-scan outputs under `itemdb/notes/`, `runs/`, or `itemdb/reports/`; do not leave important analysis only in logs.
+
+### Gap-Scan Artifact TODO
+
+- [ ] Define `itemdb/notes/sast-gap-scan.md` as the human-readable summary of the independent SAST pass.
+- [ ] Define `itemdb/notes/sast-gap-candidates.yml` as the structured candidate list.
+- [ ] Define `itemdb/notes/sast-gap-interesting-files.md` as the sweep planning file for missing candidates.
+- [ ] Define `itemdb/notes/sast-gap-file-risk-index.yml` as an optional machine-readable file priority index for targeted sweeps.
+- [ ] Define `runs/sast-gap-scan-YYYY-MM-DD-HHMMSS.md` run summary using `templates/run-summary.md` style.
+- [ ] Define `runs/sast-gap-compare-YYYY-MM-DD-HHMMSS.md` for the semantic comparison result.
+- [ ] Define `runs/sast-gap-sweep-YYYY-MM-DD-HHMMSS.md` for files swept and resulting finding IDs.
+
+### Candidate Schema TODO
+
+- [ ] Define candidate IDs such as `GAP-0001`, stable within a scan run.
+- [ ] Include candidate fields: title, category, CWE hint, severity hint, confidence, affected files, symbols, entry points, source, sink, trust boundary, evidence snippets, impact, and validation idea.
+- [ ] Include comparison fields: matched existing findings, matched notes, match confidence, decision, and action.
+- [ ] Include action values: `covered`, `missing_sweep`, `missing_create_candidate`, `duplicate`, `rejected_conflict`, `needs_human`, `defer_low_signal`.
+- [ ] Include sweep planning fields: sweep files, rationale for each file, and expected vulnerability class.
+- [ ] Include safety fields: why this candidate is source-backed and why it is not merely a generic bug-class guess.
+
+### Prompt/Agent TODO
+
+- [x] Add prompt `prompts/phase-2-gap-sast.md` for independent SAST-style gap scanning.
+- [x] The prompt must read `AGENTS.md`, `codecome.yml`, `itemdb/notes/`, all existing findings across statuses, and high-risk source files.
+- [x] The prompt must specifically ask for missed low/medium information disclosure patterns such as exception/stack trace exposure when externally reachable.
+- [x] The prompt must require structured output to `itemdb/notes/sast-gap-candidates.yml` and summary to `itemdb/notes/sast-gap-scan.md`.
+- [x] The prompt must forbid direct confirmation/exploitation and forbid moving findings across statuses.
+- [x] The prompt must require semantic deduplication against existing active and inactive findings.
+- [ ] Decide whether to reuse `auditor` or add a new `.opencode/agents/gap-scanner.md` agent.
+- [ ] If adding `gap-scanner`, define its role as independent SAST reviewer, not validator/exploiter.
+
+### Comparison Engine TODO
+
+- [ ] Add a comparator that reads all findings under `itemdb/findings/{PENDING,CONFIRMED,EXPLOITED,REJECTED,DUPLICATE}`.
+- [ ] Compare candidates against findings by vulnerability class, files, symbols, source, sink, trust boundary, impact, and validation path.
+- [ ] Compare candidates against Phase 1 notes to detect cases that are mentioned in notes but missing as findings.
+- [ ] Mark candidates as `covered` when a semantically equivalent finding exists in any status.
+- [ ] Mark candidates as `missing_sweep` when only notes mention the issue or no finding covers it.
+- [ ] Mark candidates as `needs_human` when the candidate conflicts with a rejected/duplicate finding but has stronger evidence.
+- [ ] Write comparison decisions to `runs/sast-gap-compare-YYYY-MM-DD-HHMMSS.md`.
+
+### Targeted Sweep TODO
+
+- [x] Add `make gap-scan` to run the independent SAST prompt and write candidate artifacts.
+- [ ] Add `make gap-compare` to compare candidates against current findings and notes.
+- [ ] Add `make gap-sweep` to run `make sweep FILE=...` for selected missing candidates.
+- [ ] Add `make gap-loop` as an optional bounded sequence: `gap-scan`, `gap-compare`, `gap-sweep`, `phase-3`, `validate-all`, `exploit-all`.
+- [ ] Ensure `gap-sweep` can run one selected candidate or all candidates marked `missing_sweep`.
+- [ ] Ensure `gap-sweep` records which files were swept and which findings were created.
+- [ ] Prevent duplicate sweeps of the same file/candidate in the same audit unless explicitly forced.
+- [ ] Use existing `make sweep FILE=...` rather than duplicating line-by-line audit logic.
+
+### Backend/API TODO
+
+- [ ] Add API endpoint to start `gap-scan` for an audit.
+- [ ] Add API endpoint to start `gap-compare` for an audit.
+- [ ] Add API endpoint to start `gap-sweep` for an audit or selected candidate.
+- [ ] Add API endpoint to list gap candidates and their comparison decisions.
+- [ ] Add API endpoint to mark a candidate as ignored/deferred/needs-human.
+- [ ] Add phase execution or job metadata support for `gap-scan`, `gap-compare`, and `gap-sweep` steps.
+- [ ] Ensure remote workers receive the workspace before gap-sweep and return `itemdb/notes`, `itemdb/findings`, `runs`, and evidence artifacts after execution.
+- [ ] Ensure worker capacity accounting treats gap steps like existing phase jobs.
+
+### Frontend/UI TODO
+
+- [ ] Add `Gap Scan` tab or Overview panel in audit details.
+- [ ] Add button `Run Gap Scan` after `make exploit-all` or whenever the user explicitly chooses.
+- [ ] Add button `Compare Candidates` after gap scan completes.
+- [ ] Add table of gap candidates with status/action, severity hint, files, matched findings, and recommended sweep files.
+- [ ] Add action buttons: `Run Sweep`, `Ignore`, `Needs Human`, and `Open Candidate Details`.
+- [ ] Show whether a candidate is covered by an existing finding, only mentioned in notes, or missing entirely.
+- [ ] Show a clear warning that gap candidates are not confirmed vulnerabilities.
+- [ ] Add audit creation option `Run gap scan after exploit-all` defaulting to disabled.
+
+### Quality/Safety TODO
+
+- [ ] Add unit tests for candidate schema parsing and validation.
+- [ ] Add unit tests for semantic comparison against existing findings.
+- [ ] Add backend API tests for starting/listing gap scans.
+- [ ] Add frontend tests for Gap Scan UI states and candidate table actions.
+- [ ] Add integration test using a small fixture where Phase 1 notes mention stack trace disclosure but no finding exists, and gap-compare marks it `missing_sweep`.
+- [ ] Add regression test that a covered finding is not re-swept.
+- [ ] Run full `./web_app/run-checks.sh` before every commit.
+- [ ] For live verification, upload `/opt/tools/08_TETools/SmallCompany.zip`, run a bounded gap scan, and confirm missing note-only issues become targeted sweeps or candidates.
+
+### Open Design TODO
+
+- [ ] Decide default max candidates per scan, proposed default: `10`.
+- [ ] Decide default max sweep files per gap loop, proposed default: `5`.
+- [ ] Decide default max gap loop rounds, proposed default: `1`.
+- [ ] Decide whether candidate comparison should use only deterministic rules first or an LLM-assisted comparator.
+- [ ] Decide whether `gap-loop` should run automatically before `phase-6` when enabled, or stay manual-only in the first release.
+
 ## Current Major Feature: Users, Question Owners, and Fake AI Answerers
 
 Goal: successful phases that produce questions for the user must pause the workflow until the audit's assigned question owner answers them. The owner may be a human user answering in the web app, or a fake AI user that answers automatically and allows the workflow to continue.

@@ -66,3 +66,23 @@ def test_phase_1c_recon_prompt_is_self_consistent():
     assert "Phase 1c" in content
     assert "Detailed Reconnaissance" in content
     assert "third and final" in content  # recon is the third sub-phase
+
+
+def test_gap_scan_prompt_is_candidate_only():
+    content = Path("prompts/phase-2-gap-sast.md").read_text(encoding="utf-8")
+
+    assert "itemdb/notes/sast-gap-candidates.yml" in content
+    assert "itemdb/notes/sast-gap-scan.md" in content
+    assert "Do not create files under `itemdb/findings/`" in content
+    assert "Do not run `make findings-create`" in content
+    assert "Do not mark anything as `CONFIRMED`" in content
+    assert "stack traces" in content
+
+
+def test_makefile_has_manual_gap_scan_target():
+    content = Path("Makefile").read_text(encoding="utf-8")
+
+    assert "gap-scan: env-check" in content
+    assert "--label \"Gap Scan\"" in content
+    assert "--agent auditor" in content
+    assert "--prompt-file prompts/phase-2-gap-sast.md" in content
