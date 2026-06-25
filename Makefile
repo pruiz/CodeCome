@@ -79,6 +79,10 @@ help:
 	@printf "    $(BOLD)CODECOME_MODEL_VARIANT=<v>$(RESET)   Pin the model variant (e.g. high, max)\n"
 	@printf "    $(BOLD)PROMPT_EXTRA=\"...\"$(RESET)            Append extra instructions to phase prompt\n"
 	@printf "    $(BOLD)PROMPT_EXTRA_FILE=path$(RESET)        Append file content to phase prompt\n"
+	@printf "    $(BOLD)CODECOME_GAP_MAX_SCAN_ROUNDS=N$(RESET)    Gap scan rounds (default 1)\n"
+	@printf "    $(BOLD)CODECOME_GAP_MAX_CANDIDATES=N$(RESET)     Gap candidates per scan (default 10)\n"
+	@printf "    $(BOLD)CODECOME_GAP_MAX_SWEEP_FILES=N$(RESET)    Gap sweep files per loop (default 5)\n"
+	@printf "    $(BOLD)CODECOME_GAP_MAX_SWEEPS_PER_AUDIT=N$(RESET) Gap sweeps per audit (default 5)\n"
 	@printf "\n"
 	@printf "    $(BOLD)make show-model$(RESET)              Print the model resolution table for an agent\n"
 	@printf "    $(BOLD)make show-model AGENT=auditor$(RESET)\n"
@@ -265,6 +269,7 @@ exploit-all: env-check
 	done
 
 gap-scan: env-check
+	@$(PYTHON) tools/gap-config.py >/dev/null
 	@$(PYTHON) tools/run-agent.py --phase 2 --label "Gap Scan" --agent auditor --prompt-file prompts/phase-2-gap-sast.md
 
 # ---------------------------------------------------------------------------

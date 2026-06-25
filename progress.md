@@ -63,7 +63,7 @@ Goal: after CodeCome finishes the normal workflow through `make exploit-all`, op
 - [x] Keep CodeCome CLI core behavior stable; add orchestration through web app and thin Make/tool wrappers only where needed.
 - [x] Do not let the gap-scan LLM directly mark findings as confirmed, exploited, rejected, or duplicate.
 - [x] Prefer creating durable candidate-gap artifacts first; targeted sweeps should create real `PENDING` findings using existing Phase 2 mechanisms.
-- [ ] Bound the loop to avoid infinite rescans: maximum scan rounds, maximum candidates, maximum sweep files, and maximum sweeps per audit must be configurable.
+- [x] Bound the loop to avoid infinite rescans: maximum scan rounds, maximum candidates, maximum sweep files, and maximum sweeps per audit must be configurable.
 - [x] Never re-open `REJECTED` or `DUPLICATE` findings automatically; flag strong conflicts for human review.
 - [x] Preserve existing CodeCome status lifecycle: `PENDING` -> Phase 3 counter-analysis -> Phase 4 validation -> Phase 5 exploitation.
 - [x] Every gap-scan claim must distinguish notes-only evidence from active findings.
@@ -155,9 +155,9 @@ Goal: after CodeCome finishes the normal workflow through `make exploit-all`, op
 
 ### Open Design TODO
 
-- [ ] Decide default max candidates per scan, proposed default: `10`.
-- [ ] Decide default max sweep files per gap loop, proposed default: `5`.
-- [ ] Decide default max gap loop rounds, proposed default: `1`.
+- [x] Decide default max candidates per scan, proposed default: `10`.
+- [x] Decide default max sweep files per gap loop, proposed default: `5`.
+- [x] Decide default max gap loop rounds, proposed default: `1`.
 - [ ] Decide whether candidate comparison should use only deterministic rules first or an LLM-assisted comparator.
 - [ ] Decide whether `gap-loop` should run automatically before `phase-6` when enabled, or stay manual-only in the first release.
 

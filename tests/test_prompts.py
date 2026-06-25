@@ -73,6 +73,7 @@ def test_gap_scan_prompt_is_candidate_only():
 
     assert "itemdb/notes/sast-gap-candidates.yml" in content
     assert "itemdb/notes/sast-gap-scan.md" in content
+    assert "CODECOME_GAP_MAX_CANDIDATES" in content
     assert "Do not create files under `itemdb/findings/`" in content
     assert "Do not run `make findings-create`" in content
     assert "Do not run `make findings-move`" in content
@@ -91,5 +92,6 @@ def test_makefile_has_manual_gap_scan_target():
     assert "--label \"Gap Scan\"" in content
     assert "--agent auditor" in content
     assert "--prompt-file prompts/phase-2-gap-sast.md" in content
+    assert "tools/gap-config.py" in content
     assert "gap-loop:" not in content
     assert "gap-sweep:" not in content

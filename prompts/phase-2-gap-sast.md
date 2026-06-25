@@ -27,6 +27,17 @@ Analyze the target source tree under:
 
 Use the existing reconnaissance notes and findings to avoid duplicating already-known issues.
 
+## Bounds
+
+The operator may configure bounds with these environment variables:
+
+- `CODECOME_GAP_MAX_SCAN_ROUNDS` — default `1`.
+- `CODECOME_GAP_MAX_CANDIDATES` — default `10`.
+- `CODECOME_GAP_MAX_SWEEP_FILES` — default `5`.
+- `CODECOME_GAP_MAX_SWEEPS_PER_AUDIT` — default `5`.
+
+For this scan, do not emit more than `CODECOME_GAP_MAX_CANDIDATES` candidates. If you identify more plausible issues, prioritize the most source-backed, externally reachable, and actionable ones, then mention the overflow count in `itemdb/notes/sast-gap-scan.md`.
+
 ## Goal
 
 Create a durable independent SAST-style gap analysis that identifies candidate issues that are either:
