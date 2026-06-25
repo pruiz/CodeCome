@@ -7,7 +7,7 @@ celery_app = Celery(
     backend=settings.CELERY_RESULT_BACKEND
 )
 
-celery_app.conf.update(
+config = dict(
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
@@ -16,10 +16,15 @@ celery_app.conf.update(
     task_track_started=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
-    task_time_limit=7200,  # 2 hour timeout
-    task_soft_time_limit=6600,  # 110 minute soft timeout,
     include=[
         'app.workers.phase_tasks',
         'app.workers.ai_tasks',
     ]
 )
+
+if settings.CELERY_TASK_TIME_LIMIT > 0:
+    config["task_time_limit"] = settings.CELERY_TASK_TIME_LIMIT
+if settings.CELERY_TASK_SOFT_TIME_LIMIT > 0:
+    config["task_soft_time_limit"] = settings.CELERY_TASK_SOFT_TIME_LIMIT
+
+celery_app.conf.update(**config)

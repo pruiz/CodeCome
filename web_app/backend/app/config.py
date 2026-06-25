@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     REDIS_URL: str
     CELERY_BROKER_URL: str
     CELERY_RESULT_BACKEND: str
+    CELERY_TASK_TIME_LIMIT: int = 9000
+    CELERY_TASK_SOFT_TIME_LIMIT: int = 0
     
     # Application
     API_HOST: str = "0.0.0.0"
