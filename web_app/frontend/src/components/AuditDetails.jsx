@@ -73,6 +73,9 @@ const auditSteps = [
   { key: 'phase-3', statusPrefix: 'phase_3', label: 'make phase-3', sub: 'Counter-analysis' },
   { key: 'make validate-all', statusPrefix: 'make_validate_all', label: 'make validate-all', sub: 'Validate findings' },
   { key: 'make exploit-all', statusPrefix: 'make_exploit_all', label: 'make exploit-all', sub: 'Exploit confirmed' },
+  { key: 'gap-scan', statusPrefix: 'gap_scan', label: 'make gap-scan', sub: 'Gap scan' },
+  { key: 'gap-compare', statusPrefix: 'gap_compare', label: 'make gap-compare', sub: 'Compare gaps' },
+  { key: 'gap-sweep', statusPrefix: 'gap_sweep', label: 'make gap-sweep', sub: 'Sweep gaps' },
   { key: 'phase-6', statusPrefix: 'phase_6', label: 'make phase-6', sub: 'Reporting' },
 ];
 
@@ -104,7 +107,7 @@ function latestExecutionForPhase(executions, phase) {
 
 function PhaseProgress({ audit, selectedPhase, onSelectPhase }) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-2 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-12 gap-2 mb-6">
       {auditSteps.map((step) => {
         const status = stepStatus(audit, step);
         const selected = selectedPhase === step.key;

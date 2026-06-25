@@ -7,7 +7,7 @@ from app.api.audits import audit_response, next_audit_step, sandbox_start_comman
 from app.api.workers import model_options_from_worker, registered_worker_config, validate_worker_registration_token
 from app.utils.codecome_wrapper import CodeComeExecutor
 from app.api import logs, workers
-from app.workers.phase_tasks import build_command_line, status_phase
+from app.workers.phase_tasks import ALL_PHASES, build_command_line, status_phase
 from app.workers.phase_tasks import merged_phase_env
 
 
@@ -417,6 +417,14 @@ def test_merged_phase_env_uses_worker_model_as_lowest_priority_default():
 def test_status_phase_normalizes_make_and_phase_names():
     assert status_phase("make init") == "make_init"
     assert status_phase("phase-1") == "phase_1"
+    assert status_phase("gap-scan") == "gap_scan"
+
+
+def test_gap_steps_are_supported_manual_phases():
+    assert "gap-scan" in ALL_PHASES
+    assert "gap-compare" in ALL_PHASES
+    assert "gap-sweep" in ALL_PHASES
+    assert build_command_line("gap-sweep").endswith("make gap-sweep")
 
 
 def test_next_audit_step_skips_optional_sweep():
