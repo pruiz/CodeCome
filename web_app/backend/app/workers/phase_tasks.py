@@ -31,9 +31,15 @@ def audit_options(model_settings: dict | None) -> dict:
 
 
 def phase_order_for_settings(model_settings: dict | None) -> list[str]:
-    if audit_options(model_settings).get("run_sweep_auto"):
-        return ["make init", "make check", "phase-1", "phase-2", "make sweep", "phase-3", "make validate-all", "make exploit-all", "phase-6"]
-    return PHASE_ORDER
+    options = audit_options(model_settings)
+    order = ["make init", "make check", "phase-1", "phase-2"]
+    if options.get("run_sweep_auto"):
+        order.append("make sweep")
+    order.extend(["phase-3", "make validate-all", "make exploit-all"])
+    if options.get("run_gap_scan_auto"):
+        order.append("gap-scan")
+    order.append("phase-6")
+    return order
 
 
 def merged_phase_env(model_settings: dict | None, phase: str) -> dict:

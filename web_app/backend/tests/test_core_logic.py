@@ -457,6 +457,23 @@ def test_next_audit_step_includes_optional_sweep_when_enabled():
     assert next_audit_step(executions, {"__audit_options": {"run_sweep_auto": True}}) == "phase-3"
 
 
+def test_next_audit_step_includes_optional_gap_scan_when_enabled():
+    executions = [
+        SimpleNamespace(phase="make init", status="success"),
+        SimpleNamespace(phase="make check", status="success"),
+        SimpleNamespace(phase="phase-1", status="success"),
+        SimpleNamespace(phase="phase-2", status="success"),
+        SimpleNamespace(phase="phase-3", status="success"),
+        SimpleNamespace(phase="make validate-all", status="success"),
+        SimpleNamespace(phase="make exploit-all", status="success"),
+    ]
+
+    assert next_audit_step(executions, {"__audit_options": {"run_gap_scan_auto": True}}) == "gap-scan"
+
+    executions.append(SimpleNamespace(phase="gap-scan", status="success"))
+    assert next_audit_step(executions, {"__audit_options": {"run_gap_scan_auto": True}}) == "phase-6"
+
+
 def test_next_audit_step_uses_batch_validation_and_exploitation():
     executions = [
         SimpleNamespace(phase="make init", status="success"),
