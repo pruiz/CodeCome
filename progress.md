@@ -122,7 +122,7 @@ Goal: after CodeCome finishes the normal workflow through `make exploit-all`, op
 
 ### Backend/API TODO
 
-- [ ] Add API endpoint to start `gap-scan` for an audit.
+- [x] Add API endpoint to start `gap-scan` for an audit.
 - [ ] Add API endpoint to start `gap-compare` for an audit.
 - [ ] Add API endpoint to start `gap-sweep` for an audit or selected candidate.
 - [ ] Add API endpoint to list gap candidates and their comparison decisions.
