@@ -1190,6 +1190,47 @@ function GapScanPanel({ auditId }) {
       {!loading && !(data.candidates || []).length && (
         <div className="rounded border border-gray-800 bg-gray-950 p-6 text-center text-gray-500">No gap candidates found yet. Run the manual gap scan workflow to create candidate artifacts.</div>
       )}
+      {!loading && (data.candidates || []).length > 0 && (
+        <div className="overflow-x-auto rounded-xl border border-gray-800 bg-gray-950">
+          <table className="min-w-full divide-y divide-gray-800 text-sm">
+            <thead className="bg-gray-900/80 text-xs uppercase tracking-wide text-gray-500">
+              <tr>
+                <th className="px-3 py-2 text-left">Candidate</th>
+                <th className="px-3 py-2 text-left">Decision</th>
+                <th className="px-3 py-2 text-left">Severity</th>
+                <th className="px-3 py-2 text-left">Files</th>
+                <th className="px-3 py-2 text-left">Matched Findings</th>
+                <th className="px-3 py-2 text-left">Recommended Sweep</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-900">
+              {data.candidates.map((candidate) => (
+                <tr key={candidate.id} className="align-top hover:bg-gray-900/50">
+                  <td className="max-w-xs px-3 py-3">
+                    <div className="font-mono text-xs text-cyan-300">{candidate.id}</div>
+                    <div className="mt-1 font-semibold text-gray-100">{candidate.title || '-'}</div>
+                    <div className="mt-1 text-xs text-gray-500">{candidate.category || 'Unclassified'}</div>
+                  </td>
+                  <td className="px-3 py-3">
+                    <span className="rounded bg-gray-800 px-2 py-1 text-xs text-gray-200">{(candidate.decision || '-').replace(/_/g, ' ')}</span>
+                    <div className="mt-2 text-xs text-gray-500">Action: {candidate.action || '-'}</div>
+                  </td>
+                  <td className="px-3 py-3 text-gray-200">{candidate.severity_hint || '-'}</td>
+                  <td className="min-w-64 px-3 py-3">
+                    {(candidate.files || []).length ? candidate.files.map((file) => <div key={file} className="break-all font-mono text-xs text-gray-300">{file}</div>) : <span className="text-gray-500">-</span>}
+                  </td>
+                  <td className="min-w-48 px-3 py-3">
+                    {(candidate.matched_existing_findings || []).length ? candidate.matched_existing_findings.map((finding) => <div key={finding} className="text-xs text-green-200">{finding}</div>) : <span className="text-gray-500">-</span>}
+                  </td>
+                  <td className="min-w-64 px-3 py-3">
+                    {(candidate.sweep_files || []).length ? candidate.sweep_files.map((file) => <div key={file} className="break-all font-mono text-xs text-amber-200">{file}</div>) : <span className="text-gray-500">-</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }

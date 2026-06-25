@@ -50,8 +50,8 @@ describe('AuditDetails', () => {
           audit_id: 'audit-1',
           total: 2,
           candidates: [
-            { id: 'GAP-0001', title: 'Stack trace disclosure', decision: 'missing_sweep', action: 'sweep', severity_hint: 'LOW', sweep_files: ['src/EmployeeController.java'] },
-            { id: 'GAP-0002', title: 'Covered issue', decision: 'covered', action: 'none', severity_hint: 'LOW', sweep_files: [] },
+            { id: 'GAP-0001', title: 'Stack trace disclosure', category: 'Information Disclosure', decision: 'missing_sweep', action: 'sweep', severity_hint: 'LOW', files: ['src/EmployeeController.java'], matched_existing_findings: [], sweep_files: ['src/EmployeeController.java'] },
+            { id: 'GAP-0002', title: 'Covered issue', category: 'Access Control', decision: 'covered', action: 'none', severity_hint: 'MEDIUM', files: ['src/AdminController.java'], matched_existing_findings: ['CC-0002 (CONFIRMED)'], sweep_files: [] },
           ],
         }), { status: 200 }));
       }
@@ -233,10 +233,15 @@ describe('AuditDetails', () => {
     expect(await screen.findByRole('heading', { name: 'Gap Scan' })).toBeInTheDocument();
     expect(screen.getByText(/not confirmed vulnerabilities/i)).toBeInTheDocument();
     expect(screen.getByText('Candidates')).toBeInTheDocument();
-    expect(screen.getByText('missing sweep')).toBeInTheDocument();
+    expect(screen.getAllByText('missing sweep').length).toBeGreaterThan(0);
     expect(screen.getByText('needs human')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Run Gap Scan' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Compare Candidates' })).toBeInTheDocument();
+    expect(screen.getByText('Candidate')).toBeInTheDocument();
+    expect(screen.getByText('Stack trace disclosure')).toBeInTheDocument();
+    expect(screen.getAllByText('src/EmployeeController.java').length).toBeGreaterThan(0);
+    expect(screen.getByText('CC-0002 (CONFIRMED)')).toBeInTheDocument();
+    expect(screen.getByText('Recommended Sweep')).toBeInTheDocument();
     expect(screen.getAllByText('1').length).toBeGreaterThan(0);
   });
 
