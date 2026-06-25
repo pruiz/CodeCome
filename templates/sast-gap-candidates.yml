@@ -1,0 +1,52 @@
+# SAST gap candidate schema.
+# Gap candidates are not confirmed vulnerabilities and must not be treated as findings.
+
+schema_version: 1
+generated_at: "YYYY-MM-DDTHH:MM:SSZ"
+generated_by: "gap-scan"
+target: "codecome-target"
+bounds:
+  max_scan_rounds: 1
+  max_candidates: 10
+  max_sweep_files: 5
+  max_sweeps_per_audit: 5
+
+candidates:
+  - id: "GAP-0001"
+    title: "Externally reachable exception details disclose implementation internals"
+    category: "Information Disclosure"
+    cwe:
+      - "CWE-209"
+    severity_hint: "LOW"
+    confidence: "HIGH"
+    files:
+      - "src/example/Controller.java"
+    symbols:
+      - "ExampleController.create"
+    entry_points:
+      - "HTTP POST /example"
+    sources:
+      - "attacker-controlled request body"
+    sinks:
+      - "HTTP response body containing exception class/message"
+    trust_boundary: "remote user -> server response"
+    evidence:
+      - "return \"Error: \" + e.getClass().getName() + \": \" + e.getMessage();"
+    impact: "Attackers can fingerprint internal classes and tune follow-up payloads."
+    validation_idea: "Send malformed input to the endpoint and capture whether the response includes exception class names or stack traces."
+    matched_existing_findings: []
+    matched_notes:
+      - "itemdb/notes/attack-surface.md:66"
+    match_confidence: "NONE"
+    decision: "missing_sweep"
+    action: "sweep"
+    sweep_files:
+      - "src/example/Controller.java"
+    sweep_rationale:
+      - "The file contains the response-building sink and route handler."
+    expected_vulnerability_class: "Information Disclosure"
+    safety:
+      source_backed: true
+      not_generic_guess: true
+      rationale: "Candidate cites concrete response construction code and an externally reachable route."
+    notes: "Example entry; replace with target-specific candidates."

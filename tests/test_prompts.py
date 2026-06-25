@@ -1,5 +1,6 @@
 import re
 from pathlib import Path
+import yaml
 
 def test_prompt_safeguards():
     """Ensure prompts enforce CLI usage and frontmatter validation."""
@@ -95,3 +96,50 @@ def test_makefile_has_manual_gap_scan_target():
     assert "tools/gap-config.py" in content
     assert "gap-loop:" not in content
     assert "gap-sweep:" not in content
+
+
+def test_gap_scan_templates_define_required_artifacts():
+    expected = [
+        "sast-gap-scan.md",
+        "sast-gap-candidates.yml",
+        "sast-gap-interesting-files.md",
+        "sast-gap-file-risk-index.yml",
+        "sast-gap-compare-summary.md",
+        "sast-gap-sweep-summary.md",
+    ]
+
+    for name in expected:
+        assert (Path("templates") / name).is_file(), f"missing template {name}"
+
+    candidates = yaml.safe_load(Path("templates/sast-gap-candidates.yml").read_text(encoding="utf-8"))
+    candidate = candidates["candidates"][0]
+    for field in [
+        "id",
+        "title",
+        "category",
+        "cwe",
+        "severity_hint",
+        "confidence",
+        "files",
+        "symbols",
+        "entry_points",
+        "sources",
+        "sinks",
+        "trust_boundary",
+        "evidence",
+        "impact",
+        "validation_idea",
+        "matched_existing_findings",
+        "matched_notes",
+        "match_confidence",
+        "decision",
+        "action",
+        "sweep_files",
+        "sweep_rationale",
+        "expected_vulnerability_class",
+        "safety",
+    ]:
+        assert field in candidate
+
+    assert candidate["id"] == "GAP-0001"
+    assert candidate["decision"] == "missing_sweep"

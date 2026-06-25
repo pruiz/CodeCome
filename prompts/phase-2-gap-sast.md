@@ -11,6 +11,12 @@ Read the following files and directories, all relative to the workspace root:
 - `AGENTS.md`
 - `codecome.yml`
 - `templates/finding.md`
+- `templates/sast-gap-scan.md`
+- `templates/sast-gap-candidates.yml`
+- `templates/sast-gap-interesting-files.md`
+- `templates/sast-gap-file-risk-index.yml`
+- `templates/sast-gap-compare-summary.md`
+- `templates/sast-gap-sweep-summary.md`
 - `.opencode/agents/auditor.md`
 - `.opencode/skills/finding-format/SKILL.md`
 - `.opencode/skills/source-recon/SKILL.md`
@@ -64,11 +70,17 @@ Create or update these files:
 
        itemdb/notes/sast-gap-interesting-files.md
 
-4. Run summary:
+4. Optional machine-readable file priority index:
+
+       itemdb/notes/sast-gap-file-risk-index.yml
+
+5. Run summary:
 
        runs/sast-gap-scan-YYYY-MM-DD-HHMMSS.md
 
 Use the timestamp format already used by other CodeCome run summaries.
+
+Use the `templates/sast-gap-*.md` and `templates/sast-gap-*.yml` files as the schema contract for these artifacts.
 
 ## Candidate schema
 

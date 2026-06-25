@@ -71,22 +71,22 @@ Goal: after CodeCome finishes the normal workflow through `make exploit-all`, op
 
 ### Gap-Scan Artifact TODO
 
-- [ ] Define `itemdb/notes/sast-gap-scan.md` as the human-readable summary of the independent SAST pass.
-- [ ] Define `itemdb/notes/sast-gap-candidates.yml` as the structured candidate list.
-- [ ] Define `itemdb/notes/sast-gap-interesting-files.md` as the sweep planning file for missing candidates.
-- [ ] Define `itemdb/notes/sast-gap-file-risk-index.yml` as an optional machine-readable file priority index for targeted sweeps.
-- [ ] Define `runs/sast-gap-scan-YYYY-MM-DD-HHMMSS.md` run summary using `templates/run-summary.md` style.
-- [ ] Define `runs/sast-gap-compare-YYYY-MM-DD-HHMMSS.md` for the semantic comparison result.
-- [ ] Define `runs/sast-gap-sweep-YYYY-MM-DD-HHMMSS.md` for files swept and resulting finding IDs.
+- [x] Define `itemdb/notes/sast-gap-scan.md` as the human-readable summary of the independent SAST pass.
+- [x] Define `itemdb/notes/sast-gap-candidates.yml` as the structured candidate list.
+- [x] Define `itemdb/notes/sast-gap-interesting-files.md` as the sweep planning file for missing candidates.
+- [x] Define `itemdb/notes/sast-gap-file-risk-index.yml` as an optional machine-readable file priority index for targeted sweeps.
+- [x] Define `runs/sast-gap-scan-YYYY-MM-DD-HHMMSS.md` run summary using `templates/run-summary.md` style.
+- [x] Define `runs/sast-gap-compare-YYYY-MM-DD-HHMMSS.md` for the semantic comparison result.
+- [x] Define `runs/sast-gap-sweep-YYYY-MM-DD-HHMMSS.md` for files swept and resulting finding IDs.
 
 ### Candidate Schema TODO
 
-- [ ] Define candidate IDs such as `GAP-0001`, stable within a scan run.
-- [ ] Include candidate fields: title, category, CWE hint, severity hint, confidence, affected files, symbols, entry points, source, sink, trust boundary, evidence snippets, impact, and validation idea.
-- [ ] Include comparison fields: matched existing findings, matched notes, match confidence, decision, and action.
-- [ ] Include action values: `covered`, `missing_sweep`, `missing_create_candidate`, `duplicate`, `rejected_conflict`, `needs_human`, `defer_low_signal`.
-- [ ] Include sweep planning fields: sweep files, rationale for each file, and expected vulnerability class.
-- [ ] Include safety fields: why this candidate is source-backed and why it is not merely a generic bug-class guess.
+- [x] Define candidate IDs such as `GAP-0001`, stable within a scan run.
+- [x] Include candidate fields: title, category, CWE hint, severity hint, confidence, affected files, symbols, entry points, source, sink, trust boundary, evidence snippets, impact, and validation idea.
+- [x] Include comparison fields: matched existing findings, matched notes, match confidence, decision, and action.
+- [x] Include action values: `covered`, `missing_sweep`, `missing_create_candidate`, `duplicate`, `rejected_conflict`, `needs_human`, `defer_low_signal`.
+- [x] Include sweep planning fields: sweep files, rationale for each file, and expected vulnerability class.
+- [x] Include safety fields: why this candidate is source-backed and why it is not merely a generic bug-class guess.
 
 ### Prompt/Agent TODO
 

@@ -1,0 +1,28 @@
+# Optional machine-readable risk index generated from SAST gap candidates.
+
+schema_version: 1
+generated_by: "gap-scan"
+generated_at: "YYYY-MM-DDTHH:MM:SSZ"
+source_candidates: "itemdb/notes/sast-gap-candidates.yml"
+scoring_scale:
+  min: 1
+  max: 5
+  meaning:
+    "1": "Low-priority follow-up; weak reachability or limited security relevance."
+    "2": "Some source-backed signal but limited impact or uncertainty."
+    "3": "Moderate gap-scan signal with actionable sweep rationale."
+    "4": "High signal; likely reachable trust-boundary or security-relevant sink."
+    "5": "Very high signal; externally reachable and likely to produce a useful finding."
+
+files:
+  - path: "src/example/Controller.java"
+    score: 5
+    confidence: "HIGH"
+    candidates:
+      - "GAP-0001"
+    reasons:
+      - "Candidate cites concrete externally reachable exception disclosure sink."
+    suggested_vulnerability_classes:
+      - "Information Disclosure"
+    suggested_sweep_command: "make sweep FILE=src/example/Controller.java"
+    notes: "Example entry; replace with target-specific ranked files."
