@@ -110,6 +110,9 @@ export const auditsApi = {
   gapCandidates: (id) => {
     return apiFetch(`${API_BASE}/audits/${id}/gap-candidates`).then(res => parseResponse(res, 'Failed to load gap candidates'));
   },
+  runGapScan: (id) => {
+    return apiFetch(`${API_BASE}/audits/${id}/gap-scan`, { method: 'POST' }).then(res => parseResponse(res, 'Failed to queue gap scan'));
+  },
 };
 
 export const findingsApi = {

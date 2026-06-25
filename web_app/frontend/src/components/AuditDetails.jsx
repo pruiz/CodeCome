@@ -1094,6 +1094,8 @@ function GapScanPanel({ auditId }) {
   const [data, setData] = useState({ total: 0, candidates: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [queueing, setQueueing] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -1112,6 +1114,20 @@ function GapScanPanel({ auditId }) {
     load();
   }, [auditId]);
 
+  const runGapScan = async () => {
+    setQueueing(true);
+    setMessage('');
+    setError('');
+    try {
+      const response = await auditsApi.runGapScan(auditId);
+      setMessage(response.message || 'Gap scan queued.');
+    } catch (err) {
+      setError(err.message || 'Failed to queue gap scan');
+    } finally {
+      setQueueing(false);
+    }
+  };
+
   const counts = (data.candidates || []).reduce((acc, candidate) => {
     const key = candidate.decision || 'unknown';
     acc[key] = (acc[key] || 0) + 1;
@@ -1128,9 +1144,15 @@ function GapScanPanel({ auditId }) {
           <h3 className="text-xl font-semibold">Gap Scan</h3>
           <p className="mt-1 text-sm text-gray-500">Candidates from <code>itemdb/notes/sast-gap-candidates.yml</code> with current comparison decisions.</p>
         </div>
-        <button onClick={load} className="rounded bg-gray-800 px-3 py-1.5 text-sm hover:bg-gray-700">Refresh</button>
+        <div className="flex gap-2">
+          <button onClick={runGapScan} disabled={queueing} className="rounded bg-blue-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-gray-700">
+            {queueing ? 'Queueing...' : 'Run Gap Scan'}
+          </button>
+          <button onClick={load} className="rounded bg-gray-800 px-3 py-1.5 text-sm hover:bg-gray-700">Refresh</button>
+        </div>
       </div>
       {error && <div className="rounded bg-red-950/40 px-3 py-2 text-sm text-red-200">{error}</div>}
+      {message && <div className="rounded bg-gray-900 px-3 py-2 text-sm text-gray-200">{message}</div>}
       {loading ? (
         <div className="text-sm text-gray-500">Loading gap candidates...</div>
       ) : (
