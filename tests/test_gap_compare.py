@@ -115,6 +115,42 @@ candidates:
     assert "GAP-0003" in summary.read_text(encoding="utf-8")
 
 
+def test_gap_compare_discovers_phase_1_note_only_stack_trace_gap(tmp_path):
+    ctx = make_ctx(tmp_path)
+    notes = tmp_path / "itemdb" / "notes"
+    notes.mkdir(parents=True, exist_ok=True)
+    (notes / "attack-surface.md").write_text(
+        "# Attack Surface\n\n"
+        "Error handling leaks stack traces and exception messages to HTTP response body. "
+        "Employee import and report flows return exception class names to remote users.",
+        encoding="utf-8",
+    )
+    (tmp_path / "itemdb" / "findings" / "PENDING").mkdir(parents=True, exist_ok=True)
+    write_candidates(tmp_path, """
+candidates:
+  - id: GAP-0005
+    title: Stack trace exception message disclosure in HTTP responses
+    category: Information Disclosure
+    cwe: [CWE-209]
+    files: [src/EmployeeController.java]
+    evidence:
+      - 'return "Error: " + e.getClass().getName() + ": " + e.getMessage();'
+    sweep_files: [src/EmployeeController.java]
+    safety: {source_backed: true, not_generic_guess: true}
+""")
+
+    results, summary = compare_gap_candidates(ctx)
+
+    assert results[0].candidate_id == "GAP-0005"
+    assert results[0].decision == "missing_sweep"
+    assert results[0].action == "sweep"
+    assert results[0].matched_findings == []
+    assert results[0].matched_notes == ["itemdb/notes/attack-surface.md"]
+    summary_text = summary.read_text(encoding="utf-8")
+    assert "GAP-0005" in summary_text
+    assert "missing_sweep" in summary_text
+
+
 def test_gap_compare_does_not_reopen_rejected_findings(tmp_path):
     ctx = make_ctx(tmp_path)
     write_finding(tmp_path, "REJECTED", "CC-0004", title="Exception disclosure", category="Information Disclosure", files=["src/App.java"], cwe=["CWE-209"])
