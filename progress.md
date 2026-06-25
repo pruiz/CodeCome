@@ -101,18 +101,18 @@ Goal: after CodeCome finishes the normal workflow through `make exploit-all`, op
 
 ### Comparison Engine TODO
 
-- [ ] Add a comparator that reads all findings under `itemdb/findings/{PENDING,CONFIRMED,EXPLOITED,REJECTED,DUPLICATE}`.
-- [ ] Compare candidates against findings by vulnerability class, files, symbols, source, sink, trust boundary, impact, and validation path.
-- [ ] Compare candidates against Phase 1 notes to detect cases that are mentioned in notes but missing as findings.
-- [ ] Mark candidates as `covered` when a semantically equivalent finding exists in any status.
-- [ ] Mark candidates as `missing_sweep` when only notes mention the issue or no finding covers it.
-- [ ] Mark candidates as `needs_human` when the candidate conflicts with a rejected/duplicate finding but has stronger evidence.
-- [ ] Write comparison decisions to `runs/sast-gap-compare-YYYY-MM-DD-HHMMSS.md`.
+- [x] Add a comparator that reads all findings under `itemdb/findings/{PENDING,CONFIRMED,EXPLOITED,REJECTED,DUPLICATE}`.
+- [x] Compare candidates against findings by vulnerability class, files, symbols, source, sink, trust boundary, impact, and validation path.
+- [x] Compare candidates against Phase 1 notes to detect cases that are mentioned in notes but missing as findings.
+- [x] Mark candidates as `covered` when a semantically equivalent finding exists in any status.
+- [x] Mark candidates as `missing_sweep` when only notes mention the issue or no finding covers it.
+- [x] Mark candidates as `needs_human` when the candidate conflicts with a rejected/duplicate finding but has stronger evidence.
+- [x] Write comparison decisions to `runs/sast-gap-compare-YYYY-MM-DD-HHMMSS.md`.
 
 ### Targeted Sweep TODO
 
 - [x] Add `make gap-scan` to run the independent SAST prompt and write candidate artifacts.
-- [ ] Add `make gap-compare` to compare candidates against current findings and notes.
+- [x] Add `make gap-compare` to compare candidates against current findings and notes.
 - [ ] Add `make gap-sweep` to run `make sweep FILE=...` for selected missing candidates.
 - [ ] Add `make gap-loop` as an optional bounded sequence: `gap-scan`, `gap-compare`, `gap-sweep`, `phase-3`, `validate-all`, `exploit-all`.
 - [ ] Ensure `gap-sweep` can run one selected candidate or all candidates marked `missing_sweep`.
@@ -144,8 +144,8 @@ Goal: after CodeCome finishes the normal workflow through `make exploit-all`, op
 
 ### Quality/Safety TODO
 
-- [ ] Add unit tests for candidate schema parsing and validation.
-- [ ] Add unit tests for semantic comparison against existing findings.
+- [x] Add unit tests for candidate schema parsing and validation.
+- [x] Add unit tests for semantic comparison against existing findings.
 - [ ] Add backend API tests for starting/listing gap scans.
 - [ ] Add frontend tests for Gap Scan UI states and candidate table actions.
 - [ ] Add integration test using a small fixture where Phase 1 notes mention stack trace disclosure but no finding exists, and gap-compare marks it `missing_sweep`.

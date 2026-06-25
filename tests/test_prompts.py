@@ -90,10 +90,12 @@ def test_makefile_has_manual_gap_scan_target():
     content = Path("Makefile").read_text(encoding="utf-8")
 
     assert "gap-scan: env-check" in content
+    assert "gap-compare: env-check" in content
     assert "--label \"Gap Scan\"" in content
     assert "--agent gap-scanner" in content
     assert "--prompt-file prompts/phase-2-gap-sast.md" in content
     assert "tools/gap-config.py" in content
+    assert "tools/gap-compare.py" in content
     assert "gap-loop:" not in content
     assert "gap-sweep:" not in content
 
