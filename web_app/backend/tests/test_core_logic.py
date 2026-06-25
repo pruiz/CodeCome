@@ -7,7 +7,7 @@ from app.api.audits import audit_response, next_audit_step, sandbox_start_comman
 from app.api.workers import model_options_from_worker, registered_worker_config, validate_worker_registration_token
 from app.utils.codecome_wrapper import CodeComeExecutor
 from app.api import logs, workers
-from app.workers.phase_tasks import ALL_PHASES, build_command_line, status_phase
+from app.workers.phase_tasks import ALL_PHASES, GAP_PHASES, build_command_line, status_phase
 from app.workers.phase_tasks import merged_phase_env
 
 
@@ -421,10 +421,15 @@ def test_status_phase_normalizes_make_and_phase_names():
 
 
 def test_gap_steps_are_supported_manual_phases():
-    assert "gap-scan" in ALL_PHASES
-    assert "gap-compare" in ALL_PHASES
-    assert "gap-sweep" in ALL_PHASES
+    assert set(GAP_PHASES).issubset(set(ALL_PHASES))
+    assert GAP_PHASES == ["gap-scan", "gap-compare", "gap-sweep"]
     assert build_command_line("gap-sweep").endswith("make gap-sweep")
+
+
+def test_gap_steps_use_standard_phase_status_and_commands():
+    for phase in GAP_PHASES:
+        assert status_phase(phase) == phase.replace("-", "_")
+        assert build_command_line(phase).endswith(f"make {phase}")
 
 
 def test_next_audit_step_skips_optional_sweep():
