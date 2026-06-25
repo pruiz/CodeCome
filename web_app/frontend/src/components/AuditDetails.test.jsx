@@ -45,15 +45,22 @@ describe('AuditDetails', () => {
           headers: { 'content-disposition': 'attachment; filename="report.md"' },
         }));
       }
+      if (requested.pathname.includes('/api/audits/audit-1/gap-candidates/GAP-0001/mark')) {
+        const body = JSON.parse(options.body || '{}');
+        return Promise.resolve(new Response(JSON.stringify({ message: `Gap candidate marked as ${body.decision}` }), { status: 200 }));
+      }
       if (requested.pathname.includes('/api/audits/audit-1/gap-candidates')) {
         return Promise.resolve(new Response(JSON.stringify({
           audit_id: 'audit-1',
           total: 2,
           candidates: [
-            { id: 'GAP-0001', title: 'Stack trace disclosure', category: 'Information Disclosure', decision: 'missing_sweep', action: 'sweep', severity_hint: 'LOW', files: ['src/EmployeeController.java'], matched_existing_findings: [], sweep_files: ['src/EmployeeController.java'] },
+            { id: 'GAP-0001', title: 'Stack trace disclosure', category: 'Information Disclosure', decision: 'missing_sweep', action: 'sweep', severity_hint: 'LOW', files: ['src/EmployeeController.java'], matched_existing_findings: [], matched_notes: ['itemdb/notes/attack-surface.md:66'], match_confidence: 'NONE', comparison_rationale: 'Notes-only gap.', sweep_files: ['src/EmployeeController.java'] },
             { id: 'GAP-0002', title: 'Covered issue', category: 'Access Control', decision: 'covered', action: 'none', severity_hint: 'MEDIUM', files: ['src/AdminController.java'], matched_existing_findings: ['CC-0002 (CONFIRMED)'], sweep_files: [] },
           ],
         }), { status: 200 }));
+      }
+      if (requested.pathname.includes('/api/audits/audit-1/gap-sweep')) {
+        return Promise.resolve(new Response(JSON.stringify({ message: 'Gap sweep queued', phase: 'gap-sweep' }), { status: 200 }));
       }
       if (requested.pathname.includes('/api/audits/audit-1/gap-scan')) {
         return Promise.resolve(new Response(JSON.stringify({ message: 'Gap scan queued', phase: 'gap-scan' }), { status: 200 }));
@@ -242,6 +249,10 @@ describe('AuditDetails', () => {
     expect(screen.getAllByText('src/EmployeeController.java').length).toBeGreaterThan(0);
     expect(screen.getByText('CC-0002 (CONFIRMED)')).toBeInTheDocument();
     expect(screen.getByText('Recommended Sweep')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Run Sweep' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Ignore' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Needs Human' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Open Candidate Details' }).length).toBeGreaterThan(0);
     expect(screen.getAllByText('1').length).toBeGreaterThan(0);
   });
 
@@ -283,5 +294,34 @@ describe('AuditDetails', () => {
       expect(call).toBeTruthy();
     });
     expect(await screen.findByText('Gap compare queued')).toBeInTheDocument();
+  });
+
+  it('runs sweep, marks, and opens candidate details from the gap table', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/audit/audit-1']}>
+        <Routes>
+          <Route path="/audit/:id" element={<AuditDetails />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Gap Scan' }));
+    await user.click((await screen.findAllByRole('button', { name: 'Open Candidate Details' }))[0]);
+    expect(await screen.findByText(/itemdb\/notes\/attack-surface.md:66/)).toBeInTheDocument();
+
+    await user.click((await screen.findAllByRole('button', { name: 'Run Sweep' }))[0]);
+    await waitFor(() => {
+      const call = global.fetch.mock.calls.find(([url, options]) => String(url).includes('/gap-sweep?candidate=GAP-0001') && options?.method === 'POST');
+      expect(call).toBeTruthy();
+    });
+    expect(await screen.findByText('Gap sweep queued')).toBeInTheDocument();
+
+    await user.click((await screen.findAllByRole('button', { name: 'Ignore' }))[0]);
+    await waitFor(() => {
+      const call = global.fetch.mock.calls.find(([url, options]) => String(url).includes('/gap-candidates/GAP-0001/mark') && options?.method === 'POST');
+      expect(call).toBeTruthy();
+    });
+    expect(await screen.findByText('Gap candidate marked as ignored')).toBeInTheDocument();
   });
 });

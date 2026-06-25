@@ -116,6 +116,17 @@ export const auditsApi = {
   runGapCompare: (id) => {
     return apiFetch(`${API_BASE}/audits/${id}/gap-compare`, { method: 'POST' }).then(res => parseResponse(res, 'Failed to queue gap compare'));
   },
+  runGapSweep: (id, candidateId) => {
+    const suffix = candidateId ? `?candidate=${encodeURIComponent(candidateId)}` : '';
+    return apiFetch(`${API_BASE}/audits/${id}/gap-sweep${suffix}`, { method: 'POST' }).then(res => parseResponse(res, 'Failed to queue gap sweep'));
+  },
+  markGapCandidate: (id, candidateId, data) => {
+    return apiFetch(`${API_BASE}/audits/${id}/gap-candidates/${candidateId}/mark`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).then(res => parseResponse(res, 'Failed to mark gap candidate'));
+  },
 };
 
 export const findingsApi = {

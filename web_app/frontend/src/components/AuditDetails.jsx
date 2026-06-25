@@ -1097,6 +1097,8 @@ function GapScanPanel({ auditId }) {
   const [message, setMessage] = useState('');
   const [queueing, setQueueing] = useState(false);
   const [comparing, setComparing] = useState(false);
+  const [candidateAction, setCandidateAction] = useState('');
+  const [openCandidateId, setOpenCandidateId] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -1140,6 +1142,35 @@ function GapScanPanel({ auditId }) {
       setError(err.message || 'Failed to queue gap compare');
     } finally {
       setComparing(false);
+    }
+  };
+
+  const runCandidateSweep = async (candidateId) => {
+    setCandidateAction(candidateId);
+    setMessage('');
+    setError('');
+    try {
+      const response = await auditsApi.runGapSweep(auditId, candidateId);
+      setMessage(response.message || 'Gap sweep queued.');
+    } catch (err) {
+      setError(err.message || 'Failed to queue gap sweep');
+    } finally {
+      setCandidateAction('');
+    }
+  };
+
+  const markCandidate = async (candidateId, decision) => {
+    setCandidateAction(candidateId);
+    setMessage('');
+    setError('');
+    try {
+      const response = await auditsApi.markGapCandidate(auditId, candidateId, { decision, note: `Marked ${decision} in web UI.` });
+      setMessage(response.message || `Gap candidate marked as ${decision}.`);
+      await load();
+    } catch (err) {
+      setError(err.message || 'Failed to mark gap candidate');
+    } finally {
+      setCandidateAction('');
     }
   };
 
@@ -1201,31 +1232,53 @@ function GapScanPanel({ auditId }) {
                 <th className="px-3 py-2 text-left">Files</th>
                 <th className="px-3 py-2 text-left">Matched Findings</th>
                 <th className="px-3 py-2 text-left">Recommended Sweep</th>
+                <th className="px-3 py-2 text-left">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-900">
               {data.candidates.map((candidate) => (
-                <tr key={candidate.id} className="align-top hover:bg-gray-900/50">
-                  <td className="max-w-xs px-3 py-3">
-                    <div className="font-mono text-xs text-cyan-300">{candidate.id}</div>
-                    <div className="mt-1 font-semibold text-gray-100">{candidate.title || '-'}</div>
-                    <div className="mt-1 text-xs text-gray-500">{candidate.category || 'Unclassified'}</div>
-                  </td>
-                  <td className="px-3 py-3">
-                    <span className="rounded bg-gray-800 px-2 py-1 text-xs text-gray-200">{(candidate.decision || '-').replace(/_/g, ' ')}</span>
-                    <div className="mt-2 text-xs text-gray-500">Action: {candidate.action || '-'}</div>
-                  </td>
-                  <td className="px-3 py-3 text-gray-200">{candidate.severity_hint || '-'}</td>
-                  <td className="min-w-64 px-3 py-3">
-                    {(candidate.files || []).length ? candidate.files.map((file) => <div key={file} className="break-all font-mono text-xs text-gray-300">{file}</div>) : <span className="text-gray-500">-</span>}
-                  </td>
-                  <td className="min-w-48 px-3 py-3">
-                    {(candidate.matched_existing_findings || []).length ? candidate.matched_existing_findings.map((finding) => <div key={finding} className="text-xs text-green-200">{finding}</div>) : <span className="text-gray-500">-</span>}
-                  </td>
-                  <td className="min-w-64 px-3 py-3">
-                    {(candidate.sweep_files || []).length ? candidate.sweep_files.map((file) => <div key={file} className="break-all font-mono text-xs text-amber-200">{file}</div>) : <span className="text-gray-500">-</span>}
-                  </td>
-                </tr>
+                <React.Fragment key={candidate.id}>
+                  <tr className="align-top hover:bg-gray-900/50">
+                    <td className="max-w-xs px-3 py-3">
+                      <div className="font-mono text-xs text-cyan-300">{candidate.id}</div>
+                      <div className="mt-1 font-semibold text-gray-100">{candidate.title || '-'}</div>
+                      <div className="mt-1 text-xs text-gray-500">{candidate.category || 'Unclassified'}</div>
+                    </td>
+                    <td className="px-3 py-3">
+                      <span className="rounded bg-gray-800 px-2 py-1 text-xs text-gray-200">{(candidate.decision || '-').replace(/_/g, ' ')}</span>
+                      <div className="mt-2 text-xs text-gray-500">Action: {candidate.action || '-'}</div>
+                    </td>
+                    <td className="px-3 py-3 text-gray-200">{candidate.severity_hint || '-'}</td>
+                    <td className="min-w-64 px-3 py-3">
+                      {(candidate.files || []).length ? candidate.files.map((file) => <div key={file} className="break-all font-mono text-xs text-gray-300">{file}</div>) : <span className="text-gray-500">-</span>}
+                    </td>
+                    <td className="min-w-48 px-3 py-3">
+                      {(candidate.matched_existing_findings || []).length ? candidate.matched_existing_findings.map((finding) => <div key={finding} className="text-xs text-green-200">{finding}</div>) : <span className="text-gray-500">-</span>}
+                    </td>
+                    <td className="min-w-64 px-3 py-3">
+                      {(candidate.sweep_files || []).length ? candidate.sweep_files.map((file) => <div key={file} className="break-all font-mono text-xs text-amber-200">{file}</div>) : <span className="text-gray-500">-</span>}
+                    </td>
+                    <td className="min-w-52 px-3 py-3">
+                      <div className="flex flex-wrap gap-2">
+                        <button onClick={() => runCandidateSweep(candidate.id)} disabled={candidateAction === candidate.id || !(candidate.sweep_files || []).length} className="rounded bg-amber-700 px-2 py-1 text-xs font-semibold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-gray-700">Run Sweep</button>
+                        <button onClick={() => markCandidate(candidate.id, 'ignored')} disabled={candidateAction === candidate.id} className="rounded bg-gray-800 px-2 py-1 text-xs hover:bg-gray-700 disabled:opacity-50">Ignore</button>
+                        <button onClick={() => markCandidate(candidate.id, 'needs_human')} disabled={candidateAction === candidate.id} className="rounded bg-purple-800 px-2 py-1 text-xs text-purple-50 hover:bg-purple-700 disabled:opacity-50">Needs Human</button>
+                        <button onClick={() => setOpenCandidateId(openCandidateId === candidate.id ? null : candidate.id)} className="rounded bg-cyan-800 px-2 py-1 text-xs text-cyan-50 hover:bg-cyan-700">Open Candidate Details</button>
+                      </div>
+                    </td>
+                  </tr>
+                  {openCandidateId === candidate.id && (
+                    <tr>
+                      <td colSpan="7" className="bg-gray-950 px-3 py-3 text-xs text-gray-300">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                          <div><span className="text-gray-500">Matched notes:</span> {(candidate.matched_notes || []).join(', ') || '-'}</div>
+                          <div><span className="text-gray-500">Confidence:</span> {candidate.match_confidence || '-'}</div>
+                          <div><span className="text-gray-500">Rationale:</span> {candidate.comparison_rationale || candidate.rationale || '-'}</div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
