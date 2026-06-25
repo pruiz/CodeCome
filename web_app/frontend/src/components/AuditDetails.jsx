@@ -896,12 +896,20 @@ function AuditOverview({ audit, onRefresh }) {
   const [saving, setSaving] = useState(false);
   const [sandboxStarting, setSandboxStarting] = useState(false);
   const [users, setUsers] = useState([]);
+  const [auditTokenSummary, setAuditTokenSummary] = useState(null);
 
   useEffect(() => {
     usersApi.list({ active: true, limit: 500 })
       .then((data) => setUsers(data.users || []))
       .catch(() => setUsers([]));
   }, []);
+
+  useEffect(() => {
+    if (!audit?.id) return;
+    logsApi.tokenSummary(audit.id)
+      .then((data) => setAuditTokenSummary(data.summary))
+      .catch(() => setAuditTokenSummary(null));
+  }, [audit?.id, audit?.updated_at, audit?.status]);
 
   const updateAudit = async (changes) => {
     setSaving(true);
@@ -919,6 +927,8 @@ function AuditOverview({ audit, onRefresh }) {
 
   const envCount = Object.keys(audit.model_settings?.__audit_env?.env || {}).length;
   const auditOptions = audit.model_settings?.__audit_options || {};
+  const totalRuntimeSeconds = (audit.phase_executions || []).reduce((total, execution) => total + (Number(execution.duration_seconds) || 0), 0);
+  const totalTokens = auditTokenSummary?.total_tokens || 0;
 
   const updateAuditOption = async (key, value) => {
     const nextSettings = { ...(audit.model_settings || {}) };
@@ -959,6 +969,29 @@ function AuditOverview({ audit, onRefresh }) {
         <div className="vortex-stat-red rounded-xl p-5 text-white">
           <div className="text-sm font-semibold text-white/80">Findings</div>
           <div className="mt-2 text-2xl font-bold">{audit.total_findings}</div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-xl border border-cyan-900/60 bg-cyan-950/30 p-5">
+          <div className="text-sm font-semibold text-cyan-100/80">Total Runtime</div>
+          <div className="mt-2 text-2xl font-bold text-cyan-50">{formatDuration(totalRuntimeSeconds)}</div>
+          <div className="mt-1 text-xs text-cyan-100/60">Sum of recorded phase durations.</div>
+        </div>
+        <div className="rounded-xl border border-purple-900/60 bg-purple-950/30 p-5">
+          <div className="text-sm font-semibold text-purple-100/80">Total Tokens</div>
+          <div className="mt-2 text-2xl font-bold text-purple-50">{totalTokens.toLocaleString()}</div>
+          <div className="mt-1 text-xs text-purple-100/60">Approximate OpenCode token usage.</div>
+        </div>
+        <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-5">
+          <div className="text-sm font-semibold text-gray-400">LLM Turns</div>
+          <div className="mt-2 text-2xl font-bold text-gray-100">{auditTokenSummary?.turns || 0}</div>
+          <div className="mt-1 text-xs text-gray-500">Parsed from phase logs.</div>
+        </div>
+        <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-5">
+          <div className="text-sm font-semibold text-gray-400">Reasoning Tokens</div>
+          <div className="mt-2 text-2xl font-bold text-gray-100">{(auditTokenSummary?.reasoning_tokens || 0).toLocaleString()}</div>
+          <div className="mt-1 text-xs text-gray-500">Included in total tokens.</div>
         </div>
       </div>
 

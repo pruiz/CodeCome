@@ -26,7 +26,10 @@ const baseAudit = {
   findings_by_status: {},
   created_at: '2026-01-01T00:00:00',
   updated_at: '2026-01-01T00:00:00',
-  phase_executions: [],
+  phase_executions: [
+    { id: 10, audit_id: 'audit-1', phase: 'phase-1', attempt: 1, status: 'success', duration_seconds: 65 },
+    { id: 11, audit_id: 'audit-1', phase: 'phase-2', attempt: 1, status: 'success', duration_seconds: 125 },
+  ],
 };
 
 let auditPayload;
@@ -58,7 +61,11 @@ describe('AuditDetails', () => {
         }), { status: 200 }));
       }
       if (requested.pathname.includes('/api/logs')) {
-        return Promise.resolve(new Response(JSON.stringify({ total: 0, logs: [], summary: { turns: 0 } }), { status: 200 }));
+        return Promise.resolve(new Response(JSON.stringify({
+          total: 0,
+          logs: [],
+          summary: { turns: 3, input_tokens: 1000, output_tokens: 200, reasoning_tokens: 50, total_tokens: 1250, models: {}, steps: {} },
+        }), { status: 200 }));
       }
       if (requested.pathname.includes('/api/phases')) {
         return Promise.resolve(new Response(JSON.stringify({ triages: [], findings: [], total: 0 }), { status: 200 }));
@@ -147,6 +154,23 @@ describe('AuditDetails', () => {
       expect(sandboxCall).toBeTruthy();
     });
     expect(await screen.findByText(/Sandbox command finished with exit code 0/i)).toBeInTheDocument();
+  });
+
+  it('shows total runtime and token usage in overview', async () => {
+    render(
+      <MemoryRouter initialEntries={['/audit/audit-1']}>
+        <Routes>
+          <Route path="/audit/:id" element={<AuditDetails />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Total Runtime')).toBeInTheDocument();
+    expect(screen.getByText('3m 10s')).toBeInTheDocument();
+    expect(await screen.findByText('Total Tokens')).toBeInTheDocument();
+    expect(screen.getByText('1,250')).toBeInTheDocument();
+    expect(screen.getByText('LLM Turns')).toBeInTheDocument();
+    expect(screen.getAllByText('3').length).toBeGreaterThan(0);
   });
 
   it('downloads the report from the reporting phase', async () => {
