@@ -4,6 +4,7 @@ from typing import Optional, List
 from uuid import UUID
 from pathlib import Path
 from fastapi.responses import FileResponse, StreamingResponse
+import sys
 import io
 from datetime import datetime
 import json
@@ -24,6 +25,16 @@ import zipfile
 import yaml
 
 router = APIRouter()
+
+
+def tools_path() -> Path:
+    return Path(settings.CODECOME_ROOT) / "tools"
+
+
+def ensure_tools_import_path() -> None:
+    path = str(tools_path())
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 
 def sandbox_start_command(audit) -> str:
@@ -53,6 +64,43 @@ def sync_remote_reports_if_needed(audit, workspace_path: Path, db: Session) -> N
     if not worker or worker.type not in ("ssh", "proxmox-vm", "proxmox-lxc"):
         return
     SSHCodeComeExecutor(worker).download_reports(str(audit.id), workspace_path)
+
+
+def gap_candidate_payloads(workspace_path: Path) -> list[dict]:
+    ensure_tools_import_path()
+    from findings.constants import FindingsContext
+    from gap.compare import compare_candidate, load_candidates, load_finding_records
+
+    ctx = FindingsContext(
+        root=workspace_path,
+        itemdb_root=workspace_path / "itemdb",
+        findings_root=workspace_path / "itemdb" / "findings",
+        evidence_root=workspace_path / "itemdb" / "evidence",
+        notes_root=workspace_path / "itemdb" / "notes",
+        reports_root=workspace_path / "itemdb" / "reports",
+        template_path=workspace_path / "templates" / "finding.md",
+        evidence_template_path=workspace_path / "templates" / "evidence-readme.md",
+    )
+    candidates = load_candidates(ctx.notes_root / "sast-gap-candidates.yml")
+    findings = load_finding_records(ctx)
+    payloads = []
+    for candidate in candidates:
+        result = compare_candidate(candidate, findings, ctx.notes_root)
+        raw = dict(candidate.raw)
+        raw.update({
+            "id": candidate.id,
+            "title": candidate.title,
+            "category": candidate.category,
+            "decision": result.decision,
+            "action": result.action,
+            "match_confidence": result.match_confidence,
+            "matched_existing_findings": result.matched_findings,
+            "matched_notes": result.matched_notes,
+            "comparison_rationale": result.rationale,
+            "sweep_files": result.sweep_files or candidate.sweep_files,
+        })
+        payloads.append(raw)
+    return payloads
 
 
 def sandbox_runtime_env(audit, workspace_path: Path) -> dict:
@@ -343,6 +391,23 @@ def run_gap_sweep(audit_id: UUID, candidate: Optional[str] = Query(None), db: Se
             raise HTTPException(status_code=400, detail="candidate must look like GAP-0001")
         extra_env = {"ARGS": f"--candidate {candidate}"}
     return queue_gap_step(db, audit_id, "gap-sweep", "Gap sweep queued", extra_env=extra_env)
+
+
+@router.get("/{audit_id}/gap-candidates")
+def list_gap_candidates(audit_id: UUID, db: Session = Depends(get_db)):
+    """List gap-scan candidates with current deterministic comparison decisions."""
+    audit = crud.get_audit(db, audit_id)
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    workspace_path = Path(audit.workspace_path)
+    if not workspace_path.exists():
+        raise HTTPException(status_code=404, detail="Audit workspace not found")
+    candidates = gap_candidate_payloads(workspace_path)
+    return {
+        "audit_id": str(audit_id),
+        "total": len(candidates),
+        "candidates": candidates,
+    }
 
 
 @router.post("/{audit_id}/continue-after-questions")

@@ -125,7 +125,7 @@ Goal: after CodeCome finishes the normal workflow through `make exploit-all`, op
 - [x] Add API endpoint to start `gap-scan` for an audit.
 - [x] Add API endpoint to start `gap-compare` for an audit.
 - [x] Add API endpoint to start `gap-sweep` for an audit or selected candidate.
-- [ ] Add API endpoint to list gap candidates and their comparison decisions.
+- [x] Add API endpoint to list gap candidates and their comparison decisions.
 - [ ] Add API endpoint to mark a candidate as ignored/deferred/needs-human.
 - [ ] Add phase execution or job metadata support for `gap-scan`, `gap-compare`, and `gap-sweep` steps.
 - [ ] Ensure remote workers receive the workspace before gap-sweep and return `itemdb/notes`, `itemdb/findings`, `runs`, and evidence artifacts after execution.
@@ -146,7 +146,7 @@ Goal: after CodeCome finishes the normal workflow through `make exploit-all`, op
 
 - [x] Add unit tests for candidate schema parsing and validation.
 - [x] Add unit tests for semantic comparison against existing findings.
-- [ ] Add backend API tests for starting/listing gap scans.
+- [x] Add backend API tests for starting/listing gap scans.
 - [ ] Add frontend tests for Gap Scan UI states and candidate table actions.
 - [ ] Add integration test using a small fixture where Phase 1 notes mention stack trace disclosure but no finding exists, and gap-compare marks it `missing_sweep`.
 - [ ] Add regression test that a covered finding is not re-swept.

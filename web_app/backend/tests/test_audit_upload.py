@@ -336,3 +336,41 @@ def test_run_gap_sweep_rejects_bad_candidate(tmp_path):
         assert "GAP-0001" in exc.detail
     else:
         raise AssertionError("Expected HTTPException")
+
+
+def test_list_gap_candidates_returns_comparison_decisions(monkeypatch, tmp_path):
+    audit_id = "11111111-2222-3333-4444-555555555555"
+    audit = SimpleNamespace(id=audit_id, workspace_path=str(tmp_path))
+    notes = tmp_path / "itemdb" / "notes"
+    notes.mkdir(parents=True)
+    (notes / "sast-gap-candidates.yml").write_text("""
+candidates:
+  - id: GAP-0001
+    title: Stack trace disclosure
+    category: Information Disclosure
+    files: [src/EmployeeController.java]
+    matched_notes: [itemdb/notes/attack-surface.md:66]
+    sweep_files: [src/EmployeeController.java]
+    safety: {source_backed: true}
+""", encoding="utf-8")
+
+    monkeypatch.setattr(audits.crud, "get_audit", lambda db_arg, candidate_id: audit)
+
+    response = audits.list_gap_candidates(audit_id, db=object())
+
+    assert response["total"] == 1
+    candidate = response["candidates"][0]
+    assert candidate["id"] == "GAP-0001"
+    assert candidate["decision"] == "missing_sweep"
+    assert candidate["action"] == "sweep"
+    assert candidate["matched_notes"] == ["itemdb/notes/attack-surface.md:66"]
+
+
+def test_list_gap_candidates_returns_empty_when_file_missing(monkeypatch, tmp_path):
+    audit_id = "11111111-2222-3333-4444-555555555555"
+    audit = SimpleNamespace(id=audit_id, workspace_path=str(tmp_path))
+    monkeypatch.setattr(audits.crud, "get_audit", lambda db_arg, candidate_id: audit)
+
+    response = audits.list_gap_candidates(audit_id, db=object())
+
+    assert response == {"audit_id": audit_id, "total": 0, "candidates": []}
