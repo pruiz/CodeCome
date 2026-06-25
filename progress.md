@@ -114,7 +114,7 @@ Goal: after CodeCome finishes the normal workflow through `make exploit-all`, op
 - [x] Add `make gap-scan` to run the independent SAST prompt and write candidate artifacts.
 - [x] Add `make gap-compare` to compare candidates against current findings and notes.
 - [x] Add `make gap-sweep` to run `make sweep FILE=...` for selected missing candidates.
-- [ ] Add `make gap-loop` as an optional bounded sequence: `gap-scan`, `gap-compare`, `gap-sweep`, `phase-3`, `validate-all`, `exploit-all`.
+- [x] Add `make gap-loop` as an optional bounded sequence: `gap-scan`, `gap-compare`, `gap-sweep`, `phase-3`, `validate-all`, `exploit-all`.
 - [x] Ensure `gap-sweep` can run one selected candidate or all candidates marked `missing_sweep`.
 - [x] Ensure `gap-sweep` records which files were swept and which findings were created.
 - [x] Prevent duplicate sweeps of the same file/candidate in the same audit unless explicitly forced.
@@ -159,7 +159,7 @@ Goal: after CodeCome finishes the normal workflow through `make exploit-all`, op
 - [x] Decide default max sweep files per gap loop, proposed default: `5`.
 - [x] Decide default max gap loop rounds, proposed default: `1`.
 - [ ] Decide whether candidate comparison should use only deterministic rules first or an LLM-assisted comparator.
-- [ ] Decide whether `gap-loop` should run automatically before `phase-6` when enabled, or stay manual-only in the first release.
+- [x] Decide whether `gap-loop` should run automatically before `phase-6` when enabled, or stay manual-only in the first release.
 
 ## Current Major Feature: Users, Question Owners, and Fake AI Answerers
 

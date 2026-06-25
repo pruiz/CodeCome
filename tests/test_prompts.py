@@ -92,13 +92,14 @@ def test_makefile_has_manual_gap_scan_target():
     assert "gap-scan: env-check" in content
     assert "gap-compare: env-check" in content
     assert "gap-sweep: env-check" in content
+    assert "gap-loop: env-check" in content
     assert "--label \"Gap Scan\"" in content
     assert "--agent gap-scanner" in content
     assert "--prompt-file prompts/phase-2-gap-sast.md" in content
     assert "tools/gap-config.py" in content
     assert "tools/gap-compare.py" in content
     assert "tools/gap-sweep.py" in content
-    assert "gap-loop:" not in content
+    assert "tools/gap-loop.py" in content
 
 
 def test_gap_scanner_agent_is_candidate_only():
