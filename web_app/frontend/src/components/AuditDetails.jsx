@@ -1180,6 +1180,13 @@ function GapScanPanel({ auditId }) {
     return acc;
   }, {});
 
+  const coverageLabel = (candidate) => {
+    if ((candidate.matched_existing_findings || []).length) return 'Covered by finding';
+    if ((candidate.matched_notes || []).length) return 'Notes-only gap';
+    if (candidate.decision === 'missing_sweep' || candidate.decision === 'missing_candidate') return 'Missing candidate';
+    return 'Unmatched';
+  };
+
   return (
     <section className="space-y-4">
       <div className="rounded-xl border border-amber-800/70 bg-amber-950/30 p-4 text-sm text-amber-100">
@@ -1247,6 +1254,7 @@ function GapScanPanel({ auditId }) {
                     <td className="px-3 py-3">
                       <span className="rounded bg-gray-800 px-2 py-1 text-xs text-gray-200">{(candidate.decision || '-').replace(/_/g, ' ')}</span>
                       <div className="mt-2 text-xs text-gray-500">Action: {candidate.action || '-'}</div>
+                      <div className="mt-2 text-xs font-semibold text-cyan-200">{coverageLabel(candidate)}</div>
                     </td>
                     <td className="px-3 py-3 text-gray-200">{candidate.severity_hint || '-'}</td>
                     <td className="min-w-64 px-3 py-3">

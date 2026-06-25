@@ -248,6 +248,8 @@ describe('AuditDetails', () => {
     expect(screen.getByText('Stack trace disclosure')).toBeInTheDocument();
     expect(screen.getAllByText('src/EmployeeController.java').length).toBeGreaterThan(0);
     expect(screen.getByText('CC-0002 (CONFIRMED)')).toBeInTheDocument();
+    expect(screen.getByText('Notes-only gap')).toBeInTheDocument();
+    expect(screen.getByText('Covered by finding')).toBeInTheDocument();
     expect(screen.getByText('Recommended Sweep')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Run Sweep' }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: 'Ignore' }).length).toBeGreaterThan(0);
