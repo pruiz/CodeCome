@@ -124,12 +124,17 @@ Examples of issues worth candidates when externally reachable:
 
 - Do not create files under `itemdb/findings/` in this gap scan.
 - Do not run `make findings-create` in this gap scan.
+- Do not run `make findings-move` in this gap scan.
 - Do not move findings between statuses.
 - Do not validate findings.
 - Do not mark anything as `CONFIRMED`.
+- Do not mark anything as `EXPLOITED`, `REJECTED`, or `DUPLICATE`.
+- Do not re-open `REJECTED` or `DUPLICATE` findings. If a candidate conflicts with those statuses, mark it `needs_human`.
 - Do not treat notes-only references as active findings.
 - Do not create generic candidates without concrete files, symbols, sources, sinks, and validation ideas.
 - Deduplicate against existing findings across `PENDING`, `CONFIRMED`, `EXPLOITED`, `REJECTED`, and `DUPLICATE`.
+- Preserve the normal CodeCome lifecycle: targeted sweeps may later create `PENDING` findings, Phase 3 performs counter-analysis, Phase 4 validates, and Phase 5 exploits.
+- Keep the gap scan limited to durable notes and run summaries under `itemdb/notes/` and `runs/`.
 
 ## Suggested output behavior
 

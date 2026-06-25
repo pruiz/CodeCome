@@ -75,7 +75,12 @@ def test_gap_scan_prompt_is_candidate_only():
     assert "itemdb/notes/sast-gap-scan.md" in content
     assert "Do not create files under `itemdb/findings/`" in content
     assert "Do not run `make findings-create`" in content
+    assert "Do not run `make findings-move`" in content
     assert "Do not mark anything as `CONFIRMED`" in content
+    assert "Do not mark anything as `EXPLOITED`, `REJECTED`, or `DUPLICATE`" in content
+    assert "Do not re-open `REJECTED` or `DUPLICATE` findings" in content
+    assert "Preserve the normal CodeCome lifecycle" in content
+    assert "Do not treat notes-only references as active findings" in content
     assert "stack traces" in content
 
 
@@ -86,3 +91,5 @@ def test_makefile_has_manual_gap_scan_target():
     assert "--label \"Gap Scan\"" in content
     assert "--agent auditor" in content
     assert "--prompt-file prompts/phase-2-gap-sast.md" in content
+    assert "gap-loop:" not in content
+    assert "gap-sweep:" not in content

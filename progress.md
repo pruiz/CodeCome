@@ -60,14 +60,14 @@ Goal: after CodeCome finishes the normal workflow through `make exploit-all`, op
 ### Product Rules
 
 - [x] Add a new optional workflow step named `gap-scan`; it must not run automatically unless explicitly enabled by audit settings or clicked in the UI.
-- [ ] Keep CodeCome CLI core behavior stable; add orchestration through web app and thin Make/tool wrappers only where needed.
-- [ ] Do not let the gap-scan LLM directly mark findings as confirmed, exploited, rejected, or duplicate.
-- [ ] Prefer creating durable candidate-gap artifacts first; targeted sweeps should create real `PENDING` findings using existing Phase 2 mechanisms.
+- [x] Keep CodeCome CLI core behavior stable; add orchestration through web app and thin Make/tool wrappers only where needed.
+- [x] Do not let the gap-scan LLM directly mark findings as confirmed, exploited, rejected, or duplicate.
+- [x] Prefer creating durable candidate-gap artifacts first; targeted sweeps should create real `PENDING` findings using existing Phase 2 mechanisms.
 - [ ] Bound the loop to avoid infinite rescans: maximum scan rounds, maximum candidates, maximum sweep files, and maximum sweeps per audit must be configurable.
-- [ ] Never re-open `REJECTED` or `DUPLICATE` findings automatically; flag strong conflicts for human review.
-- [ ] Preserve existing CodeCome status lifecycle: `PENDING` -> Phase 3 counter-analysis -> Phase 4 validation -> Phase 5 exploitation.
-- [ ] Every gap-scan claim must distinguish notes-only evidence from active findings.
-- [ ] Store all gap-scan outputs under `itemdb/notes/`, `runs/`, or `itemdb/reports/`; do not leave important analysis only in logs.
+- [x] Never re-open `REJECTED` or `DUPLICATE` findings automatically; flag strong conflicts for human review.
+- [x] Preserve existing CodeCome status lifecycle: `PENDING` -> Phase 3 counter-analysis -> Phase 4 validation -> Phase 5 exploitation.
+- [x] Every gap-scan claim must distinguish notes-only evidence from active findings.
+- [x] Store all gap-scan outputs under `itemdb/notes/`, `runs/`, or `itemdb/reports/`; do not leave important analysis only in logs.
 
 ### Gap-Scan Artifact TODO
 
