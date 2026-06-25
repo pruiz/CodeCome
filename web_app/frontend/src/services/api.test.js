@@ -76,4 +76,21 @@ describe('api auth handling', () => {
     expect(options.body.get('auto_continue')).toBe('true');
     expect(options.body.get('codecome_yml')).toBe('project: demo');
   });
+
+  it('queues gap scan workflow actions with auth headers', async () => {
+    window.localStorage.setItem(authApi.tokenKey, 'fresh-token');
+    global.fetch = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ message: 'queued' }), { status: 200 })));
+
+    await auditsApi.runGapScan('audit-1');
+    await auditsApi.runGapCompare('audit-1');
+    await auditsApi.runGapSweep('audit-1', 'GAP-0007');
+    await auditsApi.markGapCandidate('audit-1', 'GAP-0007', { decision: 'ignored', note: 'not relevant' });
+
+    expect(global.fetch.mock.calls[0][0]).toBe('/api/audits/audit-1/gap-scan');
+    expect(global.fetch.mock.calls[1][0]).toBe('/api/audits/audit-1/gap-compare');
+    expect(global.fetch.mock.calls[2][0]).toBe('/api/audits/audit-1/gap-sweep?candidate=GAP-0007');
+    expect(global.fetch.mock.calls[3][0]).toBe('/api/audits/audit-1/gap-candidates/GAP-0007/mark');
+    expect(global.fetch.mock.calls.every(([, options]) => options.headers.Authorization === 'Bearer fresh-token')).toBe(true);
+    expect(JSON.parse(global.fetch.mock.calls[3][1].body)).toEqual({ decision: 'ignored', note: 'not relevant' });
+  });
 });

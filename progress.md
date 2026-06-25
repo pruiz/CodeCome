@@ -147,7 +147,7 @@ Goal: after CodeCome finishes the normal workflow through `make exploit-all`, op
 - [x] Add unit tests for candidate schema parsing and validation.
 - [x] Add unit tests for semantic comparison against existing findings.
 - [x] Add backend API tests for starting/listing gap scans.
-- [ ] Add frontend tests for Gap Scan UI states and candidate table actions.
+- [x] Add frontend tests for Gap Scan UI states and candidate table actions.
 - [ ] Add integration test using a small fixture where Phase 1 notes mention stack trace disclosure but no finding exists, and gap-compare marks it `missing_sweep`.
 - [ ] Add regression test that a covered finding is not re-swept.
 - [ ] Run full `./web_app/run-checks.sh` before every commit.
