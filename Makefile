@@ -3,7 +3,7 @@
 
 .PHONY: help init venv env-check check status next-id frontmatter check-phase-artifacts tests test-parity itemdb-reset codeql-clean index report
 .PHONY: findings findings-create findings-move findings-evidence findings-package
-.PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all gap-scan gap-compare opencode-raw
+.PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all gap-scan gap-compare gap-sweep opencode-raw
 .PHONY: sandbox-setup sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-reset sandbox-build sandbox-test
 .PHONY: sandbox-list sandbox-inspect sandbox-detect sandbox-bootstrap sandbox-validate sandbox-regenerate sandbox-status show-model
 
@@ -66,6 +66,7 @@ help:
 	@printf "    $(BOLD)make exploit-all$(RESET)              Exploit all CONFIRMED findings\n"
 	@printf "    $(BOLD)make gap-scan$(RESET)                 Optional post-exploit SAST gap scan\n"
 	@printf "    $(BOLD)make gap-compare$(RESET)              Compare gap candidates to findings\n"
+	@printf "    $(BOLD)make gap-sweep$(RESET)                Run bounded sweeps for missing gap candidates\n"
 	@printf "\n"
 	@printf "  $(BOLD)$(CYAN)Deep Sweep (Optional):$(RESET)\n"
 	@printf "\n"
@@ -275,6 +276,9 @@ gap-scan: env-check
 
 gap-compare: env-check
 	@$(PYTHON) tools/gap-compare.py
+
+gap-sweep: env-check
+	@$(PYTHON) tools/gap-sweep.py $(ARGS)
 
 # ---------------------------------------------------------------------------
 # Workspace tools

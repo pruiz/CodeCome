@@ -113,12 +113,12 @@ Goal: after CodeCome finishes the normal workflow through `make exploit-all`, op
 
 - [x] Add `make gap-scan` to run the independent SAST prompt and write candidate artifacts.
 - [x] Add `make gap-compare` to compare candidates against current findings and notes.
-- [ ] Add `make gap-sweep` to run `make sweep FILE=...` for selected missing candidates.
+- [x] Add `make gap-sweep` to run `make sweep FILE=...` for selected missing candidates.
 - [ ] Add `make gap-loop` as an optional bounded sequence: `gap-scan`, `gap-compare`, `gap-sweep`, `phase-3`, `validate-all`, `exploit-all`.
-- [ ] Ensure `gap-sweep` can run one selected candidate or all candidates marked `missing_sweep`.
-- [ ] Ensure `gap-sweep` records which files were swept and which findings were created.
-- [ ] Prevent duplicate sweeps of the same file/candidate in the same audit unless explicitly forced.
-- [ ] Use existing `make sweep FILE=...` rather than duplicating line-by-line audit logic.
+- [x] Ensure `gap-sweep` can run one selected candidate or all candidates marked `missing_sweep`.
+- [x] Ensure `gap-sweep` records which files were swept and which findings were created.
+- [x] Prevent duplicate sweeps of the same file/candidate in the same audit unless explicitly forced.
+- [x] Use existing `make sweep FILE=...` rather than duplicating line-by-line audit logic.
 
 ### Backend/API TODO
 
