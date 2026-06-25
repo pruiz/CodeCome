@@ -87,20 +87,52 @@ def gap_candidate_payloads(workspace_path: Path) -> list[dict]:
     for candidate in candidates:
         result = compare_candidate(candidate, findings, ctx.notes_root)
         raw = dict(candidate.raw)
+        manual_decision = raw.get("manual_decision") if isinstance(raw.get("manual_decision"), dict) else None
+        if manual_decision:
+            manual_value = manual_decision.get("decision")
+            result_decision = "needs_human" if manual_value == "needs_human" else "defer_low_signal"
+            result_action = {"ignored": "ignore", "deferred": "defer", "needs_human": "review"}.get(str(manual_value), "none")
+            result_rationale = manual_decision.get("note") or f"Manually marked as {manual_value}."
+        else:
+            result_decision = result.decision
+            result_action = result.action
+            result_rationale = result.rationale
         raw.update({
             "id": candidate.id,
             "title": candidate.title,
             "category": candidate.category,
-            "decision": result.decision,
-            "action": result.action,
+            "decision": result_decision,
+            "action": result_action,
             "match_confidence": result.match_confidence,
             "matched_existing_findings": result.matched_findings,
             "matched_notes": result.matched_notes,
-            "comparison_rationale": result.rationale,
+            "comparison_rationale": result_rationale,
             "sweep_files": result.sweep_files or candidate.sweep_files,
         })
         payloads.append(raw)
     return payloads
+
+
+def mark_gap_candidate(workspace_path: Path, candidate_id: str, request: schemas.GapCandidateMarkRequest) -> dict:
+    if not re.fullmatch(r"GAP-\d{4,}", candidate_id):
+        raise HTTPException(status_code=400, detail="candidate_id must look like GAP-0001")
+    path = workspace_path / "itemdb" / "notes" / "sast-gap-candidates.yml"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Gap candidates file not found")
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    candidates = data.get("candidates") or []
+    if not isinstance(candidates, list):
+        raise HTTPException(status_code=400, detail="Gap candidates file has invalid candidates list")
+    for candidate in candidates:
+        if isinstance(candidate, dict) and str(candidate.get("id")) == candidate_id:
+            candidate["manual_decision"] = {
+                "decision": request.decision,
+                "note": request.note or "",
+                "updated_at": datetime.now().isoformat(timespec="seconds"),
+            }
+            path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+            return candidate
+    raise HTTPException(status_code=404, detail="Gap candidate not found")
 
 
 def sandbox_runtime_env(audit, workspace_path: Path) -> dict:
@@ -407,6 +439,29 @@ def list_gap_candidates(audit_id: UUID, db: Session = Depends(get_db)):
         "audit_id": str(audit_id),
         "total": len(candidates),
         "candidates": candidates,
+    }
+
+
+@router.post("/{audit_id}/gap-candidates/{candidate_id}/mark")
+def mark_gap_candidate_decision(
+    audit_id: UUID,
+    candidate_id: str,
+    request: schemas.GapCandidateMarkRequest,
+    db: Session = Depends(get_db),
+):
+    """Manually mark a gap candidate as ignored, deferred, or needing human review."""
+    audit = crud.get_audit(db, audit_id)
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    workspace_path = Path(audit.workspace_path)
+    if not workspace_path.exists():
+        raise HTTPException(status_code=404, detail="Audit workspace not found")
+    candidate = mark_gap_candidate(workspace_path, candidate_id, request)
+    return {
+        "audit_id": str(audit_id),
+        "candidate_id": candidate_id,
+        "candidate": candidate,
+        "message": f"Gap candidate marked as {request.decision}",
     }
 
 

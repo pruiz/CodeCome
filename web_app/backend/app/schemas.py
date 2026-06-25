@@ -30,6 +30,11 @@ class AuditUpdate(BaseModel):
     user_notes: Optional[str] = None
 
 
+class GapCandidateMarkRequest(BaseModel):
+    decision: str = Field(..., pattern="^(ignored|deferred|needs_human)$")
+    note: Optional[str] = None
+
+
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=1, max_length=255)
     display_name: Optional[str] = Field(None, max_length=255)

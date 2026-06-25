@@ -374,3 +374,46 @@ def test_list_gap_candidates_returns_empty_when_file_missing(monkeypatch, tmp_pa
     response = audits.list_gap_candidates(audit_id, db=object())
 
     assert response == {"audit_id": audit_id, "total": 0, "candidates": []}
+
+
+def test_mark_gap_candidate_persists_manual_decision(monkeypatch, tmp_path):
+    audit_id = "11111111-2222-3333-4444-555555555555"
+    audit = SimpleNamespace(id=audit_id, workspace_path=str(tmp_path))
+    notes = tmp_path / "itemdb" / "notes"
+    notes.mkdir(parents=True)
+    (notes / "sast-gap-candidates.yml").write_text("""
+candidates:
+  - id: GAP-0001
+    title: Stack trace disclosure
+    category: Information Disclosure
+    files: [src/EmployeeController.java]
+    matched_notes: [itemdb/notes/attack-surface.md:66]
+    sweep_files: [src/EmployeeController.java]
+    safety: {source_backed: true}
+""", encoding="utf-8")
+
+    monkeypatch.setattr(audits.crud, "get_audit", lambda db_arg, candidate_id: audit)
+
+    response = audits.mark_gap_candidate_decision(
+        audit_id,
+        "GAP-0001",
+        schemas.GapCandidateMarkRequest(decision="ignored", note="Accepted risk."),
+        db=object(),
+    )
+
+    assert response["message"] == "Gap candidate marked as ignored"
+    listed = audits.list_gap_candidates(audit_id, db=object())
+    candidate = listed["candidates"][0]
+    assert candidate["manual_decision"]["decision"] == "ignored"
+    assert candidate["decision"] == "defer_low_signal"
+    assert candidate["action"] == "ignore"
+    assert candidate["comparison_rationale"] == "Accepted risk."
+
+
+def test_mark_gap_candidate_rejects_bad_candidate_id(tmp_path):
+    try:
+        audits.mark_gap_candidate(tmp_path, "bad", schemas.GapCandidateMarkRequest(decision="ignored"))
+    except Exception as exc:
+        assert getattr(exc, "status_code") == 400
+    else:
+        raise AssertionError("Expected HTTPException")
