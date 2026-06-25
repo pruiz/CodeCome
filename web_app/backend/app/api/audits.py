@@ -307,20 +307,30 @@ def run_audit_phase(audit_id: UUID, phase: str = Query(...), db: Session = Depen
 @router.post("/{audit_id}/gap-scan")
 def run_gap_scan(audit_id: UUID, db: Session = Depends(get_db)):
     """Manually queue the optional post-exploit gap-scan step."""
+    return queue_gap_step(db, audit_id, "gap-scan", "Gap scan queued")
+
+
+def queue_gap_step(db: Session, audit_id: UUID, phase: str, message: str):
     audit = crud.get_audit(db, audit_id)
     if not audit:
         raise HTTPException(status_code=404, detail="Audit not found")
     if crud.audit_has_open_blocking_questions(db, audit_id):
         raise HTTPException(status_code=409, detail="Audit has open blocking questions")
-    worker = queue_audit_phase(db, audit, "gap-scan")
+    worker = queue_audit_phase(db, audit, phase)
     return {
         "audit_id": str(audit_id),
-        "status": "gap_scan_running",
-        "phase": "gap-scan",
+        "status": f"{phase.replace('-', '_')}_running",
+        "phase": phase,
         "worker_id": worker.id,
         "worker_name": worker.name,
-        "message": "Gap scan queued",
+        "message": message,
     }
+
+
+@router.post("/{audit_id}/gap-compare")
+def run_gap_compare(audit_id: UUID, db: Session = Depends(get_db)):
+    """Manually queue comparison of gap candidates against existing findings."""
+    return queue_gap_step(db, audit_id, "gap-compare", "Gap compare queued")
 
 
 @router.post("/{audit_id}/continue-after-questions")

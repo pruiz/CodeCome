@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # CodeCome execution sequence. Setup steps are first-class steps in the UI/history.
 PHASE_ORDER = ["make init", "make check", "phase-1", "phase-2", "phase-3", "make validate-all", "make exploit-all", "phase-6"]
 OPTIONAL_PHASES = ["make sweep"]
-ALL_PHASES = ["make init", "make check", "phase-1", "phase-2", "make sweep", "phase-3", "make validate-all", "make exploit-all", "phase-6", "gap-scan"]
+ALL_PHASES = ["make init", "make check", "phase-1", "phase-2", "make sweep", "phase-3", "make validate-all", "make exploit-all", "phase-6", "gap-scan", "gap-compare"]
 AUDIT_ENV_KEY = "__audit_env"
 AUDIT_OPTIONS_KEY = "__audit_options"
 

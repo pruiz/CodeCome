@@ -244,3 +244,31 @@ def test_run_gap_scan_queues_manual_gap_phase(monkeypatch, tmp_path):
     assert audit.current_phase == "gap-scan"
     assert captured["delay"][:3] == (audit_id, "gap-scan", None)
     assert captured["delay"][6] == 4
+
+
+def test_run_gap_compare_queues_manual_gap_phase(monkeypatch, tmp_path):
+    captured = {}
+    audit_id = "11111111-2222-3333-4444-555555555555"
+    audit = SimpleNamespace(
+        id=audit_id,
+        status="completed",
+        assigned_worker_id=4,
+        model_settings={},
+        workspace_path=str(tmp_path),
+        current_phase=None,
+    )
+    worker = SimpleNamespace(id=4, name="local")
+    db = SimpleNamespace(commits=0, commit=lambda: setattr(db, "commits", db.commits + 1))
+
+    monkeypatch.setattr(audits.crud, "get_audit", lambda db_arg, candidate_id: audit)
+    monkeypatch.setattr(audits.crud, "audit_has_open_blocking_questions", lambda db_arg, candidate_id: False)
+    monkeypatch.setattr(audits.crud, "select_available_worker", lambda db_arg, worker_id: worker)
+    monkeypatch.setattr(audits.run_phase_task, "delay", lambda *args: captured.setdefault("delay", args))
+
+    response = audits.run_gap_compare(audit_id, db=db)
+
+    assert response["phase"] == "gap-compare"
+    assert response["message"] == "Gap compare queued"
+    assert audit.current_phase == "gap-compare"
+    assert captured["delay"][:3] == (audit_id, "gap-compare", None)
+    assert captured["delay"][6] == 4
