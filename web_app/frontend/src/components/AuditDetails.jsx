@@ -1096,6 +1096,7 @@ function GapScanPanel({ auditId }) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [queueing, setQueueing] = useState(false);
+  const [comparing, setComparing] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -1128,6 +1129,20 @@ function GapScanPanel({ auditId }) {
     }
   };
 
+  const runGapCompare = async () => {
+    setComparing(true);
+    setMessage('');
+    setError('');
+    try {
+      const response = await auditsApi.runGapCompare(auditId);
+      setMessage(response.message || 'Gap compare queued.');
+    } catch (err) {
+      setError(err.message || 'Failed to queue gap compare');
+    } finally {
+      setComparing(false);
+    }
+  };
+
   const counts = (data.candidates || []).reduce((acc, candidate) => {
     const key = candidate.decision || 'unknown';
     acc[key] = (acc[key] || 0) + 1;
@@ -1147,6 +1162,9 @@ function GapScanPanel({ auditId }) {
         <div className="flex gap-2">
           <button onClick={runGapScan} disabled={queueing} className="rounded bg-blue-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-gray-700">
             {queueing ? 'Queueing...' : 'Run Gap Scan'}
+          </button>
+          <button onClick={runGapCompare} disabled={comparing || !(data.candidates || []).length} className="rounded bg-purple-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-purple-600 disabled:cursor-not-allowed disabled:bg-gray-700">
+            {comparing ? 'Queueing...' : 'Compare Candidates'}
           </button>
           <button onClick={load} className="rounded bg-gray-800 px-3 py-1.5 text-sm hover:bg-gray-700">Refresh</button>
         </div>

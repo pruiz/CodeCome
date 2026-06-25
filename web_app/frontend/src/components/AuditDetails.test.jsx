@@ -58,6 +58,9 @@ describe('AuditDetails', () => {
       if (requested.pathname.includes('/api/audits/audit-1/gap-scan')) {
         return Promise.resolve(new Response(JSON.stringify({ message: 'Gap scan queued', phase: 'gap-scan' }), { status: 200 }));
       }
+      if (requested.pathname.includes('/api/audits/audit-1/gap-compare')) {
+        return Promise.resolve(new Response(JSON.stringify({ message: 'Gap compare queued', phase: 'gap-compare' }), { status: 200 }));
+      }
       if (requested.pathname.includes('/api/audits/audit-1/sandbox/start')) {
         return Promise.resolve(new Response(JSON.stringify({ command: './sandbox/scripts/up.sh', exit_code: 0, stdout: 'ok', stderr: '' }), { status: 200 }));
       }
@@ -233,6 +236,7 @@ describe('AuditDetails', () => {
     expect(screen.getByText('missing sweep')).toBeInTheDocument();
     expect(screen.getByText('needs human')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Run Gap Scan' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Compare Candidates' })).toBeInTheDocument();
     expect(screen.getAllByText('1').length).toBeGreaterThan(0);
   });
 
@@ -254,5 +258,25 @@ describe('AuditDetails', () => {
       expect(call).toBeTruthy();
     });
     expect(await screen.findByText('Gap scan queued')).toBeInTheDocument();
+  });
+
+  it('queues gap comparison from the gap scan tab', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/audit/audit-1']}>
+        <Routes>
+          <Route path="/audit/:id" element={<AuditDetails />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Gap Scan' }));
+    await user.click(await screen.findByRole('button', { name: 'Compare Candidates' }));
+
+    await waitFor(() => {
+      const call = global.fetch.mock.calls.find(([url, options]) => String(url).includes('/gap-compare') && options?.method === 'POST');
+      expect(call).toBeTruthy();
+    });
+    expect(await screen.findByText('Gap compare queued')).toBeInTheDocument();
   });
 });
