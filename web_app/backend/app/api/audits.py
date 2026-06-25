@@ -116,7 +116,7 @@ def next_audit_step(phase_executions, model_settings: dict | None = None) -> str
     return "phase-6"
 
 
-def queue_audit_phase(db: Session, audit, phase: str):
+def queue_audit_phase(db: Session, audit, phase: str, extra_env: dict | None = None):
     if phase not in ALL_PHASES:
         raise HTTPException(status_code=400, detail="Unsupported phase")
     if "running" in audit.status:
@@ -131,7 +131,7 @@ def queue_audit_phase(db: Session, audit, phase: str):
     phase_config = model_settings.get(phase, {})
     model = phase_config.get("model")
     variant = phase_config.get("variant")
-    env_overrides = with_user_answers_env(Path(audit.workspace_path), merged_phase_env(model_settings, phase))
+    env_overrides = with_user_answers_env(Path(audit.workspace_path), {**merged_phase_env(model_settings, phase), **(extra_env or {})})
 
     audit.current_phase = phase
     db.commit()
@@ -310,13 +310,13 @@ def run_gap_scan(audit_id: UUID, db: Session = Depends(get_db)):
     return queue_gap_step(db, audit_id, "gap-scan", "Gap scan queued")
 
 
-def queue_gap_step(db: Session, audit_id: UUID, phase: str, message: str):
+def queue_gap_step(db: Session, audit_id: UUID, phase: str, message: str, extra_env: dict | None = None):
     audit = crud.get_audit(db, audit_id)
     if not audit:
         raise HTTPException(status_code=404, detail="Audit not found")
     if crud.audit_has_open_blocking_questions(db, audit_id):
         raise HTTPException(status_code=409, detail="Audit has open blocking questions")
-    worker = queue_audit_phase(db, audit, phase)
+    worker = queue_audit_phase(db, audit, phase, extra_env=extra_env)
     return {
         "audit_id": str(audit_id),
         "status": f"{phase.replace('-', '_')}_running",
@@ -331,6 +331,18 @@ def queue_gap_step(db: Session, audit_id: UUID, phase: str, message: str):
 def run_gap_compare(audit_id: UUID, db: Session = Depends(get_db)):
     """Manually queue comparison of gap candidates against existing findings."""
     return queue_gap_step(db, audit_id, "gap-compare", "Gap compare queued")
+
+
+@router.post("/{audit_id}/gap-sweep")
+def run_gap_sweep(audit_id: UUID, candidate: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    """Manually queue targeted sweeps for missing gap candidates."""
+    extra_env = None
+    candidate = candidate if isinstance(candidate, str) else None
+    if candidate:
+        if not re.fullmatch(r"GAP-\d{4,}", candidate):
+            raise HTTPException(status_code=400, detail="candidate must look like GAP-0001")
+        extra_env = {"ARGS": f"--candidate {candidate}"}
+    return queue_gap_step(db, audit_id, "gap-sweep", "Gap sweep queued", extra_env=extra_env)
 
 
 @router.post("/{audit_id}/continue-after-questions")
