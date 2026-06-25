@@ -137,6 +137,44 @@ def test_local_folder_audit_copies_source_into_workspace(tmp_path):
     assert (workspace / "src" / "nested" / "config.yml").read_text() == "name: demo\n"
 
 
+def test_latest_report_path_prefers_newest_markdown(tmp_path):
+    reports = tmp_path / "itemdb" / "reports"
+    reports.mkdir(parents=True)
+    older = reports / "old.txt"
+    newer = reports / "report.md"
+    older.write_text("old")
+    newer.write_text("new")
+
+    assert audits.latest_report_path(tmp_path) == newer
+
+
+def test_download_latest_report_fetches_remote_reports_when_missing(monkeypatch, tmp_path):
+    audit = SimpleNamespace(
+        id="audit-remote",
+        workspace_path=str(tmp_path),
+        assigned_worker_id=3,
+    )
+    worker = SimpleNamespace(type="ssh")
+
+    class FakeExecutor:
+        def __init__(self, worker_arg):
+            assert worker_arg is worker
+
+        def download_reports(self, audit_id, local_workspace_path):
+            assert audit_id == "audit-remote"
+            report_dir = local_workspace_path / "itemdb" / "reports"
+            report_dir.mkdir(parents=True)
+            (report_dir / "remote-report.md").write_text("# Report\n")
+
+    monkeypatch.setattr(audits.crud, "get_audit", lambda db, audit_id: audit)
+    monkeypatch.setattr(audits.crud, "get_worker", lambda db, worker_id: worker)
+    monkeypatch.setattr(audits, "SSHCodeComeExecutor", FakeExecutor)
+
+    response = audits.download_latest_report("audit-remote", db=object())
+
+    assert response.path.endswith("remote-report.md")
+
+
 def test_upload_zip_auto_continue_queues_first_phase(monkeypatch, tmp_path):
     captured = {}
     workspace = tmp_path / "workspace"

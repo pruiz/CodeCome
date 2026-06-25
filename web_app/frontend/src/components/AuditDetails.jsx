@@ -266,6 +266,7 @@ function SelectedPhasePanel({ audit, selectedPhase, selectedExecutionId, onRerun
   const [phaseFindings, setPhaseFindings] = useState(null);
   const [phaseTriages, setPhaseTriages] = useState(null);
   const [triageMessage, setTriageMessage] = useState('');
+  const [reportMessage, setReportMessage] = useState('');
   const executions = audit?.phase_executions || [];
   const execution = selectedExecutionId
     ? executions.find((item) => item.id === selectedExecutionId)
@@ -358,6 +359,24 @@ function SelectedPhasePanel({ audit, selectedPhase, selectedExecutionId, onRerun
     });
   };
 
+  const downloadReport = async () => {
+    setReportMessage('');
+    try {
+      const { blob, filename } = await auditsApi.downloadReport(audit.id);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setReportMessage(`Downloaded ${filename}.`);
+    } catch (error) {
+      setReportMessage(`Download failed: ${error.message}`);
+    }
+  };
+
   return (
     <div className={`mt-6 rounded-xl border p-4 ${style.row}`}>
       <div className="flex items-start justify-between gap-4">
@@ -395,8 +414,18 @@ function SelectedPhasePanel({ audit, selectedPhase, selectedExecutionId, onRerun
               Run Optional Sweep
             </button>
           )}
+          {selectedPhase === 'phase-6' && (
+            <button
+              onClick={downloadReport}
+              className="rounded bg-green-700 px-3 py-2 text-sm font-semibold hover:bg-green-600"
+            >
+              Download Report
+            </button>
+          )}
         </div>
       </div>
+
+      {reportMessage && <div className="mt-3 rounded bg-gray-950 px-3 py-2 text-sm text-gray-300">{reportMessage}</div>}
 
       {execution ? (
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">

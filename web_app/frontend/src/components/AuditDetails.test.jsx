@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import AuditDetails from './AuditDetails';
 
-const audit = {
+const baseAudit = {
   id: 'audit-1',
   name: 'Question Audit',
   status: 'paused_for_questions',
@@ -29,15 +29,24 @@ const audit = {
   phase_executions: [],
 };
 
+let auditPayload;
+
 describe('AuditDetails', () => {
   beforeEach(() => {
+    auditPayload = { ...baseAudit };
     global.fetch = vi.fn((url, options = {}) => {
       const requested = new URL(String(url), 'http://localhost');
+      if (requested.pathname.includes('/api/audits/audit-1/report/download')) {
+        return Promise.resolve(new Response('# Report\n', {
+          status: 200,
+          headers: { 'content-disposition': 'attachment; filename="report.md"' },
+        }));
+      }
       if (requested.pathname.includes('/api/audits/audit-1/sandbox/start')) {
         return Promise.resolve(new Response(JSON.stringify({ command: './sandbox/scripts/up.sh', exit_code: 0, stdout: 'ok', stderr: '' }), { status: 200 }));
       }
       if (requested.pathname.includes('/api/audits/audit-1')) {
-        return Promise.resolve(new Response(JSON.stringify(audit), { status: 200 }));
+        return Promise.resolve(new Response(JSON.stringify(auditPayload), { status: 200 }));
       }
       if (requested.pathname.includes('/api/questions')) {
         return Promise.resolve(new Response(JSON.stringify({
@@ -47,6 +56,12 @@ describe('AuditDetails', () => {
             { id: 2, audit_id: 'audit-1', phase_execution_id: 1, phase: 'phase-3', question: 'Answered?', status: 'ANSWERED', blocking: true, created_at: '2026-01-01T00:00:00' },
           ],
         }), { status: 200 }));
+      }
+      if (requested.pathname.includes('/api/logs')) {
+        return Promise.resolve(new Response(JSON.stringify({ total: 0, logs: [], summary: { turns: 0 } }), { status: 200 }));
+      }
+      if (requested.pathname.includes('/api/phases')) {
+        return Promise.resolve(new Response(JSON.stringify({ triages: [], findings: [], total: 0 }), { status: 200 }));
       }
       if (requested.pathname.includes('/api/users')) {
         return Promise.resolve(new Response(JSON.stringify({ total: 0, users: [] }), { status: 200 }));
@@ -132,5 +147,34 @@ describe('AuditDetails', () => {
       expect(sandboxCall).toBeTruthy();
     });
     expect(await screen.findByText(/Sandbox command finished with exit code 0/i)).toBeInTheDocument();
+  });
+
+  it('downloads the report from the reporting phase', async () => {
+    const user = userEvent.setup();
+    auditPayload = {
+      ...baseAudit,
+      status: 'phase_6_complete',
+      current_phase: 'phase-6',
+      phase_executions: [{ id: 99, audit_id: 'audit-1', phase: 'phase-6', attempt: 1, status: 'success', exit_code: 0 }],
+    };
+    Object.defineProperty(window.URL, 'createObjectURL', { value: vi.fn(() => 'blob:report'), configurable: true });
+    Object.defineProperty(window.URL, 'revokeObjectURL', { value: vi.fn(), configurable: true });
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    render(
+      <MemoryRouter initialEntries={['/audit/audit-1']}>
+        <Routes>
+          <Route path="/audit/:id" element={<AuditDetails />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Current Phase' }));
+    expect(await screen.findByRole('button', { name: 'Download Report' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Download Report' }));
+
+    expect(window.URL.createObjectURL).toHaveBeenCalled();
+    expect(clickSpy).toHaveBeenCalled();
+    expect(await screen.findByText('Downloaded report.md.')).toBeInTheDocument();
   });
 });

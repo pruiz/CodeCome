@@ -157,6 +157,21 @@ class SSHCodeComeExecutor:
             if client:
                 client.close()
 
+    def download_reports(self, audit_id: str, local_workspace_path: Path) -> None:
+        client = None
+        try:
+            client = self._connect()
+            sftp = client.open_sftp()
+            remote_workspace = self.remote_workspace_path(audit_id)
+            self._download_if_exists(
+                sftp,
+                posixpath.join(remote_workspace, "itemdb", "reports"),
+                local_workspace_path / "itemdb" / "reports",
+            )
+        finally:
+            if client:
+                client.close()
+
     def cancel_remote_pid(self, remote_pid: str | None) -> None:
         if not remote_pid:
             return

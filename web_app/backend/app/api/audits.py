@@ -35,6 +35,26 @@ def sandbox_start_command(audit) -> str:
     return str(command).strip() or "./sandbox/scripts/up.sh"
 
 
+def latest_report_path(workspace_path: Path) -> Path | None:
+    reports_dir = workspace_path / "itemdb" / "reports"
+    if not reports_dir.exists():
+        return None
+    candidates = [path for path in reports_dir.rglob("*") if path.is_file() and not path.name.startswith(".")]
+    if not candidates:
+        return None
+    markdown = [path for path in candidates if path.suffix.lower() in {".md", ".markdown"}]
+    return max(markdown or candidates, key=lambda path: path.stat().st_mtime)
+
+
+def sync_remote_reports_if_needed(audit, workspace_path: Path, db: Session) -> None:
+    if not audit.assigned_worker_id:
+        return
+    worker = crud.get_worker(db, audit.assigned_worker_id)
+    if not worker or worker.type not in ("ssh", "proxmox-vm", "proxmox-lxc"):
+        return
+    SSHCodeComeExecutor(worker).download_reports(str(audit.id), workspace_path)
+
+
 def sandbox_runtime_env(audit, workspace_path: Path) -> dict:
     audit_slug = re.sub(r"[^a-z0-9]+", "", str(audit.id).lower()) or "audit"
     project_name = f"codecome_{audit_slug}"[:63]
@@ -352,6 +372,27 @@ def start_audit_sandbox(audit_id: UUID, db: Session = Depends(get_db)):
         "stdout": result.stdout[-4000:],
         "stderr": result.stderr[-4000:],
     }
+
+
+@router.get("/{audit_id}/report/download")
+def download_latest_report(audit_id: UUID, db: Session = Depends(get_db)):
+    audit = crud.get_audit(db, audit_id)
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    workspace_path = Path(audit.workspace_path)
+    if not workspace_path.exists():
+        raise HTTPException(status_code=404, detail="Audit workspace not found")
+
+    report_path = latest_report_path(workspace_path)
+    if report_path is None:
+        try:
+            sync_remote_reports_if_needed(audit, workspace_path, db)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Failed to fetch remote report artifacts: {exc}")
+        report_path = latest_report_path(workspace_path)
+    if report_path is None:
+        raise HTTPException(status_code=404, detail="No report file found under itemdb/reports")
+    return FileResponse(str(report_path), filename=report_path.name, media_type="text/markdown")
 
 
 @router.post("/{audit_id}/pause")

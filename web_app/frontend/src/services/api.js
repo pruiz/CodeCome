@@ -88,6 +88,16 @@ export const auditsApi = {
   start: (id) => {
     return apiFetch(`${API_BASE}/audits/${id}/start`, { method: 'POST' }).then(res => parseResponse(res, 'Failed to start audit'));
   },
+  downloadReport: async (id) => {
+    const res = await apiFetch(`${API_BASE}/audits/${id}/report/download`);
+    if (!res.ok) {
+      const data = await parseResponse(res, 'Failed to download report');
+      return data;
+    }
+    const disposition = res.headers.get('content-disposition') || '';
+    const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
+    return { blob: await res.blob(), filename: filenameMatch?.[1] || `codecome-report-${id}.md` };
+  },
   runPhase: (id, phase) => {
     return apiFetch(`${API_BASE}/audits/${id}/run-phase?phase=${encodeURIComponent(phase)}`, { method: 'POST' }).then(res => parseResponse(res, 'Failed to run phase'));
   },
