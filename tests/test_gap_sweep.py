@@ -43,6 +43,29 @@ candidates:
 """, encoding="utf-8")
 
 
+def write_finding(root: Path, status: str, finding_id: str, *, title: str, category: str, files: list[str], cwe: list[str] | None = None):
+    directory = root / "itemdb" / "findings" / status
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{finding_id}-demo.md"
+    path.write_text(
+        "---\n"
+        f"id: \"{finding_id}\"\n"
+        f"title: \"{title}\"\n"
+        f"status: \"{status}\"\n"
+        f"category: \"{category}\"\n"
+        f"cwe: {cwe or []}\n"
+        f"files: {files}\n"
+        "symbols: []\n"
+        "sources: []\n"
+        "sinks: []\n"
+        "trust_boundary: \"remote user -> server response\"\n"
+        "---\n"
+        f"# Summary\n\n{title}\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def test_sweep_items_only_use_missing_sweep_results():
     results = [
         ComparisonResult(candidate_id="GAP-0001", decision="missing_sweep", action="sweep", match_confidence="NONE", sweep_files=["src/A.java"]),
@@ -102,3 +125,30 @@ def test_run_gap_sweep_can_select_one_candidate(tmp_path):
     run = run_gap_sweep(ctx=ctx, candidate_id="GAP-0001", dry_run=True, limits=GapLimits(max_sweep_files=5, max_sweeps_per_audit=5))
 
     assert [item.file for item in run.selected] == ["src/A.java", "src/B.java"]
+
+
+def test_run_gap_sweep_does_not_resweep_covered_candidate(tmp_path):
+    ctx = make_ctx(tmp_path)
+    write_finding(
+        tmp_path,
+        "PENDING",
+        "CC-0007",
+        title="Stack trace disclosure",
+        category="Information Disclosure",
+        files=["src/A.java"],
+    )
+    write_candidates(tmp_path)
+    calls = []
+
+    def fake_runner(command, cwd, check):
+        calls.append((command, cwd, check))
+        class Result:
+            returncode = 0
+        return Result()
+
+    run = run_gap_sweep(ctx=ctx, runner=fake_runner, limits=GapLimits(max_sweep_files=5, max_sweeps_per_audit=5))
+
+    assert calls == []
+    assert run.selected == []
+    assert run.summary_path and run.summary_path.exists()
+    assert "None." in run.summary_path.read_text(encoding="utf-8")
