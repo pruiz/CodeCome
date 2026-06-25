@@ -67,6 +67,31 @@ def test_phase_script_contains_env_and_exit_code_file():
     assert "exit_code" in script
 
 
+def test_gap_sweep_phase_script_uses_make_target_and_args_env():
+    worker = SimpleNamespace(
+        host="192.0.2.10",
+        port=22,
+        username="codecome",
+        workspace_base_path="/srv/workspaces",
+        config={"ssh_auth": {"method": "password", "password": "secret"}},
+    )
+    executor = SSHCodeComeExecutor(worker)
+
+    script = executor._phase_script(
+        remote_workspace="/srv/workspaces/audit-1",
+        job_dir="/srv/workspaces/audit-1/.codecome-web/jobs/gap-sweep-1",
+        phase="gap-sweep",
+        model=None,
+        variant=None,
+        finding_id=None,
+        thinking=False,
+        env_overrides={"ARGS": "--candidate GAP-0007"},
+    )
+
+    assert "export ARGS='--candidate GAP-0007'" in script
+    assert "make gap-sweep" in script
+
+
 def test_upload_tree_copies_workspace_source_to_remote_worker(tmp_path):
     worker = SimpleNamespace(
         host="192.0.2.10",
@@ -88,6 +113,30 @@ def test_upload_tree_copies_workspace_source_to_remote_worker(tmp_path):
     remote_paths = {remote for _, remote in sftp.puts}
     assert "/srv/workspaces/audit-1/src/app.py" in remote_paths
     assert "/srv/workspaces/audit-1/Makefile" in remote_paths
+
+
+def test_download_artifacts_pulls_itemdb_and_runs(tmp_path):
+    worker = SimpleNamespace(
+        host="192.0.2.10",
+        port=22,
+        username="codecome",
+        workspace_base_path="/srv/workspaces",
+        config={"ssh_auth": {"method": "password", "password": "secret"}},
+    )
+    executor = SSHCodeComeExecutor(worker)
+    calls = []
+
+    def fake_download_if_exists(sftp, remote_path, local_path):
+        calls.append((remote_path, local_path))
+
+    executor._download_if_exists = fake_download_if_exists
+
+    executor._download_artifacts(object(), "/srv/workspaces/audit-1", tmp_path / "audit-1")
+
+    assert calls == [
+        ("/srv/workspaces/audit-1/itemdb", tmp_path / "audit-1" / "itemdb"),
+        ("/srv/workspaces/audit-1/runs", tmp_path / "audit-1" / "runs"),
+    ]
 
 
 def test_read_opencode_config_uses_remote_worker(monkeypatch):

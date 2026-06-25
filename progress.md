@@ -128,7 +128,7 @@ Goal: after CodeCome finishes the normal workflow through `make exploit-all`, op
 - [x] Add API endpoint to list gap candidates and their comparison decisions.
 - [x] Add API endpoint to mark a candidate as ignored/deferred/needs-human.
 - [x] Add phase execution or job metadata support for `gap-scan`, `gap-compare`, and `gap-sweep` steps.
-- [ ] Ensure remote workers receive the workspace before gap-sweep and return `itemdb/notes`, `itemdb/findings`, `runs`, and evidence artifacts after execution.
+- [x] Ensure remote workers receive the workspace before gap-sweep and return `itemdb/notes`, `itemdb/findings`, `runs`, and evidence artifacts after execution.
 - [ ] Ensure worker capacity accounting treats gap steps like existing phase jobs.
 
 ### Frontend/UI TODO
