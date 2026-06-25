@@ -96,9 +96,9 @@ function FindingTimeline({ finding, frontmatter }) {
               <span className={`h-2.5 w-2.5 rounded-full shadow-lg ${timelinePhaseStyle(item.label).dot}`}></span>
               <div className={`text-xs font-semibold uppercase tracking-wide ${timelinePhaseStyle(item.label).label}`}>{item.label}</div>
             </div>
-            <div className={`mt-2 text-sm font-semibold ${timelinePhaseStyle(item.label).status}`}>{item.status}</div>
+            <div className={`mt-2 max-h-10 overflow-y-auto break-words pr-1 text-sm font-semibold ${timelinePhaseStyle(item.label).status}`}>{item.status}</div>
             <div className="mt-1 text-xs text-gray-500">{formatDate(item.time)}</div>
-            <div className="mt-2 max-h-9 overflow-hidden text-xs text-gray-400">{item.detail}</div>
+            <div className="mt-2 max-h-20 overflow-y-auto whitespace-pre-wrap break-words pr-1 text-xs text-gray-400">{item.detail}</div>
           </div>
         ))}
       </div>

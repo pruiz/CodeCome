@@ -22,7 +22,7 @@ const finding = {
     entry_points: ['GET /rce'],
     symbols: ['RceController.exec'],
     trust_boundary: 'HTTP user -> shell',
-    validation: { status: 'NOT_STARTED', evidence_dir: 'itemdb/evidence/CC-0001' },
+    validation: { status: 'NOT_STARTED', summary: 'Very long validation summary that should remain visible through a scrollable timeline card instead of being clipped out of view.' },
     exploitation: { status: 'NOT_STARTED', artifacts_dir: 'itemdb/evidence/CC-0001/exploits' },
   },
   content: '# Summary\n\nDangerous command execution.',
@@ -63,6 +63,7 @@ describe('FindingDetails', () => {
     expect(screen.getByText('Hypothesis')).toBeInTheDocument();
     expect(screen.getByText('Counter-analysis')).toBeInTheDocument();
     expect(screen.getByText('Validation')).toBeInTheDocument();
+    expect(screen.getByText(/Very long validation summary/)).toHaveClass('overflow-y-auto');
     expect(screen.getByText('Exploitation')).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText('Status'), 'CONFIRMED');
