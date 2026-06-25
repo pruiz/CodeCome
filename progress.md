@@ -133,7 +133,7 @@ Goal: after CodeCome finishes the normal workflow through `make exploit-all`, op
 
 ### Frontend/UI TODO
 
-- [ ] Add `Gap Scan` tab or Overview panel in audit details.
+- [x] Add `Gap Scan` tab or Overview panel in audit details.
 - [ ] Add button `Run Gap Scan` after `make exploit-all` or whenever the user explicitly chooses.
 - [ ] Add button `Compare Candidates` after gap scan completes.
 - [ ] Add table of gap candidates with status/action, severity hint, files, matched findings, and recommended sweep files.

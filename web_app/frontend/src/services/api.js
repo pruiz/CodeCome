@@ -107,6 +107,9 @@ export const auditsApi = {
   startSandbox: (id) => {
     return apiFetch(`${API_BASE}/audits/${id}/sandbox/start`, { method: 'POST' }).then(res => parseResponse(res, 'Failed to start sandbox'));
   },
+  gapCandidates: (id) => {
+    return apiFetch(`${API_BASE}/audits/${id}/gap-candidates`).then(res => parseResponse(res, 'Failed to load gap candidates'));
+  },
 };
 
 export const findingsApi = {

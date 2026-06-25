@@ -45,6 +45,16 @@ describe('AuditDetails', () => {
           headers: { 'content-disposition': 'attachment; filename="report.md"' },
         }));
       }
+      if (requested.pathname.includes('/api/audits/audit-1/gap-candidates')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          audit_id: 'audit-1',
+          total: 2,
+          candidates: [
+            { id: 'GAP-0001', title: 'Stack trace disclosure', decision: 'missing_sweep', action: 'sweep', severity_hint: 'LOW', sweep_files: ['src/EmployeeController.java'] },
+            { id: 'GAP-0002', title: 'Covered issue', decision: 'covered', action: 'none', severity_hint: 'LOW', sweep_files: [] },
+          ],
+        }), { status: 200 }));
+      }
       if (requested.pathname.includes('/api/audits/audit-1/sandbox/start')) {
         return Promise.resolve(new Response(JSON.stringify({ command: './sandbox/scripts/up.sh', exit_code: 0, stdout: 'ok', stderr: '' }), { status: 200 }));
       }
@@ -200,5 +210,25 @@ describe('AuditDetails', () => {
     expect(window.URL.createObjectURL).toHaveBeenCalled();
     expect(clickSpy).toHaveBeenCalled();
     expect(await screen.findByText('Downloaded report.md.')).toBeInTheDocument();
+  });
+
+  it('shows the gap scan tab with candidate summary and warning', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/audit/audit-1']}>
+        <Routes>
+          <Route path="/audit/:id" element={<AuditDetails />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Gap Scan' }));
+
+    expect(await screen.findByRole('heading', { name: 'Gap Scan' })).toBeInTheDocument();
+    expect(screen.getByText(/not confirmed vulnerabilities/i)).toBeInTheDocument();
+    expect(screen.getByText('Candidates')).toBeInTheDocument();
+    expect(screen.getByText('missing sweep')).toBeInTheDocument();
+    expect(screen.getByText('needs human')).toBeInTheDocument();
+    expect(screen.getAllByText('1').length).toBeGreaterThan(0);
   });
 });

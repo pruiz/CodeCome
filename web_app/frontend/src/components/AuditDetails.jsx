@@ -1090,6 +1090,70 @@ function AuditOverview({ audit, onRefresh }) {
   );
 }
 
+function GapScanPanel({ auditId }) {
+  const [data, setData] = useState({ total: 0, candidates: [] });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await auditsApi.gapCandidates(auditId);
+      setData(response);
+    } catch (err) {
+      setError(err.message || 'Failed to load gap candidates');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, [auditId]);
+
+  const counts = (data.candidates || []).reduce((acc, candidate) => {
+    const key = candidate.decision || 'unknown';
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <section className="space-y-4">
+      <div className="rounded-xl border border-amber-800/70 bg-amber-950/30 p-4 text-sm text-amber-100">
+        Gap scan candidates are independent SAST-style leads, not confirmed vulnerabilities. Use them to decide whether a targeted sweep is worthwhile.
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-xl font-semibold">Gap Scan</h3>
+          <p className="mt-1 text-sm text-gray-500">Candidates from <code>itemdb/notes/sast-gap-candidates.yml</code> with current comparison decisions.</p>
+        </div>
+        <button onClick={load} className="rounded bg-gray-800 px-3 py-1.5 text-sm hover:bg-gray-700">Refresh</button>
+      </div>
+      {error && <div className="rounded bg-red-950/40 px-3 py-2 text-sm text-red-200">{error}</div>}
+      {loading ? (
+        <div className="text-sm text-gray-500">Loading gap candidates...</div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <div className="rounded border border-gray-800 bg-gray-950 p-4">
+            <div className="text-xs uppercase tracking-wide text-gray-500">Candidates</div>
+            <div className="mt-1 text-2xl font-bold text-gray-100">{data.total || 0}</div>
+          </div>
+          {['covered', 'missing_sweep', 'needs_human'].map((decision) => (
+            <div key={decision} className="rounded border border-gray-800 bg-gray-950 p-4">
+              <div className="text-xs uppercase tracking-wide text-gray-500">{decision.replace(/_/g, ' ')}</div>
+              <div className="mt-1 text-2xl font-bold text-gray-100">{counts[decision] || 0}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {!loading && !(data.candidates || []).length && (
+        <div className="rounded border border-gray-800 bg-gray-950 p-6 text-center text-gray-500">No gap candidates found yet. Run the manual gap scan workflow to create candidate artifacts.</div>
+      )}
+    </section>
+  );
+}
+
 export default function AuditDetails() {
   const { id } = useParams();
   const { audit, loading, refetch } = useAudit(id);
@@ -1157,6 +1221,7 @@ export default function AuditDetails() {
     { key: 'logs', label: 'Live Logs' },
     { key: 'findings', label: 'Findings' },
     { key: 'questions', label: 'Questions' },
+    { key: 'gapScan', label: 'Gap Scan' },
     { key: 'config', label: 'Config' },
   ];
   
@@ -1318,6 +1383,7 @@ export default function AuditDetails() {
         {activeTab === 'logs' && <LiveLogs auditId={id} />}
         {activeTab === 'findings' && <FindingsList auditId={id} />}
         {activeTab === 'questions' && <AuditQuestions auditId={id} auditStatus={audit.status} onRefreshSummary={loadQuestionSummary} />}
+        {activeTab === 'gapScan' && <GapScanPanel auditId={id} />}
         {activeTab === 'config' && <ConfigEditor audit={audit} onRefresh={refetch} />}
       </div>
     </div>
