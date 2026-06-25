@@ -270,7 +270,7 @@ exploit-all: env-check
 
 gap-scan: env-check
 	@$(PYTHON) tools/gap-config.py >/dev/null
-	@$(PYTHON) tools/run-agent.py --phase 2 --label "Gap Scan" --agent auditor --prompt-file prompts/phase-2-gap-sast.md
+	@$(PYTHON) tools/run-agent.py --phase 2 --label "Gap Scan" --agent gap-scanner --prompt-file prompts/phase-2-gap-sast.md
 
 # ---------------------------------------------------------------------------
 # Workspace tools

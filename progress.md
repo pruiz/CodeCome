@@ -96,8 +96,8 @@ Goal: after CodeCome finishes the normal workflow through `make exploit-all`, op
 - [x] The prompt must require structured output to `itemdb/notes/sast-gap-candidates.yml` and summary to `itemdb/notes/sast-gap-scan.md`.
 - [x] The prompt must forbid direct confirmation/exploitation and forbid moving findings across statuses.
 - [x] The prompt must require semantic deduplication against existing active and inactive findings.
-- [ ] Decide whether to reuse `auditor` or add a new `.opencode/agents/gap-scanner.md` agent.
-- [ ] If adding `gap-scanner`, define its role as independent SAST reviewer, not validator/exploiter.
+- [x] Decide whether to reuse `auditor` or add a new `.opencode/agents/gap-scanner.md` agent.
+- [x] If adding `gap-scanner`, define its role as independent SAST reviewer, not validator/exploiter.
 
 ### Comparison Engine TODO
 

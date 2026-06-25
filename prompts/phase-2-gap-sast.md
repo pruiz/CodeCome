@@ -17,6 +17,7 @@ Read the following files and directories, all relative to the workspace root:
 - `templates/sast-gap-file-risk-index.yml`
 - `templates/sast-gap-compare-summary.md`
 - `templates/sast-gap-sweep-summary.md`
+- `.opencode/agents/gap-scanner.md`
 - `.opencode/agents/auditor.md`
 - `.opencode/skills/finding-format/SKILL.md`
 - `.opencode/skills/source-recon/SKILL.md`

@@ -91,11 +91,23 @@ def test_makefile_has_manual_gap_scan_target():
 
     assert "gap-scan: env-check" in content
     assert "--label \"Gap Scan\"" in content
-    assert "--agent auditor" in content
+    assert "--agent gap-scanner" in content
     assert "--prompt-file prompts/phase-2-gap-sast.md" in content
     assert "tools/gap-config.py" in content
     assert "gap-loop:" not in content
     assert "gap-sweep:" not in content
+
+
+def test_gap_scanner_agent_is_candidate_only():
+    content = Path(".opencode/agents/gap-scanner.md").read_text(encoding="utf-8")
+
+    assert "You do not create vulnerability findings." in content
+    assert "You do not validate findings." in content
+    assert "You do not develop exploits." in content
+    assert "Do not write under `itemdb/findings/`" in content
+    assert "make findings-create" in content
+    assert "make findings-move" in content
+    assert "Do not claim any candidate is confirmed." in content
 
 
 def test_gap_scan_templates_define_required_artifacts():
