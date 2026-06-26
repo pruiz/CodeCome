@@ -8,6 +8,10 @@ Findings root: `itemdb/findings/`
 
 Compare gap candidates against existing findings and notes to decide whether each candidate is covered, missing, duplicate, conflicting, or needs human review.
 
+# Comparison Mode
+
+First release uses deterministic comparison only. It compares structured candidate fields, finding frontmatter, finding content, and reconnaissance notes. LLM-assisted comparison is intentionally deferred until deterministic behavior is reviewed on real audits.
+
 # Inputs Read
 
 - `itemdb/notes/sast-gap-candidates.yml`

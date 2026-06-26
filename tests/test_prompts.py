@@ -127,6 +127,10 @@ def test_gap_scan_templates_define_required_artifacts():
     for name in expected:
         assert (Path("templates") / name).is_file(), f"missing template {name}"
 
+    compare_template = Path("templates/sast-gap-compare-summary.md").read_text(encoding="utf-8")
+    assert "First release uses deterministic comparison only" in compare_template
+    assert "LLM-assisted comparison is intentionally deferred" in compare_template
+
     candidates = yaml.safe_load(Path("templates/sast-gap-candidates.yml").read_text(encoding="utf-8"))
     candidate = candidates["candidates"][0]
     for field in [

@@ -158,7 +158,7 @@ Goal: after CodeCome finishes the normal workflow through `make exploit-all`, op
 - [x] Decide default max candidates per scan, proposed default: `10`.
 - [x] Decide default max sweep files per gap loop, proposed default: `5`.
 - [x] Decide default max gap loop rounds, proposed default: `1`.
-- [ ] Decide whether candidate comparison should use only deterministic rules first or an LLM-assisted comparator.
+- [x] Decide whether candidate comparison should use only deterministic rules first or an LLM-assisted comparator. Decision: first release uses deterministic comparison only; LLM-assisted comparison is deferred until deterministic behavior is reviewed on real audits.
 - [x] Decide whether `gap-loop` should run automatically before `phase-6` when enabled, or stay manual-only in the first release.
 
 ## Current Major Feature: Users, Question Owners, and Fake AI Answerers
