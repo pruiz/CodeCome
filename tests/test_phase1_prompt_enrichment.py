@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
 from findings.constants import FindingsContext
-from phase1_enrichment.prompt import build_phase1_enrichment_prompt, load_enrichment_prompt, write_enrichment_prompt_artifacts
+from phase1_enrichment.prompt import build_phase1_enrichment_prompt, load_enrichment_prompt, run_prompt_enrichment, write_enrichment_prompt_artifacts
 from phase1_enrichment.semgrep import run_semgrep_enrichment
 
 
@@ -83,3 +83,55 @@ def test_semgrep_enrichment_writes_prompt_copy_from_explicit_file(tmp_path):
     assert run.status == "completed"
     assert run.prompt_copy_path == tmp_path / "runs" / "phase-1-enrichment-prompt.md"
     assert "Prioritize tenant isolation." in run.prompt_copy_path.read_text(encoding="utf-8")
+
+
+def test_run_prompt_enrichment_executes_recon_agent_command(tmp_path):
+    ctx = temp_ctx(tmp_path)
+    (ctx.notes_root).mkdir(parents=True)
+    (ctx.notes_root / "semgrep-results.yml").write_text(
+        "summary:\n  by_file:\n    src/app.php: 1\n",
+        encoding="utf-8",
+    )
+    prompt_file = tmp_path / "prompt.md"
+    prompt_file.write_text("Prioritize tenant isolation.", encoding="utf-8")
+    calls = []
+
+    def fake_runner(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    run = run_prompt_enrichment(ctx=ctx, enrichment_prompt_file=str(prompt_file), runner=fake_runner)
+
+    assert run.status == "completed"
+    assert calls
+    command = calls[0][0]
+    assert command[:4] == ["opencode", "run", "--agent", "recon"]
+    assert "Prioritize tenant isolation." in command[-1]
+    assert "src/app.php" in command[-1]
+    assert "Do not create files under `itemdb/findings/`" in command[-1]
+    assert calls[0][1]["cwd"] == str(tmp_path)
+    assert (tmp_path / "runs" / "phase-1-enrichment-prompt.md").exists()
+    assert list((tmp_path / "runs").glob("phase-1-prompt-enrichment-*.md"))
+
+
+def test_run_prompt_enrichment_prepare_only_does_not_execute(tmp_path):
+    ctx = temp_ctx(tmp_path)
+    prompt_file = tmp_path / "prompt.md"
+    prompt_file.write_text("Review upload routes.", encoding="utf-8")
+
+    def forbidden_runner(command, **kwargs):
+        raise AssertionError("runner should not be called")
+
+    run = run_prompt_enrichment(ctx=ctx, enrichment_prompt_file=str(prompt_file), execute=False, runner=forbidden_runner)
+
+    assert run.status == "prepared"
+    assert run.returncode is None
+    assert run.prompt_copy_path.exists()
+
+
+def test_makefile_has_manual_prompt_enrichment_target():
+    content = (ROOT / "Makefile").read_text(encoding="utf-8")
+
+    assert "phase-1-prompt-enrich: env-check" in content
+    assert "tools/phase-1-prompt-enrich.py" in content
+    assert "phase-1-prompt-enrich" in content

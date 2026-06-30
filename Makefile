@@ -3,7 +3,7 @@
 
 .PHONY: help init venv env-check check status next-id frontmatter check-phase-artifacts tests test-parity itemdb-reset codeql-clean index report
 .PHONY: findings findings-create findings-move findings-evidence findings-package
-.PHONY: phase-1 phase-1-semgrep phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all gap-scan gap-compare gap-sweep gap-loop opencode-raw
+.PHONY: phase-1 phase-1-semgrep phase-1-prompt-enrich phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all gap-scan gap-compare gap-sweep gap-loop opencode-raw
 .PHONY: sandbox-setup sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-reset sandbox-build sandbox-test
 .PHONY: sandbox-list sandbox-inspect sandbox-detect sandbox-bootstrap sandbox-validate sandbox-regenerate sandbox-status show-model
 
@@ -58,6 +58,7 @@ help:
 	@printf "    $(BOLD)make init$(RESET)                     Create/update repo-local virtualenv\n"
 	@printf "    $(BOLD)make phase-1$(RESET)                  Run reconnaissance\n"
 	@printf "    $(BOLD)make phase-1-semgrep$(RESET)          Optional Semgrep enrichment after Phase 1\n"
+	@printf "    $(BOLD)make phase-1-prompt-enrich$(RESET)    Optional user-prompt recon enrichment\n"
 	@printf "    $(BOLD)make phase-2$(RESET)                  Run hypothesis generation\n"
 	@printf "    $(BOLD)make phase-3$(RESET)                  Run counter-analysis\n"
 	@printf "    $(BOLD)make phase-4 FINDING=CC-0001$(RESET)  Validate one finding\n"
@@ -199,6 +200,9 @@ phase-1: env-check
 
 phase-1-semgrep: env-check
 	@$(PYTHON) tools/phase-1-semgrep.py $(ARGS)
+
+phase-1-prompt-enrich: env-check
+	@$(PYTHON) tools/phase-1-prompt-enrich.py $(ARGS)
 
 phase-2: env-check
 	@$(PYTHON) tools/gate-check.py 2

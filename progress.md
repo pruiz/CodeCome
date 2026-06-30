@@ -267,7 +267,7 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 - [x] Reuse the existing Preview Analysis prompt as the first source for a user-defined enrichment prompt, if practical.
 - [x] If Preview Analysis remains global, decide whether audit-specific prompt overrides are needed before implementation.
 - [x] Add a durable prompt copy per audit/workspace, likely under `runs/phase-1-enrichment-prompt.md`, so later reviewers know exactly what was used.
-- [ ] Run the prompt with the `recon` agent or a narrowly defined enrichment agent that behaves like recon and does not create findings.
+- [x] Run the prompt with the `recon` agent or a narrowly defined enrichment agent that behaves like recon and does not create findings.
 - [x] The prompt should read existing Phase 1 artifacts, Semgrep normalized results, and selected high-risk source files.
 - [x] The prompt should update/enrich Phase 1 notes, not write findings.
 - [x] Add explicit prompt rules: distinguish Semgrep signal from confirmed vulnerability, avoid generic claims, and record assumptions.
@@ -319,7 +319,7 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 
 - [x] Decide final command name: preferred `make phase-1-semgrep`; alternative `make recon-semgrep`.
 - [x] Decide whether Semgrep should run before or after user-prompt enrichment; proposed order is Semgrep first, prompt second, so the prompt can interpret Semgrep output.
-- [ ] Decide whether the prompt should use the existing `recon` agent or a new `recon-enricher` agent.
+- [x] Decide whether the prompt should use the existing `recon` agent or a new `recon-enricher` agent.
 - [x] Decide whether Preview Analysis prompt should remain global or become audit-specific for this feature.
 - [x] Decide default Semgrep rules/config and how to handle Semgrep not installed.
 - [ ] Decide whether to add a strict mode that blocks Phase 2 if enrichment fails; proposed default is non-blocking.
