@@ -5,6 +5,7 @@ import { auditsApi, logsApi, phasesApi, questionsApi, usersApi } from '../servic
 import LiveLogs from './LiveLogs';
 import FindingsList from './FindingsList';
 import AuditQuestions from './AuditQuestions';
+import Phase1EnrichmentPanelTab from './Phase1EnrichmentPanel';
 import { formatSpainDateTime, formatSpainTime } from '../utils/dates';
 
 function cleanTerminalText(value) {
@@ -1363,6 +1364,7 @@ export default function AuditDetails() {
     { key: 'logs', label: 'Live Logs' },
     { key: 'findings', label: 'Findings' },
     { key: 'questions', label: 'Questions' },
+    { key: 'phase1Enrichment', label: 'Phase 1 Enrichment' },
     { key: 'gapScan', label: 'Gap Scan' },
     { key: 'config', label: 'Config' },
   ];
@@ -1525,6 +1527,7 @@ export default function AuditDetails() {
         {activeTab === 'logs' && <LiveLogs auditId={id} />}
         {activeTab === 'findings' && <FindingsList auditId={id} />}
         {activeTab === 'questions' && <AuditQuestions auditId={id} auditStatus={audit.status} onRefreshSummary={loadQuestionSummary} />}
+        {activeTab === 'phase1Enrichment' && <Phase1EnrichmentPanelTab audit={audit} onRefresh={refetch} />}
         {activeTab === 'gapScan' && <GapScanPanel auditId={id} />}
         {activeTab === 'config' && <ConfigEditor audit={audit} onRefresh={refetch} />}
       </div>

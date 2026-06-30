@@ -296,14 +296,14 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 
 ### Frontend/UI TODO
 
-- [ ] Add an optional Phase 1 enrichment panel or tab in audit details.
-- [ ] Show that the step is optional and should be run after Phase 1 and before Phase 2.
-- [ ] Add buttons: `Run Semgrep Enrichment`, `Run Prompt Enrichment`, and possibly `Run Full Enrichment`.
-- [ ] Show Semgrep summary counts by severity/rule/file.
-- [ ] Show enriched file leads and whether they were merged into `file-risk-index.yml`.
-- [ ] Show a warning that Semgrep and prompt leads are not findings.
-- [ ] Allow viewing/editing the user-defined enrichment prompt, reusing Preview Analysis prompt where practical.
-- [ ] Display latest enrichment run summaries and artifact paths.
+- [x] Add an optional Phase 1 enrichment panel or tab in audit details.
+- [x] Show that the step is optional and should be run after Phase 1 and before Phase 2.
+- [x] Add buttons: `Run Semgrep Enrichment`, `Run Prompt Enrichment`, and possibly `Run Full Enrichment`.
+- [x] Show Semgrep summary counts by severity/rule/file.
+- [x] Show enriched file leads and whether they were merged into `file-risk-index.yml`.
+- [x] Show a warning that Semgrep and prompt leads are not findings.
+- [x] Allow viewing/editing the user-defined enrichment prompt, reusing Preview Analysis prompt where practical.
+- [x] Display latest enrichment run summaries and artifact paths.
 
 ### Testing/Quality TODO
 
@@ -311,9 +311,9 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 - [x] Add backend tests for Semgrep artifact writing and note enrichment merge behavior.
 - [x] Add backend API tests for queuing enrichment steps and prompt save/load behavior.
 - [x] Add worker/orchestration tests proving enrichment is optional and does not alter default phase progression.
-- [ ] Add frontend tests for the enrichment panel, buttons, warning copy, and prompt editor behavior.
+- [x] Add frontend tests for the enrichment panel, buttons, warning copy, and prompt editor behavior.
 - [x] Add regression test that raw Semgrep alerts do not create `itemdb/findings/PENDING` files by default.
-- [ ] Run `web_app/run-checks.sh` before committing implementation.
+- [x] Run `web_app/run-checks.sh` before committing implementation.
 
 ### Open Design TODO
 

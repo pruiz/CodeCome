@@ -127,6 +127,25 @@ export const auditsApi = {
       body: JSON.stringify(data),
     }).then(res => parseResponse(res, 'Failed to mark gap candidate'));
   },
+  phase1EnrichmentArtifacts: (id) => {
+    return apiFetch(`${API_BASE}/audits/${id}/phase-1-enrichment-artifacts`).then(res => parseResponse(res, 'Failed to load Phase 1 enrichment artifacts'));
+  },
+  phase1EnrichmentPrompt: (id) => {
+    return apiFetch(`${API_BASE}/audits/${id}/phase-1-enrichment-prompt`).then(res => parseResponse(res, 'Failed to load Phase 1 enrichment prompt'));
+  },
+  updatePhase1EnrichmentPrompt: (id, prompt) => {
+    return apiFetch(`${API_BASE}/audits/${id}/phase-1-enrichment-prompt`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    }).then(res => parseResponse(res, 'Failed to save Phase 1 enrichment prompt'));
+  },
+  runPhase1Semgrep: (id) => {
+    return apiFetch(`${API_BASE}/audits/${id}/phase-1-semgrep`, { method: 'POST' }).then(res => parseResponse(res, 'Failed to queue Phase 1 Semgrep enrichment'));
+  },
+  runPhase1PromptEnrichment: (id) => {
+    return apiFetch(`${API_BASE}/audits/${id}/phase-1-prompt-enrich`, { method: 'POST' }).then(res => parseResponse(res, 'Failed to queue Phase 1 prompt enrichment'));
+  },
 };
 
 export const findingsApi = {
