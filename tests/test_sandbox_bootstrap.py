@@ -67,6 +67,16 @@ def test_render_provenance_includes_compose_project_name():
     assert "`phorge`" in content
 
 
+def test_erlang_sandbox_redirects_crash_dump_to_ignored_tmp():
+    compose = (ROOT / "templates" / "sandboxes" / "erlang-otp" / "docker-compose.yml").read_text(
+        encoding="utf-8"
+    )
+    gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
+
+    assert "ERL_CRASH_DUMP: /workspace/tmp/erl_crash.dump" in compose
+    assert "tmp/*" in gitignore
+
+
 def test_opencode_json_allows_src_and_sandbox_env_reads():
     # Read as plain JSON because this file is expected to be strict JSON.
     with (ROOT / "opencode.json").open("r", encoding="utf-8") as fh:
