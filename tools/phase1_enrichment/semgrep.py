@@ -130,6 +130,26 @@ def _semgrep_signal(item: SemgrepFinding) -> dict[str, Any]:
     }
 
 
+def _signal_key(signal: dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        str(signal.get("rule_id") or ""),
+        str(signal.get("line") or ""),
+        str(signal.get("message") or ""),
+    )
+
+
+def dedupe_semgrep_signals(signals: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return Semgrep signals deduplicated by stable rule/line/message keys."""
+    deduped: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for signal in signals:
+        if not isinstance(signal, dict):
+            continue
+        key = _signal_key(signal)
+        if key not in deduped:
+            deduped[key] = dict(signal)
+    return [deduped[key] for key in sorted(deduped.keys())]
+
+
 def _group_by_file(findings: list[SemgrepFinding]) -> dict[str, list[SemgrepFinding]]:
     by_file: dict[str, list[SemgrepFinding]] = {}
     for finding in findings:
@@ -177,7 +197,7 @@ def _merge_file_risk_index(ctx: FindingsContext, by_file: dict[str, list[Semgrep
         if not isinstance(external, dict):
             external = {}
             entry["external_signals"] = external
-        external["semgrep"] = [_semgrep_signal(item) for item in items]
+        external["semgrep"] = dedupe_semgrep_signals([_semgrep_signal(item) for item in items])
 
     path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
 

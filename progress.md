@@ -323,7 +323,7 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 - [x] Decide whether Preview Analysis prompt should remain global or become audit-specific for this feature.
 - [x] Decide default Semgrep rules/config and how to handle Semgrep not installed.
 - [x] Decide whether to add a strict mode that blocks Phase 2 if enrichment fails; proposed default is non-blocking.
-- [ ] Decide how to deduplicate Semgrep, CodeQL, and manual file-risk signals in `file-risk-index.yml`.
+- [x] Decide how to deduplicate Semgrep, CodeQL, and manual file-risk signals in `file-risk-index.yml`.
 
 ## Done Recently
 

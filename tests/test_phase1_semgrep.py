@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
 from findings.constants import FindingsContext
-from phase1_enrichment.semgrep import normalize_semgrep_results, run_semgrep_enrichment
+from phase1_enrichment.semgrep import dedupe_semgrep_signals, normalize_semgrep_results, run_semgrep_enrichment
 
 
 def temp_ctx(root: Path) -> FindingsContext:
@@ -65,7 +65,15 @@ def test_run_semgrep_enrichment_writes_durable_artifacts(tmp_path):
     (ctx.notes_root / "file-risk-index.yml").write_text(
         yaml.safe_dump({
             "schema_version": 1,
-            "files": [{"path": "src/app.php", "score": 2, "reasons": ["Phase 1 lead."]}],
+            "files": [{
+                "path": "src/app.php",
+                "score": 2,
+                "reasons": ["Phase 1 lead."],
+                "external_signals": {
+                    "codeql": {"alerts": 3, "rules": ["php/example"]},
+                    "semgrep": [{"rule_id": "stale", "line": 1, "message": "old"}],
+                },
+            }],
         }, sort_keys=False),
         encoding="utf-8",
     )
@@ -119,7 +127,9 @@ def test_run_semgrep_enrichment_writes_durable_artifacts(tmp_path):
     assert merged_risk["files"][0]["path"] == "src/app.php"
     assert merged_risk["files"][0]["score"] == 4
     assert "Phase 1 lead." in merged_risk["files"][0]["reasons"]
+    assert merged_risk["files"][0]["external_signals"]["codeql"] == {"alerts": 3, "rules": ["php/example"]}
     assert merged_risk["files"][0]["external_signals"]["semgrep"][0]["rule_id"] == "php.lang.security.sql-injection"
+    assert len(merged_risk["files"][0]["external_signals"]["semgrep"]) == 1
 
     interesting = (ctx.notes_root / "interesting-files.md").read_text(encoding="utf-8")
     assert "Existing note." in interesting
@@ -157,3 +167,14 @@ def test_run_semgrep_enrichment_skips_when_semgrep_missing(tmp_path):
     results = yaml.safe_load((ctx.notes_root / "semgrep-results.yml").read_text(encoding="utf-8"))
     assert results["status"] == "skipped"
     assert results["summary"]["total_results"] == 0
+
+
+def test_dedupe_semgrep_signals_uses_stable_rule_line_message_key():
+    signals = dedupe_semgrep_signals([
+        {"rule_id": "r1", "line": 5, "message": "x", "severity": "ERROR"},
+        {"rule_id": "r1", "line": 5, "message": "x", "severity": "WARNING"},
+        {"rule_id": "r2", "line": 5, "message": "x", "severity": "INFO"},
+    ])
+
+    assert len(signals) == 2
+    assert [signal["rule_id"] for signal in signals] == ["r1", "r2"]
