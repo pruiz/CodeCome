@@ -23,7 +23,7 @@ Continue from `progress.md` and implement the next unfinished TODO.
 
 ## TODO
 
-- [ ] Plan only: define optional post-Phase-1/pre-Phase-2 enrichment step using Semgrep plus a user-defined prompt; do not implement until explicitly requested.
+- [x] Plan only: define optional post-Phase-1/pre-Phase-2 enrichment step using Semgrep plus a user-defined prompt; do not implement until explicitly requested.
 - [x] Create `progress.md` to track web app work and quality rules.
 - [x] Add backend test foundation with mocks/isolated database so API changes do not break silently.
 - [x] Add tests for audit creation, worker listing, phase sequencing, logs API, and findings API.
@@ -235,11 +235,11 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 
 ### Product Decision
 
-- [ ] Add an optional command named `make phase-1-semgrep` or `make recon-semgrep`; current preferred name is `make phase-1-semgrep` because it clearly means optional Phase 1 enrichment.
-- [ ] Do not replace or modify the existing `make phase-1` behavior.
-- [ ] Run this step only when explicitly launched by the user or enabled in audit settings; do not include it automatically in default phase progression.
-- [ ] Treat Semgrep and prompt results as reconnaissance signals, not confirmed vulnerabilities.
-- [ ] Do not create `PENDING` findings by default from raw Semgrep alerts or prompt output.
+- [x] Add an optional command named `make phase-1-semgrep` or `make recon-semgrep`; current preferred name is `make phase-1-semgrep` because it clearly means optional Phase 1 enrichment.
+- [x] Do not replace or modify the existing `make phase-1` behavior.
+- [x] Run this step only when explicitly launched by the user or enabled in audit settings; do not include it automatically in default phase progression.
+- [x] Treat Semgrep and prompt results as reconnaissance signals, not confirmed vulnerabilities.
+- [x] Do not create `PENDING` findings by default from raw Semgrep alerts or prompt output.
 - [ ] Keep `make phase-2` responsible for turning enriched reconnaissance into CodeCome-quality candidate findings.
 - [ ] Preserve the existing lifecycle: Phase 1 notes -> Phase 2 `PENDING` findings -> Phase 3 counter-analysis -> validation -> exploitation.
 
@@ -251,16 +251,16 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 
 ### Semgrep Enrichment TODO
 
-- [ ] Add a Semgrep runner for `src/` that uses safe local execution and records raw JSON output durably.
-- [ ] Decide the default Semgrep ruleset; proposed default is `semgrep --config auto` when available, with support for user-provided config paths later.
-- [ ] Normalize Semgrep output into `itemdb/notes/semgrep-results.yml`.
-- [ ] Write a human-readable summary to `itemdb/notes/semgrep-scan.md`.
-- [ ] Write file-priority leads to `itemdb/notes/semgrep-interesting-files.md`.
-- [ ] Write machine-readable scoring to `itemdb/notes/semgrep-file-risk-index.yml`.
+- [x] Add a Semgrep runner for `src/` that uses safe local execution and records raw JSON output durably.
+- [x] Decide the default Semgrep ruleset; proposed default is `semgrep --config auto` when available, with support for user-provided config paths later.
+- [x] Normalize Semgrep output into `itemdb/notes/semgrep-results.yml`.
+- [x] Write a human-readable summary to `itemdb/notes/semgrep-scan.md`.
+- [x] Write file-priority leads to `itemdb/notes/semgrep-interesting-files.md`.
+- [x] Write machine-readable scoring to `itemdb/notes/semgrep-file-risk-index.yml`.
 - [ ] Enrich `itemdb/notes/file-risk-index.yml` by adding `external_signals.semgrep` blocks where useful.
 - [ ] Enrich `itemdb/notes/interesting-files.md` with a clearly marked Semgrep section.
 - [ ] Enrich `itemdb/notes/attack-surface.md`, `trust-boundaries.md`, and/or `threat-model.md` only when Semgrep results are source-backed and relevant.
-- [ ] Write run summary `runs/phase-1-semgrep-YYYY-MM-DD-HHMMSS.md` using `templates/run-summary.md` style.
+- [x] Write run summary `runs/phase-1-semgrep-YYYY-MM-DD-HHMMSS.md` using `templates/run-summary.md` style.
 
 ### User Prompt Enrichment TODO
 
@@ -307,21 +307,21 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 
 ### Testing/Quality TODO
 
-- [ ] Add backend unit tests for Semgrep JSON normalization.
+- [x] Add backend unit tests for Semgrep JSON normalization.
 - [ ] Add backend tests for Semgrep artifact writing and note enrichment merge behavior.
 - [ ] Add backend API tests for queuing enrichment steps and prompt save/load behavior.
 - [ ] Add worker/orchestration tests proving enrichment is optional and does not alter default phase progression.
 - [ ] Add frontend tests for the enrichment panel, buttons, warning copy, and prompt editor behavior.
-- [ ] Add regression test that raw Semgrep alerts do not create `itemdb/findings/PENDING` files by default.
+- [x] Add regression test that raw Semgrep alerts do not create `itemdb/findings/PENDING` files by default.
 - [ ] Run `web_app/run-checks.sh` before committing implementation.
 
 ### Open Design TODO
 
-- [ ] Decide final command name: preferred `make phase-1-semgrep`; alternative `make recon-semgrep`.
+- [x] Decide final command name: preferred `make phase-1-semgrep`; alternative `make recon-semgrep`.
 - [ ] Decide whether Semgrep should run before or after user-prompt enrichment; proposed order is Semgrep first, prompt second, so the prompt can interpret Semgrep output.
 - [ ] Decide whether the prompt should use the existing `recon` agent or a new `recon-enricher` agent.
 - [ ] Decide whether Preview Analysis prompt should remain global or become audit-specific for this feature.
-- [ ] Decide default Semgrep rules/config and how to handle Semgrep not installed.
+- [x] Decide default Semgrep rules/config and how to handle Semgrep not installed.
 - [ ] Decide whether to add a strict mode that blocks Phase 2 if enrichment fails; proposed default is non-blocking.
 - [ ] Decide how to deduplicate Semgrep, CodeQL, and manual file-risk signals in `file-risk-index.yml`.
 
