@@ -240,13 +240,13 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 - [x] Run this step only when explicitly launched by the user or enabled in audit settings; do not include it automatically in default phase progression.
 - [x] Treat Semgrep and prompt results as reconnaissance signals, not confirmed vulnerabilities.
 - [x] Do not create `PENDING` findings by default from raw Semgrep alerts or prompt output.
-- [ ] Keep `make phase-2` responsible for turning enriched reconnaissance into CodeCome-quality candidate findings.
-- [ ] Preserve the existing lifecycle: Phase 1 notes -> Phase 2 `PENDING` findings -> Phase 3 counter-analysis -> validation -> exploitation.
+- [x] Keep `make phase-2` responsible for turning enriched reconnaissance into CodeCome-quality candidate findings.
+- [x] Preserve the existing lifecycle: Phase 1 notes -> Phase 2 `PENDING` findings -> Phase 3 counter-analysis -> validation -> exploitation.
 
 ### Why This Is Not Direct Finding Creation
 
-- [ ] Document that Semgrep alerts usually provide rule id, file, line, message, severity, and matched code, but not enough CodeCome context by themselves.
-- [ ] Require Phase 2 agent reasoning before a finding exists: attacker-controlled source, trust boundary, sink/security decision, reachability, impact, missing controls, validation plan, and counter-analysis placeholder.
+- [x] Document that Semgrep alerts usually provide rule id, file, line, message, severity, and matched code, but not enough CodeCome context by themselves.
+- [x] Require Phase 2 agent reasoning before a finding exists: attacker-controlled source, trust boundary, sink/security decision, reachability, impact, missing controls, validation plan, and counter-analysis placeholder.
 - [ ] Consider a future explicit opt-in mode such as `--create-pending --min-confidence HIGH`, but keep it out of the first implementation unless explicitly requested.
 
 ### Semgrep Enrichment TODO
@@ -259,7 +259,7 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 - [x] Write machine-readable scoring to `itemdb/notes/semgrep-file-risk-index.yml`.
 - [x] Enrich `itemdb/notes/file-risk-index.yml` by adding `external_signals.semgrep` blocks where useful.
 - [x] Enrich `itemdb/notes/interesting-files.md` with a clearly marked Semgrep section.
-- [ ] Enrich `itemdb/notes/attack-surface.md`, `trust-boundaries.md`, and/or `threat-model.md` only when Semgrep results are source-backed and relevant.
+- [x] Enrich `itemdb/notes/attack-surface.md`, `trust-boundaries.md`, and/or `threat-model.md` only when Semgrep results are source-backed and relevant.
 - [x] Write run summary `runs/phase-1-semgrep-YYYY-MM-DD-HHMMSS.md` using `templates/run-summary.md` style.
 
 ### User Prompt Enrichment TODO

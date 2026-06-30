@@ -70,6 +70,9 @@ def test_run_semgrep_enrichment_writes_durable_artifacts(tmp_path):
         encoding="utf-8",
     )
     (ctx.notes_root / "interesting-files.md").write_text("# Interesting Files\n\nExisting note.\n", encoding="utf-8")
+    (ctx.notes_root / "attack-surface.md").write_text("# Attack Surface\n\nHTTP routes.\n", encoding="utf-8")
+    (ctx.notes_root / "trust-boundaries.md").write_text("# Trust Boundaries\n\nRemote user to app.\n", encoding="utf-8")
+    (ctx.notes_root / "threat-model.md").write_text("# Threat Model\n\nExisting model.\n", encoding="utf-8")
     payload = {
         "results": [{
             "check_id": "php.lang.security.sql-injection",
@@ -122,6 +125,22 @@ def test_run_semgrep_enrichment_writes_durable_artifacts(tmp_path):
     assert "Existing note." in interesting
     assert "# Semgrep Enrichment" in interesting
     assert "php.lang.security.sql-injection" in interesting
+
+    attack_surface = (ctx.notes_root / "attack-surface.md").read_text(encoding="utf-8")
+    trust_boundaries = (ctx.notes_root / "trust-boundaries.md").read_text(encoding="utf-8")
+    threat_model = (ctx.notes_root / "threat-model.md").read_text(encoding="utf-8")
+    assert "HTTP routes." in attack_surface
+    assert "Remote user to app." in trust_boundaries
+    assert "Existing model." in threat_model
+    for content in (attack_surface, trust_boundaries, threat_model):
+        assert "# Semgrep Enrichment" in content
+        assert "not confirmed vulnerabilities" in content
+        assert "php.lang.security.sql-injection" in content
+
+    run = run_semgrep_enrichment(ctx=ctx, runner=fake_runner)
+    assert run.status == "completed"
+    attack_surface = (ctx.notes_root / "attack-surface.md").read_text(encoding="utf-8")
+    assert attack_surface.count("# Semgrep Enrichment") == 1
 
 
 def test_run_semgrep_enrichment_skips_when_semgrep_missing(tmp_path):

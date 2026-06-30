@@ -203,6 +203,64 @@ def _merge_interesting_files(ctx: FindingsContext, by_file: dict[str, list[Semgr
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 
+def _replace_markdown_section(path: Path, default_title: str, section_title: str, body_lines: list[str]) -> None:
+    existing = path.read_text(encoding="utf-8") if path.exists() else f"# {default_title}\n"
+    marker = f"\n# {section_title}\n"
+    base = existing.split(marker, 1)[0].rstrip()
+    content = "\n".join([base, "", f"# {section_title}", "", *body_lines]).rstrip() + "\n"
+    path.write_text(content, encoding="utf-8")
+
+
+def _semgrep_note_lines(by_file: dict[str, list[SemgrepFinding]], generated_at: str, purpose: str) -> list[str]:
+    lines = [
+        f"Date: {generated_at}",
+        "",
+        "Semgrep results are source-backed reconnaissance signals only. They are not confirmed vulnerabilities and are not CodeCome findings.",
+        f"Use this section to {purpose}; Phase 2 must still perform source-to-sink and trust-boundary reasoning before creating findings.",
+        "",
+    ]
+    if not by_file:
+        lines.append("No Semgrep-backed leads were produced.")
+        return lines
+
+    for file_path, items in sorted(by_file.items(), key=lambda entry: (-_risk_score(entry[1]), entry[0])):
+        lines.extend([
+            f"## `{file_path}`",
+            "",
+            f"- Signal count: {len(items)}",
+            f"- Risk score hint: {_risk_score(items)}",
+        ])
+        cwes = sorted({cwe for item in items for cwe in item.cwe})
+        if cwes:
+            lines.append(f"- CWE hints: {', '.join(cwes)}")
+        for item in items[:5]:
+            location = f":{item.start_line}" if item.start_line else ""
+            lines.append(f"- `{item.rule_id}` at `{file_path}{location}`: {item.message}")
+        lines.append("")
+    return lines
+
+
+def _merge_recon_notes(ctx: FindingsContext, by_file: dict[str, list[SemgrepFinding]], generated_at: str) -> None:
+    _replace_markdown_section(
+        ctx.notes_root / "attack-surface.md",
+        "Attack Surface",
+        "Semgrep Enrichment",
+        _semgrep_note_lines(by_file, generated_at, "prioritize attack surfaces for follow-up review"),
+    )
+    _replace_markdown_section(
+        ctx.notes_root / "trust-boundaries.md",
+        "Trust Boundaries",
+        "Semgrep Enrichment",
+        _semgrep_note_lines(by_file, generated_at, "identify potential lower-trust input paths reaching sensitive code"),
+    )
+    _replace_markdown_section(
+        ctx.notes_root / "threat-model.md",
+        "Threat Model",
+        "Semgrep Enrichment",
+        _semgrep_note_lines(by_file, generated_at, "calibrate Phase 2 abuse-path themes from static-analysis signals"),
+    )
+
+
 def _write_results(run: SemgrepEnrichmentRun, ctx: FindingsContext) -> None:
     ctx.notes_root.mkdir(parents=True, exist_ok=True)
     runs_dir = ctx.root / "runs"
@@ -309,6 +367,7 @@ def _write_results(run: SemgrepEnrichmentRun, ctx: FindingsContext) -> None:
 
     _merge_file_risk_index(ctx, by_file)
     _merge_interesting_files(ctx, by_file, generated_at)
+    _merge_recon_notes(ctx, by_file, generated_at)
 
     run.summary_path = runs_dir / f"phase-1-semgrep-{datetime.now().strftime('%Y-%m-%d-%H%M%S')}.md"
     summary_lines = [
@@ -326,6 +385,9 @@ def _write_results(run: SemgrepEnrichmentRun, ctx: FindingsContext) -> None:
         "- `itemdb/notes/semgrep-file-risk-index.yml`",
         "- `itemdb/notes/file-risk-index.yml`",
         "- `itemdb/notes/interesting-files.md`",
+        "- `itemdb/notes/attack-surface.md`",
+        "- `itemdb/notes/trust-boundaries.md`",
+        "- `itemdb/notes/threat-model.md`",
         "",
         "# Findings Created",
         "",
