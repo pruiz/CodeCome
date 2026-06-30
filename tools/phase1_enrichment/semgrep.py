@@ -10,6 +10,7 @@ import subprocess
 import yaml
 
 from findings.constants import FindingsContext
+from phase1_enrichment.prompt import load_enrichment_prompt, write_enrichment_prompt_artifacts
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ class SemgrepEnrichmentRun:
     interesting_files_path: Path | None = None
     file_risk_index_path: Path | None = None
     summary_path: Path | None = None
+    prompt_copy_path: Path | None = None
 
 
 def _as_list(value: Any) -> list[str]:
@@ -261,7 +263,7 @@ def _merge_recon_notes(ctx: FindingsContext, by_file: dict[str, list[SemgrepFind
     )
 
 
-def _write_results(run: SemgrepEnrichmentRun, ctx: FindingsContext) -> None:
+def _write_results(run: SemgrepEnrichmentRun, ctx: FindingsContext, *, enrichment_prompt_file: str | None = None) -> None:
     ctx.notes_root.mkdir(parents=True, exist_ok=True)
     runs_dir = ctx.root / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
@@ -369,6 +371,15 @@ def _write_results(run: SemgrepEnrichmentRun, ctx: FindingsContext) -> None:
     _merge_interesting_files(ctx, by_file, generated_at)
     _merge_recon_notes(ctx, by_file, generated_at)
 
+    enrichment_prompt = load_enrichment_prompt(ctx, enrichment_prompt_file)
+    if enrichment_prompt:
+        run.prompt_copy_path = write_enrichment_prompt_artifacts(
+            ctx,
+            enrichment_prompt,
+            generated_at=generated_at,
+            semgrep_files=by_file.keys(),
+        )
+
     run.summary_path = runs_dir / f"phase-1-semgrep-{datetime.now().strftime('%Y-%m-%d-%H%M%S')}.md"
     summary_lines = [
         "# Run Summary",
@@ -388,6 +399,7 @@ def _write_results(run: SemgrepEnrichmentRun, ctx: FindingsContext) -> None:
         "- `itemdb/notes/attack-surface.md`",
         "- `itemdb/notes/trust-boundaries.md`",
         "- `itemdb/notes/threat-model.md`",
+        *(["- `runs/phase-1-enrichment-prompt.md`"] if run.prompt_copy_path else []),
         "",
         "# Findings Created",
         "",
@@ -410,6 +422,7 @@ def run_semgrep_enrichment(
     *,
     ctx: FindingsContext | None = None,
     semgrep_config: str = "auto",
+    enrichment_prompt_file: str | None = None,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
 ) -> SemgrepEnrichmentRun:
     ctx = ctx or FindingsContext.default()
@@ -422,7 +435,7 @@ def run_semgrep_enrichment(
     except FileNotFoundError as exc:
         run = SemgrepEnrichmentRun(status="skipped", command=command, returncode=None, error=str(exc), raw_output_path=raw_path)
         raw_path.write_text(json.dumps({"error": run.error, "results": []}, indent=2), encoding="utf-8")
-        _write_results(run, ctx)
+        _write_results(run, ctx, enrichment_prompt_file=enrichment_prompt_file)
         return run
 
     stdout = completed.stdout or ""
@@ -446,7 +459,7 @@ def run_semgrep_enrichment(
         error=error,
         raw_output_path=raw_path,
     )
-    _write_results(run, ctx)
+    _write_results(run, ctx, enrichment_prompt_file=enrichment_prompt_file)
     return run
 
 
@@ -455,8 +468,9 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="Run optional Phase 1 Semgrep enrichment.")
     parser.add_argument("--config", default="auto", help="Semgrep config to use (default: auto).")
+    parser.add_argument("--enrichment-prompt-file", help="Optional user prompt file for Phase 1 note enrichment.")
     args = parser.parse_args(argv)
-    run = run_semgrep_enrichment(semgrep_config=args.config)
+    run = run_semgrep_enrichment(semgrep_config=args.config, enrichment_prompt_file=args.enrichment_prompt_file)
     print(f"Semgrep enrichment {run.status}: {len(run.findings)} result(s)")
     if run.summary_path:
         print(f"Summary: {run.summary_path.relative_to(FindingsContext.default().root)}")
