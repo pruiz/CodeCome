@@ -247,7 +247,7 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 
 - [x] Document that Semgrep alerts usually provide rule id, file, line, message, severity, and matched code, but not enough CodeCome context by themselves.
 - [x] Require Phase 2 agent reasoning before a finding exists: attacker-controlled source, trust boundary, sink/security decision, reachability, impact, missing controls, validation plan, and counter-analysis placeholder.
-- [ ] Consider a future explicit opt-in mode such as `--create-pending --min-confidence HIGH`, but keep it out of the first implementation unless explicitly requested.
+- [x] Consider a future explicit opt-in mode such as `--create-pending --min-confidence HIGH`, but keep it out of the first implementation unless explicitly requested.
 
 ### Semgrep Enrichment TODO
 
@@ -271,8 +271,8 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 - [x] The prompt should read existing Phase 1 artifacts, Semgrep normalized results, and selected high-risk source files.
 - [x] The prompt should update/enrich Phase 1 notes, not write findings.
 - [x] Add explicit prompt rules: distinguish Semgrep signal from confirmed vulnerability, avoid generic claims, and record assumptions.
-- [ ] Add a UI control to edit/reuse the Preview Analysis prompt for this enrichment step.
-- [ ] Add a UI button to run user-prompt enrichment after Phase 1 completes.
+- [x] Add a UI control to edit/reuse the Preview Analysis prompt for this enrichment step.
+- [x] Add a UI button to run user-prompt enrichment after Phase 1 completes.
 
 ### Artifact Contract TODO
 

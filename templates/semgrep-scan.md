@@ -31,6 +31,8 @@ Semgrep results are reconnaissance signals only. They are not CodeCome findings 
 
 Phase 2 must perform source-to-sink reasoning, trust-boundary analysis, counter-analysis planning, and validation planning before creating findings.
 
+Direct finding creation from Semgrep is intentionally deferred. A future explicit opt-in mode such as `--create-pending --min-confidence HIGH` may be considered only if it still routes every alert through CodeCome finding-quality requirements; it is not part of the first implementation.
+
 # Limitations
 
 List limitations such as missing Semgrep installation, unsupported languages, rule coverage gaps, or parse errors.

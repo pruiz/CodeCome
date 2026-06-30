@@ -18,6 +18,8 @@ def test_semgrep_enrichment_templates_define_required_artifacts():
     assert "Semgrep results are reconnaissance signals only" in scan
     assert "Phase 2 must perform source-to-sink reasoning" in scan
     assert "itemdb/notes/semgrep-results.yml" in scan
+    assert "Direct finding creation from Semgrep is intentionally deferred" in scan
+    assert "--create-pending --min-confidence HIGH" in scan
 
     results = yaml.safe_load(Path("templates/semgrep-results.yml").read_text(encoding="utf-8"))
     assert results["schema_version"] == 1
