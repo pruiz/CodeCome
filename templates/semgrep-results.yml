@@ -1,0 +1,36 @@
+# Semgrep normalized result schema.
+# Semgrep results are reconnaissance signals only and must not be treated as findings.
+
+schema_version: 1
+tool: semgrep
+generated_at: "YYYY-MM-DDTHH:MM:SSZ"
+status: completed
+command:
+  - semgrep
+  - --json
+  - --config
+  - auto
+  - src
+returncode: 0
+error: ""
+summary:
+  total_results: 1
+  by_severity:
+    ERROR: 1
+  by_file:
+    src/example/app.php: 1
+results:
+  - id: SG-0001
+    rule_id: php.lang.security.sql-injection
+    path: src/example/app.php
+    start_line: 42
+    end_line: 42
+    message: Possible SQL injection from request input.
+    severity: ERROR
+    confidence: HIGH
+    cwe:
+      - CWE-89
+    owasp:
+      - A03:2021
+    category: security
+    lines: "$db->query($_GET['q']);"

@@ -276,11 +276,11 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 
 ### Artifact Contract TODO
 
-- [ ] Define `templates/semgrep-scan.md` for human-readable summary.
-- [ ] Define `templates/semgrep-results.yml` for normalized Semgrep result schema.
-- [ ] Define `templates/semgrep-interesting-files.md` for reviewer-facing file leads.
-- [ ] Define `templates/semgrep-file-risk-index.yml` for machine-readable file scoring.
-- [ ] Define how Semgrep scores merge into existing `itemdb/notes/file-risk-index.yml` without deleting manual or CodeQL-derived entries.
+- [x] Define `templates/semgrep-scan.md` for human-readable summary.
+- [x] Define `templates/semgrep-results.yml` for normalized Semgrep result schema.
+- [x] Define `templates/semgrep-interesting-files.md` for reviewer-facing file leads.
+- [x] Define `templates/semgrep-file-risk-index.yml` for machine-readable file scoring.
+- [x] Define how Semgrep scores merge into existing `itemdb/notes/file-risk-index.yml` without deleting manual or CodeQL-derived entries.
 - [ ] Define how user-prompt enrichment changes are recorded in run summaries and note sections.
 
 ### Backend/API TODO

@@ -1,0 +1,18 @@
+# Semgrep file risk index schema.
+# This is a machine-readable companion to semgrep-interesting-files.md.
+
+schema_version: 1
+generated_at: "YYYY-MM-DDTHH:MM:SSZ"
+source: semgrep
+files:
+  - path: src/example/app.php
+    score: 4
+    reasons:
+      - 1 Semgrep result(s) in this file.
+    external_signals:
+      semgrep:
+        - id: SG-0001
+          rule_id: php.lang.security.sql-injection
+          severity: ERROR
+          line: 42
+          message: Possible SQL injection from request input.
