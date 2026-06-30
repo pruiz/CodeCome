@@ -7,6 +7,8 @@ services:
       context: .
       dockerfile: Dockerfile
     working_dir: /workspace
+    environment:
+      ERL_CRASH_DUMP: /workspace/tmp/erl_crash.dump
     volumes:
       - ../:/workspace
       - ../.tools/codeql/current:/opt/codeql:ro
