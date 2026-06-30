@@ -15,7 +15,7 @@ import subprocess
 from app.database import get_db
 from app import crud, models, schemas
 from app.services.workspace import workspace_manager
-from app.workers.phase_tasks import ALL_PHASES, PHASE_ORDER, merged_phase_env, phase_order_for_settings, run_phase_task, run_sequential_workflow
+from app.workers.phase_tasks import ALL_PHASES, PHASE_ORDER, audit_options, merged_phase_env, phase_order_for_settings, run_phase_task, run_sequential_workflow
 from app.workers.question_answering import write_user_answers_context, with_user_answers_env
 from app.utils.codecome_wrapper import CodeComeExecutor, codecome_executor
 from app.utils.ssh_executor import SSHCodeComeExecutor
@@ -111,6 +111,73 @@ def gap_candidate_payloads(workspace_path: Path) -> list[dict]:
         })
         payloads.append(raw)
     return payloads
+
+
+PHASE1_ENRICHMENT_PROMPT_OPTION = "phase1_enrichment_prompt"
+PHASE1_ENRICHMENT_PROMPT_PATH = "runs/phase-1-enrichment-user-prompt.md"
+
+
+def preview_analysis_prompt_text() -> str:
+    path = Path(settings.CODECOME_ROOT) / "web_app" / "backend" / "data" / "preview-analysis.md"
+    if path.exists():
+        return path.read_text(encoding="utf-8", errors="replace")
+    return ""
+
+
+def phase1_enrichment_prompt_payload(audit) -> dict:
+    custom_prompt = audit_options(getattr(audit, "model_settings", None)).get(PHASE1_ENRICHMENT_PROMPT_OPTION)
+    default_prompt = preview_analysis_prompt_text()
+    return {
+        "path": "web_app/backend/data/preview-analysis.md",
+        "default_prompt": default_prompt,
+        "prompt": custom_prompt if isinstance(custom_prompt, str) and custom_prompt.strip() else default_prompt,
+        "custom": bool(isinstance(custom_prompt, str) and custom_prompt.strip()),
+    }
+
+
+def sync_local_phase1_enrichment_prompt(audit, prompt: str) -> str:
+    raw_workspace_path = getattr(audit, "workspace_path", "") or ""
+    if not raw_workspace_path:
+        return "skipped"
+    workspace_path = Path(raw_workspace_path)
+    path = workspace_path / PHASE1_ENRICHMENT_PROMPT_PATH
+    if prompt.strip():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(prompt, encoding="utf-8")
+        return PHASE1_ENRICHMENT_PROMPT_PATH
+    if path.exists():
+        path.unlink()
+    return "removed"
+
+
+def phase1_enrichment_artifact_payload(workspace_path: Path) -> dict:
+    notes = workspace_path / "itemdb" / "notes"
+    runs = workspace_path / "runs"
+    semgrep_results = notes / "semgrep-results.yml"
+    semgrep_summary = {}
+    if semgrep_results.exists():
+        try:
+            data = yaml.safe_load(semgrep_results.read_text(encoding="utf-8")) or {}
+            semgrep_summary = data.get("summary") if isinstance(data.get("summary"), dict) else {}
+        except Exception:
+            semgrep_summary = {}
+    artifact_paths = [
+        "itemdb/notes/semgrep-results.yml",
+        "itemdb/notes/semgrep-scan.md",
+        "itemdb/notes/semgrep-interesting-files.md",
+        "itemdb/notes/semgrep-file-risk-index.yml",
+        "runs/phase-1-enrichment-prompt.md",
+    ]
+    artifacts = []
+    for rel_path in artifact_paths:
+        path = workspace_path / rel_path
+        artifacts.append({"path": rel_path, "exists": path.exists()})
+    summaries = []
+    if runs.exists():
+        for pattern in ("phase-1-semgrep-*.md", "phase-1-prompt-enrichment-*.md"):
+            summaries.extend(path.name for path in runs.glob(pattern))
+    summaries = sorted(set(summaries))
+    return {"semgrep_summary": semgrep_summary, "artifacts": artifacts, "run_summaries": summaries}
 
 
 def mark_gap_candidate(workspace_path: Path, candidate_id: str, request: schemas.GapCandidateMarkRequest) -> dict:
@@ -390,6 +457,27 @@ def run_gap_scan(audit_id: UUID, db: Session = Depends(get_db)):
     return queue_gap_step(db, audit_id, "gap-scan", "Gap scan queued")
 
 
+@router.post("/{audit_id}/phase-1-semgrep")
+def run_phase1_semgrep(audit_id: UUID, db: Session = Depends(get_db)):
+    """Manually queue optional Phase 1 Semgrep enrichment."""
+    return queue_gap_step(db, audit_id, "phase-1-semgrep", "Phase 1 Semgrep enrichment queued")
+
+
+@router.post("/{audit_id}/phase-1-prompt-enrich")
+def run_phase1_prompt_enrichment(audit_id: UUID, db: Session = Depends(get_db)):
+    """Manually queue optional Phase 1 user-prompt enrichment."""
+    audit = crud.get_audit(db, audit_id)
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    payload = phase1_enrichment_prompt_payload(audit)
+    prompt = payload.get("prompt") or ""
+    extra_env = None
+    if str(prompt).strip():
+        sync_local_phase1_enrichment_prompt(audit, str(prompt))
+        extra_env = {"CODECOME_PHASE1_ENRICHMENT_PROMPT_FILE": PHASE1_ENRICHMENT_PROMPT_PATH}
+    return queue_gap_step(db, audit_id, "phase-1-prompt-enrich", "Phase 1 prompt enrichment queued", extra_env=extra_env)
+
+
 def queue_gap_step(db: Session, audit_id: UUID, phase: str, message: str, extra_env: dict | None = None):
     audit = crud.get_audit(db, audit_id)
     if not audit:
@@ -440,6 +528,52 @@ def list_gap_candidates(audit_id: UUID, db: Session = Depends(get_db)):
         "total": len(candidates),
         "candidates": candidates,
     }
+
+
+@router.get("/{audit_id}/phase-1-enrichment-artifacts")
+def list_phase1_enrichment_artifacts(audit_id: UUID, db: Session = Depends(get_db)):
+    """List optional Phase 1 enrichment artifacts currently present in the workspace."""
+    audit = crud.get_audit(db, audit_id)
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    workspace_path = Path(audit.workspace_path)
+    if not workspace_path.exists():
+        raise HTTPException(status_code=404, detail="Audit workspace not found")
+    payload = phase1_enrichment_artifact_payload(workspace_path)
+    payload.update({"audit_id": str(audit_id)})
+    return payload
+
+
+@router.get("/{audit_id}/phase-1-enrichment-prompt")
+def get_phase1_enrichment_prompt(audit_id: UUID, db: Session = Depends(get_db)):
+    """Return the prompt used by optional Phase 1 prompt enrichment."""
+    audit = crud.get_audit(db, audit_id)
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    return phase1_enrichment_prompt_payload(audit)
+
+
+@router.put("/{audit_id}/phase-1-enrichment-prompt")
+def update_phase1_enrichment_prompt(audit_id: UUID, request: schemas.Phase1EnrichmentPromptUpdate, db: Session = Depends(get_db)):
+    """Save or reset an audit-specific Phase 1 enrichment prompt."""
+    audit = crud.get_audit(db, audit_id)
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    prompt = request.prompt or ""
+    model_settings = dict(audit.model_settings or {})
+    options = dict(model_settings.get("__audit_options") or {})
+    if prompt.strip():
+        options[PHASE1_ENRICHMENT_PROMPT_OPTION] = prompt
+    else:
+        options.pop(PHASE1_ENRICHMENT_PROMPT_OPTION, None)
+    model_settings["__audit_options"] = options
+    audit.model_settings = model_settings
+    db.commit()
+    db.refresh(audit)
+    local_sync = sync_local_phase1_enrichment_prompt(audit, prompt)
+    payload = phase1_enrichment_prompt_payload(audit)
+    payload.update({"local_sync": local_sync})
+    return payload
 
 
 @router.post("/{audit_id}/gap-candidates/{candidate_id}/mark")

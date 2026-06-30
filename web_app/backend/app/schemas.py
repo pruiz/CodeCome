@@ -35,6 +35,10 @@ class GapCandidateMarkRequest(BaseModel):
     note: Optional[str] = None
 
 
+class Phase1EnrichmentPromptUpdate(BaseModel):
+    prompt: Optional[str] = None
+
+
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=1, max_length=255)
     display_name: Optional[str] = Field(None, max_length=255)

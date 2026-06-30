@@ -285,14 +285,14 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 
 ### Backend/API TODO
 
-- [ ] Add phase/job metadata support for optional `phase-1-semgrep` / Phase 1 enrichment step.
-- [ ] Add API endpoint to run Semgrep enrichment for an audit.
-- [ ] Add API endpoint to run user-prompt enrichment for an audit.
-- [ ] Add API endpoint to read/update the enrichment prompt, initially backed by Preview Analysis prompt if feasible.
-- [ ] Add API endpoint to list Semgrep/enrichment artifacts and summary status.
-- [ ] Ensure worker capacity accounting treats the enrichment step like existing phase jobs.
-- [ ] Ensure remote workers receive the workspace before enrichment and return `itemdb/notes`, `runs`, and any Semgrep artifacts after execution.
-- [ ] Ensure failed enrichment jobs do not block normal `make phase-2` unless the user explicitly chooses strict mode.
+- [x] Add phase/job metadata support for optional `phase-1-semgrep` / Phase 1 enrichment step.
+- [x] Add API endpoint to run Semgrep enrichment for an audit.
+- [x] Add API endpoint to run user-prompt enrichment for an audit.
+- [x] Add API endpoint to read/update the enrichment prompt, initially backed by Preview Analysis prompt if feasible.
+- [x] Add API endpoint to list Semgrep/enrichment artifacts and summary status.
+- [x] Ensure worker capacity accounting treats the enrichment step like existing phase jobs.
+- [x] Ensure remote workers receive the workspace before enrichment and return `itemdb/notes`, `runs`, and any Semgrep artifacts after execution.
+- [x] Ensure failed enrichment jobs do not block normal `make phase-2` unless the user explicitly chooses strict mode.
 
 ### Frontend/UI TODO
 
@@ -309,8 +309,8 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 
 - [x] Add backend unit tests for Semgrep JSON normalization.
 - [x] Add backend tests for Semgrep artifact writing and note enrichment merge behavior.
-- [ ] Add backend API tests for queuing enrichment steps and prompt save/load behavior.
-- [ ] Add worker/orchestration tests proving enrichment is optional and does not alter default phase progression.
+- [x] Add backend API tests for queuing enrichment steps and prompt save/load behavior.
+- [x] Add worker/orchestration tests proving enrichment is optional and does not alter default phase progression.
 - [ ] Add frontend tests for the enrichment panel, buttons, warning copy, and prompt editor behavior.
 - [x] Add regression test that raw Semgrep alerts do not create `itemdb/findings/PENDING` files by default.
 - [ ] Run `web_app/run-checks.sh` before committing implementation.
@@ -322,7 +322,7 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 - [x] Decide whether the prompt should use the existing `recon` agent or a new `recon-enricher` agent.
 - [x] Decide whether Preview Analysis prompt should remain global or become audit-specific for this feature.
 - [x] Decide default Semgrep rules/config and how to handle Semgrep not installed.
-- [ ] Decide whether to add a strict mode that blocks Phase 2 if enrichment fails; proposed default is non-blocking.
+- [x] Decide whether to add a strict mode that blocks Phase 2 if enrichment fails; proposed default is non-blocking.
 - [ ] Decide how to deduplicate Semgrep, CodeQL, and manual file-risk signals in `file-risk-index.yml`.
 
 ## Done Recently

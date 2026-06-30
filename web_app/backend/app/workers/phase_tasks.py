@@ -18,10 +18,13 @@ logger = logging.getLogger(__name__)
 # CodeCome execution sequence. Setup steps are first-class steps in the UI/history.
 PHASE_ORDER = ["make init", "make check", "phase-1", "phase-2", "phase-3", "make validate-all", "make exploit-all", "phase-6"]
 OPTIONAL_PHASES = ["make sweep"]
+PHASE1_ENRICHMENT_PHASES = ["phase-1-semgrep", "phase-1-prompt-enrich"]
 GAP_PHASES = ["gap-scan", "gap-compare", "gap-sweep"]
-ALL_PHASES = ["make init", "make check", "phase-1", "phase-2", "make sweep", "phase-3", "make validate-all", "make exploit-all", "phase-6", *GAP_PHASES]
+ALL_PHASES = ["make init", "make check", "phase-1", "phase-2", "make sweep", "phase-3", "make validate-all", "make exploit-all", "phase-6", *PHASE1_ENRICHMENT_PHASES, *GAP_PHASES]
 AUDIT_ENV_KEY = "__audit_env"
 AUDIT_OPTIONS_KEY = "__audit_options"
+PHASE1_ENRICHMENT_PROMPT_ENV = "CODECOME_PHASE1_ENRICHMENT_PROMPT_FILE"
+PHASE1_ENRICHMENT_PROMPT_PATH = "runs/phase-1-enrichment-user-prompt.md"
 
 
 def audit_options(model_settings: dict | None) -> dict:
@@ -53,6 +56,27 @@ def merged_phase_env(model_settings: dict | None, phase: str) -> dict:
     phase_config = settings.get(phase) or {}
     phase_env = phase_config.get("env") or phase_config.get("env_overrides") or {}
     return {**default_env, **(audit_env or {}), **(phase_env or {})}
+
+
+def phase1_enrichment_prompt_text(model_settings: dict | None) -> str | None:
+    prompt = audit_options(model_settings).get("phase1_enrichment_prompt")
+    if isinstance(prompt, str) and prompt.strip():
+        return prompt
+    return None
+
+
+def with_phase1_enrichment_prompt_env(workspace_path: Path, model_settings: dict | None, phase: str, env_overrides: dict | None) -> dict:
+    env = dict(env_overrides or {})
+    if phase != "phase-1-prompt-enrich" or env.get(PHASE1_ENRICHMENT_PROMPT_ENV):
+        return env
+    prompt = phase1_enrichment_prompt_text(model_settings)
+    if not prompt:
+        return env
+    prompt_path = workspace_path / PHASE1_ENRICHMENT_PROMPT_PATH
+    prompt_path.parent.mkdir(parents=True, exist_ok=True)
+    prompt_path.write_text(prompt, encoding="utf-8")
+    env[PHASE1_ENRICHMENT_PROMPT_ENV] = PHASE1_ENRICHMENT_PROMPT_PATH
+    return env
 
 
 def build_command_line(phase: str, model: str = None, variant: str = None, finding_id: str = None, worker_type: str = "local", env_overrides: dict = None) -> str:
@@ -219,6 +243,7 @@ def run_phase_task(
 
         workspace_path = Path(audit.workspace_path)
         env_overrides = env_overrides or {}
+        env_overrides = with_phase1_enrichment_prompt_env(workspace_path, audit.model_settings, phase, env_overrides)
         command_line = build_command_line(phase, model, variant, finding_id, worker.type, env_overrides)
 
         audit.assigned_worker_id = worker.id
