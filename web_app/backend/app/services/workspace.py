@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 from app.config import settings
 import shutil
 import zipfile
@@ -64,21 +65,43 @@ class WorkspaceManager:
                 else:
                     shutil.copy2(src, dst)
     
+    def _normalize_git_source(self, git_url: str) -> tuple[str, str | None]:
+        """Return a clone URL and optional ref for supported browser URLs."""
+        parsed = urlparse(git_url)
+        host = parsed.netloc.lower()
+        parts = [part for part in parsed.path.strip("/").split("/") if part]
+        if host in {"github.com", "www.github.com"} and len(parts) >= 4 and parts[2] == "tree":
+            owner, repo = parts[0], parts[1]
+            ref = "/".join(parts[3:])
+            return f"https://github.com/{owner}/{repo}.git", ref
+        return git_url, None
+
     def setup_source_from_git(self, workspace_path: Path, git_url: str) -> bool:
         """Clone git repository to workspace/src/."""
         import subprocess
         
         src_path = workspace_path / "src"
         src_path.mkdir(exist_ok=True)
-        
+
         try:
+            clone_url, checkout_ref = self._normalize_git_source(git_url)
             result = subprocess.run(
-                ["git", "clone", git_url, "."],
+                ["git", "clone", clone_url, "."],
                 cwd=src_path,
                 capture_output=True,
                 text=True,
                 timeout=300
             )
+            if result.returncode != 0:
+                return False
+            if checkout_ref:
+                result = subprocess.run(
+                    ["git", "checkout", checkout_ref],
+                    cwd=src_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
             return result.returncode == 0
         except (subprocess.TimeoutExpired, Exception):
             return False

@@ -1,4 +1,5 @@
 import asyncio
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -135,6 +136,47 @@ def test_local_folder_audit_copies_source_into_workspace(tmp_path):
 
     assert (workspace / "src" / "app.py").read_text() == "print('local source')\n"
     assert (workspace / "src" / "nested" / "config.yml").read_text() == "name: demo\n"
+
+
+def test_github_tree_url_clones_repo_and_checks_out_ref(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    manager = WorkspaceManager()
+
+    ok = manager.setup_source_from_git(
+        workspace,
+        "https://github.com/phpipam/phpipam/tree/137141d89a44e9979eb0df52427ec0e676077f03",
+    )
+
+    assert ok is True
+    assert calls[0][0] == ["git", "clone", "https://github.com/phpipam/phpipam.git", "."]
+    assert calls[1][0] == ["git", "checkout", "137141d89a44e9979eb0df52427ec0e676077f03"]
+    assert calls[0][1]["cwd"] == workspace / "src"
+
+
+def test_plain_git_url_clones_without_checkout(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    manager = WorkspaceManager()
+
+    ok = manager.setup_source_from_git(workspace, "https://github.com/phpipam/phpipam.git")
+
+    assert ok is True
+    assert calls == [["git", "clone", "https://github.com/phpipam/phpipam.git", "."]]
 
 
 def test_latest_report_path_prefers_newest_markdown(tmp_path):
