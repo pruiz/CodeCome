@@ -118,6 +118,91 @@ def _risk_score(findings: list[SemgrepFinding]) -> int:
     return min(base, 5)
 
 
+def _semgrep_signal(item: SemgrepFinding) -> dict[str, Any]:
+    return {
+        "id": item.id,
+        "rule_id": item.rule_id,
+        "severity": item.severity,
+        "line": item.start_line,
+        "message": item.message,
+    }
+
+
+def _group_by_file(findings: list[SemgrepFinding]) -> dict[str, list[SemgrepFinding]]:
+    by_file: dict[str, list[SemgrepFinding]] = {}
+    for finding in findings:
+        by_file.setdefault(finding.path, []).append(finding)
+    return by_file
+
+
+def _merge_file_risk_index(ctx: FindingsContext, by_file: dict[str, list[SemgrepFinding]]) -> None:
+    path = ctx.notes_root / "file-risk-index.yml"
+    if path.exists():
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(data, dict):
+            data = {}
+    else:
+        data = {"schema_version": 1, "files": []}
+
+    files = data.get("files")
+    if not isinstance(files, list):
+        files = []
+        data["files"] = files
+
+    by_path = {entry.get("path"): entry for entry in files if isinstance(entry, dict)}
+    for file_path, items in sorted(by_file.items()):
+        entry = by_path.get(file_path)
+        if entry is None:
+            entry = {"path": file_path, "score": _risk_score(items), "reasons": []}
+            files.append(entry)
+            by_path[file_path] = entry
+
+        try:
+            current_score = int(entry.get("score") or 1)
+        except (TypeError, ValueError):
+            current_score = 1
+        entry["score"] = max(current_score, _risk_score(items))
+
+        reasons = entry.get("reasons")
+        if not isinstance(reasons, list):
+            reasons = []
+            entry["reasons"] = reasons
+        reason = f"Semgrep reported {len(items)} result(s) in this file."
+        if reason not in reasons:
+            reasons.append(reason)
+
+        external = entry.get("external_signals")
+        if not isinstance(external, dict):
+            external = {}
+            entry["external_signals"] = external
+        external["semgrep"] = [_semgrep_signal(item) for item in items]
+
+    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+
+
+def _merge_interesting_files(ctx: FindingsContext, by_file: dict[str, list[SemgrepFinding]], generated_at: str) -> None:
+    path = ctx.notes_root / "interesting-files.md"
+    existing = path.read_text(encoding="utf-8") if path.exists() else "# Interesting Files\n"
+    marker = "\n# Semgrep Enrichment\n"
+    base = existing.split(marker, 1)[0].rstrip()
+    lines = [base, "", "# Semgrep Enrichment", "", f"Date: {generated_at}", "", "These are reconnaissance signals only, not findings.", ""]
+    if by_file:
+        for file_path, items in sorted(by_file.items(), key=lambda entry: (-_risk_score(entry[1]), entry[0])):
+            lines.extend([
+                f"## `{file_path}`",
+                "",
+                f"- Risk score hint: {_risk_score(items)}",
+                f"- Semgrep results: {len(items)}",
+            ])
+            for item in items[:5]:
+                location = f":{item.start_line}" if item.start_line else ""
+                lines.append(f"- `{item.rule_id}` at `{file_path}{location}`: {item.message}")
+            lines.append("")
+    else:
+        lines.append("No Semgrep file leads were produced.")
+    path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+
 def _write_results(run: SemgrepEnrichmentRun, ctx: FindingsContext) -> None:
     ctx.notes_root.mkdir(parents=True, exist_ok=True)
     runs_dir = ctx.root / "runs"
@@ -172,9 +257,7 @@ def _write_results(run: SemgrepEnrichmentRun, ctx: FindingsContext) -> None:
     run.scan_path = ctx.notes_root / "semgrep-scan.md"
     run.scan_path.write_text("\n".join(scan_lines), encoding="utf-8")
 
-    by_file: dict[str, list[SemgrepFinding]] = {}
-    for finding in run.findings:
-        by_file.setdefault(finding.path, []).append(finding)
+    by_file = _group_by_file(run.findings)
 
     interesting_lines = [
         "# Semgrep Interesting Files",
@@ -212,11 +295,7 @@ def _write_results(run: SemgrepEnrichmentRun, ctx: FindingsContext) -> None:
                 "external_signals": {
                     "semgrep": [
                         {
-                            "id": item.id,
-                            "rule_id": item.rule_id,
-                            "severity": item.severity,
-                            "line": item.start_line,
-                            "message": item.message,
+                            **_semgrep_signal(item),
                         }
                         for item in items
                     ]
@@ -227,6 +306,9 @@ def _write_results(run: SemgrepEnrichmentRun, ctx: FindingsContext) -> None:
     }
     run.file_risk_index_path = ctx.notes_root / "semgrep-file-risk-index.yml"
     run.file_risk_index_path.write_text(yaml.safe_dump(risk_data, sort_keys=False), encoding="utf-8")
+
+    _merge_file_risk_index(ctx, by_file)
+    _merge_interesting_files(ctx, by_file, generated_at)
 
     run.summary_path = runs_dir / f"phase-1-semgrep-{datetime.now().strftime('%Y-%m-%d-%H%M%S')}.md"
     summary_lines = [
@@ -242,6 +324,8 @@ def _write_results(run: SemgrepEnrichmentRun, ctx: FindingsContext) -> None:
         "- `itemdb/notes/semgrep-scan.md`",
         "- `itemdb/notes/semgrep-interesting-files.md`",
         "- `itemdb/notes/semgrep-file-risk-index.yml`",
+        "- `itemdb/notes/file-risk-index.yml`",
+        "- `itemdb/notes/interesting-files.md`",
         "",
         "# Findings Created",
         "",

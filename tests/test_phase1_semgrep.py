@@ -61,6 +61,15 @@ def test_normalize_semgrep_results_extracts_recon_fields():
 def test_run_semgrep_enrichment_writes_durable_artifacts(tmp_path):
     ctx = temp_ctx(tmp_path)
     (tmp_path / "src").mkdir()
+    ctx.notes_root.mkdir(parents=True)
+    (ctx.notes_root / "file-risk-index.yml").write_text(
+        yaml.safe_dump({
+            "schema_version": 1,
+            "files": [{"path": "src/app.php", "score": 2, "reasons": ["Phase 1 lead."]}],
+        }, sort_keys=False),
+        encoding="utf-8",
+    )
+    (ctx.notes_root / "interesting-files.md").write_text("# Interesting Files\n\nExisting note.\n", encoding="utf-8")
     payload = {
         "results": [{
             "check_id": "php.lang.security.sql-injection",
@@ -102,6 +111,17 @@ def test_run_semgrep_enrichment_writes_durable_artifacts(tmp_path):
     assert risk["files"][0]["path"] == "src/app.php"
     assert risk["files"][0]["score"] == 4
     assert risk["files"][0]["external_signals"]["semgrep"][0]["rule_id"] == "php.lang.security.sql-injection"
+
+    merged_risk = yaml.safe_load((ctx.notes_root / "file-risk-index.yml").read_text(encoding="utf-8"))
+    assert merged_risk["files"][0]["path"] == "src/app.php"
+    assert merged_risk["files"][0]["score"] == 4
+    assert "Phase 1 lead." in merged_risk["files"][0]["reasons"]
+    assert merged_risk["files"][0]["external_signals"]["semgrep"][0]["rule_id"] == "php.lang.security.sql-injection"
+
+    interesting = (ctx.notes_root / "interesting-files.md").read_text(encoding="utf-8")
+    assert "Existing note." in interesting
+    assert "# Semgrep Enrichment" in interesting
+    assert "php.lang.security.sql-injection" in interesting
 
 
 def test_run_semgrep_enrichment_skips_when_semgrep_missing(tmp_path):

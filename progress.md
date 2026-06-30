@@ -257,8 +257,8 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 - [x] Write a human-readable summary to `itemdb/notes/semgrep-scan.md`.
 - [x] Write file-priority leads to `itemdb/notes/semgrep-interesting-files.md`.
 - [x] Write machine-readable scoring to `itemdb/notes/semgrep-file-risk-index.yml`.
-- [ ] Enrich `itemdb/notes/file-risk-index.yml` by adding `external_signals.semgrep` blocks where useful.
-- [ ] Enrich `itemdb/notes/interesting-files.md` with a clearly marked Semgrep section.
+- [x] Enrich `itemdb/notes/file-risk-index.yml` by adding `external_signals.semgrep` blocks where useful.
+- [x] Enrich `itemdb/notes/interesting-files.md` with a clearly marked Semgrep section.
 - [ ] Enrich `itemdb/notes/attack-surface.md`, `trust-boundaries.md`, and/or `threat-model.md` only when Semgrep results are source-backed and relevant.
 - [x] Write run summary `runs/phase-1-semgrep-YYYY-MM-DD-HHMMSS.md` using `templates/run-summary.md` style.
 
@@ -308,7 +308,7 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 ### Testing/Quality TODO
 
 - [x] Add backend unit tests for Semgrep JSON normalization.
-- [ ] Add backend tests for Semgrep artifact writing and note enrichment merge behavior.
+- [x] Add backend tests for Semgrep artifact writing and note enrichment merge behavior.
 - [ ] Add backend API tests for queuing enrichment steps and prompt save/load behavior.
 - [ ] Add worker/orchestration tests proving enrichment is optional and does not alter default phase progression.
 - [ ] Add frontend tests for the enrichment panel, buttons, warning copy, and prompt editor behavior.
