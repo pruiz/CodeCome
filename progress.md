@@ -235,7 +235,7 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 
 ### Product Decision
 
-- [x] Add an optional command named `make phase-1-semgrep` or `make recon-semgrep`; current preferred name is `make phase-1-semgrep` because it clearly means optional Phase 1 enrichment.
+- [x] Add optional web-owned worker phases named `phase-1-semgrep` and `phase-1-prompt-enrich`; do not add upstream CodeCome `make` targets.
 - [x] Do not replace or modify the existing `make phase-1` behavior.
 - [x] Run this step only when explicitly launched by the user or enabled in audit settings; do not include it automatically in default phase progression.
 - [x] Treat Semgrep and prompt results as reconnaissance signals, not confirmed vulnerabilities.
@@ -276,10 +276,7 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 
 ### Artifact Contract TODO
 
-- [x] Define `templates/semgrep-scan.md` for human-readable summary.
-- [x] Define `templates/semgrep-results.yml` for normalized Semgrep result schema.
-- [x] Define `templates/semgrep-interesting-files.md` for reviewer-facing file leads.
-- [x] Define `templates/semgrep-file-risk-index.yml` for machine-readable file scoring.
+- [x] Define `web_app`-owned Semgrep artifact contracts for human-readable summary, normalized results, reviewer-facing file leads, and machine-readable file scoring.
 - [x] Define how Semgrep scores merge into existing `itemdb/notes/file-risk-index.yml` without deleting manual or CodeQL-derived entries.
 - [x] Define how user-prompt enrichment changes are recorded in run summaries and note sections.
 
@@ -317,7 +314,7 @@ Goal: add an optional, explicitly triggered enrichment step that runs after norm
 
 ### Open Design TODO
 
-- [x] Decide final command name: preferred `make phase-1-semgrep`; alternative `make recon-semgrep`.
+- [x] Decide final command names: web-owned worker phases `phase-1-semgrep` and `phase-1-prompt-enrich`, not upstream `make` targets.
 - [x] Decide whether Semgrep should run before or after user-prompt enrichment; proposed order is Semgrep first, prompt second, so the prompt can interpret Semgrep output.
 - [x] Decide whether the prompt should use the existing `recon` agent or a new `recon-enricher` agent.
 - [x] Decide whether Preview Analysis prompt should remain global or become audit-specific for this feature.

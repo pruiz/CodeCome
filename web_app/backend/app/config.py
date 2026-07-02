@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     # Workspaces
     WORKSPACES_DIR: Path = Path("./workspaces")
     CODECOME_ROOT: Path = Path("/codecome")
+    CODE_SERVER_BIND_ADDR: str = "127.0.0.1"
+    CODE_SERVER_PUBLIC_BASE_URL: str = ""
     
     # Security
     SECRET_KEY: str = "change-me-in-production"

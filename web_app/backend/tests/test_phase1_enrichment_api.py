@@ -10,11 +10,29 @@ def test_phase1_enrichment_phases_are_supported():
     assert "phase-1-prompt-enrich" in phase_tasks.ALL_PHASES
 
 
+def test_phase1_enrichment_phases_use_web_owned_runner_commands():
+    semgrep_command = phase_tasks.build_command_line("phase-1-semgrep")
+    prompt_command = phase_tasks.build_command_line("phase-1-prompt-enrich")
+
+    assert ".codecome-web/phase1_enrichment_runner.py semgrep" in semgrep_command
+    assert ".codecome-web/phase1_enrichment_runner.py prompt" in prompt_command
+    assert "make phase-1-semgrep" not in semgrep_command
+    assert "make phase-1-prompt-enrich" not in prompt_command
+
+
 def test_phase1_enrichment_is_not_in_default_phase_progression():
     order = phase_tasks.phase_order_for_settings({})
 
     assert "phase-1-semgrep" not in order
     assert "phase-1-prompt-enrich" not in order
+
+
+def test_phase1_enrichment_auto_runs_before_phase2():
+    order = phase_tasks.phase_order_for_settings({"__audit_options": {"run_phase1_enrichment_auto": True}})
+
+    assert order.index("phase-1") < order.index("phase-1-semgrep")
+    assert order.index("phase-1-semgrep") < order.index("phase-1-prompt-enrich")
+    assert order.index("phase-1-prompt-enrich") < order.index("phase-2")
 
 
 def test_run_phase1_semgrep_queues_optional_phase(monkeypatch, tmp_path):
@@ -37,18 +55,38 @@ def test_run_phase1_semgrep_queues_optional_phase(monkeypatch, tmp_path):
     assert captured["delay"][6] == 2
 
 
+def test_sandbox_start_queues_worker_phase(monkeypatch, tmp_path):
+    captured = {}
+    audit_id = "11111111-2222-3333-4444-555555555555"
+    audit = SimpleNamespace(id=audit_id, status="ready", assigned_worker_id=2, model_settings={}, workspace_path=str(tmp_path), current_phase=None)
+    worker = SimpleNamespace(id=2, name="local")
+    db = SimpleNamespace(commits=0, commit=lambda: setattr(db, "commits", db.commits + 1))
+
+    monkeypatch.setattr(audits.crud, "get_audit", lambda db_arg, candidate_id: audit)
+    monkeypatch.setattr(audits.crud, "audit_has_open_blocking_questions", lambda db_arg, candidate_id: False)
+    monkeypatch.setattr(audits.crud, "select_available_worker", lambda db_arg, worker_id: worker)
+    monkeypatch.setattr(audits.run_phase_task, "delay", lambda *args: captured.setdefault("delay", args))
+
+    response = audits.start_audit_sandbox(audit_id, db=db)
+
+    assert response["phase"] == "make sandbox-up"
+    assert response["message"] == "Sandbox startup queued on worker"
+    assert captured["delay"][1] == "make sandbox-up"
+    assert captured["delay"][6] == 2
+
+
 def test_phase1_enrichment_prompt_defaults_to_preview_prompt(monkeypatch, tmp_path):
     preview_path = tmp_path / "web_app" / "backend" / "data" / "preview-analysis.md"
     preview_path.parent.mkdir(parents=True)
-    preview_path.write_text("Preview prompt", encoding="utf-8")
+    preview_path.write_text("User enrichment default prompt", encoding="utf-8")
     audit = SimpleNamespace(id="audit-1", model_settings={})
 
     monkeypatch.setattr(audits.settings, "CODECOME_ROOT", tmp_path)
 
     response = audits.phase1_enrichment_prompt_payload(audit)
 
-    assert response["prompt"] == "Preview prompt"
-    assert response["default_prompt"] == "Preview prompt"
+    assert response["prompt"] == "User enrichment default prompt"
+    assert response["default_prompt"] == "User enrichment default prompt"
     assert response["custom"] is False
 
 
@@ -72,14 +110,17 @@ def test_update_phase1_enrichment_prompt_saves_settings_and_workspace_file(monke
     assert response["local_sync"] == "runs/phase-1-enrichment-user-prompt.md"
 
 
-def test_run_phase1_prompt_enrichment_materializes_prompt_env(monkeypatch, tmp_path):
+def test_run_phase1_prompt_enrichment_queues_worker_phase_without_web_materialization(monkeypatch, tmp_path):
     captured = {}
     audit_id = "11111111-2222-3333-4444-555555555555"
     audit = SimpleNamespace(
         id=audit_id,
         status="phase_1_complete",
         assigned_worker_id=3,
-        model_settings={"__audit_options": {"phase1_enrichment_prompt": "Review imports."}},
+        model_settings={
+            "__audit_options": {"phase1_enrichment_prompt": "Review imports."},
+            "phase-1-prompt-enrich": {"model": "local/qwen3.6-27b"},
+        },
         workspace_path=str(tmp_path),
         current_phase=None,
     )
@@ -94,9 +135,10 @@ def test_run_phase1_prompt_enrichment_materializes_prompt_env(monkeypatch, tmp_p
     response = audits.run_phase1_prompt_enrichment(audit_id, db=db)
 
     assert response["phase"] == "phase-1-prompt-enrich"
-    assert (tmp_path / "runs" / "phase-1-enrichment-user-prompt.md").read_text() == "Review imports."
+    assert not (tmp_path / "runs" / "phase-1-enrichment-user-prompt.md").exists()
     assert captured["delay"][1] == "phase-1-prompt-enrich"
-    assert captured["delay"][7] == {"CODECOME_PHASE1_ENRICHMENT_PROMPT_FILE": "runs/phase-1-enrichment-user-prompt.md"}
+    assert captured["delay"][2] == "local/qwen3.6-27b"
+    assert captured["delay"][7] == {}
 
 
 def test_phase1_enrichment_artifact_payload_reads_semgrep_summary(tmp_path):

@@ -84,13 +84,55 @@ describe('api auth handling', () => {
     await auditsApi.runGapScan('audit-1');
     await auditsApi.runGapCompare('audit-1');
     await auditsApi.runGapSweep('audit-1', 'GAP-0007');
+    await auditsApi.gapPrompt('audit-1');
+    await auditsApi.updateGapPrompt('audit-1', 'Custom prompt');
     await auditsApi.markGapCandidate('audit-1', 'GAP-0007', { decision: 'ignored', note: 'not relevant' });
 
     expect(global.fetch.mock.calls[0][0]).toBe('/api/audits/audit-1/gap-scan');
     expect(global.fetch.mock.calls[1][0]).toBe('/api/audits/audit-1/gap-compare');
     expect(global.fetch.mock.calls[2][0]).toBe('/api/audits/audit-1/gap-sweep?candidate=GAP-0007');
-    expect(global.fetch.mock.calls[3][0]).toBe('/api/audits/audit-1/gap-candidates/GAP-0007/mark');
+    expect(global.fetch.mock.calls[3][0]).toBe('/api/audits/audit-1/gap-prompt');
+    expect(global.fetch.mock.calls[4][0]).toBe('/api/audits/audit-1/gap-prompt');
+    expect(global.fetch.mock.calls[4][1].method).toBe('PUT');
+    expect(JSON.parse(global.fetch.mock.calls[4][1].body)).toEqual({ prompt: 'Custom prompt' });
+    expect(global.fetch.mock.calls[5][0]).toBe('/api/audits/audit-1/gap-candidates/GAP-0007/mark');
     expect(global.fetch.mock.calls.every(([, options]) => options.headers.Authorization === 'Bearer fresh-token')).toBe(true);
-    expect(JSON.parse(global.fetch.mock.calls[3][1].body)).toEqual({ decision: 'ignored', note: 'not relevant' });
+    expect(JSON.parse(global.fetch.mock.calls[5][1].body)).toEqual({ decision: 'ignored', note: 'not relevant' });
+  });
+
+  it('calls phase 1 enrichment APIs with auth headers', async () => {
+    window.localStorage.setItem(authApi.tokenKey, 'fresh-token');
+    global.fetch = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ message: 'ok' }), { status: 200 })));
+
+    await auditsApi.phase1EnrichmentArtifacts('audit-1');
+    await auditsApi.phase1EnrichmentPrompt('audit-1');
+    await auditsApi.updatePhase1EnrichmentPrompt('audit-1', 'Custom recon prompt');
+    await auditsApi.runPhase1Semgrep('audit-1');
+    await auditsApi.runPhase1PromptEnrichment('audit-1');
+
+    expect(global.fetch.mock.calls[0][0]).toBe('/api/audits/audit-1/phase-1-enrichment-artifacts');
+    expect(global.fetch.mock.calls[1][0]).toBe('/api/audits/audit-1/phase-1-enrichment-prompt');
+    expect(global.fetch.mock.calls[2][0]).toBe('/api/audits/audit-1/phase-1-enrichment-prompt');
+    expect(global.fetch.mock.calls[2][1].method).toBe('PUT');
+    expect(JSON.parse(global.fetch.mock.calls[2][1].body)).toEqual({ prompt: 'Custom recon prompt' });
+    expect(global.fetch.mock.calls[3][0]).toBe('/api/audits/audit-1/phase-1-semgrep');
+    expect(global.fetch.mock.calls[4][0]).toBe('/api/audits/audit-1/phase-1-prompt-enrich');
+    expect(global.fetch.mock.calls.every(([, options]) => options.headers.Authorization === 'Bearer fresh-token')).toBe(true);
+  });
+
+  it('calls code-server APIs with auth headers', async () => {
+    window.localStorage.setItem(authApi.tokenKey, 'fresh-token');
+    global.fetch = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ running: false }), { status: 200 })));
+
+    await auditsApi.codeServerStatus('audit-1');
+    await auditsApi.startCodeServer('audit-1');
+    await auditsApi.stopCodeServer('audit-1');
+
+    expect(global.fetch.mock.calls[0][0]).toBe('/api/audits/audit-1/code-server/status');
+    expect(global.fetch.mock.calls[1][0]).toBe('/api/audits/audit-1/code-server/start');
+    expect(global.fetch.mock.calls[1][1].method).toBe('POST');
+    expect(global.fetch.mock.calls[2][0]).toBe('/api/audits/audit-1/code-server/stop');
+    expect(global.fetch.mock.calls[2][1].method).toBe('POST');
+    expect(global.fetch.mock.calls.every(([, options]) => options.headers.Authorization === 'Bearer fresh-token')).toBe(true);
   });
 });

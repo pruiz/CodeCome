@@ -110,6 +110,16 @@ export const auditsApi = {
   gapCandidates: (id) => {
     return apiFetch(`${API_BASE}/audits/${id}/gap-candidates`).then(res => parseResponse(res, 'Failed to load gap candidates'));
   },
+  gapPrompt: (id) => {
+    return apiFetch(`${API_BASE}/audits/${id}/gap-prompt`).then(res => parseResponse(res, 'Failed to load gap prompt'));
+  },
+  updateGapPrompt: (id, prompt) => {
+    return apiFetch(`${API_BASE}/audits/${id}/gap-prompt`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    }).then(res => parseResponse(res, 'Failed to save gap prompt'));
+  },
   runGapScan: (id) => {
     return apiFetch(`${API_BASE}/audits/${id}/gap-scan`, { method: 'POST' }).then(res => parseResponse(res, 'Failed to queue gap scan'));
   },
@@ -146,6 +156,9 @@ export const auditsApi = {
   runPhase1PromptEnrichment: (id) => {
     return apiFetch(`${API_BASE}/audits/${id}/phase-1-prompt-enrich`, { method: 'POST' }).then(res => parseResponse(res, 'Failed to queue Phase 1 prompt enrichment'));
   },
+  codeServerStatus: (id) => apiFetch(`${API_BASE}/audits/${id}/code-server/status`).then(res => parseResponse(res, 'Failed to load VS Code status')),
+  startCodeServer: (id) => apiFetch(`${API_BASE}/audits/${id}/code-server/start`, { method: 'POST' }).then(res => parseResponse(res, 'Failed to start VS Code')),
+  stopCodeServer: (id) => apiFetch(`${API_BASE}/audits/${id}/code-server/stop`, { method: 'POST' }).then(res => parseResponse(res, 'Failed to stop VS Code')),
 };
 
 export const findingsApi = {
@@ -179,6 +192,15 @@ export const previewApi = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt })
   }).then(res => parseResponse(res, 'Failed to save preview config')),
+};
+
+export const settingsApi = {
+  getCodeServer: () => apiFetch(`${API_BASE}/settings/code-server`).then(res => parseResponse(res, 'Failed to load VS Code settings')),
+  updateCodeServer: (data) => apiFetch(`${API_BASE}/settings/code-server`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }).then(res => parseResponse(res, 'Failed to save VS Code settings')),
 };
 
 export const logsApi = {

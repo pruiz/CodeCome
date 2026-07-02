@@ -30,6 +30,7 @@ CODECOME_REPO_REF="${CODECOME_REPO_REF:-}"
 OPENCODE_CONFIG_URL="${OPENCODE_CONFIG_URL:-}"
 OPENCODE_CONFIG_B64="${OPENCODE_CONFIG_B64:-}"
 INSTALL_DOCKER="${INSTALL_DOCKER:-1}"
+INSTALL_SEMGREP="${INSTALL_SEMGREP:-1}"
 RUN_MAKE_INIT="${RUN_MAKE_INIT:-1}"
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -98,6 +99,29 @@ install_docker() {
 
   systemctl enable docker >/dev/null 2>&1 || true
   systemctl start docker >/dev/null 2>&1 || true
+}
+
+install_semgrep() {
+  if [ "$INSTALL_SEMGREP" != "1" ]; then
+    log "Skipping Semgrep install (INSTALL_SEMGREP=$INSTALL_SEMGREP)."
+    return
+  fi
+
+  if need_cmd semgrep; then
+    log "Semgrep already installed."
+    return
+  fi
+
+  log "Installing Semgrep with pip."
+  if python3 -m pip install --upgrade semgrep --break-system-packages; then
+    return
+  fi
+
+  log "System pip install failed; trying user-local Semgrep install."
+  python3 -m pip install --user --upgrade semgrep
+  if [ -x /root/.local/bin/semgrep ] && [ ! -e /usr/local/bin/semgrep ]; then
+    ln -s /root/.local/bin/semgrep /usr/local/bin/semgrep
+  fi
 }
 
 create_worker_user() {
@@ -277,6 +301,7 @@ collect_requirements() {
   {"key":"python_310","label":"Python 3.10+","required":true,"ok":$python_ok,"detail":$(printf '%s' "$python_detail" | json_escape)},
   $(check_command gnu_make 'GNU Make' true make --version),
   {"key":"docker","label":"Docker CLI and daemon","required":true,"ok":$docker_ok,"detail":$(printf '%s' "$docker_detail" | json_escape)},
+  $(check_command semgrep_cli 'Semgrep CLI' false semgrep --version),
   $(check_command codeql_cli 'CodeQL CLI' false codeql --version),
   $(check_command asciinema 'asciinema' false asciinema --version),
   $(check_command agg 'agg' false agg --version),
@@ -403,6 +428,8 @@ main() {
   install_packages
   log "Installing Docker runtime."
   install_docker
+  log "Installing Semgrep static analysis CLI."
+  install_semgrep
   log "Creating worker user."
   create_worker_user
   log "Preparing directories."

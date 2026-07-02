@@ -92,6 +92,31 @@ def test_gap_sweep_phase_script_uses_make_target_and_args_env():
     assert "make gap-sweep" in script
 
 
+def test_gap_scan_phase_script_exports_custom_prompt_file():
+    worker = SimpleNamespace(
+        host="192.0.2.10",
+        port=22,
+        username="codecome",
+        workspace_base_path="/srv/workspaces",
+        config={"ssh_auth": {"method": "password", "password": "secret"}},
+    )
+    executor = SSHCodeComeExecutor(worker)
+
+    script = executor._phase_script(
+        remote_workspace="/srv/workspaces/audit-1",
+        job_dir="/srv/workspaces/audit-1/.codecome-web/jobs/gap-scan-1",
+        phase="gap-scan",
+        model=None,
+        variant=None,
+        finding_id=None,
+        thinking=False,
+        env_overrides={"CODECOME_GAP_PROMPT_FILE": "runs/gap-scan-prompt.md"},
+    )
+
+    assert "export CODECOME_GAP_PROMPT_FILE=runs/gap-scan-prompt.md" in script
+    assert "make gap-scan" in script
+
+
 def test_upload_tree_copies_workspace_source_to_remote_worker(tmp_path):
     worker = SimpleNamespace(
         host="192.0.2.10",

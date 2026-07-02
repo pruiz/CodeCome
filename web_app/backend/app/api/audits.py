@@ -3,13 +3,15 @@ from sqlalchemy.orm import Session
 from typing import Optional, List
 from uuid import UUID
 from pathlib import Path
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse
 import sys
-import io
+import posixpath
 from datetime import datetime
 import json
 import os
 import re
+import secrets
+import socket
 import subprocess
 
 from app.database import get_db
@@ -20,11 +22,14 @@ from app.workers.question_answering import write_user_answers_context, with_user
 from app.utils.codecome_wrapper import CodeComeExecutor, codecome_executor
 from app.utils.ssh_executor import SSHCodeComeExecutor
 from app.config import settings
+from app.api.preview import default_user_prompt_enrichment_prompt
 import shutil
 import zipfile
 import yaml
 
 router = APIRouter()
+
+CODE_SERVER_SESSIONS: dict[str, dict] = {}
 
 
 def tools_path() -> Path:
@@ -55,6 +60,46 @@ def latest_report_path(workspace_path: Path) -> Path | None:
         return None
     markdown = [path for path in candidates if path.suffix.lower() in {".md", ".markdown"}]
     return max(markdown or candidates, key=lambda path: path.stat().st_mtime)
+
+
+def free_local_port() -> int:
+    from app.api.settings import load_code_server_settings
+
+    bind_addr = load_code_server_settings().bind_addr
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind((bind_addr, 0))
+        return int(sock.getsockname()[1])
+
+
+def code_server_public_url(port: int) -> str:
+    from app.api.settings import load_code_server_settings
+
+    config = load_code_server_settings()
+    base = (config.public_base_url or "").strip().rstrip("/")
+    if base:
+        return f"{base}:{port}"
+    host = "localhost" if config.bind_addr in ("127.0.0.1", "localhost") else config.bind_addr
+    return f"http://{host}:{port}"
+
+
+def code_server_status_for_audit(audit_id: str) -> dict:
+    session = CODE_SERVER_SESSIONS.get(str(audit_id))
+    if not session:
+        return {"running": False}
+    process = session.get("process")
+    if process and process.poll() is None:
+        return {
+            "running": True,
+            "url": session["url"],
+            "password": session["password"],
+            "pid": process.pid,
+            "port": session["port"],
+            "bind_addr": session.get("bind_addr", settings.CODE_SERVER_BIND_ADDR),
+            "workspace_path": session["workspace_path"],
+            "started_at": session["started_at"],
+        }
+    CODE_SERVER_SESSIONS.pop(str(audit_id), None)
+    return {"running": False}
 
 
 def sync_remote_reports_if_needed(audit, workspace_path: Path, db: Session) -> None:
@@ -113,6 +158,94 @@ def gap_candidate_payloads(workspace_path: Path) -> list[dict]:
     return payloads
 
 
+def read_remote_gap_scan_prompt(audit, worker) -> tuple[str, str] | None:
+    if not worker or worker.type not in ("ssh", "proxmox-vm", "proxmox-lxc"):
+        return None
+    executor = SSHCodeComeExecutor(worker)
+    client = None
+    try:
+        client = executor._connect()
+        sftp = client.open_sftp()
+        remote_path = posixpath.join(executor.remote_workspace_path(str(audit.id)), "prompts", "phase-2-gap-sast.md")
+        if not executor._remote_exists(sftp, remote_path):
+            return None
+        return remote_path, executor._read_remote_file(sftp, remote_path)
+    except Exception:
+        return None
+    finally:
+        if client:
+            client.close()
+
+
+def default_gap_scan_prompt_for_audit(audit=None, worker=None) -> tuple[str, str]:
+    if audit:
+        remote_prompt = read_remote_gap_scan_prompt(audit, worker)
+        if remote_prompt and remote_prompt[1].strip():
+            return remote_prompt
+        workspace_path = Path(getattr(audit, "workspace_path", "") or "")
+        workspace_prompt = workspace_path / "prompts" / "phase-2-gap-sast.md"
+        if workspace_prompt.exists():
+            content = workspace_prompt.read_text(encoding="utf-8", errors="replace")
+            if content.strip():
+                return str(workspace_prompt), content
+    root_prompt = Path(settings.CODECOME_ROOT) / "prompts" / "phase-2-gap-sast.md"
+    if root_prompt.exists():
+        content = root_prompt.read_text(encoding="utf-8", errors="replace")
+        if content.strip():
+            return "prompts/phase-2-gap-sast.md", content
+    raise HTTPException(status_code=404, detail="Gap scan prompt not found in worker, audit workspace, or CodeCome root")
+
+
+def gap_scan_prompt_payload(audit=None, worker=None) -> dict:
+    prompt_path, default_prompt = default_gap_scan_prompt_for_audit(audit, worker)
+    custom_prompt = audit_options(getattr(audit, "model_settings", None)).get("gap_scan_prompt") if audit else None
+    return {
+        "path": prompt_path,
+        "default_prompt": default_prompt,
+        "prompt": custom_prompt if isinstance(custom_prompt, str) and custom_prompt.strip() else default_prompt,
+        "custom": bool(isinstance(custom_prompt, str) and custom_prompt.strip()),
+    }
+
+
+def sync_local_gap_scan_prompt(audit, prompt: str) -> str:
+    raw_workspace_path = getattr(audit, "workspace_path", "") or ""
+    if not raw_workspace_path:
+        return "skipped"
+    workspace_path = Path(raw_workspace_path)
+    path = workspace_path / "runs" / "gap-scan-prompt.md"
+    if prompt.strip():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(prompt, encoding="utf-8")
+        return str(path)
+    if path.exists():
+        path.unlink()
+    return "removed"
+
+
+def sync_remote_gap_scan_prompt(audit, worker, prompt: str) -> str:
+    if not worker or worker.type not in ("ssh", "proxmox-vm", "proxmox-lxc"):
+        return "skipped"
+    executor = SSHCodeComeExecutor(worker)
+    client = None
+    try:
+        client = executor._connect()
+        sftp = client.open_sftp()
+        remote_path = posixpath.join(executor.remote_workspace_path(str(audit.id)), "runs", "gap-scan-prompt.md")
+        if prompt.strip():
+            executor._mkdir_p(sftp, posixpath.dirname(remote_path))
+            with sftp.open(remote_path, "w") as handle:
+                handle.write(prompt)
+            return remote_path
+        if executor._remote_exists(sftp, remote_path):
+            sftp.remove(remote_path)
+        return "removed"
+    except Exception as exc:
+        return f"failed: {exc}"
+    finally:
+        if client:
+            client.close()
+
+
 PHASE1_ENRICHMENT_PROMPT_OPTION = "phase1_enrichment_prompt"
 PHASE1_ENRICHMENT_PROMPT_PATH = "runs/phase-1-enrichment-user-prompt.md"
 
@@ -120,8 +253,10 @@ PHASE1_ENRICHMENT_PROMPT_PATH = "runs/phase-1-enrichment-user-prompt.md"
 def preview_analysis_prompt_text() -> str:
     path = Path(settings.CODECOME_ROOT) / "web_app" / "backend" / "data" / "preview-analysis.md"
     if path.exists():
-        return path.read_text(encoding="utf-8", errors="replace")
-    return ""
+        prompt = path.read_text(encoding="utf-8", errors="replace")
+        if prompt.strip():
+            return prompt
+    return default_user_prompt_enrichment_prompt()
 
 
 def phase1_enrichment_prompt_payload(audit) -> dict:
@@ -466,16 +601,7 @@ def run_phase1_semgrep(audit_id: UUID, db: Session = Depends(get_db)):
 @router.post("/{audit_id}/phase-1-prompt-enrich")
 def run_phase1_prompt_enrichment(audit_id: UUID, db: Session = Depends(get_db)):
     """Manually queue optional Phase 1 user-prompt enrichment."""
-    audit = crud.get_audit(db, audit_id)
-    if not audit:
-        raise HTTPException(status_code=404, detail="Audit not found")
-    payload = phase1_enrichment_prompt_payload(audit)
-    prompt = payload.get("prompt") or ""
-    extra_env = None
-    if str(prompt).strip():
-        sync_local_phase1_enrichment_prompt(audit, str(prompt))
-        extra_env = {"CODECOME_PHASE1_ENRICHMENT_PROMPT_FILE": PHASE1_ENRICHMENT_PROMPT_PATH}
-    return queue_gap_step(db, audit_id, "phase-1-prompt-enrich", "Phase 1 prompt enrichment queued", extra_env=extra_env)
+    return queue_gap_step(db, audit_id, "phase-1-prompt-enrich", "Phase 1 prompt enrichment queued")
 
 
 def queue_gap_step(db: Session, audit_id: UUID, phase: str, message: str, extra_env: dict | None = None):
@@ -576,6 +702,44 @@ def update_phase1_enrichment_prompt(audit_id: UUID, request: schemas.Phase1Enric
     return payload
 
 
+@router.get("/{audit_id}/gap-prompt")
+def get_gap_prompt(audit_id: UUID, db: Session = Depends(get_db)):
+    """Return the prompt file used by make gap-scan for review in the UI."""
+    audit = crud.get_audit(db, audit_id)
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    assigned_worker_id = getattr(audit, "assigned_worker_id", None)
+    worker = crud.get_worker(db, assigned_worker_id) if assigned_worker_id else None
+    return gap_scan_prompt_payload(audit, worker)
+
+
+@router.put("/{audit_id}/gap-prompt")
+def update_gap_prompt(audit_id: UUID, request: schemas.GapPromptUpdate, db: Session = Depends(get_db)):
+    """Save or reset the audit-specific gap-scan prompt and sync it to the worker workspace."""
+    audit = crud.get_audit(db, audit_id)
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    prompt = request.prompt or ""
+    model_settings = dict(audit.model_settings or {})
+    options = dict(model_settings.get("__audit_options") or {})
+    if prompt.strip():
+        options["gap_scan_prompt"] = prompt
+    else:
+        options.pop("gap_scan_prompt", None)
+    model_settings["__audit_options"] = options
+    audit.model_settings = model_settings
+    db.commit()
+    db.refresh(audit)
+
+    assigned_worker_id = getattr(audit, "assigned_worker_id", None)
+    worker = crud.get_worker(db, assigned_worker_id) if assigned_worker_id else None
+    local_sync = sync_local_gap_scan_prompt(audit, prompt)
+    remote_sync = sync_remote_gap_scan_prompt(audit, worker, prompt)
+    payload = gap_scan_prompt_payload(audit, worker)
+    payload.update({"local_sync": local_sync, "remote_sync": remote_sync})
+    return payload
+
+
 @router.post("/{audit_id}/gap-candidates/{candidate_id}/mark")
 def mark_gap_candidate_decision(
     audit_id: UUID,
@@ -622,50 +786,19 @@ def continue_after_questions(audit_id: UUID, db: Session = Depends(get_db)):
 
 @router.post("/{audit_id}/sandbox/start")
 def start_audit_sandbox(audit_id: UUID, db: Session = Depends(get_db)):
-    """Launch the audit sandbox using codecome.yml environment.startup_command."""
+    """Queue audit sandbox startup on the assigned worker."""
     audit = crud.get_audit(db, audit_id)
     if not audit:
         raise HTTPException(status_code=404, detail="Audit not found")
-    workspace_path = Path(audit.workspace_path)
-    if not workspace_path.exists():
-        raise HTTPException(status_code=404, detail="Audit workspace not found")
-    command = sandbox_start_command(audit)
-    started_at = datetime.now()
-    crud.create_audit_log(db, audit_id, "INFO", f"Starting sandbox: {command}", source="sandbox")
-    try:
-        result = subprocess.run(
-            command,
-            cwd=str(workspace_path),
-            shell=True,
-            text=True,
-            capture_output=True,
-            env=os.environ.copy(),
-            timeout=900,
-        )
-    except subprocess.TimeoutExpired as exc:
-        crud.create_audit_log(db, audit_id, "ERROR", f"Sandbox start timed out after {exc.timeout}s", source="sandbox")
-        return {
-            "audit_id": str(audit_id),
-            "command": command,
-            "exit_code": -1,
-            "duration_seconds": int((datetime.now() - started_at).total_seconds()),
-            "stdout": (exc.stdout or "")[-4000:] if isinstance(exc.stdout, str) else "",
-            "stderr": (exc.stderr or "")[-4000:] if isinstance(exc.stderr, str) else "Command timed out",
-        }
-    duration = int((datetime.now() - started_at).total_seconds())
-    level = "INFO" if result.returncode == 0 else "ERROR"
-    crud.create_audit_log(db, audit_id, level, f"Sandbox start finished with exit code {result.returncode} in {duration}s", source="sandbox")
-    if result.stdout.strip():
-        crud.create_audit_log(db, audit_id, "INFO", result.stdout[-2000:], source="sandbox")
-    if result.stderr.strip():
-        crud.create_audit_log(db, audit_id, "WARN" if result.returncode == 0 else "ERROR", result.stderr[-2000:], source="sandbox")
+    if crud.audit_has_open_blocking_questions(db, audit_id):
+        raise HTTPException(status_code=409, detail="Audit has open blocking questions")
+    worker = queue_audit_phase(db, audit, "make sandbox-up")
     return {
         "audit_id": str(audit_id),
-        "command": command,
-        "exit_code": result.returncode,
-        "duration_seconds": duration,
-        "stdout": result.stdout[-4000:],
-        "stderr": result.stderr[-4000:],
+        "phase": "make sandbox-up",
+        "worker_id": worker.id,
+        "worker_name": worker.name,
+        "message": "Sandbox startup queued on worker",
     }
 
 
@@ -688,6 +821,87 @@ def download_latest_report(audit_id: UUID, db: Session = Depends(get_db)):
     if report_path is None:
         raise HTTPException(status_code=404, detail="No report file found under itemdb/reports")
     return FileResponse(str(report_path), filename=report_path.name, media_type="text/markdown")
+
+
+@router.get("/{audit_id}/code-server/status")
+def code_server_status(audit_id: UUID, db: Session = Depends(get_db)):
+    """Return local web-host code-server status for an audit workspace."""
+    audit = crud.get_audit(db, audit_id)
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    status = code_server_status_for_audit(str(audit_id))
+    status["audit_id"] = str(audit_id)
+    return status
+
+
+@router.post("/{audit_id}/code-server/start")
+def start_code_server(audit_id: UUID, db: Session = Depends(get_db)):
+    """Start code-server on the web host for the local synced audit workspace."""
+    audit = crud.get_audit(db, audit_id)
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    workspace_path = Path(audit.workspace_path)
+    if not workspace_path.exists():
+        raise HTTPException(status_code=404, detail="Audit workspace not found")
+    existing = code_server_status_for_audit(str(audit_id))
+    if existing.get("running"):
+        existing["audit_id"] = str(audit_id)
+        return existing
+    if not shutil.which("code-server"):
+        raise HTTPException(status_code=503, detail="code-server is not installed on the web host")
+    from app.api.settings import load_code_server_settings
+
+    code_server_config = load_code_server_settings()
+    port = free_local_port()
+    password = secrets.token_urlsafe(18)
+    data_dir = workspace_path / "runs" / "code-server-data"
+    extensions_dir = workspace_path / "runs" / "code-server-extensions"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    extensions_dir.mkdir(parents=True, exist_ok=True)
+    env = os.environ.copy()
+    env["PASSWORD"] = password
+    cmd = [
+        "code-server",
+        "--bind-addr",
+        f"{code_server_config.bind_addr}:{port}",
+        "--auth",
+        "password",
+        "--disable-telemetry",
+        "--user-data-dir",
+        str(data_dir),
+        "--extensions-dir",
+        str(extensions_dir),
+        str(workspace_path),
+    ]
+    process = subprocess.Popen(cmd, cwd=str(workspace_path), env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
+    session = {
+        "process": process,
+        "port": port,
+        "password": password,
+        "url": code_server_public_url(port),
+        "bind_addr": code_server_config.bind_addr,
+        "workspace_path": str(workspace_path),
+        "started_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    CODE_SERVER_SESSIONS[str(audit_id)] = session
+    return {"audit_id": str(audit_id), **code_server_status_for_audit(str(audit_id))}
+
+
+@router.post("/{audit_id}/code-server/stop")
+def stop_code_server(audit_id: UUID, db: Session = Depends(get_db)):
+    """Stop local web-host code-server for an audit workspace."""
+    audit = crud.get_audit(db, audit_id)
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    session = CODE_SERVER_SESSIONS.pop(str(audit_id), None)
+    process = session.get("process") if session else None
+    if process and process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+    return {"audit_id": str(audit_id), "running": False}
 
 
 @router.post("/{audit_id}/pause")

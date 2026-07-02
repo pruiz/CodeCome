@@ -288,6 +288,86 @@ def test_run_gap_scan_queues_manual_gap_phase(monkeypatch, tmp_path):
     assert captured["delay"][6] == 4
 
 
+def test_gap_prompt_returns_custom_audit_prompt(monkeypatch, tmp_path):
+    (tmp_path / "prompts").mkdir()
+    (tmp_path / "prompts" / "phase-2-gap-sast.md").write_text("Default prompt", encoding="utf-8")
+    audit = SimpleNamespace(id="audit-1", model_settings={"__audit_options": {"gap_scan_prompt": "Custom app context"}})
+
+    monkeypatch.setattr(settings, "CODECOME_ROOT", tmp_path)
+    monkeypatch.setattr(audits.crud, "get_audit", lambda db_arg, audit_id: audit)
+
+    response = audits.get_gap_prompt("11111111-2222-3333-4444-555555555555", db=object())
+
+    assert response["path"] == "prompts/phase-2-gap-sast.md"
+    assert response["default_prompt"] == "Default prompt"
+    assert response["prompt"] == "Custom app context"
+    assert response["custom"] is True
+
+
+def test_gap_prompt_prefers_audit_workspace_prompt(monkeypatch, tmp_path):
+    workspace = tmp_path / "workspace"
+    (workspace / "prompts").mkdir(parents=True)
+    (workspace / "prompts" / "phase-2-gap-sast.md").write_text("Workspace prompt", encoding="utf-8")
+    audit = SimpleNamespace(id="audit-1", assigned_worker_id=None, workspace_path=str(workspace), model_settings={})
+
+    monkeypatch.setattr(audits.crud, "get_audit", lambda db_arg, audit_id: audit)
+
+    response = audits.get_gap_prompt("11111111-2222-3333-4444-555555555555", db=object())
+
+    assert response["path"] == str(workspace / "prompts" / "phase-2-gap-sast.md")
+    assert response["prompt"] == "Workspace prompt"
+    assert response["custom"] is False
+
+
+def test_gap_prompt_prefers_remote_worker_prompt(monkeypatch, tmp_path):
+    worker = SimpleNamespace(id=4, type="ssh")
+    audit = SimpleNamespace(id="audit-1", assigned_worker_id=4, workspace_path=str(tmp_path), model_settings={})
+
+    class FakeExecutor:
+        def __init__(self, worker_arg):
+            self.worker = worker_arg
+
+        def _connect(self):
+            return SimpleNamespace(close=lambda: None, open_sftp=lambda: object())
+
+        def remote_workspace_path(self, audit_id):
+            return f"/srv/workspaces/audit-{audit_id}"
+
+        def _remote_exists(self, sftp, remote_path):
+            return remote_path == "/srv/workspaces/audit-audit-1/prompts/phase-2-gap-sast.md"
+
+        def _read_remote_file(self, sftp, remote_path):
+            return "Remote worker prompt"
+
+    monkeypatch.setattr(audits, "SSHCodeComeExecutor", FakeExecutor)
+    monkeypatch.setattr(audits.crud, "get_audit", lambda db_arg, audit_id: audit)
+    monkeypatch.setattr(audits.crud, "get_worker", lambda db_arg, worker_id: worker)
+
+    response = audits.get_gap_prompt("11111111-2222-3333-4444-555555555555", db=object())
+
+    assert response["path"] == "/srv/workspaces/audit-audit-1/prompts/phase-2-gap-sast.md"
+    assert response["prompt"] == "Remote worker prompt"
+    assert response["custom"] is False
+
+
+def test_update_gap_prompt_saves_model_settings_and_workspace_file(monkeypatch, tmp_path):
+    audit_id = "11111111-2222-3333-4444-555555555555"
+    workspace = tmp_path / "workspace"
+    (workspace / "prompts").mkdir(parents=True)
+    (workspace / "prompts" / "phase-2-gap-sast.md").write_text("Workspace prompt", encoding="utf-8")
+    audit = SimpleNamespace(id=audit_id, assigned_worker_id=None, workspace_path=str(workspace), model_settings={})
+    db = SimpleNamespace(commits=0, refreshed=[], commit=lambda: setattr(db, "commits", db.commits + 1), refresh=lambda obj: db.refreshed.append(obj))
+
+    monkeypatch.setattr(audits.crud, "get_audit", lambda db_arg, candidate_id: audit)
+
+    response = audits.update_gap_prompt(audit_id, schemas.GapPromptUpdate(prompt="Custom audit focus"), db=db)
+
+    assert audit.model_settings["__audit_options"]["gap_scan_prompt"] == "Custom audit focus"
+    assert (workspace / "runs" / "gap-scan-prompt.md").read_text() == "Custom audit focus"
+    assert response["prompt"] == "Custom audit focus"
+    assert response["local_sync"].endswith("runs/gap-scan-prompt.md")
+
+
 def test_run_gap_compare_queues_manual_gap_phase(monkeypatch, tmp_path):
     captured = {}
     audit_id = "11111111-2222-3333-4444-555555555555"

@@ -60,6 +60,7 @@ describe('AuditCreator', () => {
     await screen.findByText('AI Owner (AI)');
     expect(screen.queryByText(/AI review between phases/i)).not.toBeInTheDocument();
     await user.click(screen.getByRole('switch', { name: /Auto-continue to next phase/i }));
+    await user.click(screen.getByRole('switch', { name: /Run Phase 1 enrichment before phase-2/i }));
     await user.click(screen.getByRole('switch', { name: /Run gap scan after exploit-all/i }));
     await screen.findByText('local/qwen3.6-27b');
     await user.selectOptions(screen.getByLabelText('Worker Model'), 'local/qwen3.6-27b');
@@ -74,7 +75,7 @@ describe('AuditCreator', () => {
         name: 'Question Owner Audit',
         question_owner_user_id: 7,
         auto_continue: true,
-        model_settings: { __audit_options: { worker_model: 'local/qwen3.6-27b', run_gap_scan_auto: true } },
+        model_settings: { __audit_options: { worker_model: 'local/qwen3.6-27b', run_phase1_enrichment_auto: true, run_gap_scan_auto: true } },
       });
     });
   });
@@ -90,6 +91,7 @@ describe('AuditCreator', () => {
     await user.type(screen.getByPlaceholderText('My Audit'), 'Zip Question Audit');
     await screen.findByText('AI Owner (AI)');
     await screen.findByText('local/qwen3.6-27b');
+    await user.click(screen.getByRole('switch', { name: /Run Phase 1 enrichment before phase-2/i }));
     await user.click(screen.getByRole('switch', { name: /Run gap scan after exploit-all/i }));
     await user.selectOptions(screen.getByLabelText('Worker Model'), 'local/qwen3.6-27b');
     await user.selectOptions(screen.getByLabelText('Question Owner'), '7');
@@ -103,7 +105,7 @@ describe('AuditCreator', () => {
       expect(uploadCall[1].body.get('file')).toBe(zipFile);
       expect(uploadCall[1].body.get('name')).toBe('Zip Question Audit');
       expect(uploadCall[1].body.get('question_owner_user_id')).toBe('7');
-      expect(JSON.parse(uploadCall[1].body.get('model_settings'))).toEqual({ __audit_options: { worker_model: 'local/qwen3.6-27b', run_gap_scan_auto: true } });
+      expect(JSON.parse(uploadCall[1].body.get('model_settings'))).toEqual({ __audit_options: { worker_model: 'local/qwen3.6-27b', run_phase1_enrichment_auto: true, run_gap_scan_auto: true } });
     });
   });
 });

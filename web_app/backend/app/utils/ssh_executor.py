@@ -288,7 +288,11 @@ class SSHCodeComeExecutor:
         for key, value in (env_overrides or {}).items():
             exports.append(f"export {shlex.quote(str(key))}={shlex.quote(str(value))}")
 
-        if phase.startswith("make "):
+        if phase == "phase-1-semgrep":
+            make_cmd = [".venv/bin/python3", ".codecome-web/phase1_enrichment_runner.py", "semgrep"]
+        elif phase == "phase-1-prompt-enrich":
+            make_cmd = [".venv/bin/python3", ".codecome-web/phase1_enrichment_runner.py", "prompt"]
+        elif phase.startswith("make "):
             make_cmd = ["make", shlex.quote(phase.split(" ", 1)[1])]
         else:
             make_cmd = ["make", shlex.quote(phase)]

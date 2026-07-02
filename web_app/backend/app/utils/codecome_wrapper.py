@@ -224,6 +224,70 @@ class CodeComeExecutor:
             completed_at=completed_at,
         )
 
+    def execute_command(
+        self,
+        workspace_path: Path,
+        cmd: list[str],
+        output_callback: Optional[Callable[[str, str], None]] = None,
+        process_callback: Optional[Callable[[int, list[str]], None]] = None,
+        env_overrides: Optional[dict] = None,
+        timeout: int = 7200,
+    ) -> ExecutionResult:
+        started_at = datetime.now()
+        stdout_parts = []
+        stderr_parts = []
+        exit_code = 0
+        env = os.environ.copy()
+        if env_overrides:
+            env.update({str(k): str(v) for k, v in env_overrides.items()})
+        try:
+            if output_callback:
+                output_callback("system", f"$ {' '.join(cmd)}")
+            process = subprocess.Popen(
+                cmd,
+                cwd=str(workspace_path),
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+                preexec_fn=os.setsid,
+            )
+            if process_callback:
+                process_callback(process.pid, cmd)
+
+            def read_stream(stream, parts, source):
+                for line in iter(stream.readline, ""):
+                    parts.append(line)
+                    if output_callback and line.strip():
+                        output_callback(source, line.rstrip("\n"))
+                stream.close()
+
+            stdout_thread = threading.Thread(target=read_stream, args=(process.stdout, stdout_parts, "stdout"))
+            stderr_thread = threading.Thread(target=read_stream, args=(process.stderr, stderr_parts, "stderr"))
+            stdout_thread.start()
+            stderr_thread.start()
+            try:
+                process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                self.terminate_process_group(process.pid)
+                exit_code = -1
+            stdout_thread.join(timeout=5)
+            stderr_thread.join(timeout=5)
+            exit_code = process.returncode if exit_code != -1 else -1
+        except Exception as exc:
+            exit_code = -1
+            stderr_parts.append(str(exc))
+        completed_at = datetime.now()
+        return ExecutionResult(
+            exit_code=exit_code,
+            stdout="".join(stdout_parts),
+            stderr="".join(stderr_parts),
+            duration=(completed_at - started_at).total_seconds(),
+            started_at=started_at,
+            completed_at=completed_at,
+        )
+
     @staticmethod
     def terminate_process_group(pid: int) -> None:
         pgid = None

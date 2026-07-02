@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 from datetime import datetime
+from pathlib import Path
 from uuid import uuid4
 
 from app import crud, schemas
@@ -7,7 +8,7 @@ from app.api.audits import audit_response, next_audit_step, sandbox_start_comman
 from app.api.workers import model_options_from_worker, registered_worker_config, validate_worker_registration_token
 from app.utils.codecome_wrapper import CodeComeExecutor
 from app.api import logs, workers
-from app.workers.phase_tasks import ALL_PHASES, GAP_PHASES, build_command_line, status_phase
+from app.workers.phase_tasks import ALL_PHASES, GAP_PHASES, build_command_line, status_phase, with_gap_scan_prompt_env, with_phase1_enrichment_prompt_env, with_phase2_enrichment_context_env
 from app.workers.phase_tasks import merged_phase_env
 
 
@@ -196,6 +197,34 @@ def test_worker_response_redacts_ssh_secrets():
     }
     assert "secret" not in str(response)
     assert "private_key" not in response["config"]["ssh_auth"]
+
+
+def test_local_worker_checks_include_semgrep(monkeypatch):
+    def fake_command_version(command, args=None):
+        if command == "semgrep":
+            return True, "1.2.3"
+        if command == "docker" and args == ["--version"]:
+            return True, "Docker version"
+        return True, "ok"
+
+    monkeypatch.setattr(workers, "command_version", fake_command_version)
+    monkeypatch.setattr(workers.shutil, "which", lambda command: "/usr/bin/" + command)
+
+    class FakeRunResult:
+        returncode = 0
+        stdout = "3.12.3\n"
+        stderr = ""
+
+    monkeypatch.setattr(workers.subprocess, "run", lambda *args, **kwargs: FakeRunResult())
+    monkeypatch.setattr(workers.Path, "home", classmethod(lambda cls: Path("/definitely/missing")))
+
+    checks = workers.local_requirement_checks()
+    semgrep = next(check for check in checks if check.key == "semgrep_cli")
+
+    assert semgrep.label == "Semgrep CLI"
+    assert semgrep.required is False
+    assert semgrep.ok is True
+    assert semgrep.detail == "1.2.3"
 
 
 def test_local_worker_capacity_is_forced_to_one_job():
@@ -392,6 +421,63 @@ def test_phase_command_line_shows_env_overrides_after_model_defaults():
     )
 
     assert command.index("CODECOME_MODEL=worker/default") < command.index("CODECOME_MODEL=audit/override")
+
+
+def test_gap_scan_custom_prompt_writes_workspace_prompt(tmp_path):
+    env = with_gap_scan_prompt_env(
+        tmp_path,
+        {"__audit_options": {"gap_scan_prompt": "Focus on tenant isolation."}},
+        "gap-scan",
+        {},
+    )
+
+    assert env["CODECOME_GAP_PROMPT_FILE"] == "runs/gap-scan-prompt.md"
+    assert (tmp_path / "runs" / "gap-scan-prompt.md").read_text() == "Focus on tenant isolation."
+
+
+def test_gap_scan_prompt_env_preserves_explicit_override(tmp_path):
+    env = with_gap_scan_prompt_env(
+        tmp_path,
+        {"__audit_options": {"gap_scan_prompt": "Custom"}},
+        "gap-scan",
+        {"CODECOME_GAP_PROMPT_FILE": "prompts/other.md"},
+    )
+
+    assert env["CODECOME_GAP_PROMPT_FILE"] == "prompts/other.md"
+    assert not (tmp_path / "runs" / "gap-scan-prompt.md").exists()
+
+
+def test_phase1_prompt_enrichment_env_written_by_worker_task(tmp_path):
+    env = with_phase1_enrichment_prompt_env(
+        tmp_path,
+        {"__audit_options": {"phase1_enrichment_prompt": "Review authorization boundaries."}},
+        "phase-1-prompt-enrich",
+        {},
+    )
+
+    assert env["CODECOME_PHASE1_ENRICHMENT_PROMPT_FILE"] == "runs/phase-1-enrichment-user-prompt.md"
+    assert (tmp_path / "runs" / "phase-1-enrichment-user-prompt.md").read_text() == "Review authorization boundaries."
+
+
+def test_phase2_enrichment_context_env_written_when_artifacts_exist(tmp_path):
+    notes = tmp_path / "itemdb" / "notes"
+    notes.mkdir(parents=True)
+    (notes / "semgrep-results.yml").write_text("summary: {}\n")
+
+    env = with_phase2_enrichment_context_env(tmp_path, "phase-2", {})
+
+    assert env["PROMPT_EXTRA_FILE"] == "runs/phase-2-enrichment-context.md"
+    context = (tmp_path / "runs" / "phase-2-enrichment-context.md").read_text()
+    assert "itemdb/notes/semgrep-results.yml" in context
+    assert "itemdb/notes/user-prompt-candidates.yml" in context
+    assert "leads only, not findings" in context
+
+
+def test_phase2_enrichment_context_env_skips_without_artifacts(tmp_path):
+    env = with_phase2_enrichment_context_env(tmp_path, "phase-2", {})
+
+    assert "PROMPT_EXTRA_FILE" not in env
+    assert not (tmp_path / "runs" / "phase-2-enrichment-context.md").exists()
 
 
 def test_merged_phase_env_phase_overrides_audit_defaults():

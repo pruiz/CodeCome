@@ -35,6 +35,10 @@ class GapCandidateMarkRequest(BaseModel):
     note: Optional[str] = None
 
 
+class GapPromptUpdate(BaseModel):
+    prompt: Optional[str] = None
+
+
 class Phase1EnrichmentPromptUpdate(BaseModel):
     prompt: Optional[str] = None
 
@@ -321,6 +325,12 @@ class WorkerChecksResponse(BaseModel):
 
 class PreviewAnalysisConfig(BaseModel):
     prompt: str = ""
+    updated: bool = False
+
+
+class CodeServerSettings(BaseModel):
+    bind_addr: str = "127.0.0.1"
+    public_base_url: str = ""
     updated: bool = False
 
 

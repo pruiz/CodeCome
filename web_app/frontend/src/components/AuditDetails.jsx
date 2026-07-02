@@ -6,6 +6,7 @@ import LiveLogs from './LiveLogs';
 import FindingsList from './FindingsList';
 import AuditQuestions from './AuditQuestions';
 import Phase1EnrichmentPanelTab from './Phase1EnrichmentPanel';
+import CodeServerPanel from './CodeServerPanel';
 import { formatSpainDateTime, formatSpainTime } from '../utils/dates';
 
 function cleanTerminalText(value) {
@@ -69,6 +70,8 @@ const auditSteps = [
   { key: 'make init', statusPrefix: 'make_init', label: 'make init', sub: 'venv + deps' },
   { key: 'make check', statusPrefix: 'make_check', label: 'make check', sub: 'preflight' },
   { key: 'phase-1', statusPrefix: 'phase_1', label: 'make phase-1', sub: 'Reconnaissance' },
+  { key: 'phase-1-semgrep', statusPrefix: 'phase_1_semgrep', label: 'Semgrep enrichment', sub: 'Web worker phase' },
+  { key: 'phase-1-prompt-enrich', statusPrefix: 'phase_1_prompt_enrich', label: 'Prompt enrichment', sub: 'Web worker phase' },
   { key: 'phase-2', statusPrefix: 'phase_2', label: 'make phase-2', sub: 'Hypothesis' },
   { key: 'make sweep', statusPrefix: 'make_sweep', label: 'make sweep', sub: 'Optional deep sweep' },
   { key: 'phase-3', statusPrefix: 'phase_3', label: 'make phase-3', sub: 'Counter-analysis' },
@@ -79,6 +82,42 @@ const auditSteps = [
   { key: 'gap-sweep', statusPrefix: 'gap_sweep', label: 'make gap-sweep', sub: 'Sweep gaps' },
   { key: 'phase-6', statusPrefix: 'phase_6', label: 'make phase-6', sub: 'Reporting' },
 ];
+
+const mandatoryPhaseKeys = [
+  'make init',
+  'make check',
+  'phase-1',
+  'phase-2',
+  'phase-3',
+  'make validate-all',
+  'make exploit-all',
+  'phase-6',
+];
+
+const optionalPhaseBranches = [
+  {
+    label: 'Phase 1 enrichment',
+    anchor: 'after make phase-1',
+    parentKey: 'phase-1',
+    keys: ['phase-1-semgrep', 'phase-1-prompt-enrich'],
+  },
+  {
+    label: 'Optional deep sweep',
+    anchor: 'after make phase-2',
+    parentKey: 'phase-2',
+    keys: ['make sweep'],
+  },
+  {
+    label: 'Find gaps loop',
+    anchor: 'after make exploit-all',
+    parentKey: 'make exploit-all',
+    keys: ['gap-scan', 'gap-compare', 'gap-sweep'],
+  },
+];
+
+function findAuditStep(key) {
+  return auditSteps.find((step) => step.key === key);
+}
 
 function stepStatus(audit, step) {
   const executions = audit?.phase_executions || [];
@@ -106,39 +145,117 @@ function latestExecutionForPhase(executions, phase) {
   }, matches[0]);
 }
 
-function PhaseProgress({ audit, selectedPhase, onSelectPhase }) {
+function PhaseBox({ audit, step, selected, optional = false, onSelectPhase }) {
+  const status = stepStatus(audit, step);
+  const styles = {
+    empty: optional
+      ? 'border-amber-900/70 bg-amber-950/10 text-amber-200/70'
+      : 'border-gray-800 bg-gray-900/80 text-gray-500',
+    complete: 'border-green-700/70 bg-green-950/50 text-green-200 shadow-green-950/30',
+    running: 'border-blue-700/70 bg-blue-950/50 text-blue-200 shadow-blue-950/30',
+    failed: 'border-red-700/70 bg-red-950/50 text-red-200 shadow-red-950/30',
+  };
+  const dot = {
+    empty: optional ? 'bg-amber-500/60' : 'bg-gray-600',
+    complete: 'bg-green-400',
+    running: 'bg-blue-400 animate-pulse',
+    failed: 'bg-red-400',
+  };
+
   return (
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-12 gap-2 mb-6">
-      {auditSteps.map((step) => {
-        const status = stepStatus(audit, step);
-        const selected = selectedPhase === step.key;
-        const styles = {
-          empty: 'border-gray-800 bg-gray-900/80 text-gray-500',
-          complete: 'border-green-700/70 bg-green-950/50 text-green-200 shadow-green-950/30',
-          running: 'border-blue-700/70 bg-blue-950/50 text-blue-200 shadow-blue-950/30',
-          failed: 'border-red-700/70 bg-red-950/50 text-red-200 shadow-red-950/30',
-        };
-        const dot = {
-          empty: 'bg-gray-600',
-          complete: 'bg-green-400',
-          running: 'bg-blue-400 animate-pulse',
-          failed: 'bg-red-400',
-        };
-        
-        return (
-          <button
-            key={step.key}
-            onClick={() => onSelectPhase(step.key)}
-            className={`min-w-0 rounded-xl border p-3 text-left shadow-lg transition ${styles[status]} ${selected ? 'ring-2 ring-blue-300' : ''}`}
-          >
-            <div className="flex items-center gap-2">
-              <span className={`h-2.5 w-2.5 rounded-full ${dot[status]}`}></span>
-              <span className="truncate text-xs font-bold">{step.label}</span>
-            </div>
-            <div className="mt-1 truncate text-[10px] opacity-75">{step.sub}</div>
-          </button>
-        );
-      })}
+    <button
+      key={step.key}
+      onClick={() => onSelectPhase(step.key)}
+      className={`min-h-[76px] w-40 shrink-0 rounded-xl border p-3 text-left shadow-lg transition ${styles[status]} ${selected ? 'ring-2 ring-blue-300' : ''}`}
+    >
+      <div className="flex items-center gap-2">
+        <span className={`h-2.5 w-2.5 rounded-full ${dot[status]}`}></span>
+        <span className="truncate text-xs font-bold">{step.label}</span>
+      </div>
+      <div className="mt-1 truncate text-[10px] opacity-75">{step.sub}</div>
+      {optional && <div className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-amber-300/80">optional</div>}
+    </button>
+  );
+}
+
+function PhaseArrow({ optional = false }) {
+  return (
+    <div className="flex shrink-0 items-center gap-1 px-1" aria-hidden="true">
+      <div className={optional ? 'h-0 w-8 border-t-2 border-dotted border-amber-500/70' : 'h-0.5 w-8 rounded-full bg-cyan-500/80'}></div>
+      <div className={`h-2 w-2 rotate-45 border-r-2 border-t-2 ${optional ? 'border-amber-500/70' : 'border-cyan-500/80'}`}></div>
+    </div>
+  );
+}
+
+function PhaseProgress({ audit, selectedPhase, onSelectPhase }) {
+  const mandatorySteps = mandatoryPhaseKeys.map(findAuditStep).filter(Boolean);
+  const optionalByParent = optionalPhaseBranches.reduce((acc, branch) => {
+    acc[branch.parentKey] = branch;
+    return acc;
+  }, {});
+
+  return (
+    <div className="mb-6 rounded-2xl border border-gray-800 bg-gray-950/50 p-4 shadow-xl shadow-black/20">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Audit phase flow</div>
+          <div className="mt-1 text-sm text-gray-400">Solid arrows are mandatory. Dotted arrows are optional steps.</div>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-wide text-gray-500">
+          <span className="flex items-center gap-1.5"><span className="h-0.5 w-5 rounded-full bg-cyan-500/80"></span>mandatory</span>
+          <span className="flex items-center gap-1.5"><span className="h-0 w-5 border-t-2 border-dotted border-amber-500/70"></span>optional</span>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto pb-2">
+        <div className="flex min-w-max items-start">
+          {mandatorySteps.map((step, index) => (
+            <React.Fragment key={step.key}>
+              {index > 0 && <div className="pt-9"><PhaseArrow /></div>}
+              <div className="min-w-40 shrink-0">
+                <PhaseBox audit={audit} step={step} selected={selectedPhase === step.key} onSelectPhase={onSelectPhase} />
+                {optionalByParent[step.key] ? (
+                  <OptionalBranch
+                    audit={audit}
+                    branch={optionalByParent[step.key]}
+                    selectedPhase={selectedPhase}
+                    onSelectPhase={onSelectPhase}
+                  />
+                ) : (
+                  <div className="h-40" />
+                )}
+              </div>
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OptionalBranch({ audit, branch, selectedPhase, onSelectPhase }) {
+  const steps = branch.keys.map(findAuditStep).filter(Boolean);
+
+  return (
+    <div className="mt-3 w-max">
+      <div className="ml-20 h-5 w-0 border-l-2 border-dotted border-amber-500/70" aria-hidden="true"></div>
+      <div className="rounded-xl border border-dotted border-amber-800/70 bg-amber-950/10 p-3">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-amber-300/90">{branch.label}</div>
+            <div className="text-[10px] text-amber-200/60">{branch.anchor}</div>
+          </div>
+          <span className="rounded-full border border-amber-700/60 bg-amber-950 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-200">optional</span>
+        </div>
+        <div className="flex items-center">
+          {steps.map((step, index) => (
+            <React.Fragment key={step.key}>
+              {index > 0 && <PhaseArrow optional />}
+              <PhaseBox audit={audit} step={step} selected={selectedPhase === step.key} optional onSelectPhase={onSelectPhase} />
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -207,7 +324,7 @@ function PhaseLogs({ auditId, phase, refreshToken = 0 }) {
           <h4 className="font-semibold">Logs for {phase}</h4>
           <p className="text-xs text-gray-500">Showing {logs.length} of {total} log entries</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button onClick={() => loadLogs()} className="rounded bg-gray-800 px-3 py-1 text-sm hover:bg-gray-700">Refresh</button>
           <button
             onClick={loadOlder}
@@ -814,6 +931,16 @@ function EnvRowsEditor({ initialEnv, onSave, title, description }) {
 function ConfigEditor({ audit, onRefresh }) {
   const [ymlContent, setYmlContent] = useState(audit?.codecome_yml || '');
   const [saving, setSaving] = useState(false);
+  const [optionMessage, setOptionMessage] = useState('');
+  const auditOptions = audit?.model_settings?.__audit_options || {};
+
+  const updateAuditOption = async (key, value) => {
+    const nextSettings = { ...(audit.model_settings || {}) };
+    nextSettings.__audit_options = { ...(nextSettings.__audit_options || {}), [key]: value };
+    await auditsApi.update(audit.id, { model_settings: nextSettings });
+    await onRefresh?.();
+    setOptionMessage('Audit workflow option saved.');
+  };
   
   const handleSave = async () => {
     setSaving(true);
@@ -829,6 +956,22 @@ function ConfigEditor({ audit, onRefresh }) {
   
   return (
     <div>
+      {optionMessage && <div className="mb-4 rounded bg-gray-950/70 px-3 py-2 text-sm text-gray-300">{optionMessage}</div>}
+      <div className="mb-6 rounded-xl border border-gray-800 bg-gray-950/70 p-4">
+        <h3 className="text-lg font-semibold">Workflow Options</h3>
+        <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-purple-900/60 bg-purple-950/20 px-4 py-4">
+          <div>
+            <div className="font-semibold text-purple-100">Run Phase 1 enrichment before phase-2</div>
+            <div className="text-sm text-purple-200/70">When auto-continue is enabled, <code>make phase-2</code> waits until Semgrep and user-prompt enrichment finish.</div>
+          </div>
+          <ToggleSwitch
+            checked={!!auditOptions.run_phase1_enrichment_auto}
+            disabled={saving}
+            label="Toggle config Phase 1 enrichment"
+            onChange={(value) => updateAuditOption('run_phase1_enrichment_auto', value)}
+          />
+        </div>
+      </div>
       <div className="mb-6">
         <EnvRowsEditor
           title="Audit-level Environment Overrides"
@@ -862,7 +1005,7 @@ function ConfigEditor({ audit, onRefresh }) {
   );
 }
 
-function ToggleSwitch({ checked, disabled, onChange }) {
+function ToggleSwitch({ checked, disabled, onChange, label }) {
   return (
     <button
       type="button"
@@ -874,6 +1017,7 @@ function ToggleSwitch({ checked, disabled, onChange }) {
           : 'border-gray-700 bg-gray-800'
       } ${disabled ? 'cursor-not-allowed opacity-60' : 'hover:border-cyan-400'}`}
       aria-pressed={checked}
+      aria-label={label}
     >
       <span
         className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${
@@ -890,6 +1034,93 @@ function InfoItem({ label, value, mono = false }) {
       <div className="text-[10px] uppercase tracking-wide text-gray-500">{label}</div>
       <div className={`mt-1 min-w-0 break-words text-sm text-gray-200 ${mono ? 'font-mono text-xs leading-5' : ''}`}>
         {value || '-'}
+      </div>
+    </div>
+  );
+}
+
+const gapBoundFields = [
+  { key: 'CODECOME_GAP_MAX_SCAN_ROUNDS', label: 'Max scan rounds', defaultValue: '1' },
+  { key: 'CODECOME_GAP_MAX_CANDIDATES', label: 'Max candidates', defaultValue: '10' },
+  { key: 'CODECOME_GAP_MAX_SWEEP_FILES', label: 'Max sweep files', defaultValue: '5' },
+  { key: 'CODECOME_GAP_MAX_SWEEPS_PER_AUDIT', label: 'Max sweeps per audit', defaultValue: '5' },
+];
+
+function GapBoundsEditor({ audit, saving, onSave, compact = false }) {
+  const auditEnv = audit.model_settings?.__audit_env?.env || {};
+  const [values, setValues] = useState({});
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setValues(gapBoundFields.reduce((acc, field) => {
+      acc[field.key] = auditEnv[field.key] ?? '';
+      return acc;
+    }, {}));
+  }, [audit?.id, JSON.stringify(auditEnv)]);
+
+  const saveGapBounds = async () => {
+    setError('');
+    const nextSettings = { ...(audit.model_settings || {}) };
+    const nextEnv = { ...(((nextSettings.__audit_env || {}).env) || {}) };
+    for (const field of gapBoundFields) {
+      const trimmed = String(values[field.key] || '').trim();
+      if (trimmed && (!/^\d+$/.test(trimmed) || Number(trimmed) < 1)) {
+        throw new Error(`${field.key} must be a positive integer.`);
+      }
+      if (trimmed) {
+        nextEnv[field.key] = trimmed;
+      } else {
+        delete nextEnv[field.key];
+      }
+    }
+    nextSettings.__audit_env = { ...(nextSettings.__audit_env || {}), env: nextEnv };
+    await onSave({ model_settings: nextSettings });
+  };
+
+  const handleSaveGapBounds = async () => {
+    try {
+      await saveGapBounds();
+    } catch (err) {
+      setError(err.message || 'Failed to save gap bounds.');
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-amber-900/60 bg-amber-950/20 px-4 py-4">
+      <div className="mb-3">
+        <div className="font-semibold text-amber-100">Gap scan bounds</div>
+        <div className="text-sm text-amber-200/70">Controls <code>CODECOME_GAP_*</code> environment variables for gap-scan and gap-sweep runs. Empty fields use defaults.</div>
+      </div>
+      {error && <div className="mb-3 rounded bg-red-950/50 px-3 py-2 text-xs text-red-200">{error}</div>}
+      <div className={`grid grid-cols-1 gap-3 ${compact ? 'xl:grid-cols-4' : 'sm:grid-cols-2'}`}>
+        {gapBoundFields.map((field) => {
+          const value = values[field.key] ?? '';
+          return (
+            <label key={field.key} className="rounded-lg border border-amber-900/60 bg-gray-950/60 p-3">
+              <span className="block text-xs font-semibold text-amber-100">{field.label}</span>
+              <span className="mt-1 block font-mono text-[10px] text-amber-200/60">{field.key}</span>
+              <input
+                type="number"
+                min="1"
+                value={value}
+                disabled={saving}
+                placeholder={field.defaultValue}
+                onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))}
+                className="mt-2 w-full rounded border border-amber-900/70 bg-gray-950 px-3 py-2 text-sm text-gray-100 placeholder:text-gray-600 disabled:cursor-not-allowed disabled:opacity-60"
+              />
+            </label>
+          );
+        })}
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <div className="text-xs text-amber-200/60">Defaults: rounds 1, candidates 10, sweep files 5, sweeps per audit 5.</div>
+        <button
+          onClick={handleSaveGapBounds}
+          disabled={saving}
+          className="rounded bg-amber-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
+        >
+          Save Gap Bounds
+        </button>
       </div>
     </div>
   );
@@ -942,10 +1173,10 @@ function AuditOverview({ audit, onRefresh }) {
 
   const startSandbox = async () => {
     setSandboxStarting(true);
-    setMessage('');
+      setMessage('');
     try {
       const result = await auditsApi.startSandbox(audit.id);
-      setMessage(`Sandbox command finished with exit code ${result.exit_code}: ${result.command}`);
+      setMessage(result.message || `Sandbox startup queued on worker ${result.worker_name || result.worker_id || ''}.`);
     } catch (error) {
       setMessage(`Sandbox start failed: ${error.message}`);
     } finally {
@@ -1011,12 +1242,26 @@ function AuditOverview({ audit, onRefresh }) {
               <ToggleSwitch
                 checked={!!audit.auto_continue}
                 disabled={saving}
+                label="Toggle auto-continue"
                 onChange={(value) => updateAudit({ auto_continue: value })}
               />
             </div>
 
             {audit.auto_continue && (
-              <div className="ml-4 rounded-xl border border-cyan-900/50 bg-cyan-950/20 px-4 py-4">
+              <div className="ml-4 space-y-3 rounded-xl border border-cyan-900/50 bg-cyan-950/20 px-4 py-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="font-semibold text-cyan-100">Include Phase 1 enrichment</div>
+                    <div className="text-sm text-cyan-200/70">When auto-continue is enabled, run web-owned Semgrep and user-prompt enrichment worker phases after <code>make phase-1</code>. <code>make phase-2</code> waits until both finish.</div>
+                  </div>
+                  <ToggleSwitch
+                    checked={!!auditOptions.run_phase1_enrichment_auto}
+                    disabled={saving}
+                    label="Toggle optional Phase 1 enrichment"
+                    onChange={(value) => updateAuditOption('run_phase1_enrichment_auto', value)}
+                  />
+                </div>
+                <div className="border-t border-cyan-900/50 pt-3">
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <div className="font-semibold text-cyan-100">Include optional make sweep</div>
@@ -1025,8 +1270,24 @@ function AuditOverview({ audit, onRefresh }) {
                   <ToggleSwitch
                     checked={!!auditOptions.run_sweep_auto}
                     disabled={saving}
+                    label="Toggle optional make sweep"
                     onChange={(value) => updateAuditOption('run_sweep_auto', value)}
                   />
+                </div>
+                </div>
+                <div className="border-t border-cyan-900/50 pt-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <div className="font-semibold text-cyan-100">Include optional gap-scan</div>
+                      <div className="text-sm text-cyan-200/70">When auto-continue is enabled, run <code>make gap-scan</code> after <code>make exploit-all</code> before reporting. This can be changed mid-audit before that step is reached.</div>
+                    </div>
+                    <ToggleSwitch
+                      checked={!!auditOptions.run_gap_scan_auto}
+                      disabled={saving}
+                      label="Toggle optional gap-scan"
+                      onChange={(value) => updateAuditOption('run_gap_scan_auto', value)}
+                    />
+                  </div>
                 </div>
               </div>
             )}
@@ -1039,6 +1300,7 @@ function AuditOverview({ audit, onRefresh }) {
               <ToggleSwitch
                 checked={auditOptions.failure_triage_enabled !== false}
                 disabled={saving}
+                label="Toggle auto-triage failed phases"
                 onChange={(value) => updateAuditOption('failure_triage_enabled', value)}
               />
             </div>
@@ -1084,6 +1346,20 @@ function AuditOverview({ audit, onRefresh }) {
               <InfoItem label="Audit env variables" value={envCount} />
               <InfoItem label="Has codecome.yml" value={audit.has_codecome_yml ? 'yes' : 'no'} />
             </div>
+            <div className={`rounded-lg border p-3 ${auditOptions.run_gap_scan_auto ? 'border-amber-700/70 bg-amber-950/30' : 'border-gray-800 bg-gray-950/70'}`}>
+              <div className="text-[10px] uppercase tracking-wide text-gray-500">Auto gap-scan</div>
+              <div className={`mt-1 text-sm font-semibold ${auditOptions.run_gap_scan_auto ? 'text-amber-100' : 'text-gray-300'}`}>
+                {auditOptions.run_gap_scan_auto ? 'Enabled for this audit' : 'Disabled for this audit'}
+              </div>
+              <div className="mt-1 text-xs text-gray-500">Manual gap-scan is still available from the Gap Scan tab.</div>
+            </div>
+            <div className={`rounded-lg border p-3 ${auditOptions.run_phase1_enrichment_auto ? 'border-purple-700/70 bg-purple-950/30' : 'border-gray-800 bg-gray-950/70'}`}>
+              <div className="text-[10px] uppercase tracking-wide text-gray-500">Auto Phase 1 enrichment</div>
+              <div className={`mt-1 text-sm font-semibold ${auditOptions.run_phase1_enrichment_auto ? 'text-purple-100' : 'text-gray-300'}`}>
+                {auditOptions.run_phase1_enrichment_auto ? 'Enabled before phase-2' : 'Disabled for this audit'}
+              </div>
+              <div className="mt-1 text-xs text-gray-500">Manual enrichment remains available from the Phase 1 Enrichment tab.</div>
+            </div>
           </div>
         </div>
       </div>
@@ -1091,7 +1367,180 @@ function AuditOverview({ audit, onRefresh }) {
   );
 }
 
-function GapScanPanel({ auditId }) {
+function Phase1EnrichmentPanel({ audit, onRefresh }) {
+  const auditId = audit.id;
+  const [artifacts, setArtifacts] = useState(null);
+  const [prompt, setPrompt] = useState(null);
+  const [promptDraft, setPromptDraft] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [running, setRunning] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [artifactResponse, promptResponse] = await Promise.all([
+        auditsApi.phase1EnrichmentArtifacts(auditId),
+        auditsApi.phase1EnrichmentPrompt(auditId),
+      ]);
+      setArtifacts(artifactResponse);
+      setPrompt(promptResponse);
+      setPromptDraft(promptResponse.prompt || '');
+    } catch (err) {
+      setError(err.message || 'Failed to load Phase 1 enrichment data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, [auditId]);
+
+  const savePrompt = async (nextPrompt) => {
+    setSaving(true);
+    setMessage('');
+    setError('');
+    try {
+      const response = await auditsApi.updatePhase1EnrichmentPrompt(auditId, nextPrompt);
+      setPrompt(response);
+      setPromptDraft(response.prompt || '');
+      await onRefresh?.();
+      setMessage(String(nextPrompt || '').trim() ? 'Phase 1 enrichment prompt saved.' : 'Phase 1 enrichment prompt reset to User Prompt Enrichment default.');
+    } catch (err) {
+      setError(err.message || 'Failed to save Phase 1 enrichment prompt');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runStep = async (kind) => {
+    setRunning(kind);
+    setMessage('');
+    setError('');
+    try {
+      const response = kind === 'semgrep'
+        ? await auditsApi.runPhase1Semgrep(auditId)
+        : await auditsApi.runPhase1PromptEnrichment(auditId);
+      setMessage(response.message || `${kind} enrichment queued.`);
+      await onRefresh?.();
+      await load();
+    } catch (err) {
+      setError(err.message || `Failed to queue ${kind} enrichment`);
+    } finally {
+      setRunning('');
+    }
+  };
+
+  const semgrepSummary = artifacts?.semgrep_summary || {};
+  const artifactRows = artifacts?.artifacts || [];
+  const runSummaries = artifacts?.run_summaries || [];
+
+  return (
+    <section className="space-y-4">
+      <div className="rounded-xl border border-amber-800/70 bg-amber-950/30 p-4 text-sm text-amber-100">
+        Phase 1 enrichment is optional and should run after <code>make phase-1</code> and before <code>make phase-2</code>. Semgrep and prompt leads are reconnaissance signals, not confirmed vulnerabilities or findings.
+      </div>
+
+      {error && <div className="rounded bg-red-950/40 px-3 py-2 text-sm text-red-200">{error}</div>}
+      {message && <div className="rounded bg-gray-900 px-3 py-2 text-sm text-gray-200">{message}</div>}
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
+          <div className="text-xs uppercase tracking-wide text-gray-500">Semgrep Results</div>
+          <div className="mt-1 text-3xl font-bold text-gray-100">{semgrepSummary.total_results || 0}</div>
+          <div className="mt-2 text-xs text-gray-500">Normalized from <code>itemdb/notes/semgrep-results.yml</code>.</div>
+        </div>
+        <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
+          <div className="text-xs uppercase tracking-wide text-gray-500">Severity Counts</div>
+          <div className="mt-2 space-y-1 text-sm text-gray-300">
+            {Object.keys(semgrepSummary.by_severity || {}).length ? Object.entries(semgrepSummary.by_severity).map(([severity, count]) => (
+              <div key={severity} className="flex justify-between"><span>{severity}</span><span>{count}</span></div>
+            )) : <div className="text-gray-500">No severity data yet.</div>}
+          </div>
+        </div>
+        <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
+          <div className="text-xs uppercase tracking-wide text-gray-500">File Leads</div>
+          <div className="mt-1 text-3xl font-bold text-gray-100">{Object.keys(semgrepSummary.by_file || {}).length}</div>
+          <div className="mt-2 text-xs text-gray-500">Merged into <code>file-risk-index.yml</code> when Semgrep has results.</div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold">Run Enrichment</h3>
+            <p className="mt-1 text-sm text-gray-500">These actions queue optional worker jobs and do not alter default phase progression.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => runStep('semgrep')} disabled={!!running} className="rounded bg-blue-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-gray-700">
+              {running === 'semgrep' ? 'Queueing...' : 'Run Semgrep Enrichment'}
+            </button>
+            <button onClick={() => runStep('prompt')} disabled={!!running} className="rounded bg-purple-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-purple-600 disabled:cursor-not-allowed disabled:bg-gray-700">
+              {running === 'prompt' ? 'Queueing...' : 'Run Prompt Enrichment'}
+            </button>
+            <button onClick={load} disabled={loading} className="rounded bg-gray-800 px-3 py-1.5 text-sm hover:bg-gray-700 disabled:opacity-50">Refresh</button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto rounded border border-gray-800">
+          <table className="min-w-full divide-y divide-gray-800 text-sm">
+            <thead className="bg-gray-900/80 text-xs uppercase tracking-wide text-gray-500">
+              <tr><th className="px-3 py-2 text-left">Artifact</th><th className="px-3 py-2 text-left">Status</th></tr>
+            </thead>
+            <tbody className="divide-y divide-gray-900">
+              {artifactRows.map((artifact) => (
+                <tr key={artifact.path}>
+                  <td className="break-all px-3 py-2 font-mono text-xs text-gray-300">{artifact.path}</td>
+                  <td className="px-3 py-2">{artifact.exists ? <span className="text-green-300">present</span> : <span className="text-gray-500">missing</span>}</td>
+                </tr>
+              ))}
+              {!artifactRows.length && <tr><td colSpan="2" className="px-3 py-3 text-gray-500">{loading ? 'Loading artifacts...' : 'No artifacts found yet.'}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold">User Prompt Enrichment</div>
+            <div className="font-mono text-xs text-gray-500">{prompt?.custom ? 'Audit custom prompt' : (prompt?.path || 'User Prompt Enrichment prompt')}</div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => savePrompt(promptDraft)} disabled={saving || loading} className="rounded bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-gray-700">
+              {saving ? 'Saving...' : 'Save Prompt'}
+            </button>
+            <button onClick={() => savePrompt('')} disabled={saving || loading || !prompt?.custom} className="rounded bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-100 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50">
+              Reset to Preview
+            </button>
+          </div>
+        </div>
+        <textarea
+          value={promptDraft}
+          onChange={(event) => setPromptDraft(event.target.value)}
+          spellCheck={false}
+          placeholder="User Prompt Enrichment prompt or audit-specific enrichment prompt will appear here."
+          className="h-72 w-full rounded border border-gray-800 bg-gray-900 p-3 font-mono text-xs leading-5 text-gray-200 placeholder:text-gray-600"
+        />
+        <div className="mt-2 text-xs text-gray-500">Prompt enrichment writes a durable prompt copy under <code>runs/phase-1-enrichment-prompt.md</code> before invoking the recon agent.</div>
+      </div>
+
+      <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
+        <div className="text-sm font-semibold">Latest Enrichment Run Summaries</div>
+        <div className="mt-2 space-y-1 text-xs text-gray-300">
+          {runSummaries.length ? runSummaries.map((name) => <div key={name} className="font-mono">runs/{name}</div>) : <div className="text-gray-500">No Phase 1 enrichment run summaries found.</div>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function GapScanPanel({ audit, onRefresh }) {
+  const auditId = audit.id;
   const [data, setData] = useState({ total: 0, candidates: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -1100,6 +1549,10 @@ function GapScanPanel({ auditId }) {
   const [comparing, setComparing] = useState(false);
   const [candidateAction, setCandidateAction] = useState('');
   const [openCandidateId, setOpenCandidateId] = useState(null);
+  const [prompt, setPrompt] = useState(null);
+  const [promptDraft, setPromptDraft] = useState('');
+  const [promptLoading, setPromptLoading] = useState(false);
+  const [promptSaving, setPromptSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -1114,9 +1567,55 @@ function GapScanPanel({ auditId }) {
     }
   };
 
+  const loadPrompt = async () => {
+    setPromptLoading(true);
+    setError('');
+    try {
+      const response = await auditsApi.gapPrompt(auditId);
+      setPrompt(response);
+      setPromptDraft(response.prompt || '');
+    } catch (err) {
+      setError(err.message || 'Failed to load gap prompt');
+    } finally {
+      setPromptLoading(false);
+    }
+  };
+
   useEffect(() => {
     load();
+    loadPrompt();
   }, [auditId]);
+
+  const saveGapBounds = async (changes) => {
+    setMessage('');
+    setError('');
+    try {
+      await auditsApi.update(auditId, changes);
+      await onRefresh?.();
+      setMessage('Gap scan bounds saved.');
+    } catch (err) {
+      setError(err.message || 'Failed to save gap scan bounds');
+      throw err;
+    }
+  };
+
+  const saveGapPrompt = async (nextPrompt) => {
+    setPromptSaving(true);
+    setMessage('');
+    setError('');
+    try {
+      const refreshed = await auditsApi.updateGapPrompt(auditId, nextPrompt);
+      await onRefresh?.();
+      setPrompt(refreshed);
+      setPromptDraft(refreshed.prompt || '');
+      const workerSync = refreshed.remote_sync && !['skipped', 'removed'].includes(refreshed.remote_sync) ? ` Worker sync: ${refreshed.remote_sync}.` : '';
+      setMessage(`${String(nextPrompt || '').trim() ? 'Gap scan prompt saved.' : 'Gap scan prompt reset to default.'}${workerSync}`);
+    } catch (err) {
+      setError(err.message || 'Failed to save gap scan prompt');
+    } finally {
+      setPromptSaving(false);
+    }
+  };
 
   const runGapScan = async () => {
     setQueueing(true);
@@ -1193,6 +1692,52 @@ function GapScanPanel({ auditId }) {
       <div className="rounded-xl border border-amber-800/70 bg-amber-950/30 p-4 text-sm text-amber-100">
         Gap scan candidates are independent SAST-style leads, not confirmed vulnerabilities. Use them to decide whether a targeted sweep is worthwhile.
       </div>
+      <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold">Gap scan prompt</div>
+            <div className="font-mono text-xs text-gray-500">
+              {promptLoading ? 'Loading prompt...' : prompt?.custom ? 'Audit custom prompt' : (prompt?.path || 'prompts/phase-2-gap-sast.md')}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={loadPrompt}
+              disabled={promptLoading || promptSaving}
+              className="rounded bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-100 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {promptLoading ? 'Loading...' : 'Reload Prompt'}
+            </button>
+            <button
+              onClick={() => saveGapPrompt(promptDraft)}
+              disabled={promptSaving || promptLoading || !prompt}
+              className="rounded bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-gray-700"
+            >
+              {promptSaving ? 'Saving...' : 'Save Custom Prompt'}
+            </button>
+            <button
+              onClick={() => saveGapPrompt('')}
+              disabled={promptSaving || promptLoading || !prompt?.custom}
+              className="rounded bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-100 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Reset to Default
+            </button>
+          </div>
+        </div>
+        {promptLoading && !prompt ? (
+          <div className="rounded border border-gray-800 bg-gray-900 p-6 text-sm text-gray-500">Loading gap scan prompt...</div>
+        ) : (
+          <textarea
+            value={promptDraft}
+            onChange={(event) => setPromptDraft(event.target.value)}
+            spellCheck={false}
+            placeholder="Gap scan prompt will appear here. Use Reload Prompt if it does not load."
+            className="h-[32rem] w-full rounded border border-gray-800 bg-gray-900 p-3 font-mono text-xs leading-5 text-gray-200 placeholder:text-gray-600"
+          />
+        )}
+        {!prompt?.custom && <div className="mt-2 text-xs text-gray-500">Editing and saving creates an audit-specific prompt copy. The default prompt file stays unchanged.</div>}
+      </div>
+      <GapBoundsEditor audit={audit} saving={false} onSave={saveGapBounds} compact />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-xl font-semibold">Gap Scan</h3>
@@ -1365,6 +1910,7 @@ export default function AuditDetails() {
     { key: 'findings', label: 'Findings' },
     { key: 'questions', label: 'Questions' },
     { key: 'phase1Enrichment', label: 'Phase 1 Enrichment' },
+    { key: 'codeServer', label: 'VS Code' },
     { key: 'gapScan', label: 'Gap Scan' },
     { key: 'config', label: 'Config' },
   ];
@@ -1528,7 +2074,8 @@ export default function AuditDetails() {
         {activeTab === 'findings' && <FindingsList auditId={id} />}
         {activeTab === 'questions' && <AuditQuestions auditId={id} auditStatus={audit.status} onRefreshSummary={loadQuestionSummary} />}
         {activeTab === 'phase1Enrichment' && <Phase1EnrichmentPanelTab audit={audit} onRefresh={refetch} />}
-        {activeTab === 'gapScan' && <GapScanPanel auditId={id} />}
+        {activeTab === 'codeServer' && <CodeServerPanel auditId={id} />}
+        {activeTab === 'gapScan' && <GapScanPanel audit={audit} onRefresh={refetch} />}
         {activeTab === 'config' && <ConfigEditor audit={audit} onRefresh={refetch} />}
       </div>
     </div>

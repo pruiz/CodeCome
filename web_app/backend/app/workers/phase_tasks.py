@@ -10,6 +10,7 @@ from pathlib import Path
 from datetime import datetime
 import logging
 import queue
+import shutil
 import shlex
 import threading
 
@@ -20,11 +21,14 @@ PHASE_ORDER = ["make init", "make check", "phase-1", "phase-2", "phase-3", "make
 OPTIONAL_PHASES = ["make sweep"]
 PHASE1_ENRICHMENT_PHASES = ["phase-1-semgrep", "phase-1-prompt-enrich"]
 GAP_PHASES = ["gap-scan", "gap-compare", "gap-sweep"]
-ALL_PHASES = ["make init", "make check", "phase-1", "phase-2", "make sweep", "phase-3", "make validate-all", "make exploit-all", "phase-6", *PHASE1_ENRICHMENT_PHASES, *GAP_PHASES]
+ALL_PHASES = ["make init", "make check", "make sandbox-up", "phase-1", "phase-2", "make sweep", "phase-3", "make validate-all", "make exploit-all", "phase-6", *PHASE1_ENRICHMENT_PHASES, *GAP_PHASES]
 AUDIT_ENV_KEY = "__audit_env"
 AUDIT_OPTIONS_KEY = "__audit_options"
+GAP_SCAN_PROMPT_ENV = "CODECOME_GAP_PROMPT_FILE"
+GAP_SCAN_PROMPT_PATH = "runs/gap-scan-prompt.md"
 PHASE1_ENRICHMENT_PROMPT_ENV = "CODECOME_PHASE1_ENRICHMENT_PROMPT_FILE"
 PHASE1_ENRICHMENT_PROMPT_PATH = "runs/phase-1-enrichment-user-prompt.md"
+PHASE2_ENRICHMENT_CONTEXT_PATH = "runs/phase-2-enrichment-context.md"
 
 
 def audit_options(model_settings: dict | None) -> dict:
@@ -35,7 +39,10 @@ def audit_options(model_settings: dict | None) -> dict:
 
 def phase_order_for_settings(model_settings: dict | None) -> list[str]:
     options = audit_options(model_settings)
-    order = ["make init", "make check", "phase-1", "phase-2"]
+    order = ["make init", "make check", "phase-1"]
+    if options.get("run_phase1_enrichment_auto"):
+        order.extend(["phase-1-semgrep", "phase-1-prompt-enrich"])
+    order.append("phase-2")
     if options.get("run_sweep_auto"):
         order.append("make sweep")
     order.extend(["phase-3", "make validate-all", "make exploit-all"])
@@ -58,11 +65,37 @@ def merged_phase_env(model_settings: dict | None, phase: str) -> dict:
     return {**default_env, **(audit_env or {}), **(phase_env or {})}
 
 
+def gap_scan_prompt_text(model_settings: dict | None) -> str | None:
+    prompt = audit_options(model_settings).get("gap_scan_prompt")
+    if isinstance(prompt, str) and prompt.strip():
+        return prompt
+    return None
+
+
+def with_gap_scan_prompt_env(workspace_path: Path, model_settings: dict | None, phase: str, env_overrides: dict | None) -> dict:
+    env = dict(env_overrides or {})
+    if phase != "gap-scan" or env.get(GAP_SCAN_PROMPT_ENV):
+        return env
+    prompt = gap_scan_prompt_text(model_settings)
+    if not prompt:
+        return env
+    prompt_path = workspace_path / GAP_SCAN_PROMPT_PATH
+    prompt_path.parent.mkdir(parents=True, exist_ok=True)
+    prompt_path.write_text(prompt, encoding="utf-8")
+    env[GAP_SCAN_PROMPT_ENV] = GAP_SCAN_PROMPT_PATH
+    return env
+
+
 def phase1_enrichment_prompt_text(model_settings: dict | None) -> str | None:
     prompt = audit_options(model_settings).get("phase1_enrichment_prompt")
     if isinstance(prompt, str) and prompt.strip():
         return prompt
-    return None
+    try:
+        from app.api.preview import default_user_prompt_enrichment_prompt
+
+        return default_user_prompt_enrichment_prompt()
+    except Exception:
+        return None
 
 
 def with_phase1_enrichment_prompt_env(workspace_path: Path, model_settings: dict | None, phase: str, env_overrides: dict | None) -> dict:
@@ -79,6 +112,51 @@ def with_phase1_enrichment_prompt_env(workspace_path: Path, model_settings: dict
     return env
 
 
+def phase1_enrichment_artifacts_exist(workspace_path: Path) -> bool:
+    rel_paths = [
+        "itemdb/notes/semgrep-results.yml",
+        "itemdb/notes/semgrep-interesting-files.md",
+        "itemdb/notes/semgrep-file-risk-index.yml",
+        "itemdb/notes/user-prompt-enrichment.md",
+        "itemdb/notes/user-prompt-candidates.yml",
+    ]
+    return any((workspace_path / rel_path).exists() for rel_path in rel_paths)
+
+
+def write_phase2_enrichment_context(workspace_path: Path) -> Path:
+    path = workspace_path / PHASE2_ENRICHMENT_CONTEXT_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# Optional Phase 1 Enrichment Context for Phase 2",
+        "",
+        "This audit has optional Phase 1 enrichment artifacts. Read them as Phase 2 inputs if present:",
+        "",
+        "- `itemdb/notes/semgrep-results.yml`",
+        "- `itemdb/notes/semgrep-interesting-files.md`",
+        "- `itemdb/notes/semgrep-file-risk-index.yml`",
+        "- `itemdb/notes/user-prompt-enrichment.md`",
+        "- `itemdb/notes/user-prompt-candidates.yml`",
+        "",
+        "Treat Semgrep results and user-prompt candidates as leads only, not findings.",
+        "Create a `PENDING` finding only after independently identifying concrete affected code, attacker control, trust-boundary crossing, sink or security decision, impact, and validation plan.",
+        "If a lead lacks source-to-sink evidence, preserve it in the Phase 2 run summary rather than creating a vague finding.",
+        "",
+    ]
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return path
+
+
+def with_phase2_enrichment_context_env(workspace_path: Path, phase: str, env_overrides: dict | None) -> dict:
+    env = dict(env_overrides or {})
+    if phase != "phase-2" or env.get("PROMPT_EXTRA_FILE"):
+        return env
+    if not phase1_enrichment_artifacts_exist(workspace_path):
+        return env
+    write_phase2_enrichment_context(workspace_path)
+    env["PROMPT_EXTRA_FILE"] = PHASE2_ENRICHMENT_CONTEXT_PATH
+    return env
+
+
 def build_command_line(phase: str, model: str = None, variant: str = None, finding_id: str = None, worker_type: str = "local", env_overrides: dict = None) -> str:
     env_parts = []
     if model:
@@ -87,7 +165,11 @@ def build_command_line(phase: str, model: str = None, variant: str = None, findi
         env_parts.append(f"CODECOME_MODEL_VARIANT={shlex.quote(variant)}")
     for key, value in (env_overrides or {}).items():
         env_parts.append(f"{shlex.quote(str(key))}={shlex.quote(str(value))}")
-    if phase.startswith("make "):
+    if phase == "phase-1-semgrep":
+        cmd = ["bash", "-lc", "if [ ! -x .venv/bin/python3 ]; then make init; fi; .venv/bin/python3 .codecome-web/phase1_enrichment_runner.py semgrep"]
+    elif phase == "phase-1-prompt-enrich":
+        cmd = ["bash", "-lc", "if [ ! -x .venv/bin/python3 ]; then make init; fi; .venv/bin/python3 .codecome-web/phase1_enrichment_runner.py prompt"]
+    elif phase.startswith("make "):
         cmd = ["make", phase.split(" ", 1)[1]]
     else:
         cmd = ["make", phase]
@@ -185,11 +267,43 @@ def make_step_target(phase: str) -> str:
     return phase.split(" ", 1)[1]
 
 
+def is_phase1_enrichment_phase(phase: str) -> bool:
+    return phase in PHASE1_ENRICHMENT_PHASES
+
+
+def phase1_enrichment_command(phase: str) -> list[str]:
+    if phase == "phase-1-semgrep":
+        return ["bash", "-lc", "if [ ! -x .venv/bin/python3 ]; then make init; fi; .venv/bin/python3 .codecome-web/phase1_enrichment_runner.py semgrep"]
+    if phase == "phase-1-prompt-enrich":
+        return ["bash", "-lc", "if [ ! -x .venv/bin/python3 ]; then make init; fi; .venv/bin/python3 .codecome-web/phase1_enrichment_runner.py prompt"]
+    raise ValueError(f"Unsupported Phase 1 enrichment phase: {phase}")
+
+
+def stage_web_worker_helpers(workspace_path: Path) -> Path:
+    helper_dir = workspace_path / ".codecome-web"
+    helper_dir.mkdir(parents=True, exist_ok=True)
+    source = Path(__file__).resolve().parent / "phase1_enrichment_runner.py"
+    target = helper_dir / "phase1_enrichment_runner.py"
+    shutil.copy2(source, target)
+    target.chmod(0o755)
+    return target
+
+
 def queue_failure_triage_if_enabled(db, audit, phase_exec) -> None:
     try:
-        from app.workers.ai_tasks import triage_enabled, triage_failed_phase_task
+        from app.workers.ai_tasks import triage_ai_user, triage_enabled, triage_failed_phase_task
 
         if not triage_enabled(audit.model_settings):
+            return
+        if not triage_ai_user(db, audit):
+            crud.create_audit_log(
+                db,
+                str(audit.id),
+                "INFO",
+                f"Skipped AI failure triage for {phase_exec.phase} because the audit has no active fake AI question owner",
+                phase=phase_exec.phase,
+                source="triage",
+            )
             return
         existing = crud.latest_phase_triage(db, phase_exec.id)
         if existing and existing.status in {"queued", "running", "completed", "applied"}:
@@ -243,7 +357,11 @@ def run_phase_task(
 
         workspace_path = Path(audit.workspace_path)
         env_overrides = env_overrides or {}
+        env_overrides = with_gap_scan_prompt_env(workspace_path, audit.model_settings, phase, env_overrides)
         env_overrides = with_phase1_enrichment_prompt_env(workspace_path, audit.model_settings, phase, env_overrides)
+        env_overrides = with_phase2_enrichment_context_env(workspace_path, phase, env_overrides)
+        if is_phase1_enrichment_phase(phase):
+            stage_web_worker_helpers(workspace_path)
         command_line = build_command_line(phase, model, variant, finding_id, worker.type, env_overrides)
 
         audit.assigned_worker_id = worker.id
@@ -272,7 +390,15 @@ def run_phase_task(
         # Execute phase
         if worker.type == "local":
             executor = CodeComeExecutor()
-            if is_make_step(phase):
+            if is_phase1_enrichment_phase(phase):
+                result = executor.execute_command(
+                    workspace_path=workspace_path,
+                    cmd=phase1_enrichment_command(phase),
+                    output_callback=log_output,
+                    env_overrides=env_overrides,
+                    process_callback=lambda pid, cmd: crud.update_phase_execution(db, phase_exec.id, {"local_pid": pid}),
+                )
+            elif is_make_step(phase):
                 result = executor.execute_make_target(
                     workspace_path=workspace_path,
                     target=make_step_target(phase),

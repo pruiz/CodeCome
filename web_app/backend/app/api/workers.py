@@ -138,6 +138,15 @@ def local_requirement_checks() -> list[schemas.WorkerRequirementCheck]:
         detail=codeql_detail,
     ))
 
+    semgrep_ok, semgrep_detail = command_version("semgrep", ["--version"])
+    checks.append(schemas.WorkerRequirementCheck(
+        key="semgrep_cli",
+        label="Semgrep CLI",
+        required=False,
+        ok=semgrep_ok,
+        detail=semgrep_detail,
+    ))
+
     for key, label, cmd in [
         ("asciinema", "asciinema", "asciinema"),
         ("agg", "agg", "agg"),

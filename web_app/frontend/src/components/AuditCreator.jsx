@@ -35,6 +35,7 @@ export default function AuditCreator() {
     modelId: '',
     questionOwnerUserId: '',
     autoContinue: false,
+    runPhase1EnrichmentAuto: false,
     runGapScanAuto: false,
   });
   const [file, setFile] = useState(null);
@@ -70,6 +71,7 @@ export default function AuditCreator() {
 
   const auditOptions = {};
   if (formData.modelId) auditOptions.worker_model = formData.modelId;
+  if (formData.runPhase1EnrichmentAuto) auditOptions.run_phase1_enrichment_auto = true;
   if (formData.runGapScanAuto) auditOptions.run_gap_scan_auto = true;
   const modelSettings = Object.keys(auditOptions).length
     ? { __audit_options: auditOptions }
@@ -290,6 +292,13 @@ export default function AuditCreator() {
             />
 
             <ToggleSwitch
+              checked={formData.runPhase1EnrichmentAuto}
+              label="Run Phase 1 enrichment before phase-2"
+              description="When auto-continuing, queue Semgrep and user-prompt enrichment after make phase-1 and wait for them before make phase-2. Disabled by default."
+              onChange={(value) => setFormData({ ...formData, runPhase1EnrichmentAuto: value })}
+            />
+
+            <ToggleSwitch
               checked={formData.runGapScanAuto}
               label="Run gap scan after exploit-all"
               description="When auto-continuing, queue the optional gap-scan step after make exploit-all and before reporting. Disabled by default."
@@ -327,6 +336,7 @@ export default function AuditCreator() {
             <p><span className="text-gray-400">Model:</span> {formData.modelId || 'Default'}</p>
             <p><span className="text-gray-400">Question Owner:</span> {users.find((user) => String(user.id) === formData.questionOwnerUserId)?.display_name || 'None'}</p>
             <p><span className="text-gray-400">Auto-continue:</span> {formData.autoContinue ? 'Yes' : 'No'}</p>
+            <p><span className="text-gray-400">Phase 1 enrichment before phase-2:</span> {formData.runPhase1EnrichmentAuto ? 'Yes' : 'No'}</p>
             <p><span className="text-gray-400">Gap scan after exploit-all:</span> {formData.runGapScanAuto ? 'Yes' : 'No'}</p>
           </div>
           

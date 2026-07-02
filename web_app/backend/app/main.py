@@ -9,7 +9,7 @@ from sqlalchemy import text
 
 from app.database import engine, Base
 from app import crud
-from app.api import audits, phases, findings, logs, preview, websockets, workers, users, questions, auth
+from app.api import audits, phases, findings, logs, preview, websockets, workers, users, questions, auth, settings as app_settings
 from app.auth import verify_access_token
 from app.config import settings
 
@@ -181,6 +181,7 @@ app.include_router(workers.router, prefix="/api/workers", tags=["workers"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(questions.router, prefix="/api/questions", tags=["questions"])
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(app_settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(preview.router, prefix="/api/preview", tags=["preview"])
 app.include_router(websockets.router, prefix="/ws", tags=["websockets"])
 

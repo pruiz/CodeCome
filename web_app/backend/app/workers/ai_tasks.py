@@ -115,6 +115,17 @@ def triage_enabled(model_settings: dict | None) -> bool:
     return options.get("failure_triage_enabled", True) is not False
 
 
+def triage_ai_user(db, audit):
+    """Return the assigned fake AI user allowed to run web-side triage."""
+    owner_id = getattr(audit, "question_owner_user_id", None)
+    if not owner_id:
+        return None
+    owner = crud.get_user(db, owner_id)
+    if not owner or not owner.active or not owner.is_llm_user:
+        return None
+    return owner
+
+
 @celery_app.task(bind=True, max_retries=0)
 def triage_failed_phase_task(self, phase_execution_id: int):
     db = SessionLocal()
@@ -129,6 +140,10 @@ def triage_failed_phase_task(self, phase_execution_id: int):
             logger.warning("Audit not found for triage: %s", phase_exec.audit_id)
             return
         if not triage_enabled(audit.model_settings):
+            return
+        ai_user = triage_ai_user(db, audit)
+        if not ai_user:
+            crud.create_audit_log(db, str(audit.id), "INFO", "Skipped AI failure triage because the audit has no active fake AI question owner", phase=phase_exec.phase, source="triage")
             return
 
         existing = crud.latest_phase_triage(db, phase_execution_id)
@@ -175,6 +190,8 @@ def triage_failed_phase_task(self, phase_execution_id: int):
         audit_env = ((audit.model_settings or {}).get("__audit_env") or {}).get("env") or {}
         if isinstance(audit_env, dict):
             env.update({str(k): str(v) for k, v in audit_env.items()})
+        if ai_user.llm_model:
+            env["CODECOME_MODEL"] = ai_user.llm_model
         env.setdefault("CODECOME_THINKING", "0")
 
         result = subprocess.run(

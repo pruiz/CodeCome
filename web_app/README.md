@@ -113,6 +113,21 @@ docker compose up -d
 - **Backend API:** http://localhost:8000
 - **API Docs:** http://localhost:8000/docs
 
+## Server Install
+
+For a clean Ubuntu/Debian server install, see:
+
+```text
+web_app/docs/install-server.md
+```
+
+The helper script is:
+
+```bash
+cd web_app
+./scripts/install-server.sh
+```
+
 ## Stopping
 
 ```bash

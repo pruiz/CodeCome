@@ -7,7 +7,7 @@ import AuditDetails from './components/AuditDetails';
 import FindingDetails from './components/FindingDetails';
 import AuthGate from './components/AuthGate';
 import AuthStatus from './components/AuthStatus';
-import PreviewAnalysis from './components/PreviewAnalysis';
+import Settings from './components/Settings';
 import Users from './components/Users';
 import Workers from './components/Workers';
 import WorkerDetails from './components/WorkerDetails';
@@ -46,6 +46,9 @@ function Icon({ name, className = 'h-6 w-6' }) {
   }
   if (name === 'users') {
     return <svg {...common}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>;
+  }
+  if (name === 'settings') {
+    return <svg {...common}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.33 1.82V22a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 20.4a1.65 1.65 0 0 0-1.82-.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1.82-.33H2a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 3.6 9a1.65 1.65 0 0 0 .33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-.6A1.65 1.65 0 0 0 10.33 2V2a2 2 0 1 1 4 0v.09A1.65 1.65 0 0 0 15 3.6a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.31.34.58.6.78.26.2.58.32.91.31H21a2 2 0 1 1 0 4h-.09A1.65 1.65 0 0 0 19.4 15z" /></svg>;
   }
   return null;
 }
@@ -98,9 +101,9 @@ function App() {
               <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center"><Icon name="findings" /></span>
               <span className="whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover:opacity-100">Findings</span>
             </NavLink>
-            <NavLink to="/preview" className={navLinkClass}>
-              <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center"><Icon name="preview" /></span>
-              <span className="whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover:opacity-100">Preview Analysis</span>
+            <NavLink to="/settings" className={navLinkClass}>
+              <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center"><Icon name="settings" /></span>
+              <span className="whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover:opacity-100">Config</span>
             </NavLink>
           </nav>
 
@@ -121,7 +124,7 @@ function App() {
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/findings" element={<AllFindings />} />
-                <Route path="/preview" element={<PreviewAnalysis />} />
+                <Route path="/settings" element={<Settings />} />
                 <Route path="/workers" element={<Workers />} />
                 <Route path="/users" element={<Users />} />
                 <Route path="/workers/:id" element={<WorkerDetails />} />

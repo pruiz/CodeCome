@@ -85,7 +85,10 @@ def test_preview_config_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setattr(preview, "preview_config_path", lambda: path)
 
     empty = preview.get_preview_config()
-    assert empty.prompt == ""
+    assert "optional User Prompt Enrichment" in empty.prompt
+    assert "make phase-2" in empty.prompt
+    assert "itemdb/notes/user-prompt-candidates.yml" in empty.prompt
+    assert "UPE-0001" in empty.prompt
     assert empty.updated is False
 
     saved = preview.update_preview_config(SimpleNamespace(prompt="Analyze auth first"))
