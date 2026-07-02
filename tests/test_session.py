@@ -13,6 +13,13 @@ def _load_session_module():
     return load_tool_module("codecome_session", "tools/codecome/session.py")
 
 
+def _mock_json_response(payload: dict):
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = json.dumps(payload).encode("utf-8")
+    mock_resp.__enter__.return_value = mock_resp
+    return mock_resp
+
+
 class TestGetHeaders:
     def test_no_auth_no_workspace(self):
         module = _load_session_module()
@@ -45,8 +52,7 @@ class TestCreateSession:
     @patch("urllib.request.urlopen")
     def test_create_session_without_model(self, mock_urlopen):
         module = _load_session_module()
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps({"id": "sess-abc"}).encode("utf-8")
+        mock_resp = _mock_json_response({"id": "sess-abc"})
         mock_urlopen.return_value = mock_resp
 
         sid = module.create_session("http://localhost:8080", "1", "recon", None, None, None)
@@ -58,12 +64,12 @@ class TestCreateSession:
         assert payload["title"] == "CodeCome Phase 1"
         assert payload["agent"] == "recon"
         assert "model" not in payload
+        assert mock_resp.__exit__.called
 
     @patch("urllib.request.urlopen")
     def test_create_session_with_provider_model(self, mock_urlopen):
         module = _load_session_module()
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps({"id": "sess-xyz"}).encode("utf-8")
+        mock_resp = _mock_json_response({"id": "sess-xyz"})
         mock_urlopen.return_value = mock_resp
 
         sid = module.create_session(
@@ -78,8 +84,7 @@ class TestCreateSession:
     @patch("urllib.request.urlopen")
     def test_create_session_with_bare_model(self, mock_urlopen):
         module = _load_session_module()
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps({"id": "sess-bare"}).encode("utf-8")
+        mock_resp = _mock_json_response({"id": "sess-bare"})
         mock_urlopen.return_value = mock_resp
 
         sid = module.create_session(
@@ -94,19 +99,20 @@ class TestCreateSession:
     @patch("urllib.request.urlopen")
     def test_create_session_empty_id_raises(self, mock_urlopen):
         module = _load_session_module()
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps({"id": ""}).encode("utf-8")
+        mock_resp = _mock_json_response({"id": ""})
         mock_urlopen.return_value = mock_resp
 
-        with pytest.raises(RuntimeError, match="empty session ID"):
+        with pytest.raises(module.OpenCodeRequestError, match="empty session ID") as excinfo:
             module.create_session("http://localhost:8080", "1", "recon", None, None, None)
+
+        assert excinfo.value.retriable is False
+        assert excinfo.value.operation == "create_session"
 
     @patch("time.sleep")
     @patch("urllib.request.urlopen")
     def test_create_session_retries_on_timeout(self, mock_urlopen, mock_sleep):
         module = _load_session_module()
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps({"id": "sess-after-retry"}).encode("utf-8")
+        mock_resp = _mock_json_response({"id": "sess-after-retry"})
         mock_urlopen.side_effect = [TimeoutError("timed out"), mock_resp]
 
         sid = module.create_session("http://localhost:8080", "1", "recon", None, None, None)

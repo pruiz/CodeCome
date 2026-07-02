@@ -86,6 +86,7 @@ def test_resume_status_none_with_live_process_does_not_kill_server(monkeypatch, 
     assert not isinstance(excinfo.value, runner_mod.ResumeSessionServerUnreachable)
     event_types = [event["type"] for event in _events(transcript.path)]
     assert "codecome.resume.status_unavailable_process_alive" in event_types
+    assert "codecome.resume.blocked_unknown" not in event_types
     assert "codecome.resume.server_unreachable" not in event_types
 
 

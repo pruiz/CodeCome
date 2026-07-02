@@ -65,16 +65,15 @@ class PhaseEventLoop(BaseEventLoop):
         # events for this long, treat the turn as stalled (hung model/provider)
         # so the harness can restart the server and retry instead of waiting
         # forever. server.heartbeat / server.connected do not count as progress.
-        self._stall_timeout_s = float(os.environ.get("CODECOME_BUSY_STALL_TIMEOUT", "180"))
+        self._stall_timeout_s = self._float_env("CODECOME_BUSY_STALL_TIMEOUT", 180.0)
         # Optional diagnostic signal: opencode may pause server.heartbeat during
         # valid long turns, so heartbeat-gap stalls are disabled by default. When
         # explicitly enabled, they can flag runtime blockage sooner than the
         # primary no-progress timeout.
-        self._heartbeat_stall_timeout_s = float(
-            os.environ.get("CODECOME_HEARTBEAT_STALL_TIMEOUT", "0")
-        )
+        self._heartbeat_stall_timeout_s = self._float_env("CODECOME_HEARTBEAT_STALL_TIMEOUT", 0.0)
         self._last_progress_at = time.monotonic()
         self._session_stalled = False
+        self._server_unreachable = False
         self._session_idle_via_status = False
         try:
             self._status_probe_timeout_s = max(
@@ -205,6 +204,8 @@ class PhaseEventLoop(BaseEventLoop):
 
         if self._session_stalled and _last_finish_reason not in ("stop", "idle"):
             _last_finish_reason = "session_stalled"
+        if self._server_unreachable and _last_finish_reason not in ("stop", "idle"):
+            _last_finish_reason = "server_unreachable"
 
         return self._build_result(
             any_step_finish_seen=_any_step_finish_seen,
@@ -217,6 +218,13 @@ class PhaseEventLoop(BaseEventLoop):
 
     def trigger_recovery_sync(self) -> None:
         self._pending_recovery_sync = True
+
+    @staticmethod
+    def _float_env(name: str, default: float) -> float:
+        try:
+            return float(os.environ.get(name, str(default)))
+        except (TypeError, ValueError):
+            return default
 
     def _track_session_busy(self, event: dict[str, Any]) -> None:
         """Record the latest session busy/idle state seen on the SSE stream."""
@@ -285,8 +293,12 @@ class PhaseEventLoop(BaseEventLoop):
             # while the session is busy (the prior behavior gave up too early).
             return True
         try:
-            return bool(self._liveness_check())
+            alive = bool(self._liveness_check())
+            if not alive:
+                self._server_unreachable = True
+            return alive
         except Exception:  # noqa: BLE001
+            self._server_unreachable = True
             return False
 
     def _status_probe_reports_idle(self) -> bool:

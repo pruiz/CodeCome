@@ -121,6 +121,20 @@ def _wait_for_resume_idle(
                         "codecome.resume.status_unavailable_process_alive",
                         sessionID=session_id,
                     )
+                    if time.monotonic() >= deadline:
+                        _record_codecome_event(
+                            transcript,
+                            "codecome.resume.timeout",
+                            sessionID=session_id,
+                            status=None,
+                            timeoutSeconds=timeout_s,
+                        )
+                        raise ResumeSessionNotReady(
+                            f"session {session_id} status endpoint unavailable (process alive) "
+                            f"after {timeout_s:g}s; refusing to send resume prompt"
+                        )
+                    time.sleep(max(poll_s, 0.1))
+                    continue
                 else:
                     _record_codecome_event(
                         transcript,
@@ -139,6 +153,20 @@ def _wait_for_resume_idle(
                     "codecome.resume.status_unavailable_server_healthy",
                     sessionID=session_id,
                 )
+                if time.monotonic() >= deadline:
+                    _record_codecome_event(
+                        transcript,
+                        "codecome.resume.timeout",
+                        sessionID=session_id,
+                        status=None,
+                        timeoutSeconds=timeout_s,
+                    )
+                    raise ResumeSessionNotReady(
+                        f"session {session_id} status endpoint unavailable (server healthy) "
+                        f"after {timeout_s:g}s; refusing to send resume prompt"
+                    )
+                time.sleep(max(poll_s, 0.1))
+                continue
             else:
                 consecutive_unavailable += 1
                 if consecutive_unavailable >= server_unavailable_threshold:
@@ -291,9 +319,14 @@ def _run_single_attempt(
                     loop.stop()
                 except Exception:
                     pass
-            consumer.join(timeout=5.0)
+            try:
+                stop_timeout = max(5.0, float(os.environ.get("CODECOME_SSE_READ_TICK", "10")) + 1.0)
+            except (TypeError, ValueError):
+                stop_timeout = 11.0
+            consumer.join(timeout=stop_timeout)
             if consumer.is_alive():
                 _record_codecome_event(transcript, "codecome.event_loop.stop_timeout", sessionID=session_id)
+                raise RuntimeError("event loop thread did not stop after prompt send failure") from exc
             if isinstance(exc, OpenCodeRequestError) and exc.retriable:
                 _record_codecome_event(
                     transcript,
@@ -330,6 +363,14 @@ def _run_single_attempt(
                 sessionID=session_id,
                 existingSession=bool(existing_session_id),
             )
+        if run_result.last_finish_reason == "server_unreachable":
+            _record_codecome_event(
+                transcript,
+                "codecome.session.server_unreachable",
+                sessionID=session_id,
+                existingSession=bool(existing_session_id),
+            )
+            return RunStatus.INCOMPLETE, session_id, run_result, transcript.path
     except ResumeSessionServerUnreachable as exc:
         _record_codecome_event(
             transcript,

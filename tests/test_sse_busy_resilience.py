@@ -110,6 +110,17 @@ def test_keep_consuming_false_when_busy_but_process_dead():
         {"type": "session.status", "properties": {"status": {"type": "busy"}}}
     )
     assert loop._should_keep_consuming() is False
+    assert loop._server_unreachable is True
+
+
+def test_invalid_stall_env_values_fall_back(monkeypatch):
+    monkeypatch.setenv("CODECOME_BUSY_STALL_TIMEOUT", "180s")
+    monkeypatch.setenv("CODECOME_HEARTBEAT_STALL_TIMEOUT", "off")
+
+    loop = _loop(liveness_check=lambda: True)
+
+    assert loop._stall_timeout_s == 180.0
+    assert loop._heartbeat_stall_timeout_s == 0.0
 
 
 def test_keep_consuming_true_when_busy_and_no_liveness_signal():
@@ -452,3 +463,48 @@ def test_run_status_idle_final_sync_recovers_terminal_finish(monkeypatch):
     assert result.last_finish_reason == "stop"
     assert any(event.get("type") == "step_finish" for event in rendered)
     assert recorded[-1]["properties"]["status"]["type"] == "idle"
+
+
+def test_run_dead_process_reports_server_unreachable(monkeypatch):
+    class FakeSseClient:
+        def __init__(self, *args, should_continue=None, **kwargs):
+            self.should_continue = should_continue
+
+        def events(self):
+            yield {
+                "type": "session.status",
+                "properties": {
+                    "sessionID": "sess-1",
+                    "status": {"type": "busy"},
+                },
+            }
+            if self.should_continue is not None:
+                self.should_continue()
+            return
+
+        def seconds_since_heartbeat(self):
+            return None
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr("events.phase_loop.SseClient", FakeSseClient)
+
+    loop = _loop(liveness_check=lambda: False)
+    result = loop.run(lambda *_a: None)
+
+    assert result.last_finish_reason == "server_unreachable"
+    assert result.session_stalled is False
+
+
+def test_set_stream_timeout_warns_once_when_socket_missing(monkeypatch, capsys):
+    import events.sse_client as sse_mod
+
+    monkeypatch.setattr(sse_mod, "_STREAM_TIMEOUT_WARNING_EMITTED", False)
+    resp = object()
+
+    SseClient._set_stream_timeout(resp, 1.0)
+    SseClient._set_stream_timeout(resp, 1.0)
+
+    err = capsys.readouterr().err
+    assert err.count("could not set SSE read timeout") == 1

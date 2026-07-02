@@ -332,6 +332,8 @@ def run_phase_mode(args: argparse.Namespace) -> int:
                 _recovery_reason = "session_stalled"
 
             if _recovery_reason is not None:
+                if returncode == RunStatus.OK:
+                    returncode = RunStatus.INCOMPLETE
                 if server_restart_count < max_server_restarts:
                     server_restart_count += 1
                     out.warn(

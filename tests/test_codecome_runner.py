@@ -194,6 +194,54 @@ def test_run_single_attempt_records_prompt_timeout(mock_args, mock_console, monk
     assert failed["properties"]["message"] == "Failed to send prompt: timed out"
 
 
+def test_run_single_attempt_prompt_timeout_requires_consumer_exit(mock_args, mock_console, monkeypatch):
+    monkeypatch.setattr(runner, "create_session", lambda *a, **kw: "new_session")
+    monkeypatch.setattr(runner, "_consume_events", lambda *a, **kw: RunResult())
+
+    def fake_send(*_a, **_kw):
+        raise runner.OpenCodeRequestError(
+            "Failed to send prompt: timed out",
+            retriable=True,
+            operation="send_prompt",
+        )
+
+    class AliveThread:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            pass
+
+        def join(self, timeout=None):
+            pass
+
+        def is_alive(self):
+            return True
+
+    monkeypatch.setattr(runner, "send_prompt_to_session", fake_send)
+    monkeypatch.setattr(runner.threading, "Thread", AliveThread)
+    monkeypatch.setenv("CODECOME_SSE_READ_TICK", "invalid")
+
+    events = []
+    fake_transcript = MagicMock(spec=Transcript)
+    fake_transcript.path = Path("fake.jsonl")
+    fake_transcript.write_event.side_effect = events.append
+    monkeypatch.setattr(Transcript, "for_phase", classmethod(lambda cls, p, f: fake_transcript))
+
+    code, session_id, _res, _path = runner._run_single_attempt(
+        mock_args, mock_console, "do work", "model", "var",
+        "http://base", "auth", "dir", lambda *a: None,
+        emit_fatal_error_fn=lambda *_a: None,
+    )
+
+    assert code == 1
+    assert session_id == ""
+    event_types = [event["type"] for event in events]
+    assert "codecome.event_loop.stop_timeout" in event_types
+    assert "codecome.attempt.failed" in event_types
+    assert "codecome.attempt.incomplete" not in event_types
+
+
 def test_run_single_attempt_create_session_timeout_is_recoverable(mock_args, mock_console, monkeypatch):
     def fake_create(*_a, **_kw):
         raise runner.OpenCodeRequestError(

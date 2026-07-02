@@ -223,8 +223,8 @@ def create_session(
             method="POST",
         )
         try:
-            resp = urllib.request.urlopen(req, timeout=10.0)
-            data = json.loads(resp.read().decode("utf-8"))
+            with urllib.request.urlopen(req, timeout=10.0) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
             break
         except Exception as exc:
             last_exc = exc
