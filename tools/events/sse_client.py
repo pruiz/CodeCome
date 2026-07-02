@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import sys
 import time
 import urllib.request
 from typing import Any, Callable, Iterator
@@ -26,6 +27,15 @@ _BACKOFF_MULTIPLIER = 2.0
 
 # Connect timeout for establishing the SSE connection.
 _SSE_READ_TIMEOUT_S = 30.0
+_STREAM_TIMEOUT_WARNING_EMITTED = False
+
+
+def _warn_stream_timeout(message: str) -> None:
+    global _STREAM_TIMEOUT_WARNING_EMITTED
+    if _STREAM_TIMEOUT_WARNING_EMITTED:
+        return
+    _STREAM_TIMEOUT_WARNING_EMITTED = True
+    print(message, file=sys.stderr)
 
 
 def _sse_read_tick() -> float:
@@ -275,11 +285,21 @@ class SseClient:
             sock = getattr(raw, "_sock", None) or getattr(fp, "_sock", None)
         if sock is None:
             sock = getattr(resp, "_sock", None)
+        if sock is None:
+            _warn_stream_timeout(
+                "warning: could not set SSE read timeout; stream stalls may block indefinitely"
+            )
+            return
         if sock is not None and hasattr(sock, "settimeout"):
             try:
                 sock.settimeout(timeout)
-            except Exception:  # noqa: BLE001
-                pass
+                return
+            except Exception as exc:  # noqa: BLE001
+                _warn_stream_timeout(f"warning: could not set SSE read timeout: {exc}")
+                return
+        _warn_stream_timeout(
+            "warning: SSE stream object has no settimeout; stream stalls may block indefinitely"
+        )
 
     @staticmethod
     def _parse_buffer(lines: list[str]) -> dict | None:

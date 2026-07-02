@@ -140,3 +140,18 @@ def test_recovery_shares_budget_and_exhausts(monkeypatch):
     # Budget exhausted after 2 restarts → non-zero terminal status.
     assert rc != 0
     assert fake.restart_calls == 2
+
+
+def test_session_stalled_budget_exhaustion_is_non_success(monkeypatch):
+    fake = _FakeServerRunner()
+    from codecome import harness as harness_mod
+    transcript = _t(harness_mod)
+    monkeypatch.setenv("CODECOME_MAX_SERVER_RESTARTS", "0")
+    harness_mod = _wire(monkeypatch, fake, [
+        (0, "ses_x", _stalled_result(), transcript),
+    ])
+
+    rc = harness_mod.run_phase_mode(_args())
+
+    assert rc != 0
+    assert fake.restart_calls == 0
