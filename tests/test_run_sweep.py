@@ -479,80 +479,80 @@ class TestSweepFilesArg:
 
 
 class TestSweepExclude:
-    def test_exclude_arg_splits_comma(self):
+    def test_exclude_glob_removes_matching_files(self, tmp_path):
         module = _load_run_sweep()
-        parser = module.argparse.ArgumentParser()
-        parser.add_argument("--exclude", default=None)
-        parsed = parser.parse_args(["--exclude", "src/vendor/*, src/thirdparty/** , src/tests/*"])
-        result = [p.strip() for p in parsed.exclude.split(",") if p.strip()]
-        assert result == ["src/vendor/*", "src/thirdparty/**", "src/tests/*"]
-
-    def test_exclude_arg_handles_empty_tokens(self):
-        module = _load_run_sweep()
-        parser = module.argparse.ArgumentParser()
-        parser.add_argument("--exclude", default=None)
-        parsed = parser.parse_args(["--exclude", "src/a.py,,src/b.py,"])
-        result = [p.strip() for p in parsed.exclude.split(",") if p.strip()]
-        assert result == ["src/a.py", "src/b.py"]
-
-    def test_exclude_removes_matching_files(self):
-        module = _load_run_sweep()
-        candidates = ["src/a.py", "src/vendor/x.py", "src/vendor/y.py", "src/b.cs"]
-        exclude_patterns = ["src/vendor/*"]
-        exclude_set = set()
-        for pat in exclude_patterns:
-            for p in sorted(Path("src/vendor").glob("*") if Path("src/vendor").exists() else ["x.py", "y.py"]):
-                exclude_set.add(p)
-        excluded_manually = {f"src/vendor/{p}" for p in ["x.py", "y.py"]}
-        result = [f for f in candidates if f not in excluded_manually]
-        assert sorted(result) == ["src/a.py", "src/b.cs"]
-
-    def test_exclude_without_files_does_not_crash(self):
-        module = _load_run_sweep()
-        parser = module.argparse.ArgumentParser()
-        parser.add_argument("--exclude", default=None)
-        parsed = parser.parse_args(["--exclude", "src/vendor/*"])
-        if parsed.exclude:
-            exclude_set = set()
-            for pat in parsed.exclude.split(","):
-                pat = pat.strip()
-                if pat:
-                    for p in [p for p in ["x.py", "y.py"]]:
-                        exclude_set.add(p)
-        candidates = ["src/a.py", "src/b.cs"]
-        result = [f for f in candidates if f not in exclude_set]
-        assert result == ["src/a.py", "src/b.cs"]
-
-
-class TestSweepMarkDoneWithSummary:
-    def test_mark_done_called_when_recent_summary_exists(self, tmp_path):
-        module = _load_run_sweep()
-        state_file = tmp_path / "sweep-state.txt"
-        runs_dir = tmp_path / "runs"
-        runs_dir.mkdir()
-        orig_state = module.STATE_FILE
-        module.STATE_FILE = state_file
+        src = tmp_path / "src"
+        vendor = src / "vendor"
+        vendor.mkdir(parents=True)
+        (src / "a.py").write_text("")
+        (vendor / "x.py").write_text("")
+        (vendor / "y.py").write_text("")
+        (src / "b.cs").write_text("")
         orig_root = module.ROOT
         module.ROOT = tmp_path
         try:
-            note = tmp_path / "runs" / "phase-2-summary-sweep-src-bar-py-20200101-000000.md"
-            note.parent.mkdir(parents=True, exist_ok=True)
-            note.write_text("")
+            exclude_set = set()
+            for m in module.glob.glob("src/vendor/*", root_dir=str(tmp_path)):
+                exclude_set.add(m)
+            candidates = ["src/a.py", "src/vendor/x.py", "src/vendor/y.py", "src/b.cs"]
+            result = [f for f in candidates if f not in exclude_set]
+            assert result == ["src/a.py", "src/b.cs"]
+        finally:
+            module.ROOT = orig_root
+
+    def test_exclude_glob_empty_when_no_match(self, tmp_path):
+        module = _load_run_sweep()
+        src = tmp_path / "src"
+        src.mkdir(parents=True)
+        (src / "a.py").write_text("")
+        orig_root = module.ROOT
+        module.ROOT = tmp_path
+        try:
+            exclude_set = set()
+            for m in module.glob.glob("src/nonexistent/*", root_dir=str(tmp_path)):
+                exclude_set.add(m)
+            assert exclude_set == set()
+        finally:
+            module.ROOT = orig_root
+
+    def test_exclude_glob_supports_recursive(self, tmp_path):
+        module = _load_run_sweep()
+        vendor = tmp_path / "src" / "vendor"
+        vendor.mkdir(parents=True)
+        (vendor / "x.py").write_text("")
+        deep = vendor / "deep"
+        deep.mkdir()
+        (deep / "z.py").write_text("")
+        orig_root = module.ROOT
+        module.ROOT = tmp_path
+        try:
+            exclude_set = set()
+            for m in module.glob.glob("src/vendor/**", root_dir=str(tmp_path), recursive=True):
+                exclude_set.add(m)
+            assert "src/vendor/x.py" in exclude_set
+            assert "src/vendor/deep/z.py" in exclude_set
+        finally:
+            module.ROOT = orig_root
+
+
+class TestSweepMarkDoneWithSummary:
+    def test_mark_done_writes_to_state(self, tmp_path):
+        module = _load_run_sweep()
+        state_file = tmp_path / "sweep-state.txt"
+        orig_state = module.STATE_FILE
+        module.STATE_FILE = state_file
+        try:
             module.mark_done("src/bar.py")
             assert "src/bar.py" in module.load_completed()
         finally:
             module.STATE_FILE = orig_state
-            module.ROOT = orig_root
 
-    def test_mark_done_not_called_when_no_summaries_at_all(self, tmp_path):
+    def test_load_completed_empty_when_no_mark_done(self, tmp_path):
         module = _load_run_sweep()
         state_file = tmp_path / "sweep-state.txt"
         orig_state = module.STATE_FILE
         module.STATE_FILE = state_file
-        orig_root = module.ROOT
-        module.ROOT = tmp_path
         try:
             assert module.load_completed() == set()
         finally:
             module.STATE_FILE = orig_state
-            module.ROOT = orig_root
