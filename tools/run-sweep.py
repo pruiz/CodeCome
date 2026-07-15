@@ -253,6 +253,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run sequential CodeCome file-scoped sweeps")
     parser.add_argument("--file", action="append", default=[], help="Specific file or glob to sweep. May be repeated.")
     parser.add_argument("--files", default=None, help="Comma-separated list of file patterns (convenience; added to --file args)")
+    parser.add_argument("--exclude", default=None, help="Comma-separated list of glob patterns to exclude from sweep")
     parser.add_argument("--reset", action="store_true", help="Clear sweep progress state and start fresh")
     parser.add_argument("--index", default=str(DEFAULT_INDEX), help="Path to file-risk-index.yml")
     parser.add_argument("--min-score", type=int, default=4, help="Minimum risk score when selecting from the index")
@@ -288,6 +289,24 @@ def main() -> int:
         print(C.warn("No files selected for sweep."))
         return 0
 
+    if args.exclude:
+        exclude_set: set[str] = set()
+        for pat in args.exclude.split(","):
+            pat = pat.strip()
+            if not pat:
+                continue
+            for m in glob.glob(pat, root_dir=str(ROOT), recursive=True):
+                exclude_set.add(m)
+        before = len(candidates)
+        candidates = [f for f in candidates if f not in exclude_set]
+        removed = before - len(candidates)
+        if removed:
+            print(C.info(f"Excluded {removed} file(s) matching --exclude"))
+
+    if not candidates:
+        print(C.warn("No files selected for sweep after exclusions."))
+        return 0
+
     completed = load_completed()
     files = [f for f in candidates if f not in completed]
     skipped = [f for f in candidates if f in completed]
@@ -319,7 +338,14 @@ def main() -> int:
             print(C.fail(f"Sweep failed for {file_path} with exit code {code}"), file=sys.stderr)
             return code
         if not args.dry_run:
-            mark_done(file_path)
+            summaries = list(
+                (ROOT / "runs").glob(f"phase-2-summary-sweep-{slugify(file_path)}-*.md")
+            )
+            recent = [s for s in summaries if s.stat().st_mtime >= sweep_start_time]
+            if recent:
+                mark_done(file_path)
+            else:
+                print(C.warn(f"No sweep summary found for {file_path} — will re-sweep on next run"))
 
     if not args.dry_run:
         all_files = files + skipped

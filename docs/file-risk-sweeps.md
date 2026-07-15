@@ -43,6 +43,15 @@ Run a sweep on specific files (supports glob patterns, comma-separated):
     make sweep FILES="src/a.py,src/**/*.cs"
     make sweep FILES="src/controllers/upload.php,src/models/user.py"
 
+Exclude files with `EXCLUDE` (comma-separated globs, applied before the sweep):
+
+    make sweep FILES="src/**/*.py" EXCLUDE="src/vendor/**,src/__pycache__/**"
+    make sweep EXCLUDE="src/vendor/**"
+
+`EXCLUDE` also works with index-based sweeps:
+
+    make sweep EXCLUDE="src/vendor/**"
+
 Run a sweep sequentially across the top indexed files (score 4+):
 
     make sweep
