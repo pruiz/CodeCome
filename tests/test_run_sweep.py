@@ -370,3 +370,109 @@ class TestRunSweepSummaryModelPropagation:
             assert cmd[:3] == ["opencode", "run", "--agent"]
         finally:
             self._teardown_summary_env(module, orig_swp, orig_tmp_dir, orig_root)
+
+
+class TestSweepStateFile:
+    def test_load_completed_empty_when_no_file(self, tmp_path):
+        module = _load_run_sweep()
+        orig_state = module.STATE_FILE
+        module.STATE_FILE = tmp_path / "nonexistent.txt"
+        try:
+            result = module.load_completed()
+            assert result == set()
+        finally:
+            module.STATE_FILE = orig_state
+
+    def test_load_completed_reads_paths(self, tmp_path):
+        module = _load_run_sweep()
+        state_file = tmp_path / "sweep-state.txt"
+        state_file.write_text("src/a.py\nsrc/b.cs\n\n  \n")
+        orig_state = module.STATE_FILE
+        module.STATE_FILE = state_file
+        try:
+            result = module.load_completed()
+            assert result == {"src/a.py", "src/b.cs"}
+        finally:
+            module.STATE_FILE = orig_state
+
+    def test_mark_done_appends(self, tmp_path):
+        module = _load_run_sweep()
+        state_file = tmp_path / "sweep-state.txt"
+        orig_state = module.STATE_FILE
+        module.STATE_FILE = state_file
+        try:
+            module.mark_done("src/a.py")
+            module.mark_done("src/b.cs")
+            content = state_file.read_text(encoding="utf-8")
+            assert content == "src/a.py\nsrc/b.cs\n"
+        finally:
+            module.STATE_FILE = orig_state
+
+    def test_clear_state_removes_file(self, tmp_path):
+        module = _load_run_sweep()
+        state_file = tmp_path / "sweep-state.txt"
+        state_file.write_text("src/a.py\n")
+        orig_state = module.STATE_FILE
+        module.STATE_FILE = state_file
+        try:
+            module.clear_state()
+            assert not state_file.exists()
+        finally:
+            module.STATE_FILE = orig_state
+
+    def test_clear_state_noop_when_no_file(self, tmp_path):
+        module = _load_run_sweep()
+        orig_state = module.STATE_FILE
+        module.STATE_FILE = tmp_path / "nonexistent.txt"
+        try:
+            module.clear_state()
+        finally:
+            module.STATE_FILE = orig_state
+
+
+class TestSweepFilesArg:
+    def test_files_arg_splits_comma(self):
+        module = _load_run_sweep()
+        parser = module.argparse.ArgumentParser()
+        parser.add_argument("--file", action="append", default=[])
+        parser.add_argument("--files", default=None)
+        parsed = parser.parse_args(["--files", "src/a.py, src/b.cs , src/**/*.php"])
+        if parsed.files:
+            for pat in parsed.files.split(","):
+                stripped = pat.strip()
+                if stripped:
+                    parsed.file.append(stripped)
+        assert "src/a.py" in parsed.file
+        assert "src/b.cs" in parsed.file
+        assert "src/**/*.php" in parsed.file
+        assert len(parsed.file) == 3
+
+    def test_files_arg_handles_empty_tokens(self):
+        module = _load_run_sweep()
+        parser = module.argparse.ArgumentParser()
+        parser.add_argument("--file", action="append", default=[])
+        parser.add_argument("--files", default=None)
+        parsed = parser.parse_args(["--files", "src/a.py,,src/b.cs,"])
+        if parsed.files:
+            for pat in parsed.files.split(","):
+                stripped = pat.strip()
+                if stripped:
+                    parsed.file.append(stripped)
+        assert parsed.file == ["src/a.py", "src/b.cs"]
+
+    def test_files_and_file_can_be_combined(self):
+        module = _load_run_sweep()
+        parser = module.argparse.ArgumentParser()
+        parser.add_argument("--file", action="append", default=[])
+        parser.add_argument("--files", default=None)
+        parsed = parser.parse_args([
+            "--file", "src/x.py",
+            "--files", "src/a.py,src/b.cs",
+            "--file", "src/y.py",
+        ])
+        if parsed.files:
+            for pat in parsed.files.split(","):
+                stripped = pat.strip()
+                if stripped:
+                    parsed.file.append(stripped)
+        assert parsed.file == ["src/x.py", "src/y.py", "src/a.py", "src/b.cs"]

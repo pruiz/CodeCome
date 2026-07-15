@@ -36,10 +36,12 @@ Show only paths for scripting:
 
 While the global Phase 2 agent (`make phase-2`) focuses on macro-level architectural flaws and cross-component issues, you can run an optional **Deep Sweep** (Phase 2 sweep mode) to perform exhaustive, line-by-line vulnerability hunting on specific high-risk files. Each sweep run creates Phase 2 candidate findings under `itemdb/findings/PENDING/` and writes a Phase 2 run summary.
 
-Run a sweep on specific files (supports glob patterns):
+Run a sweep on specific files (supports glob patterns, comma-separated):
 
     make sweep FILE="src/path/to/file.ext"
     make sweep FILE="src/**/*.cs"
+    make sweep FILES="src/a.py,src/**/*.cs"
+    make sweep FILES="src/controllers/upload.php,src/models/user.py"
 
 Run a sweep sequentially across the top indexed files (score 4+):
 
@@ -51,7 +53,17 @@ Preview selected files and generated prompts without invoking OpenCode:
 
 The sweep runner is sequential by default. It invokes the normal `auditor` agent with a specialized prompt (`prompts/phase-2-sweep.md`) that forces the model to read related dependencies and imports to establish complete source-to-sink context.
 
-Generated temporary prompts are written under:
+### Resume on interruption
+
+The sweep runner tracks successfully scanned files in `tmp/sweep-state.txt` (one path per line). If a sweep is interrupted or a file fails, re-running the same command will skip already-completed files and resume where it left off.
+
+To force a fresh sweep of all files, use `RESET=1` or `RESTART=1`:
+
+    make sweep FILES="src/a.py,src/b.py" RESET=1
+
+You can also inspect or manually edit `tmp/sweep-state.txt` to remove files you want to re-sweep.
+
+### Generated files
 
     tmp/file-sweep-prompts/
 
