@@ -69,7 +69,8 @@ help:
 	@printf "\n"
 	@printf "    $(BOLD)make list-risk-files$(RESET)          List top-scoring risky files from index\n"
 	@printf "    $(BOLD)make sweep$(RESET)                   Run deep sweep on top-scoring files\n"
-	@printf "    $(BOLD)make sweep FILE=\"src/foo.*\"$(RESET)  Run deep sweep on specific file(s)\n"
+	@printf "    $(BOLD)make sweep FILES=\"src/a.*,src/b.*\"$(RESET) Run deep sweep on patterns (comma-separated)\n"
+	@printf "    $(BOLD)make sweep FILE=\"src/foo.*\"$(RESET)  Run deep sweep on single file pattern\n"
 	@printf "\n"
 	@printf "  $(BOLD)$(CYAN)Phase controls:$(RESET)\n"
 	@printf "\n"
@@ -222,11 +223,23 @@ list-risk-files: env-check
 	@$(PYTHON) tools/list-risk-files.py
 
 sweep: env-check
-	@if [ -n "$(FILE)" ]; then \
-		$(PYTHON) tools/run-sweep.py --file "$(FILE)"; \
-	else \
-		$(PYTHON) tools/run-sweep.py; \
-	fi
+	@FILE_ARGS=""; \
+	if [ -n "$(FILES)" ]; then \
+		OLDIFS=$$IFS; \
+		IFS=','; \
+		for pat in $(FILES); do \
+			[ -z "$$pat" ] && continue; \
+			FILE_ARGS="$$FILE_ARGS --file $$pat"; \
+		done; \
+		IFS=$$OLDIFS; \
+	elif [ -n "$(FILE)" ]; then \
+		FILE_ARGS="--file $(FILE)"; \
+	fi; \
+	RESET_FLAG=""; \
+	if [ -n "$(RESET)" ] || [ -n "$(RESTART)" ]; then \
+		RESET_FLAG="--reset"; \
+	fi; \
+	$(PYTHON) tools/run-sweep.py $$FILE_ARGS $$RESET_FLAG
 
 # ---------------------------------------------------------------------------
 # Raw opencode debug target (non-workflow)

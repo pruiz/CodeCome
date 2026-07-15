@@ -12,8 +12,10 @@ Examples:
 
     ./tools/run-sweep.py --file src/app/controllers/upload.php
     ./tools/run-sweep.py --file "src/**/*.cs"
+    ./tools/run-sweep.py --files "src/a.py,src/**/*.cs"
     ./tools/run-sweep.py --min-score 4 --limit 5
     ./tools/run-sweep.py --min-score 5 --dry-run
+    ./tools/run-sweep.py --reset
 """
 
 from __future__ import annotations
@@ -42,6 +44,7 @@ DEFAULT_INDEX = ROOT / "itemdb" / "notes" / "file-risk-index.yml"
 PROMPT_TEMPLATE = ROOT / "prompts" / "phase-2-sweep.md"
 SWEEP_SUMMARY_PROMPT = ROOT / "prompts" / "phase-2-sweep-summary.md"
 TMP_DIR = ROOT / "tmp" / "file-sweep-prompts"
+STATE_FILE = ROOT / "tmp" / "sweep-state.txt"
 
 
 def load_risk_entries(index_path: Path) -> list[dict[str, Any]]:
@@ -115,6 +118,26 @@ def expand_file_args(file_args: list[str]) -> list[str]:
 def slugify(path: str) -> str:
     value = re.sub(r"[^A-Za-z0-9_.-]+", "-", path).strip("-")
     return value[:120] or "target"
+
+
+def load_completed() -> set[str]:
+    if not STATE_FILE.exists():
+        return set()
+    return {
+        line.strip()
+        for line in STATE_FILE.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    }
+
+
+def mark_done(file_path: str) -> None:
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(STATE_FILE, "a", encoding="utf-8") as fh:
+        fh.write(file_path + "\n")
+
+
+def clear_state() -> None:
+    STATE_FILE.unlink(missing_ok=True)
 
 
 def build_prompt_for_file(file_path: str) -> Path:
@@ -229,6 +252,8 @@ def run_sweep_summary(files: list[str], per_file_summaries: list[str]) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run sequential CodeCome file-scoped sweeps")
     parser.add_argument("--file", action="append", default=[], help="Specific file or glob to sweep. May be repeated.")
+    parser.add_argument("--files", default=None, help="Comma-separated list of file patterns (convenience; added to --file args)")
+    parser.add_argument("--reset", action="store_true", help="Clear sweep progress state and start fresh")
     parser.add_argument("--index", default=str(DEFAULT_INDEX), help="Path to file-risk-index.yml")
     parser.add_argument("--min-score", type=int, default=4, help="Minimum risk score when selecting from the index")
     parser.add_argument("--limit", type=int, default=None, help="Maximum number of indexed files to sweep")
@@ -236,21 +261,44 @@ def main() -> int:
     parser.add_argument("--skip-gates", action="store_true", help="Skip readiness and sandbox gates")
     args = parser.parse_args()
 
+    if args.files:
+        for pat in args.files.split(","):
+            stripped = pat.strip()
+            if stripped:
+                args.file.append(stripped)
+
+    if args.reset:
+        clear_state()
+        print(C.info("Sweep state cleared — starting fresh."))
+
     index_path = Path(args.index)
     if not index_path.is_absolute():
         index_path = ROOT / index_path
 
     try:
         if args.file:
-            files = expand_file_args(args.file)
+            candidates = expand_file_args(args.file)
         else:
-            files = select_from_index(index_path, args.min_score, args.limit)
+            candidates = select_from_index(index_path, args.min_score, args.limit)
     except Exception as exc:  # noqa: BLE001
         print(C.fail(str(exc)), file=sys.stderr)
         return 1
 
-    if not files:
+    if not candidates:
         print(C.warn("No files selected for sweep."))
+        return 0
+
+    completed = load_completed()
+    files = [f for f in candidates if f not in completed]
+    skipped = [f for f in candidates if f in completed]
+
+    if skipped:
+        print(C.info(f"Skipping {len(skipped)} already-scanned file(s):"))
+        for f in skipped:
+            print(f"  {C.SYM_BULLET} {f}")
+
+    if not files:
+        print(C.warn("All selected files have already been scanned. Use --reset to start fresh."))
         return 0
 
     print(C.header("Selected files"))
@@ -270,18 +318,35 @@ def main() -> int:
         if code != 0:
             print(C.fail(f"Sweep failed for {file_path} with exit code {code}"), file=sys.stderr)
             return code
+        if not args.dry_run:
+            mark_done(file_path)
 
     if not args.dry_run:
-        fresh_summaries = [
-            str(s.relative_to(ROOT))
-            for f in files
+        all_files = files + skipped
+        fresh_summaries: list[str] = []
+        seen = set()
+        for f in files:
             for s in sorted(
                 (ROOT / "runs").glob(f"phase-2-summary-sweep-{slugify(f)}-*.md"),
                 key=lambda p: p.stat().st_mtime,
+            ):
+                rel = str(s.relative_to(ROOT))
+                if s.stat().st_mtime >= sweep_start_time and rel not in seen:
+                    fresh_summaries.append(rel)
+                    seen.add(rel)
+        for f in skipped:
+            prior = sorted(
+                (ROOT / "runs").glob(f"phase-2-summary-sweep-{slugify(f)}-*.md"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
             )
-            if s.stat().st_mtime >= sweep_start_time
-        ]
-        code = run_sweep_summary(files, fresh_summaries)
+            if prior:
+                rel = str(prior[0].relative_to(ROOT))
+                if rel not in seen:
+                    fresh_summaries.append(rel)
+                    seen.add(rel)
+
+        code = run_sweep_summary(all_files, fresh_summaries if fresh_summaries else [])
         if code != 0:
             print(C.fail(f"Sweep aggregate summary failed with exit code {code}"), file=sys.stderr)
             return code
