@@ -71,6 +71,7 @@ help:
 	@printf "    $(BOLD)make sweep$(RESET)                   Run deep sweep on top-scoring files\n"
 	@printf "    $(BOLD)make sweep FILES=\"src/a.*,src/b.*\"$(RESET) Run deep sweep on patterns (comma-separated)\n"
 	@printf "    $(BOLD)make sweep FILE=\"src/foo.*\"$(RESET)  Run deep sweep on single file pattern\n"
+	@printf "    $(BOLD)make sweep FILES=... EXCLUDE=...$(RESET) Exclude patterns (comma-separated globs)\n"
 	@printf "\n"
 	@printf "  $(BOLD)$(CYAN)Phase controls:$(RESET)\n"
 	@printf "\n"
@@ -223,23 +224,11 @@ list-risk-files: env-check
 	@$(PYTHON) tools/list-risk-files.py
 
 sweep: env-check
-	@FILE_ARGS=""; \
-	if [ -n "$(FILES)" ]; then \
-		OLDIFS=$$IFS; \
-		IFS=','; \
-		for pat in $(FILES); do \
-			[ -z "$$pat" ] && continue; \
-			FILE_ARGS="$$FILE_ARGS --file $$pat"; \
-		done; \
-		IFS=$$OLDIFS; \
-	elif [ -n "$(FILE)" ]; then \
-		FILE_ARGS="--file $(FILE)"; \
-	fi; \
-	RESET_FLAG=""; \
-	if [ -n "$(RESET)" ] || [ -n "$(RESTART)" ]; then \
-		RESET_FLAG="--reset"; \
-	fi; \
-	$(PYTHON) tools/run-sweep.py $$FILE_ARGS $$RESET_FLAG
+	@$(PYTHON) tools/run-sweep.py \
+		$(if $(FILES),--files "$(FILES)") \
+		$(if $(FILE),--file "$(FILE)") \
+		$(if $(EXCLUDE),--exclude "$(EXCLUDE)") \
+		$(if $(or $(RESET),$(RESTART)),--reset)
 
 # ---------------------------------------------------------------------------
 # Raw opencode debug target (non-workflow)
