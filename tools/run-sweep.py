@@ -318,6 +318,26 @@ def main() -> int:
 
     if not files:
         print(C.warn("All selected files have already been scanned. Use --reset to start fresh."))
+        if not args.dry_run and skipped:
+            prior_summaries: list[str] = []
+            seen = set()
+            for f in skipped:
+                prior = sorted(
+                    (ROOT / "runs").glob(f"phase-2-summary-sweep-{slugify(f)}-*.md"),
+                    key=lambda p: p.stat().st_mtime,
+                    reverse=True,
+                )
+                if prior:
+                    rel = str(prior[0].relative_to(ROOT))
+                    if rel not in seen:
+                        prior_summaries.append(rel)
+                        seen.add(rel)
+            if prior_summaries:
+                print(C.header("Sweep Summary (Aggregate Rollup)"))
+                code = run_sweep_summary(skipped, prior_summaries)
+                if code != 0:
+                    print(C.fail(f"Sweep aggregate summary failed with exit code {code}"), file=sys.stderr)
+                    return code
         return 0
 
     print(C.header("Selected files"))
