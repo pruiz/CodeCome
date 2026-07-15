@@ -228,7 +228,7 @@ sweep: env-check
 		$(if $(FILES),--files "$(FILES)") \
 		$(if $(FILE),--file "$(FILE)") \
 		$(if $(EXCLUDE),--exclude "$(EXCLUDE)") \
-		$(if $(or $(RESET),$(RESTART)),--reset)
+		$(if $(filter 1,$(RESET) $(RESTART)),--reset)
 
 # ---------------------------------------------------------------------------
 # Raw opencode debug target (non-workflow)
