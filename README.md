@@ -137,7 +137,7 @@ There are convenience targets too — `make validate-all`, `make exploit-all`, `
 
 Six phases. Each one is a `make` target. Each one writes to disk.
 
-1. **Recon (`make phase-1`)** — runs as three subphases: (1a) target profiling and CodeQL plan generation, (1b) CodeQL-assisted reconnaissance using static analysis signals, and (1c) sandbox bootstrap. Writes notes under `itemdb/notes/` including a file-risk-index informed by CodeQL findings.
+1. **Recon (`make phase-1`)** — runs as three subphases: (1a) target profiling and CodeQL plan generation, (1b) sandbox bootstrap (Docker-based sandbox setup), and (1c) CodeQL-assisted reconnaissance using static analysis signals. Writes notes under `itemdb/notes/` including a file-risk-index informed by CodeQL findings.
 2. **Hypothesis (`make phase-2`)** — agent writes candidate findings under `itemdb/findings/PENDING/`. Each one points at specific code, sources, sinks, and a trust boundary.
 3. **Counter-analysis (`make phase-3`)** — a reviewer pass tries to disprove or deduplicate findings. Weak ones move to `REJECTED/`, repeats to `DUPLICATE/`.
 4. **Validation (`make phase-4 FINDING=CC-XXXX`)** — one finding at a time, in the sandbox. Build the target, write a small PoC, capture evidence, decide CONFIRMED or REJECTED.
@@ -306,10 +306,13 @@ Run phases through `make` targets — they handle readiness gates and agent sele
 
     make phase-1
 
-Two things happen together:
+Three subphases run in sequence:
 
-- **1a (recon)** — notes written under `itemdb/notes/`.
+- **1a (profiling)** — target profiling and CodeQL plan generation. Writes notes under `itemdb/notes/` including `codeql-plan.yml`.
 - **1b (sandbox bootstrap)** — picks a curated baseline from `templates/sandboxes/<id>/`, applies it to `sandbox/` (with marker substitution), validates it, and writes `itemdb/notes/sandbox-plan.md` plus `sandbox/CODECOME-GENERATED.md`.
+- **1c (reconnaissance)** — CodeQL-assisted detailed reconnaissance using static analysis signals, producing the `file-risk-index.yml` and other recon notes.
+
+CodeQL runs after sandbox bootstrap (1b) and before reconnaissance (1c), so it can build and analyze the target inside the sandbox.
 
 `sandbox/` is semi-ephemeral; Phase 1b regenerates its contents based on what is in `src/`.
 
@@ -357,13 +360,17 @@ When to use it:
 
 Trade-off: token cost scales linearly with the number of files swept (one full agent session per file). Sweep on 10 high-risk files costs roughly as many tokens as 10 Phase 2 runs. It produces overlapping findings that Phase 3 has to deduplicate. Always preview first with `--dry-run`.
 
-How it works: the sweep runner reads `itemdb/notes/file-risk-index.yml` (written by Phase 1), selects all files at score 4 or above (or the files matched by `FILE=`), writes one prompt per file under `tmp/file-sweep-prompts/` (using `prompts/phase-2-sweep.md`), then invokes the `auditor` agent once per file in sequence. Each sweep run writes a Phase 2 summary at `runs/phase-2-summary-sweep-<slug>-YYYY-MM-DD-HHMMSS.md`.
+How it works: the sweep runner reads `itemdb/notes/file-risk-index.yml` (written by Phase 1), selects all files at score 4 or above (or the files matched by `FILE=`/`FILES=`), writes one prompt per file under `tmp/file-sweep-prompts/` (using `prompts/phase-2-sweep.md`), then invokes the `auditor` agent once per file in sequence. Each sweep run writes a Phase 2 summary at `runs/phase-2-summary-sweep-<slug>-YYYY-MM-DD-HHMMSS.md`.
 
-    make list-risk-files                     # preview which files would be swept
-    python tools/run-sweep.py --dry-run      # show selected files and prompts, no agent calls
-    make sweep                               # sweep all files at score 4+
-    make sweep FILE="src/path/to/file.ext"   # sweep a specific file
-    make sweep FILE="src/**/*.cs"            # sweep all .cs files under src/
+    make list-risk-files                           # preview which files would be swept
+    python tools/run-sweep.py --dry-run            # show selected files and prompts, no agent calls
+    make sweep                                     # sweep all files at score 4+
+    make sweep FILE="src/**/*.cs"                  # sweep files matching a single glob pattern
+    make sweep FILES="src/a.py,src/**/*.cs"        # sweep files matching multiple patterns
+    make sweep FILES="src/**/*.py" EXCLUDE="src/vendor/**"  # exclude patterns
+    make sweep RESET=1                             # clear progress and restart fresh
+
+Sweep tracking uses `tmp/sweep-state.txt` to record completed files. On re-run, already-scanned files are skipped, so you can safely interrupt and resume. Use `RESET=1` (or `RESTART=1`) to clear the state and sweep everything from scratch. After all selected files complete, the runner invokes a final aggregate sweep summary using `prompts/phase-2-sweep-summary.md` that consolidates findings, open questions, and re-run hints from all per-file summaries into `runs/sweep-summary-YYYY-MM-DD-HHMMSS.md`.
 
 Sweep findings overlap with Phase 2 output by design. Phase 3 deduplicates on semantic frontmatter fields (`sources`, `sinks`, `entry_points`, `trust_boundary`, `target_area`), so overlaps are merged gracefully.
 
@@ -474,8 +481,8 @@ All `make` targets that invoke Python tools expect a repo-local virtualenv at `.
 CodeCome ships reusable phase prompts under `prompts/`:
 
     prompts/phase-1a-profile.md
-    prompts/phase-1b-recon.md
-    prompts/phase-1c-sandbox.md
+    prompts/phase-1b-sandbox.md
+    prompts/phase-1c-recon.md
     prompts/phase-2-audit.md
     prompts/phase-2-sweep.md
     prompts/phase-2-sweep-summary.md

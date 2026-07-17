@@ -72,6 +72,7 @@ help:
 	@printf "    $(BOLD)make sweep FILES=\"src/a.*,src/b.*\"$(RESET) Run deep sweep on patterns (comma-separated)\n"
 	@printf "    $(BOLD)make sweep FILE=\"src/foo.*\"$(RESET)  Run deep sweep on single file pattern\n"
 	@printf "    $(BOLD)make sweep FILES=... EXCLUDE=...$(RESET) Exclude patterns (comma-separated globs)\n"
+	@printf "    $(BOLD)make sweep RESET=1$(RESET)           Clear sweep progress and start fresh\n"
 	@printf "\n"
 	@printf "  $(BOLD)$(CYAN)Phase controls:$(RESET)\n"
 	@printf "\n"
