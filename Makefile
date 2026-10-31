@@ -57,6 +57,7 @@ help:
 	@printf "\n"
 	@printf "    $(BOLD)make init$(RESET)                     Create/update repo-local virtualenv\n"
 	@printf "    $(BOLD)make phase-1$(RESET)                  Run reconnaissance\n"
+	@printf "        $(BOLD)ID_SCHEME=CC-0142$(RESET)           First finding id for this audit\n"
 	@printf "    $(BOLD)make phase-2$(RESET)                  Run hypothesis generation\n"
 	@printf "    $(BOLD)make phase-3$(RESET)                  Run counter-analysis\n"
 	@printf "    $(BOLD)make phase-4 FINDING=CC-0001$(RESET)  Validate one finding\n"
@@ -188,6 +189,7 @@ env-check:
 # ---------------------------------------------------------------------------
 
 phase-1: env-check
+	@$(PYTHON) tools/record-id-scheme.py $(if $(ID_SCHEME),--scheme "$(ID_SCHEME)") $(if $(ID_START),--start $(ID_START)) $(if $(ID_LEDGER),--ledger "$(ID_LEDGER)")
 	@$(PYTHON) tools/gate-check.py 1
 	@$(PYTHON) tools/run-agent.py --phase 1 --label "Phase 1: Reconnaissance" --agent recon
 

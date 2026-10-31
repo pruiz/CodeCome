@@ -37,6 +37,15 @@ Run:
 
     make phase-1
 
+To line finding ids up with an internal tracker, pass the first id you want
+when reconnaissance starts. Later findings continue from that number instead
+of minting another `CC-0001`. The request is saved in
+`itemdb/notes/id-scheme.yml` and reused by `make findings-create` and
+`make next-id`.
+
+    make phase-1 ID_SCHEME=CC-0142
+    make phase-1 ID_SCHEME=INT-0007 ID_LEDGER=$HOME/.codecome/finding-ids.json
+
 `make phase-1` is the recommended automatic path (it runs Phase 1a, CodeQL enrichment, Phase 1b, and Phase 1c). For manual invocation, use the individual subphase prompts:
 
     opencode run --agent recon "$(cat prompts/phase-1a-profile.md)"

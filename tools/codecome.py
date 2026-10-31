@@ -690,9 +690,9 @@ def command_status(_: argparse.Namespace) -> int:
 
 
 def command_next_id(_: argparse.Namespace) -> int:
-    ids = collect_finding_ids(iter_finding_files())
-    next_id = max(ids, default=0) + 1
-    print(f"CC-{next_id:04d}")
+    from findings.ids import next_finding_id
+
+    print(next_finding_id())
     return 0
 
 
