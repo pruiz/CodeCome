@@ -19,6 +19,7 @@ from findings.constants import (
 )
 from findings.constants import FindingsContext
 from findings.ids import next_finding_id, slugify
+from findings.scheme import load_id_scheme
 from findings.frontmatter import replace_scalar_frontmatter, replace_nested_value
 
 
@@ -35,10 +36,20 @@ def create_finding(
     if not ctx.template_path.exists():
         raise FileNotFoundError(f"Template not found: {ctx.template_path}")
 
-    finding_id = args.id or next_finding_id(findings_root=ctx.findings_root)
+    scheme = load_id_scheme(ctx.notes_root)
+    if args.id:
+        if scheme is not None and not scheme.matches(args.id):
+            raise ValueError(
+                f"Invalid finding id format: {args.id!r} "
+                f"(expected {scheme.prefix}- and {scheme.width} digits)"
+            )
+        if scheme is None and not FINDING_ID_FORMAT_RE.fullmatch(args.id):
+            raise ValueError(f"Invalid finding id format: {args.id!r} (expected CC-NNNN)")
 
-    if args.id and not FINDING_ID_FORMAT_RE.fullmatch(args.id):
-        raise ValueError(f"Invalid finding id format: {args.id!r} (expected CC-NNNN)")
+    finding_id = args.id or next_finding_id(
+        findings_root=ctx.findings_root,
+        notes_root=ctx.notes_root,
+    )
     slug = args.slug or slugify(args.title)
     today = date.today().isoformat()
 

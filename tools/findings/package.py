@@ -12,10 +12,14 @@ from typing import Optional
 import _colors as C
 
 from findings.constants import FINDING_ID_STRICT_RE, ROOT, FindingsContext
+from findings.scheme import load_id_scheme
 
 
-def validate_finding_id(finding_id: str) -> str:
+def validate_finding_id(finding_id: str, *, notes_root: Optional[Path] = None) -> str:
     stripped = finding_id.strip()
+    scheme = load_id_scheme(notes_root)
+    if scheme is not None and scheme.matches(stripped):
+        return stripped
     if not FINDING_ID_STRICT_RE.fullmatch(stripped):
         raise ValueError(f"Invalid finding id format: {finding_id!r} (expected CC-NNNN)")
     return stripped
