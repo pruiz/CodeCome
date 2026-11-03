@@ -285,12 +285,11 @@ class TestCheckPhaseGracefulCompletionUsesConstants:
             "id: \"CC-0001\"\n"
             "title: \"Stub\"\n"
             "status: \"PENDING\"\n"
-            "severity: \"MEDIUM\"\n"
-            "cvss_v4:\n  vector: \"\"\n  score: 0.0\n  justification: \"\"\n"
+            "capability:\n  forbidden: true\n  disposition: \"\"\n  exposure: \"\"\n  gate: \"\"\n  cooperation: \"\"\n  boundary: \"\"\n  effect: \"\"\n  scope: \"\"\n  durability: \"\"\n"
             "confidence: \"LOW\"\ncategory: \"Unclassified\"\ncwe: []\nlanguage: \"unknown\"\ntarget_area: \"unknown\"\n"
             "files: []\nsymbols: []\nentry_points: []\nsources: []\nsinks: []\ntrust_boundary: \"unknown\"\nassets_at_risk: []\n"
             "validation:\n  status: \"NOT_STARTED\"\n  methods: []\n  evidence_dir: \"itemdb/evidence/CC-0001\"\n  summary: \"\"\n"
-            "exploitation:\n  status: \"NOT_STARTED\"\n  impact_demonstrated: \"\"\n  exploit_type: \"\"\n  severity_before: \"\"\n  severity_after: \"\"\n  artifacts_dir: \"itemdb/evidence/CC-0001/exploits\"\n  summary: \"\"\n"
+            "exploitation:\n  status: \"NOT_STARTED\"\n  impact_demonstrated: \"\"\n  exploit_type: \"\"\n  capability_before: {}\n  capability_after: {}\n  artifacts_dir: \"itemdb/evidence/CC-0001/exploits\"\n  summary: \"\"\n"
             "created_at: \"2026-06-16\"\nupdated_at: \"2026-06-16\"\n---\n\n# Summary\n\nPending.\n",
             encoding="utf-8",
         )

@@ -130,7 +130,7 @@ It should include:
 - finding id,
 - title,
 - status,
-- severity,
+- capability (forbidden outcome class),
 - confidence,
 - affected area,
 - validation status,

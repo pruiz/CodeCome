@@ -961,40 +961,32 @@ Reject when:
 - the report relies only on generic raw SQL usage,
 - the issue is duplicate.
 
-## Severity guidance
+## Capability guidance
 
-Severity depends on impact.
+Classify the demonstrated or hypothesized outcome. Do not use Critical,
+High, Medium, Low, or CVSS.
 
 Consider:
 
-- unauthenticated vs authenticated,
-- low-privilege vs admin-only,
-- tenant boundary impact,
-- data confidentiality,
-- data integrity,
-- authentication bypass,
-- authorization bypass,
-- stacked queries allowed,
-- file read/write primitives,
-- RCE via DB-specific features,
-- database permissions,
-- error visibility,
-- exploitability.
+- effect (read-sensitive vs read-secrets vs write-security vs execute-in-app / execute-on-host),
+- gate (none vs any-account vs privileged),
+- boundary (other-principal, other-tenant, host),
+- exposure (internet vs local vs build),
+- scope and durability.
 
-Possible severity examples:
+Examples:
 
-- CRITICAL: unauthenticated injection leading to RCE or full data compromise.
-  Common DB-RCE primitives include SQL Server `xp_cmdshell`, PostgreSQL
-  `COPY ... FROM PROGRAM` and untrusted PL/Perl/PL/Python languages,
-  MySQL `INTO OUTFILE` chained with web-root file write, and Oracle
-  `DBMS_SCHEDULER` / `DBMS_JAVA` abuse. Severity also reaches CRITICAL on
-  full data compromise via UNION extraction or OOB exfiltration without RCE.
-- HIGH: authenticated low-privilege injection exposing cross-tenant sensitive data.
-- MEDIUM: limited injection in admin-only reporting feature with meaningful data exposure.
-- LOW: local CLI injection in trusted maintenance tool with limited security impact.
-- INFO: unsafe-looking pattern not reachable by untrusted input.
+- Unauthenticated injection that runs OS commands via SQL Server
+  `xp_cmdshell`, PostgreSQL `COPY ... FROM PROGRAM`, or similar:
+  `effect: execute-on-host`, `gate: none`, `boundary: host`.
+- Authenticated low-privilege injection that returns other accounts' rows:
+  `effect: read-sensitive`, `gate: any-account`, `boundary: other-principal`.
+- Injection that updates a role grant: `effect: write-security`.
+- Injection that only returns public version metadata: `effect: read-public`.
+- Unsafe-looking pattern not reachable by untrusted input: not a finding,
+  or `forbidden: false` if the caller is already allowed.
 
-Do not overstate severity without validation.
+Do not overstate the outcome without validation.
 
 ## Reporting guidance
 

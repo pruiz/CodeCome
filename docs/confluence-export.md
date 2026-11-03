@@ -69,7 +69,7 @@ make confluence-export-findings FILES='itemdb/findings/PENDING/*.md' DRY_RUN=1
 
 # findings — title from YAML frontmatter
 ./tools/confluence-export.py \
-  --title-template "[{severity}|{status}] {id}: {title}" \
+  --title-template "[{effect}|{status}] {id}: {title}" \
   itemdb/findings/CONFIRMED/*.md itemdb/findings/EXPLOITED/*.md
 
 # preview only

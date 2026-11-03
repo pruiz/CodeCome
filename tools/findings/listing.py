@@ -6,6 +6,7 @@ from __future__ import annotations
 import _colors as C
 from typing import Optional
 
+from findings.capability.classify import short_class
 from findings.constants import FindingsContext
 from findings.frontmatter import load_frontmatter
 from findings.ids import extract_id_from_path
@@ -28,12 +29,18 @@ def load_findings(
 
         for path in sorted(status_dir.glob("CC-*.md")):
             frontmatter = load_frontmatter(path)
+            capability = frontmatter.get("capability")
+            klass = short_class(capability if isinstance(capability, dict) else None)
+            effect = ""
+            if isinstance(capability, dict) and isinstance(capability.get("effect"), str):
+                effect = capability["effect"]
 
             rows.append(
                 {
                     "id": frontmatter.get("id", extract_id_from_path(path)),
                     "status": frontmatter.get("status", path.parent.name),
-                    "severity": frontmatter.get("severity", ""),
+                    "capability_class": klass,
+                    "effect": effect,
                     "confidence": frontmatter.get("confidence", ""),
                     "exploitation_status": (
                         frontmatter.get("exploitation", {}).get("status", "")
@@ -56,20 +63,23 @@ def print_plain(rows: list[dict[str, object]]) -> None:
 
     for row in rows:
         sid = str(row["id"])
-        sev = C.severity_color(str(row["severity"]))
+        klass = C.capability_color(
+            str(row.get("capability_class") or "-"),
+            effect=str(row.get("effect") or ""),
+        )
         conf = C.confidence_color(str(row["confidence"]))
         stat = C.status_color(str(row["status"]))
         print(
             f'{C.BOLD}{sid}{C.RESET} '
             f'[{stat}] '
-            f'{sev}/{conf} '
+            f'{klass}/{conf} '
             f'- {row["title"]} '
             f'{C.DIM}({row["path"]}){C.RESET}'
         )
 
 
 def print_markdown(rows: list[dict[str, object]]) -> None:
-    print("| ID | Status | Severity | Confidence | Title | Path |")
+    print("| ID | Status | Class | Confidence | Title | Path |")
     print("|---|---|---|---|---|---|")
 
     if not rows:
@@ -80,7 +90,7 @@ def print_markdown(rows: list[dict[str, object]]) -> None:
         print(
             f'| {row["id"]} '
             f'| {row["status"]} '
-            f'| {row["severity"]} '
+            f'| {row.get("capability_class") or "-"} '
             f'| {row["confidence"]} '
             f'| {row["title"]} '
             f'| `{row["path"]}` |'

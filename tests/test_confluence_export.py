@@ -10,9 +10,11 @@ def test_parse_frontmatter_reads_top_level_pairs():
     raw = (
         "---\n"
         'id: "CC-0001"\n'
-        "severity: CRITICAL\n"
         "status: EXPLOITED\n"
         'title: "Missing authorization on admin API"\n'
+        "capability:\n"
+        "  effect: read-secrets\n"
+        "  gate: none\n"
         "validation:\n"
         "  status: DONE\n"
         "---\n"
@@ -22,10 +24,10 @@ def test_parse_frontmatter_reads_top_level_pairs():
     )
     fm = cx.parse_frontmatter(raw)
     assert fm["id"] == "CC-0001"
-    assert fm["severity"] == "CRITICAL"
     assert fm["status"] == "EXPLOITED"
     assert fm["title"] == "Missing authorization on admin API"
-    # nested keys are ignored by the minimal parser
+    assert fm["effect"] == "read-secrets"
+    assert fm["gate"] == "none"
     assert "status" in fm
     assert "validation" not in fm or fm.get("validation") == ""
 
@@ -50,19 +52,19 @@ def test_derive_title_from_template(tmp_path: Path):
     path = tmp_path / "CC-0001-missing-auth.md"
     path.write_text("x", encoding="utf-8")
     args = Namespace(
-        title_template="[{severity}|{status}] {id}: {title}",
+        title_template="[{effect}|{status}] {id}: {title}",
         title=None,
         title_prefix="",
         title_suffix="",
     )
     fm = {
         "id": "CC-0001",
-        "severity": "CRITICAL",
+        "effect": "read-secrets",
         "status": "EXPLOITED",
         "title": "Missing authorization on admin API",
     }
     title = cx.derive_title(args, str(path), h1="Summary", fm=fm)
-    assert title == "[CRITICAL|EXPLOITED] CC-0001: Missing authorization on admin API"
+    assert title == "[read-secrets|EXPLOITED] CC-0001: Missing authorization on admin API"
 
 
 def test_derive_title_unknown_fields_are_empty(tmp_path: Path):

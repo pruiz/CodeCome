@@ -189,7 +189,7 @@ The exploiter agent:
 - escalates impact (crash to code execution, read to secret exfiltration, bypass to full admin access),
 - produces self-contained, reproducible PoC scripts,
 - writes clear impact narratives,
-- adjusts severity based on demonstrated impact,
+- reclassifies the capability outcome based on demonstrated impact,
 - stores exploitation artifacts under `itemdb/evidence/<finding-id>/exploits/`.
 
 A finding may be moved to `EXPLOITED` only when a working proof-of-concept demonstrates concrete impact beyond the initial validation.
@@ -243,15 +243,42 @@ Use these confidence levels:
 - `HIGH`: strong static evidence exists, but runtime validation is still pending.
 - `CONFIRMED`: validated with evidence.
 
-## Severity levels
+## Capability class
 
-Use these severity levels:
+Do not use Critical, High, Medium, Low, or CVSS.
 
-- `CRITICAL`
-- `HIGH`
-- `MEDIUM`
-- `LOW`
-- `INFO`
+Classify each finding by the forbidden outcome in `capability`:
+
+```yaml
+capability:
+  forbidden: true
+  disposition: live          # not-shipped | dormant | live
+  exposure: internet         # local | adjacent | internet | build
+  gate: any-account          # chained | privileged | any-account | none
+  cooperation: ambient       # aimed | ambient
+  effect: read-sensitive     # see effects below
+  boundary: other-principal  # self | service | other-principal | higher-principal | other-tenant | host
+  scope: tenant              # one-object | one-principal | tenant | cross-tenant | fleet
+  durability: once           # once | persists | reexecutes
+```
+
+Effects, from most power to least:
+
+- `execute-on-host`
+- `execute-in-app`
+- `actuate`
+- `impersonate`
+- `write-security`
+- `read-secrets`
+- `destroy`
+- `write-data`
+- `read-sensitive`
+- `read-public`
+- `none`
+
+The queue order (service or local-program) is a sort policy. It is not stored on the finding. Confidence stays separate.
+
+PENDING findings may leave enum fields empty. CONFIRMED and EXPLOITED findings require a fully populated capability block.
 
 ## Status values
 

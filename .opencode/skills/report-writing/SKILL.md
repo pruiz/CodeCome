@@ -130,9 +130,9 @@ Use this structure for `itemdb/reports/report.md`:
 
 Include a table like:
 
-    | ID | Status | Severity | Confidence | CWE | Target area | Title | Evidence | Recording |
-    |---|---|---|---|---|---|---|---|---|
-    | CC-0001 | EXPLOITED | HIGH | CONFIRMED | CWE-121 | parser | Missing owner check | itemdb/evidence/CC-0001/ | itemdb/evidence/CC-0001/exploits/recordings/README.md |
+    | ID | Status | Class | Effect | Gate | Exposure | Confidence | CWE | Target area | Title | Evidence | Recording |
+    |---|---|---|---|---|---|---|---|---|---|---|---|
+    | CC-0001 | EXPLOITED | execute-on-host/host | execute-on-host | none | internet | CONFIRMED | CWE-121 | parser | Missing owner check | itemdb/evidence/CC-0001/ | itemdb/evidence/CC-0001/exploits/recordings/README.md |
 
 Cell rules:
 
@@ -189,7 +189,7 @@ For each exploited finding, include:
 
 - id,
 - title,
-- severity (note if adjusted from original),
+- capability class (note if reclassified after exploitation),
 - CWE id(s),
 - impact demonstrated,
 - exploit type,
@@ -209,7 +209,7 @@ For each confirmed finding, include:
 
 - id,
 - title,
-- severity,
+- capability class,
 - confidence,
 - CWE id(s) (if known),
 - category,
@@ -308,19 +308,19 @@ over:
 
     This is a critical vulnerability.
 
-## Severity handling
+## Capability handling
 
-Do not inflate severity.
+Do not inflate the capability class. Do not use Critical, High, Medium, Low, or CVSS.
 
-Severity should reflect:
+The class should reflect:
 
-- realistic impact,
-- required privileges,
-- reachability,
-- affected asset,
-- exploit complexity,
-- whether validation confirmed the issue,
-- target context.
+- the forbidden outcome demonstrated or hypothesized (`effect`),
+- whose asset is affected (`boundary`),
+- what the attacker must already be (`gate`),
+- where they can reach it (`exposure`),
+- whether production runs the code (`disposition`),
+- how much is affected (`scope`) and whether it sticks (`durability`),
+- whether validation confirmed the issue (confidence stays separate).
 
 ## Markdown style
 

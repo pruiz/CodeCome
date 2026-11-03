@@ -121,7 +121,7 @@ Do not reject a finding only because:
 - the issue needs runtime confirmation,
 - the code is test/benchmark code but still in scope for the current target.
 
-Instead, reduce severity or confidence and explain remaining assumptions.
+Instead, correct the capability axes or lower confidence and explain remaining assumptions.
 
 ## Rejection reasons
 

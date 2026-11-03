@@ -86,11 +86,16 @@ Minimum fields:
     id: "CC-0001"
     title: "Short vulnerability title"
     status: "PENDING"
-    severity: "MEDIUM"
-    cvss_v4:
-      vector: ""
-      score: 0.0
-      justification: ""
+    capability:
+      forbidden: true
+      disposition: ""
+      exposure: ""
+      gate: ""
+      cooperation: ""
+      boundary: ""
+      effect: ""
+      scope: ""
+      durability: ""
     confidence: "LOW"
     category: "Unclassified"
     cwe: []
@@ -112,8 +117,8 @@ Minimum fields:
       status: "NOT_STARTED"
       impact_demonstrated: ""
       exploit_type: ""
-      severity_before: ""
-      severity_after: ""
+      capability_before: {}
+      capability_after: {}
       artifacts_dir: "itemdb/evidence/CC-0001/exploits"
       summary: ""
     created_at: "YYYY-MM-DD"
@@ -152,24 +157,58 @@ Rules:
 
 Do not invent CWE ids. Use values from the official MITRE CWE catalog.
 
-## Severity values
+## Capability class
 
-Use only:
+Do not use Critical, High, Medium, Low, or CVSS.
 
-- `CRITICAL`
-- `HIGH`
-- `MEDIUM`
-- `LOW`
-- `INFO`
+Every finding stores the forbidden outcome in `capability`:
 
-Severity must reflect realistic impact, not just theoretical bug class.
-When `cvss_v4.score` is populated, `severity` must match the score band
-defined by the exploit-development skill.
+    capability:
+      forbidden: true
+      disposition: live          # not-shipped | dormant | live
+      exposure: internet         # local | adjacent | internet | build
+      gate: any-account          # chained | privileged | any-account | none
+      cooperation: ambient       # aimed | ambient
+      effect: read-sensitive     # see effects below
+      boundary: other-principal  # self | service | other-principal | higher-principal | other-tenant | host
+      scope: tenant              # one-object | one-principal | tenant | cross-tenant | fleet
+      durability: once           # once | persists | reexecutes
 
-`cvss_v4.vector`, `cvss_v4.score`, and `cvss_v4.justification` are
-required frontmatter fields. They may stay empty or zero for early
-`PENDING` findings, but must be populated when status is `CONFIRMED` or
-`EXPLOITED`.
+Effects, most power to least:
+
+- `execute-on-host`
+- `execute-in-app`
+- `actuate`
+- `impersonate`
+- `write-security`
+- `read-secrets`
+- `destroy`
+- `write-data`
+- `read-sensitive`
+- `read-public`
+- `none`
+
+Rules:
+
+- The `capability` block is always required.
+- PENDING findings may leave enum fields empty.
+- CONFIRMED and EXPLOITED findings require every enum populated and valid.
+- Confidence stays a separate field. Do not fold certainty into the class.
+- Difficulty, public exploits, and patches are not part of the class.
+- Queue order (service vs local-program) is a sort policy, not stored on the finding.
+
+### Classification checklist
+
+1. Running instructions is not a kind of write. Classify the outcome you can show.
+2. A leaked secret is not an ordinary read.
+3. Say whose asset it is (self, service, other principal, higher principal, other tenant, host).
+4. Say what the attacker must already be (none, any-account, privileged, chained).
+5. Shipped-but-unentered is not the same as absent from the release.
+6. The build, install, and CI are a place (`exposure: build`), not offline/dead.
+7. Say how much is affected (one-object through fleet).
+8. Say whether it happens once, persists, or reexecutes.
+9. Record whether each victim must be steered (`aimed` vs `ambient`). Do not demote the outcome for it.
+10. A permitted action is not a vulnerability (`forbidden: false`).
 
 ## Confidence values
 
@@ -436,8 +475,8 @@ If a confirmed finding has a demonstrated proof-of-concept exploit showing real-
 - update `exploitation.status` to `"DEMONSTRATED"`,
 - fill `exploitation.impact_demonstrated` with a description of the impact achieved,
 - fill `exploitation.exploit_type` with the type of exploit (e.g., `buffer_overflow_rce`, `sqli_data_dump`),
-- record `exploitation.severity_before` and `exploitation.severity_after`,
-- adjust `severity` if the demonstrated impact warrants it,
+- record `exploitation.capability_before` and `exploitation.capability_after`,
+- reclassify `capability` if the demonstrated impact warrants it,
 - update `# Exploitation Result` with details of the exploit,
 - update `# Demonstrated Impact` with a plain-language narrative,
 - fill `# Root cause analysis`, `# Data flow` (or `Not applicable.`),

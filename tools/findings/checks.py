@@ -12,25 +12,23 @@ try:
 except ImportError:
     yaml = None
 
+from findings.capability.taxonomy import ENUM_IDS, STORED_AXES
 from findings.constants import (
     CONFIDENCES,
-    CVSS_V4_VECTOR_RE,
     FINDING_FILENAME_RE,
     FINDING_ID_FORMAT_RE,
     FINDINGS_ROOT,
     FRONTMATTER_RE,
-    REQUIRED_CVSS_V4_FIELDS,
+    REQUIRED_CAPABILITY_FIELDS,
     REQUIRED_EXPLOITATION_FIELDS,
     REQUIRED_EXPLOITED_SECTIONS,
     REQUIRED_FIELDS,
     REQUIRED_VALIDATION_FIELDS,
     ROOT,
     SECTION_RE,
-    SEVERITIES,
     STATUSES,
     STATUSES_SET,
     VALID_CONFIDENCES,
-    VALID_SEVERITIES,
 )
 from findings.frontmatter import load_frontmatter_strict
 
@@ -46,20 +44,6 @@ def has_remediation_code(value: str) -> bool:
     return "```diff" in value or "```patch" in value or "```c" in value or "```" in value
 
 
-def severity_from_cvss_v4_score(score: float) -> str:
-    if score == 0.0:
-        return "INFO"
-    if 0.1 <= score <= 3.9:
-        return "LOW"
-    if 4.0 <= score <= 6.9:
-        return "MEDIUM"
-    if 7.0 <= score <= 8.9:
-        return "HIGH"
-    if 9.0 <= score <= 10.0:
-        return "CRITICAL"
-    return ""
-
-
 def load_sections(path: Path) -> Dict[str, str]:
     content = path.read_text(encoding="utf-8")
     match = FRONTMATTER_RE.match(content)
@@ -73,46 +57,58 @@ def load_sections(path: Path) -> Dict[str, str]:
     return sections
 
 
-def validate_cvss_v4(data: Dict[str, object], status: object, severity: object) -> List[str]:
+def _as_bool(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if value in ("true", "yes"):
+        return True
+    if value in ("false", "no"):
+        return False
+    return None
+
+
+def validate_capability(data: Dict[str, object], status: object) -> List[str]:
     errors: List[str] = []
-    cvss_v4 = data.get("cvss_v4")
+    capability = data.get("capability")
 
-    if not isinstance(cvss_v4, dict):
-        return ["cvss_v4 must be an object"]
+    if not isinstance(capability, dict):
+        return ["capability must be an object"]
 
-    for field in REQUIRED_CVSS_V4_FIELDS:
-        if field not in cvss_v4:
-            errors.append(f"missing cvss_v4 field: cvss_v4.{field}")
+    for field in REQUIRED_CAPABILITY_FIELDS:
+        if field not in capability:
+            errors.append(f"missing capability field: capability.{field}")
 
-    vector = cvss_v4.get("vector")
-    score = cvss_v4.get("score")
-    justification = cvss_v4.get("justification")
+    forbidden = capability.get("forbidden")
+    if "forbidden" in capability and _as_bool(forbidden) is None:
+        errors.append("capability.forbidden must be true or false")
 
-    if vector is not None and not isinstance(vector, str):
-        errors.append("cvss_v4.vector must be a string")
-    if justification is not None and not isinstance(justification, str):
-        errors.append("cvss_v4.justification must be a string")
-    if score is not None and not isinstance(score, (int, float)):
-        errors.append("cvss_v4.score must be a number")
+    for axis in STORED_AXES:
+        if axis not in capability:
+            continue
+        value = capability.get(axis)
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            errors.append(f"capability.{axis} must be a string")
+            continue
+        if value == "":
+            continue
+        allowed = ENUM_IDS.get(axis, frozenset())
+        if value not in allowed:
+            errors.append(
+                f"capability.{axis} must be one of {', '.join(sorted(allowed))}"
+            )
 
     if status in ("CONFIRMED", "EXPLOITED"):
-        if not isinstance(vector, str) or is_placeholder(vector):
-            errors.append(f"{status} status requires populated cvss_v4.vector")
-        elif not CVSS_V4_VECTOR_RE.match(vector):
-            errors.append("cvss_v4.vector must start with 'CVSS:4.0/'")
+        if _as_bool(forbidden) is None:
+            errors.append(f"{status} status requires capability.forbidden as true or false")
 
-        if not isinstance(justification, str) or is_placeholder(justification):
-            errors.append(f"{status} status requires populated cvss_v4.justification")
-
-        if isinstance(score, (int, float)):
-            expected_severity = severity_from_cvss_v4_score(float(score))
-            if not expected_severity:
-                errors.append("cvss_v4.score must be between 0.0 and 10.0")
-            elif severity in SEVERITIES and severity != expected_severity:
-                errors.append(
-                    f"severity {severity!r} does not match cvss_v4.score {score!r} "
-                    f"(expected {expected_severity!r})"
-                )
+        for axis in STORED_AXES:
+            value = capability.get(axis)
+            if not isinstance(value, str) or is_placeholder(value):
+                errors.append(f"{status} status requires populated capability.{axis}")
+            elif value not in ENUM_IDS.get(axis, frozenset()):
+                errors.append(f"{status} status requires valid capability.{axis}")
 
     return errors
 
@@ -147,11 +143,7 @@ def validate_finding(path: Path) -> List[str]:
             f"bare CC-XXXX.md names are not allowed (got {filename!r})"
         )
 
-    severity = data.get("severity")
-    if severity not in SEVERITIES:
-        errors.append(f"invalid severity: {severity!r}")
-
-    errors.extend(validate_cvss_v4(data, status, severity))
+    errors.extend(validate_capability(data, status))
 
     confidence = data.get("confidence")
     if confidence not in CONFIDENCES:

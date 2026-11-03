@@ -20,7 +20,16 @@ def test_create_finding_writes_expected_file(tmp_path):
         'id: "CC-0000"\n'
         'title: "Short vulnerability title"\n'
         'status: "PENDING"\n'
-        'severity: "MEDIUM"\n'
+        "capability:\n"
+        "  forbidden: true\n"
+        '  disposition: ""\n'
+        '  exposure: ""\n'
+        '  gate: ""\n'
+        '  cooperation: ""\n'
+        '  boundary: ""\n'
+        '  effect: ""\n'
+        '  scope: ""\n'
+        '  durability: ""\n'
         'confidence: "LOW"\n'
         'category: "Unclassified"\n'
         'language: "unknown"\n'
@@ -28,6 +37,8 @@ def test_create_finding_writes_expected_file(tmp_path):
         "validation:\n"
         '  evidence_dir: "itemdb/evidence/CC-0000"\n'
         "exploitation:\n"
+        "  capability_before: {}\n"
+        "  capability_after: {}\n"
         '  artifacts_dir: "itemdb/evidence/CC-0000/exploits"\n'
         'created_at: "YYYY-MM-DD"\n'
         'updated_at: "YYYY-MM-DD"\n'
@@ -49,7 +60,6 @@ def test_create_finding_writes_expected_file(tmp_path):
         title="Missing auth check",
         id=None,
         slug=None,
-        severity="HIGH",
         confidence="MEDIUM",
         category="Auth",
         language="python",
@@ -62,7 +72,7 @@ def test_create_finding_writes_expected_file(tmp_path):
     content = out.read_text(encoding="utf-8")
     assert 'id: "CC-0001"' in content
     assert 'title: "Missing auth check"' in content
-    assert 'severity: "HIGH"' in content
+    assert "capability:" in content
     assert 'confidence: "MEDIUM"' in content
     assert "Pending." in content
     assert (tmp_path / "itemdb" / "evidence" / "CC-0001").exists()
@@ -85,7 +95,6 @@ def test_create_finding_rejects_invalid_explicit_id(tmp_path):
         title="x",
         id="BAD-1",
         slug=None,
-        severity="MEDIUM",
         confidence="LOW",
         category="Unclassified",
         language="unknown",

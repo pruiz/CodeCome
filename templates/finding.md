@@ -2,11 +2,16 @@
 id: "CC-0000"
 title: "Short vulnerability title"
 status: "PENDING"
-severity: "MEDIUM"
-cvss_v4:
-  vector: ""
-  score: 0.0
-  justification: ""
+capability:
+  forbidden: true
+  disposition: ""
+  exposure: ""
+  gate: ""
+  cooperation: ""
+  boundary: ""
+  effect: ""
+  scope: ""
+  durability: ""
 confidence: "LOW"
 category: "Unclassified"
 cwe: []
@@ -28,8 +33,8 @@ exploitation:
   status: "NOT_STARTED"
   impact_demonstrated: ""
   exploit_type: ""
-  severity_before: ""
-  severity_after: ""
+  capability_before: {}
+  capability_after: {}
   artifacts_dir: "itemdb/evidence/CC-0000/exploits"
   summary: ""
 created_at: "YYYY-MM-DD"
@@ -91,21 +96,21 @@ Mention required privileges, preconditions, and assumptions.
 
 # Impact
 
-Explain the realistic security impact.
+Explain the realistic security impact as a forbidden outcome.
 
-Examples:
+Classify it in `capability` (effect, boundary, gate, exposure, scope, durability). Do not use Critical, High, Medium, Low, or CVSS.
 
-- unauthorized data access,
-- privilege escalation,
-- remote code execution,
-- local code execution,
-- denial of service,
-- information disclosure,
-- authentication bypass,
-- authorization bypass,
-- memory corruption,
-- integrity violation,
-- secret exposure.
+Examples of outcomes:
+
+- execute code on the host,
+- run instructions inside the application,
+- actuate a payment or device,
+- impersonate another principal,
+- change permissions or identity,
+- read credentials or keys,
+- destroy data or deny service,
+- write ordinary data,
+- read private information.
 
 # Validation plan
 
@@ -189,7 +194,7 @@ When exploit development is performed, record:
 - exploit type developed,
 - impact achieved,
 - escalation steps taken,
-- whether severity was adjusted,
+- whether capability was reclassified,
 - limitations of the demonstration.
 
 # Demonstrated Impact

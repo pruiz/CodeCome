@@ -73,7 +73,7 @@ This file consolidates the operational risk model. It is not merely a summary of
 - **Scope**: in-scope and out-of-scope components, runtime vs non-runtime separation.
 - **System model**: primary runtime components, data stores, external integrations, entrypoints.
 - **Assets and security objectives**: for each relevant asset, document where observed, why it matters, C/I/A objectives, related attack surfaces, and evidence.
-- **Attacker model**: realistic attacker capabilities and explicit non-capabilities. Non-capabilities are required to avoid inflated severity.
+- **Attacker model**: realistic attacker capabilities and explicit non-capabilities. Non-capabilities are required to avoid inflated capability class.
 - **Trust boundary summary**: for each important boundary, document source/destination, data/control crossing, channel, authn, authz, encryption, validation, rate controls, existing controls, evidence, and uncertainty.
 - **Existing controls**: observed controls with evidence — what the control protects, where enforced, assumptions, gaps.
 - **Abuse-path themes for Phase 2**: review leads, not findings. Each theme includes attacker goal, entrypoint, boundary crossed, impacted asset, existing controls, assumptions, relevant files, and suggested Phase 2 focus.

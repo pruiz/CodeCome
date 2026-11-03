@@ -260,7 +260,7 @@ Do not reject just because impact is lower than originally claimed.
 
 Instead:
 
-- lower severity,
+- correct or lower the capability class,
 - lower confidence,
 - document assumptions,
 - improve validation plan.

@@ -357,10 +357,11 @@ def test_phase_6_mentions_attacker_model_in_methodology() -> None:
     assert "attacker model" in content.lower() or "attacker-model" in content.lower()
 
 
-def test_phase_6_guards_against_speculative_severity() -> None:
+def test_phase_6_guards_against_speculative_capability() -> None:
     content = _read_prompt("phase-6-report.md")
     content_lower = content.lower()
     assert "inflate" in content_lower or "abuse-path" in content_lower
+    assert "capability" in content_lower
 
 
 # ---------------------------------------------------------------------------

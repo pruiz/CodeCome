@@ -157,23 +157,23 @@ The `Evidence` section should initially say:
 
     Pending.
 
-## Severity guidance
+## Capability guidance
 
-Use realistic severity.
+Classify the forbidden outcome in `capability`. Do not use Critical, High,
+Medium, Low, or CVSS.
 
 Consider:
 
-- affected asset,
-- required privilege,
-- exploitability,
-- target exposure,
-- data sensitivity,
-- integrity impact,
-- availability impact,
-- code execution potential,
-- tenant boundary impact.
+- effect (what becomes possible),
+- boundary (whose asset),
+- gate (what the attacker must already be),
+- exposure (where they reach it),
+- disposition (whether production runs the code),
+- scope and durability,
+- whether a victim must be steered.
 
-Do not inflate severity because a bug class sounds serious.
+Do not inflate the class because a bug family sounds serious. Classify the
+outcome you can justify, not the bug's name.
 
 ## Confidence guidance
 

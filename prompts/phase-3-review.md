@@ -185,7 +185,7 @@ Do not reject a finding only because:
 Instead:
 
 - lower confidence,
-- lower severity,
+- correct or lower the capability class,
 - document assumptions,
 - improve validation plan.
 

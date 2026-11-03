@@ -267,7 +267,7 @@ When confirmed:
 
 5. Reference the evidence directory and files.
 
-6. Adjust severity if validation changes impact.
+6. Reclassify capability if validation changes the demonstrated outcome.
 
 ## Validation result format
 

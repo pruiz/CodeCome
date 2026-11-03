@@ -36,7 +36,7 @@ Quick start
 
   # findings with frontmatter-driven titles
   ./tools/confluence-export.py \\
-    --title-template "[{severity}|{status}] {id}: {title}" \\
+    --title-template "[{effect}|{status}] {id}: {title}" \\
     itemdb/findings/CONFIRMED/*.md itemdb/findings/EXPLOITED/*.md
 
   # preview only, no posting
@@ -160,16 +160,28 @@ def first_h1(md: str) -> str:
 
 
 def parse_frontmatter(raw: str) -> dict:
-    """Minimal YAML frontmatter reader: top-level `key: value` pairs only.
-    No external deps; good enough for titling (severity, status, id, title, ...)."""
+    """Minimal YAML frontmatter reader for titling.
+
+    Captures top-level `key: value` pairs and also indented scalar keys
+    (so capability fields like `effect` are available as `{effect}`).
+    No external deps.
+    """
     m = re.match(r"^---\n(.*?)\n---\n", raw, re.S)
     if not m:
         return {}
     out = {}
     for line in m.group(1).splitlines():
-        km = re.match(r"^([A-Za-z0-9_.-]+):\s*(.*)$", line)
-        if km:
-            out[km.group(1)] = km.group(2).strip().strip('"').strip("'")
+        top = re.match(r"^([A-Za-z0-9_.-]+):\s*(.*)$", line)
+        if top:
+            out[top.group(1)] = top.group(2).strip().strip('"').strip("'")
+            continue
+        nested = re.match(r"^\s+([A-Za-z0-9_.-]+):\s*(.*)$", line)
+        if nested:
+            key = nested.group(1)
+            # Promote nested scalars (e.g. capability.effect) without
+            # clobbering an already-set top-level key such as status.
+            if key not in out:
+                out[key] = nested.group(2).strip().strip('"').strip("'")
     return out
 
 
@@ -258,7 +270,7 @@ def publish_page(cfg: Config, title: str, html: str, labels: list[str] | None = 
 
 def derive_title(args, path, h1, fm):
     filename = os.path.splitext(os.path.basename(path))[0]
-    if args.title_template:  # e.g. "[{severity}|{status}] {id}: {title}"
+    if args.title_template:  # e.g. "[{effect}|{status}] {id}: {title}"
         fields = dict(fm)
         fields.setdefault("h1", h1)
         fields.setdefault("filename", filename)
@@ -310,8 +322,8 @@ def main(argv=None):
     ap.add_argument("--title", help="Explicit page title (only valid with a single file).")
     ap.add_argument(
         "--title-template",
-        help='Title from frontmatter fields, e.g. "[{severity}|{status}] {id}: {title}". '
-        "Also available: {h1}, {filename}. Unknown fields render empty.",
+        help='Title from frontmatter fields, e.g. "[{effect}|{status}] {id}: {title}". '
+        "Also available: {h1}, {filename}, and capability fields. Unknown fields render empty.",
     )
     ap.add_argument("--title-prefix", default="", help='Prepended to every title, e.g. "[Report] ".')
     ap.add_argument("--title-suffix", default="", help="Appended to every title.")

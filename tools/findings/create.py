@@ -16,7 +16,6 @@ from findings.constants import (
     FINDING_ID_FORMAT_RE,
     ROOT,
     VALID_CONFIDENCES,
-    VALID_SEVERITIES,
 )
 from findings.constants import FindingsContext
 from findings.ids import next_finding_id, slugify
@@ -29,9 +28,6 @@ def create_finding(
     ctx: Optional[FindingsContext] = None,
 ) -> Path:
     ctx = ctx if ctx is not None else FindingsContext.default()
-
-    if args.severity not in VALID_SEVERITIES:
-        raise ValueError(f"Invalid severity: {args.severity}")
 
     if args.confidence not in VALID_CONFIDENCES:
         raise ValueError(f"Invalid confidence: {args.confidence}")
@@ -59,7 +55,6 @@ def create_finding(
     content = replace_scalar_frontmatter(content, "id", finding_id)
     content = replace_scalar_frontmatter(content, "title", args.title)
     content = replace_scalar_frontmatter(content, "status", DEFAULT_STATUS)
-    content = replace_scalar_frontmatter(content, "severity", args.severity)
     content = replace_scalar_frontmatter(content, "confidence", args.confidence)
     content = replace_scalar_frontmatter(content, "category", args.category)
     content = replace_scalar_frontmatter(content, "language", args.language)
@@ -99,7 +94,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("title", help="Finding title.")
     parser.add_argument("--id", help="Explicit finding id, for example CC-0007.")
     parser.add_argument("--slug", help="Explicit filename slug.")
-    parser.add_argument("--severity", default="MEDIUM", choices=sorted(VALID_SEVERITIES))
     parser.add_argument("--confidence", default="LOW", choices=sorted(VALID_CONFIDENCES))
     parser.add_argument("--category", default="Unclassified")
     parser.add_argument("--language", default="unknown")

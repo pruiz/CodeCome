@@ -253,7 +253,7 @@ Possible outcomes:
 - move finding to `EXPLOITED` (with demonstrated impact),
 - keep finding in `CONFIRMED` (exploitation not feasible).
 
-The exploiter may adjust severity based on demonstrated impact.
+The exploiter may reclassify the capability outcome based on demonstrated impact.
 
 ## Phase 6: Reporting
 
@@ -354,7 +354,7 @@ Recommended human review points:
 2. After Phase 2, review candidate findings.
 3. After Phase 3, review rejected and duplicate decisions.
 4. After Phase 4, review evidence before trusting confirmed findings.
-5. After Phase 5, review exploit PoCs and severity adjustments.
+5. After Phase 5, review exploit PoCs and capability reclassifications.
 6. Before sharing Phase 6 reports, review language and limitations.
 
 ## Validation worker model

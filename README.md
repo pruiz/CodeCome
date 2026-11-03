@@ -141,7 +141,7 @@ Six phases. Each one is a `make` target. Each one writes to disk.
 2. **Hypothesis (`make phase-2`)** — agent writes candidate findings under `itemdb/findings/PENDING/`. Each one points at specific code, sources, sinks, and a trust boundary.
 3. **Counter-analysis (`make phase-3`)** — a reviewer pass tries to disprove or deduplicate findings. Weak ones move to `REJECTED/`, repeats to `DUPLICATE/`.
 4. **Validation (`make phase-4 FINDING=CC-XXXX`)** — one finding at a time, in the sandbox. Build the target, write a small PoC, capture evidence, decide CONFIRMED or REJECTED.
-5. **Exploit (`make phase-5 FINDING=CC-XXXX`)** — for confirmed findings worth escalating, build a real PoC that shows concrete impact: code execution, data exfiltration, privilege escalation. Severity gets adjusted based on what you actually demonstrate.
+5. **Exploit (`make phase-5 FINDING=CC-XXXX`)** — for confirmed findings worth escalating, build a real PoC that shows concrete impact: code execution, data exfiltration, privilege escalation. Reclassify the capability outcome based on what you actually demonstrate.
 6. **Reporting (`make phase-6`)** — generate a Markdown report grouping exploited and confirmed findings with evidence references.
 
 The finding lifecycle:
@@ -199,7 +199,16 @@ Here is what one of those Markdown files actually looks like — trimmed from a 
 id: "CC-0022"
 title: "SQL injection via unvalidated selectRole option in user.get JSON-RPC API"
 status: "EXPLOITED"
-severity: "CRITICAL"
+capability:
+  forbidden: true
+  disposition: live
+  exposure: internet
+  gate: any-account
+  cooperation: ambient
+  effect: read-sensitive
+  boundary: other-principal
+  scope: tenant
+  durability: once
 confidence: "CONFIRMED"
 category: "SQL Injection"
 cwe:
@@ -221,8 +230,8 @@ validation:
   evidence_dir: "itemdb/evidence/CC-0022"
 exploitation:
   status: "DEMONSTRATED"
-  severity_before: "HIGH"
-  severity_after: "CRITICAL"
+  capability_before: {}
+  capability_after: {}
   artifacts_dir: "itemdb/evidence/CC-0022/exploits"
 ---
 
@@ -396,7 +405,7 @@ To run validation across all PENDING findings:
 
     make phase-5 FINDING=CC-0001
 
-Develops a working PoC for one confirmed finding. Artifacts go under `itemdb/evidence/<finding-id>/exploits/`. The exploiter may adjust severity based on demonstrated impact, and may move findings to `EXPLOITED/`.
+Develops a working PoC for one confirmed finding. Artifacts go under `itemdb/evidence/<finding-id>/exploits/`. The exploiter may reclassify the capability outcome based on demonstrated impact, and may move findings to `EXPLOITED/`.
 
 For all confirmed findings that aren't already marked as not-feasible:
 
