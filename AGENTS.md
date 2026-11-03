@@ -268,15 +268,21 @@ Effects, from most power to least:
 - `execute-in-app`
 - `actuate`
 - `impersonate`
+- `bypass-control`
 - `write-security`
 - `read-secrets`
-- `destroy`
+- `destroy` — delete or corrupt the source of truth
+- `deny` — availability only
 - `write-data`
 - `read-sensitive`
 - `read-public`
 - `none`
 
-The queue order (service or local-program) is a sort policy. It is not stored on the finding. Confidence stays separate.
+Forgery of a token or signature that the system treats as another identity is `impersonate` (or `write-security` if it changes grants). Do not file it as `write-data`.
+
+The queue order (service or local-program) is a sort policy. It is not stored on the finding.
+
+The remediation decision (`fix-now` vs `plan`) is also a derived policy, not stored on the finding. Roughly: takeover-class effects and shipped code are fix-now; wide `destroy` and mass reachable `read-sensitive` are fix-now; `not-shipped` and milder outcomes are plan. Confidence stays separate.
 
 PENDING findings may leave enum fields empty. CONFIRMED and EXPLOITED findings require a fully populated capability block.
 

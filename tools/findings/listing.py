@@ -6,7 +6,7 @@ from __future__ import annotations
 import _colors as C
 from typing import Optional
 
-from findings.capability.classify import short_class
+from findings.capability.classify import decision_for, short_class, try_finding_class
 from findings.constants import FindingsContext
 from findings.frontmatter import load_frontmatter
 from findings.ids import extract_id_from_path
@@ -30,10 +30,13 @@ def load_findings(
         for path in sorted(status_dir.glob("CC-*.md")):
             frontmatter = load_frontmatter(path)
             capability = frontmatter.get("capability")
-            klass = short_class(capability if isinstance(capability, dict) else None)
+            capability_obj = capability if isinstance(capability, dict) else None
+            klass = short_class(capability_obj)
             effect = ""
-            if isinstance(capability, dict) and isinstance(capability.get("effect"), str):
-                effect = capability["effect"]
+            if isinstance(capability_obj, dict) and isinstance(capability_obj.get("effect"), str):
+                effect = capability_obj["effect"]
+            finding_class = try_finding_class(capability_obj) if capability_obj else None
+            decision = decision_for(finding_class) if finding_class else ""
 
             rows.append(
                 {
@@ -41,6 +44,7 @@ def load_findings(
                     "status": frontmatter.get("status", path.parent.name),
                     "capability_class": klass,
                     "effect": effect,
+                    "decision": decision,
                     "confidence": frontmatter.get("confidence", ""),
                     "exploitation_status": (
                         frontmatter.get("exploitation", {}).get("status", "")
@@ -69,21 +73,23 @@ def print_plain(rows: list[dict[str, object]]) -> None:
         )
         conf = C.confidence_color(str(row["confidence"]))
         stat = C.status_color(str(row["status"]))
+        decision = str(row.get("decision") or "-")
         print(
             f'{C.BOLD}{sid}{C.RESET} '
             f'[{stat}] '
             f'{klass}/{conf} '
+            f'{C.DIM}{decision}{C.RESET} '
             f'- {row["title"]} '
             f'{C.DIM}({row["path"]}){C.RESET}'
         )
 
 
 def print_markdown(rows: list[dict[str, object]]) -> None:
-    print("| ID | Status | Class | Confidence | Title | Path |")
-    print("|---|---|---|---|---|---|")
+    print("| ID | Status | Class | Decision | Confidence | Title | Path |")
+    print("|---|---|---|---|---|---|---|")
 
     if not rows:
-        print("| - | - | - | - | No findings yet. | - |")
+        print("| - | - | - | - | - | No findings yet. | - |")
         return
 
     for row in rows:
@@ -91,6 +97,7 @@ def print_markdown(rows: list[dict[str, object]]) -> None:
             f'| {row["id"]} '
             f'| {row["status"]} '
             f'| {row.get("capability_class") or "-"} '
+            f'| {row.get("decision") or "-"} '
             f'| {row["confidence"]} '
             f'| {row["title"]} '
             f'| `{row["path"]}` |'

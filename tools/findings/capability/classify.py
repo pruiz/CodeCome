@@ -18,12 +18,17 @@ from findings.capability.taxonomy import (
     EFFECTS,
     ENUM_IDS,
     EXPOSURES,
+    FIX_NOW_DESTROY_SCOPES,
+    FIX_NOW_EFFECTS,
+    FIX_NOW_SENSITIVE_EXPOSURES,
+    FIX_NOW_SENSITIVE_SCOPES,
     GATES,
     OPTION_LIST,
     SCOPES,
     Axis,
     Boundary,
     Cooperation,
+    DecisionId,
     Durability,
     Effect,
     FindingClass,
@@ -140,12 +145,16 @@ def _outcome(effect: Effect, boundary: Boundary) -> str:
         return f"read private information {BELONGING[boundary]}"
     if effect == "write-data":
         return f"create or change ordinary information {BELONGING[boundary]}"
+    if effect == "deny":
+        return f"deny service {BELONGING[boundary]}"
     if effect == "destroy":
-        return f"delete information or deny service {BELONGING[boundary]}"
+        return f"delete or corrupt information {BELONGING[boundary]}"
     if effect == "read-secrets":
         return f"read credentials or keys {BELONGING[boundary]}"
     if effect == "write-security":
         return f"change permissions, identity, or the audit record {BELONGING[boundary]}"
+    if effect == "bypass-control":
+        return f"disable or skip a security control {BELONGING[boundary]}"
     if effect == "impersonate":
         return IMPERSONATE[boundary]
     if effect == "actuate":
@@ -174,6 +183,31 @@ def _action(finding: FindingClass, modal: Literal["can", "could"]) -> str:
     if exposure == "internet":
         return f"From the internet, {who} {modal} {what}."
     return f"From the build, install, or CI pipeline, {who} {modal} {what}."
+
+
+def decision_for(finding: FindingClass) -> DecisionId:
+    """Map a capability class to fix-now vs plan.
+
+    The decision is a replaceable policy. It is not stored on the finding.
+    Queue order remains separate and may still rank within each decision.
+    """
+    if not finding["forbidden"]:
+        return "plan"
+    if finding["disposition"] == "not-shipped":
+        return "plan"
+
+    effect = finding["effect"]
+    if effect in FIX_NOW_EFFECTS:
+        return "fix-now"
+    if effect == "destroy" and finding["scope"] in FIX_NOW_DESTROY_SCOPES:
+        return "fix-now"
+    if (
+        effect == "read-sensitive"
+        and finding["scope"] in FIX_NOW_SENSITIVE_SCOPES
+        and finding["exposure"] in FIX_NOW_SENSITIVE_EXPOSURES
+    ):
+        return "fix-now"
+    return "plan"
 
 
 def describe_finding(finding: FindingClass) -> str:
@@ -405,6 +439,7 @@ __all__ = [
     "class_key",
     "compare_queue",
     "decide",
+    "decision_for",
     "describe_finding",
     "effect_band",
     "empty_capability",

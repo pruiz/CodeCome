@@ -105,10 +105,12 @@ Examples of outcomes:
 - execute code on the host,
 - run instructions inside the application,
 - actuate a payment or device,
-- impersonate another principal,
+- impersonate another principal (including forged tokens/signatures),
+- bypass a security control,
 - change permissions or identity,
 - read credentials or keys,
-- destroy data or deny service,
+- destroy or corrupt the source of truth,
+- deny service (availability only),
 - write ordinary data,
 - read private information.
 

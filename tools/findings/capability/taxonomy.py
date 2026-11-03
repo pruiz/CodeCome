@@ -43,14 +43,18 @@ Effect = Literal[
     "read-public",
     "read-sensitive",
     "write-data",
+    "deny",
     "destroy",
     "read-secrets",
     "write-security",
+    "bypass-control",
     "impersonate",
     "actuate",
     "execute-in-app",
     "execute-on-host",
 ]
+
+DecisionId = Literal["fix-now", "plan"]
 Scope = Literal["one-object", "one-principal", "tenant", "cross-tenant", "fleet"]
 Durability = Literal["once", "persists", "reexecutes"]
 
@@ -299,8 +303,20 @@ EFFECTS: List[Option] = [
     {
         "id": "impersonate",
         "label": "Act as someone else",
-        "hint": "Use another identity without possessing their secret.",
+        "hint": (
+            "Use another identity without possessing their secret. "
+            "Includes forging a token or signature that the system treats as that identity."
+        ),
         "rank": 7,
+    },
+    {
+        "id": "bypass-control",
+        "label": "Disable or skip a security control",
+        "hint": (
+            "Auth, MFA, authorization, audit, rate limits, kill-switches, or guardrails "
+            "stop enforcing — without needing a role edit or code execution."
+        ),
+        "rank": 6,
     },
     {
         "id": "write-security",
@@ -316,9 +332,15 @@ EFFECTS: List[Option] = [
     },
     {
         "id": "destroy",
-        "label": "Delete information or deny the service",
-        "hint": "The loss or the outage is the outcome. The source of truth may or may not remain.",
+        "label": "Delete or corrupt the source of truth",
+        "hint": "Information is gone or untrustworthy. Not a temporary outage.",
         "rank": 4,
+    },
+    {
+        "id": "deny",
+        "label": "Deny the service",
+        "hint": "Availability only. The service will not serve; the source of truth may still be intact.",
+        "rank": 3,
     },
     {
         "id": "write-data",
@@ -409,21 +431,22 @@ BANDS: List[Dict[str, Union[int, str, List[str]]]] = [
     {
         "rank": 3,
         "label": (
-            "Run instructions in the application, or take a credential, "
-            "a permission, an identity, or cause an outside action"
+            "Run instructions in the application, take a credential or permission, "
+            "bypass a control, take an identity, or cause an outside action"
         ),
         "effects": [
             "execute-in-app",
             "actuate",
             "impersonate",
+            "bypass-control",
             "write-security",
             "read-secrets",
         ],
     },
     {
         "rank": 2,
-        "label": "Read private data, or change or delete ordinary data",
-        "effects": ["destroy", "write-data", "read-sensitive"],
+        "label": "Read private data, change ordinary data, destroy data, or deny service",
+        "effects": ["destroy", "deny", "write-data", "read-sensitive"],
     },
     {
         "rank": 1,
@@ -436,6 +459,26 @@ BANDS: List[Dict[str, Union[int, str, List[str]]]] = [
         "effects": ["none"],
     },
 ]
+
+# Effects that are fix-now on their own when the code is in the artifact.
+FIX_NOW_EFFECTS = frozenset(
+    {
+        "execute-on-host",
+        "execute-in-app",
+        "actuate",
+        "impersonate",
+        "bypass-control",
+        "write-security",
+        "read-secrets",
+    }
+)
+
+# Wide data destruction is fix-now even though destroy is not in FIX_NOW_EFFECTS.
+FIX_NOW_DESTROY_SCOPES = frozenset({"tenant", "cross-tenant", "fleet"})
+
+# Mass sensitive reads from reachable surfaces are fix-now.
+FIX_NOW_SENSITIVE_SCOPES = frozenset({"cross-tenant", "fleet"})
+FIX_NOW_SENSITIVE_EXPOSURES = frozenset({"internet", "build"})
 
 AXIS_LABEL: Dict[Axis, str] = {
     "forbidden": "whether the outcome is forbidden",

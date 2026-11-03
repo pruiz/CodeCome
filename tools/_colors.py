@@ -92,8 +92,8 @@ def colorize(text: str, color: str) -> str:
 # Effect-band ranks from findings.capability.taxonomy.BANDS (higher = worse).
 _EFFECT_BAND_COLORS = {
     4: BOLD_RED,  # execute-on-host
-    3: RED,       # execute-in-app / actuate / impersonate / write-security / read-secrets
-    2: YELLOW,    # destroy / write-data / read-sensitive
+    3: RED,       # execute-in-app / actuate / impersonate / bypass-control / write-security / read-secrets
+    2: YELLOW,    # destroy / deny / write-data / read-sensitive
     1: CYAN,      # read-public
     0: DIM,       # none
 }
@@ -103,9 +103,11 @@ _EFFECT_TO_BAND = {
     "execute-in-app": 3,
     "actuate": 3,
     "impersonate": 3,
+    "bypass-control": 3,
     "write-security": 3,
     "read-secrets": 3,
     "destroy": 2,
+    "deny": 2,
     "write-data": 2,
     "read-sensitive": 2,
     "read-public": 1,

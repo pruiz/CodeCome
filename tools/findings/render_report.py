@@ -12,6 +12,7 @@ from typing import Dict, Iterable, List, Optional
 import _colors as C
 
 from findings.capability.classify import (
+    decision_for,
     describe_finding,
     queue_key,
     short_class,
@@ -70,6 +71,7 @@ def load_findings() -> List[Dict[str, str]]:
             exposure = str(capability_obj.get("exposure") or "")
             finding_class = try_finding_class(capability_obj)
             sentence = describe_finding(finding_class) if finding_class else ""
+            decision = decision_for(finding_class) if finding_class else ""
 
             rows.append(
                 {
@@ -79,6 +81,7 @@ def load_findings() -> List[Dict[str, str]]:
                     "effect": effect,
                     "gate": gate,
                     "exposure": exposure,
+                    "decision": decision,
                     "capability_sentence": sentence,
                     "confidence": str(frontmatter.get("confidence", "")),
                     "cwe": cwe_text,
@@ -217,12 +220,12 @@ def sort_by_service_queue(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
 
 def table_for(rows: List[Dict[str, str]]) -> List[str]:
     lines = [
-        "| ID | Status | Class | Effect | Gate | Exposure | Confidence | CWE | Target area | Title | Evidence | Recording |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| ID | Status | Decision | Class | Effect | Gate | Exposure | Confidence | CWE | Target area | Title | Evidence | Recording |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
 
     if not rows:
-        lines.append("| - | - | - | - | - | - | - | - | - | None. | - | - |")
+        lines.append("| - | - | - | - | - | - | - | - | - | - | None. | - | - |")
         return lines
 
     for row in rows:
@@ -231,6 +234,7 @@ def table_for(rows: List[Dict[str, str]]) -> List[str]:
         lines.append(
             f"| {row['id']} "
             f"| {row['status']} "
+            f"| {row.get('decision') or '-'} "
             f"| {row.get('capability_class') or '-'} "
             f"| {row.get('effect') or '-'} "
             f"| {row.get('gate') or '-'} "
@@ -258,6 +262,7 @@ def render_detail_block(title: str, rows: List[Dict[str, str]], exploited: bool 
         lines.append(f"## {row['id']} - {row['title']}")
         lines.append("")
         lines.append(f"- Status: {row['status']}")
+        lines.append(f"- Decision: {row.get('decision') or '-'}")
         lines.append(f"- Class: {row.get('capability_class') or '-'}")
         lines.append(f"- Effect: {row.get('effect') or '-'}")
         lines.append(f"- Gate: {row.get('gate') or '-'}")

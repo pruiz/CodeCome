@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from findings.capability.classify import (
     compare_queue,
     decide,
+    decision_for,
     describe_finding,
     parse_capability_block,
     to_capability_yaml,
@@ -269,3 +270,113 @@ def test_parse_capability_rejects_unknown_effect() -> None:
     )
     assert parsed["ok"] is False
     assert "effect" in parsed["error"]
+
+
+def test_parse_new_effects() -> None:
+    for effect in ("deny", "bypass-control"):
+        parsed = parse_capability_block(
+            {
+                "forbidden": True,
+                "disposition": "live",
+                "exposure": "internet",
+                "gate": "none",
+                "cooperation": "ambient",
+                "effect": effect,
+                "boundary": "service",
+                "scope": "tenant",
+                "durability": "once",
+            }
+        )
+        assert parsed["ok"] is True
+        assert parsed["finding"]["effect"] == effect
+
+
+def test_decision_fix_now_takeover_effects() -> None:
+    assert decision_for(EXAMPLES["path-traversal-env"]) == "fix-now"
+    assert decision_for(EXAMPLES["stored-xss-admin"]) == "fix-now"
+    assert decision_for(EXAMPLES["debug-shell-dormant"]) == "fix-now"
+
+
+def test_decision_plan_not_shipped_and_mild() -> None:
+    assert decision_for(EXAMPLES["unreleased-rce"]) == "plan"
+    assert decision_for(EXAMPLES["internet-status"]) == "plan"
+    assert decision_for(EXAMPLES["unauth-comment"]) == "plan"
+    assert decision_for(EXAMPLES["admin-intended-delete"]) == "plan"
+    assert decision_for(EXAMPLES["self-xss"]) == "plan"
+
+
+def test_decision_wide_destroy_and_mass_sensitive_read() -> None:
+    fleet_wipe: FindingClass = {
+        "forbidden": True,
+        "disposition": "live",
+        "exposure": "internet",
+        "gate": "none",
+        "cooperation": "ambient",
+        "effect": "destroy",
+        "boundary": "other-tenant",
+        "scope": "fleet",
+        "durability": "persists",
+    }
+    one_row_destroy: FindingClass = {
+        **fleet_wipe,
+        "scope": "one-object",
+        "boundary": "service",
+    }
+    mass_pii: FindingClass = {
+        "forbidden": True,
+        "disposition": "live",
+        "exposure": "internet",
+        "gate": "any-account",
+        "cooperation": "ambient",
+        "effect": "read-sensitive",
+        "boundary": "other-tenant",
+        "scope": "fleet",
+        "durability": "once",
+    }
+    deny_only: FindingClass = {
+        "forbidden": True,
+        "disposition": "live",
+        "exposure": "internet",
+        "gate": "none",
+        "cooperation": "ambient",
+        "effect": "deny",
+        "boundary": "service",
+        "scope": "fleet",
+        "durability": "once",
+    }
+    bypass: FindingClass = {
+        "forbidden": True,
+        "disposition": "live",
+        "exposure": "internet",
+        "gate": "any-account",
+        "cooperation": "ambient",
+        "effect": "bypass-control",
+        "boundary": "service",
+        "scope": "tenant",
+        "durability": "persists",
+    }
+
+    assert decision_for(fleet_wipe) == "fix-now"
+    assert decision_for(one_row_destroy) == "plan"
+    assert decision_for(mass_pii) == "fix-now"
+    assert decision_for(deny_only) == "plan"
+    assert decision_for(bypass) == "fix-now"
+    assert decision_for(EXAMPLES["sqli-read-rows"]) == "plan"
+
+
+def test_destroy_sentence_no_longer_mentions_deny() -> None:
+    sentence = describe_finding(
+        {
+            "forbidden": True,
+            "disposition": "live",
+            "exposure": "internet",
+            "gate": "none",
+            "cooperation": "ambient",
+            "effect": "destroy",
+            "boundary": "service",
+            "scope": "one-object",
+            "durability": "once",
+        }
+    )
+    assert "delete or corrupt information" in sentence
+    assert "deny service" not in sentence

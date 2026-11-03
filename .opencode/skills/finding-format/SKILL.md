@@ -180,13 +180,17 @@ Effects, most power to least:
 - `execute-in-app`
 - `actuate`
 - `impersonate`
+- `bypass-control` — disable or skip auth, MFA, authorization, audit, rate limits, kill-switches, guardrails
 - `write-security`
 - `read-secrets`
-- `destroy`
+- `destroy` — delete or corrupt the source of truth (not a temporary outage)
+- `deny` — availability only; source of truth may still be intact
 - `write-data`
 - `read-sensitive`
 - `read-public`
 - `none`
+
+Forgery guidance: minting a trusted identity or signature without possessing the secret is `impersonate`. If the outcome is changing grants or the audit record, use `write-security`. Do not file forgery as `write-data`.
 
 Rules:
 
@@ -196,6 +200,22 @@ Rules:
 - Confidence stays a separate field. Do not fold certainty into the class.
 - Difficulty, public exploits, and patches are not part of the class.
 - Queue order (service vs local-program) is a sort policy, not stored on the finding.
+- Remediation decision (`fix-now` vs `plan`) is derived by `decision_for()` in
+  `tools/findings/capability/`; do not invent Critical/High labels for it.
+
+### Fix-now vs plan (derived)
+
+Fix now when the finding is forbidden, the code is in the artifact (`live` or
+`dormant`), and any of:
+
+- effect in `execute-on-host`, `execute-in-app`, `actuate`, `impersonate`,
+  `bypass-control`, `write-security`, `read-secrets`
+- `destroy` with scope `tenant`, `cross-tenant`, or `fleet`
+- `read-sensitive` with scope `cross-tenant` or `fleet` and exposure
+  `internet` or `build`
+
+Otherwise plan (including `not-shipped`, ordinary one-object writes/reads,
+and availability-only `deny` unless another fix-now rule matches).
 
 ### Classification checklist
 
@@ -209,6 +229,8 @@ Rules:
 8. Say whether it happens once, persists, or reexecutes.
 9. Record whether each victim must be steered (`aimed` vs `ambient`). Do not demote the outcome for it.
 10. A permitted action is not a vulnerability (`forbidden: false`).
+11. Destroying data is not the same as denying service (`destroy` vs `deny`).
+12. Skipping a security control is `bypass-control`, not an ordinary field write.
 
 ## Confidence values
 
