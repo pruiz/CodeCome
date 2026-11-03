@@ -3,6 +3,7 @@
 
 .PHONY: help init venv env-check check status next-id frontmatter check-phase-artifacts tests test-parity itemdb-reset codeql-clean index report
 .PHONY: findings findings-create findings-move findings-evidence findings-package
+.PHONY: confluence-export confluence-export-findings
 .PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all opencode-raw
 .PHONY: sandbox-setup sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-reset sandbox-build sandbox-test
 .PHONY: sandbox-list sandbox-inspect sandbox-detect sandbox-bootstrap sandbox-validate sandbox-regenerate sandbox-status show-model
@@ -104,6 +105,8 @@ help:
 	@printf "    $(BOLD)make codeql-clean$(RESET)   Remove generated CodeQL artifacts and cache\n"
 	@printf "    $(BOLD)make index$(RESET)          Regenerate itemdb/index.md\n"
 	@printf "    $(BOLD)make report$(RESET)         Regenerate itemdb/reports/report.md (local, no AI)\n"
+	@printf "    $(BOLD)make confluence-export$(RESET)  Publish Markdown to Confluence (needs CONFLUENCE_* env)\n"
+	@printf "    $(BOLD)make confluence-export-findings$(RESET)  Publish CONFIRMED/EXPLOITED findings\n"
 	@printf "\n"
 	@printf "  $(BOLD)$(CYAN)Finding management:$(RESET)\n"
 	@printf "\n"
@@ -329,6 +332,25 @@ hints: env-check
 
 report: env-check
 	$(PYTHON) tools/render-report.py
+
+# Publish Markdown to Confluence. Requires CONFLUENCE_* env vars (see docs/confluence-export.md).
+# Examples:
+#   make confluence-export DRY_RUN=1
+#   make confluence-export FILES='itemdb/reports/*.md' ARGS='--label codecome'
+#   make confluence-export-findings
+#   make confluence-export-findings FILES='itemdb/findings/PENDING/*.md' DRY_RUN=1
+confluence-export: env-check
+	$(PYTHON) tools/confluence-export.py \
+		$(if $(DRY_RUN),--dry-run,) \
+		$(ARGS) \
+		$(or $(FILES),itemdb/reports/report.md)
+
+confluence-export-findings: env-check
+	$(PYTHON) tools/confluence-export.py \
+		--title-template '[{severity}|{status}] {id}: {title}' \
+		$(if $(DRY_RUN),--dry-run,) \
+		$(ARGS) \
+		$(or $(FILES),itemdb/findings/CONFIRMED/*.md itemdb/findings/EXPLOITED/*.md)
 
 findings: env-check
 ifdef STATUS

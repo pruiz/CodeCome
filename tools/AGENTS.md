@@ -84,6 +84,8 @@ tools/
 ├── check-frontmatter.py          # Frontmatter validation
 ├── sandbox-bootstrap.py          # Sandbox environment setup
 ├── run-sweep.py                  # Batch file sweeps
+├── confluence_export.py          # Confluence publish library + CLI
+├── confluence-export.py          # Thin kebab-case wrapper → confluence_export.main
 ├── list-findings.py / create-finding.py / move-finding.py / …   # Script wrappers
 └── mock-llm-*.py / mock-llm-scripts/                             # Test infrastructure
 ```

@@ -102,6 +102,12 @@ Render report:
 
     ./tools/render-report.py
 
+Publish Markdown to Confluence:
+
+    ./tools/confluence-export.py --dry-run itemdb/reports/report.md
+
+See `docs/confluence-export.md` for credentials and title templating.
+
 Create evidence README:
 
     ./tools/create-evidence.py CC-0001

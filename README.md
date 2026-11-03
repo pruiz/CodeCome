@@ -412,6 +412,15 @@ A lightweight local report (no agent involved) is also available:
 
 The default report path is `itemdb/reports/report.md`.
 
+To publish the report (or findings) to Confluence Cloud / Server, set the
+`CONFLUENCE_*` environment variables and run:
+
+    make confluence-export                 # publishes itemdb/reports/report.md
+    make confluence-export-findings        # CONFIRMED + EXPLOITED findings
+    make confluence-export DRY_RUN=1       # preview titles, no network
+
+See [docs/confluence-export.md](docs/confluence-export.md) for auth setup and options.
+
 ## Customizing phase prompts
 
 Extra instructions can be appended to any phase prompt from three sources, applied in this order (all additive):
@@ -449,6 +458,8 @@ All three can be combined in a single invocation.
     make hints                                 # print open questions and re-run hints from run summaries
     make index                                 # regenerate finding index
     make report                                # regenerate report
+    make confluence-export                     # publish report.md to Confluence
+    make confluence-export-findings            # publish CONFIRMED/EXPLOITED findings
     make list-risk-files                       # top-scoring risky files from index
     make itemdb-reset                          # reset local audit artifacts
     make sandbox-check                         # sandbox sanity

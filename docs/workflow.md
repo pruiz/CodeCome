@@ -282,6 +282,13 @@ table, a short vulnerable-code excerpt and root-cause summary per
 CONFIRMED/EXPLOITED finding, and recording references by relative path.
 Binary blobs (`.gif`, `.mp4`) are never embedded inline.
 
+Optional: publish the report or findings to Confluence (requires
+`CONFLUENCE_*` env vars; see `docs/confluence-export.md`):
+
+    make confluence-export
+    make confluence-export-findings
+    make confluence-export DRY_RUN=1
+
 ## Helper commands
 
 Show available commands:
@@ -315,6 +322,11 @@ Regenerate index:
 Regenerate report:
 
     make report
+
+Publish to Confluence:
+
+    make confluence-export
+    make confluence-export-findings
 
 Check sandbox:
 
