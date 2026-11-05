@@ -1,7 +1,7 @@
 # Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later OR AGPL-3.0-or-later
 
-.PHONY: help init venv env-check check status next-id frontmatter check-phase-artifacts tests test-parity itemdb-reset codeql-clean index report
+.PHONY: help init venv env-check check status next-id frontmatter check-phase-artifacts tests test-parity itemdb-reset codeql-clean index report source-version
 .PHONY: findings findings-create findings-move findings-evidence findings-package
 .PHONY: confluence-export confluence-export-findings
 .PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all opencode-raw
@@ -190,7 +190,11 @@ env-check:
 # Workflow phases
 # ---------------------------------------------------------------------------
 
+source-version:
+	@$(PYTHON) tools/record-source-version.py
+
 phase-1: env-check
+	@$(PYTHON) tools/record-source-version.py || true
 	@$(PYTHON) tools/gate-check.py 1
 	@$(PYTHON) tools/run-agent.py --phase 1 --label "Phase 1: Reconnaissance" --agent recon
 
