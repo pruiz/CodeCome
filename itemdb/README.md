@@ -14,6 +14,7 @@ The initial PoC intentionally uses plain Markdown files instead of a database.
     ├── notes/
     ├── findings/
     │   ├── PENDING/
+    │   ├── NEEDS_VALIDATION/
     │   ├── CONFIRMED/
     │   ├── EXPLOITED/
     │   ├── REJECTED/
@@ -63,6 +64,12 @@ Use lowercase, hyphen-separated slugs after the id.
 
 Candidate findings that appear plausible but still require validation.
 
+### `NEEDS_VALIDATION/`
+
+Source-grounded leads that cannot be confirmed or rejected because the deciding fact lives outside the repository and sandbox (for example ingress header policy, cloud IAM configuration, production flags, or third-party behaviour).
+
+These findings must carry a `fingerprint` and a `needs_validation` block with concrete `blockers` and at least one of `local_check` or `owner_check`. Reports list them without severity. Once the external fact is known they move back to `PENDING/` (to resume validation) or to `REJECTED/`.
+
 ### `CONFIRMED/`
 
 Findings that have been validated with clear evidence.
@@ -81,7 +88,9 @@ Findings that were disproven, are not security-relevant, are unreachable, lack a
 
 Findings that are already covered by another finding.
 
-A duplicate finding should reference the canonical finding id.
+A duplicate finding should reference the canonical finding id and carry the canonical finding's `fingerprint`.
+
+Every new finding carries a `fingerprint`: a stable root-cause identifier (`<class>:<path>#<symbol>[:<qualifier>]`) used to deduplicate findings. Two live findings must not share one.
 
 ## Evidence
 

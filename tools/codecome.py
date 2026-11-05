@@ -63,6 +63,7 @@ REQUIRED_PATHS = [
 
 FINDING_STATUS_DIRS = [
     "PENDING",
+    "NEEDS_VALIDATION",
     "CONFIRMED",
     "EXPLOITED",
     "REJECTED",
@@ -398,7 +399,10 @@ def check_phase_progress() -> None:
     rows.append(("Phase 2", "ok" if pending else "info", f"{pending} PENDING findings" if pending else "not run"))
 
     # Phase 3
-    reviewed = counts["CONFIRMED"] + counts["EXPLOITED"] + counts["REJECTED"] + counts["DUPLICATE"]
+    reviewed = (
+        counts["NEEDS_VALIDATION"] + counts["CONFIRMED"] + counts["EXPLOITED"]
+        + counts["REJECTED"] + counts["DUPLICATE"]
+    )
     rows.append(("Phase 3", "ok" if reviewed else "info", f"{reviewed} reviewed" if reviewed else "not run"))
 
     # Phase 4

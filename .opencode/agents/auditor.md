@@ -40,6 +40,12 @@ Use target-specific skills when they apply, for example:
 - `.opencode/skills/c-cpp-security/SKILL.md`
 - `.opencode/skills/juliet-benchmark/SKILL.md`
 
+- the domain companion skills listed in `prompts/phase-2-audit.md`
+  (`core-attack-classes`, `web-protocol-auth`, `protocols-messaging-security`,
+  `data-isolation-lifecycle`, ...), selected from the Phase 1 trust boundaries.
+
+Every new finding needs a `fingerprint` (see `finding-format`).
+
 ## Mission
 
 Create concrete vulnerability hypotheses.

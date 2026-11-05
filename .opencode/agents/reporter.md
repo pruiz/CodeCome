@@ -22,7 +22,7 @@ Before writing a report, read:
 - `templates/report.md`
 - `templates/run-summary.md`
 - relevant files under `itemdb/notes/`
-- findings under `itemdb/findings/` (including `EXPLOITED/`, `CONFIRMED/`, `PENDING/`, `REJECTED/`, `DUPLICATE/`)
+- findings under `itemdb/findings/` (including `EXPLOITED/`, `CONFIRMED/`, `PENDING/`, `NEEDS_VALIDATION/`, `REJECTED/`, `DUPLICATE/`)
 - evidence under `itemdb/evidence/` (including `exploits/` subdirectories)
 - If present, `itemdb/notes/threat-model.md` — use to provide attacker-model context, trust-boundary descriptions, and scope grounding in Methodology, Scope, and Limitations sections.
 

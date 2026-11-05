@@ -36,6 +36,7 @@ Use target-specific skills when they apply, for example:
 For each candidate finding, determine whether it should be:
 
 - kept in `PENDING`,
+- moved to `NEEDS_VALIDATION` (source-grounded, blocked on an external fact),
 - moved to `REJECTED`,
 - moved to `DUPLICATE`,
 - or improved before validation.
@@ -89,6 +90,29 @@ Update:
 - `# Counter-analysis`,
 - `# Validation result`,
 - `updated_at`.
+
+### Move to `NEEDS_VALIDATION`
+
+Use this when the source trace holds up (attacker control, reachability and
+sink are established) but a **decisive fact is outside the repository and the
+sandbox**: deployment or ingress config, IdP or broker policy, a private
+dependency that blocks building the target, provider or browser behavior.
+
+Fill `fingerprint` and the `needs_validation` block (`blockers`, plus
+`local_check` and/or `owner_check`) as defined in
+`.opencode/skills/finding-format/SKILL.md`, then move it:
+
+    make findings-move FINDING=<id-or-path> STATUS=NEEDS_VALIDATION
+
+Do not use it for ideas the source cannot support (reject them) or for
+uncertainty the sandbox can resolve (keep in PENDING for Phase 4).
+
+Check `fingerprint` first: two live findings with the same fingerprint are
+duplicates by definition, and `make frontmatter` fails until one is moved to
+`DUPLICATE`. When a finding has no fingerprint yet, assign one (see
+`.opencode/skills/finding-format/SKILL.md`). When two findings turn out to be
+the same root cause under different fingerprints, keep the canonical
+finding's fingerprint and copy it onto the duplicate.
 
 ### Move to `DUPLICATE`
 

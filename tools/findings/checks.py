@@ -15,6 +15,9 @@ except ImportError:
 from findings.capability.taxonomy import ENUM_IDS, STORED_AXES
 from findings.constants import (
     CONFIDENCES,
+    FINGERPRINT_MAX_LEN,
+    FINGERPRINT_RE,
+    LIVE_STATUSES,
     FINDING_FILENAME_RE,
     FINDING_ID_FORMAT_RE,
     FINDINGS_ROOT,
@@ -23,6 +26,7 @@ from findings.constants import (
     REQUIRED_EXPLOITATION_FIELDS,
     REQUIRED_EXPLOITED_SECTIONS,
     REQUIRED_FIELDS,
+    REQUIRED_NEEDS_VALIDATION_FIELDS,
     REQUIRED_VALIDATION_FIELDS,
     ROOT,
     SECTION_RE,
@@ -113,6 +117,74 @@ def validate_capability(data: Dict[str, object], status: object) -> List[str]:
     return errors
 
 
+def validate_fingerprint(data: Dict[str, object], status: object) -> List[str]:
+    """Validate the optional ``fingerprint`` field.
+
+    Optional for backwards compatibility with findings written before the
+    field existed; required for NEEDS_VALIDATION, which is new.
+    """
+    fingerprint = data.get("fingerprint")
+    if fingerprint is None or fingerprint == "":
+        if status == "NEEDS_VALIDATION":
+            return ["NEEDS_VALIDATION status requires a populated fingerprint"]
+        return []
+    if not isinstance(fingerprint, str):
+        return ["fingerprint must be a string"]
+    if len(fingerprint) > FINGERPRINT_MAX_LEN:
+        return [f"fingerprint must be at most {FINGERPRINT_MAX_LEN} characters"]
+    if not FINGERPRINT_RE.fullmatch(fingerprint):
+        return [
+            f"invalid fingerprint {fingerprint!r}: use letters, digits and . _ : / @ + # - "
+            "(no spaces), starting with a letter or digit"
+        ]
+    return []
+
+
+def validate_needs_validation(data: Dict[str, object], status: object) -> List[str]:
+    """Validate the ``needs_validation`` block.
+
+    A NEEDS_VALIDATION finding is a source-grounded lead blocked on a fact the
+    repository and sandbox cannot show (deployment config, proxy, IdP policy,
+    private dependency...). It must say exactly what is missing and how to
+    resolve it.
+    """
+    block = data.get("needs_validation")
+    if block is None:
+        if status == "NEEDS_VALIDATION":
+            return ["NEEDS_VALIDATION status requires a needs_validation block"]
+        return []
+    if not isinstance(block, dict):
+        return ["needs_validation must be an object"]
+
+    errors: List[str] = []
+    for field in REQUIRED_NEEDS_VALIDATION_FIELDS:
+        if field not in block:
+            errors.append(f"missing needs_validation field: needs_validation.{field}")
+
+    blockers = block.get("blockers")
+    if blockers is not None and not isinstance(blockers, list):
+        errors.append("needs_validation.blockers must be a list")
+    for key in ("local_check", "owner_check"):
+        value = block.get(key)
+        if value is not None and not isinstance(value, str):
+            errors.append(f"needs_validation.{key} must be a string")
+
+    if status == "NEEDS_VALIDATION":
+        real_blockers = [
+            b for b in (blockers if isinstance(blockers, list) else [])
+            if isinstance(b, str) and not is_placeholder(b)
+        ]
+        if not real_blockers:
+            errors.append("NEEDS_VALIDATION status requires at least one needs_validation.blockers entry")
+        checks = [block.get("local_check"), block.get("owner_check")]
+        if not any(isinstance(c, str) and not is_placeholder(c) for c in checks):
+            errors.append(
+                "NEEDS_VALIDATION status requires needs_validation.local_check "
+                "or needs_validation.owner_check"
+            )
+    return errors
+
+
 def validate_finding(path: Path) -> List[str]:
     errors: List[str] = []
 
@@ -151,6 +223,9 @@ def validate_finding(path: Path) -> List[str]:
 
     if confidence == "CONFIRMED" and status not in ("CONFIRMED", "EXPLOITED"):
         errors.append("confidence CONFIRMED requires status CONFIRMED or EXPLOITED")
+
+    errors.extend(validate_fingerprint(data, status))
+    errors.extend(validate_needs_validation(data, status))
 
     validation = data.get("validation")
     if not isinstance(validation, dict):
@@ -263,6 +338,27 @@ def validate_file_risk_index() -> List[str]:
                     errors.append(f"file-risk-index.yml files[{i}] 'score' must be an integer")
 
     return errors
+
+
+def find_duplicate_fingerprints(paths: List[Path]) -> Dict[str, List[Path]]:
+    """Return fingerprints shared by more than one live finding.
+
+    REJECTED and DUPLICATE findings may legitimately reuse a live finding's
+    fingerprint (that is the point: it records the claim was already decided).
+    """
+    seen: Dict[str, List[Path]] = {}
+    for path in paths:
+        try:
+            data = load_frontmatter_strict(path)
+        except Exception:
+            continue
+        fingerprint = data.get("fingerprint")
+        if not isinstance(fingerprint, str) or not fingerprint:
+            continue
+        if data.get("status") not in LIVE_STATUSES:
+            continue
+        seen.setdefault(fingerprint, []).append(path)
+    return {fp: ps for fp, ps in seen.items() if len(ps) > 1}
 
 
 def iter_all_finding_files() -> List[Path]:

@@ -71,6 +71,8 @@ def move_finding(
         validation_status = "CONFIRMED"
     elif status == "REJECTED":
         validation_status = "REJECTED"
+    elif status == "NEEDS_VALIDATION":
+        validation_status = "BLOCKED"
 
     content = update_frontmatter(content, status, validation_status)
 

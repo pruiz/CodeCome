@@ -138,6 +138,10 @@ All new findings must have:
 
     status: "PENDING"
 
+New findings must also have a stable root-cause `fingerprint`
+(`<class>:<path>#<symbol>[:<qualifier>]`); search existing findings for the
+same fingerprint before creating one.
+
 New findings must not have:
 
     confidence: "CONFIRMED"
@@ -158,7 +162,11 @@ Expected actions:
 - improve validation plans,
 - lower or raise confidence,
 - move disproven findings to `REJECTED`,
-- move duplicate findings to `DUPLICATE`,
+- move duplicate findings to `DUPLICATE` (match `fingerprint` first, then
+  semantic fields),
+- move source-grounded leads blocked on facts outside the repository and
+  sandbox to `NEEDS_VALIDATION` (requires `fingerprint` and a
+  `needs_validation` block with blockers and a local or owner check),
 - leave plausible findings in `PENDING`.
 
 Phase 3 should not normally mark findings as `CONFIRMED`.
@@ -202,7 +210,11 @@ Possible outcomes:
 
 - move finding to `CONFIRMED`,
 - move finding to `REJECTED`,
+- move finding to `NEEDS_VALIDATION` when the outcome depends on a fact outside the repository and sandbox,
 - keep finding in `PENDING` with unresolved validation notes.
+
+A finding in `NEEDS_VALIDATION` can be revalidated with
+`make phase-4 FINDING=CC-0001` once the external fact is available.
 
 ## Phase 5: Exploit development
 
@@ -339,6 +351,7 @@ Open sandbox shell:
 ## Finding lifecycle
 
     PENDING
+        ├── NEEDS_VALIDATION (blocked on external facts; back to PENDING or REJECTED)
         ├── CONFIRMED
         │       └── EXPLOITED
         ├── REJECTED
@@ -394,6 +407,14 @@ Examples:
 - .NET apps may use `.opencode/skills/dotnet-security/`.
 - PHP apps may use `.opencode/skills/php-security/`.
 - SQL-heavy code paths may use `.opencode/skills/sql-injection/`.
+
+Domain companion skills complement the target-type skills with
+vulnerability-class checklists: `web-protocol-auth`, `core-attack-classes`,
+`memory-safety-binary`, `data-isolation-lifecycle`, `resource-exhaustion`,
+`protocols-messaging-security`, `supply-chain-security`,
+`cloud-deployment-security`, `client-side-security`, `desktop-mobile-ipc`,
+and `ai-llm-security`. Phase 1c records the applicable ones in
+`suggested_skills`; the Phase 2 prompts load them.
 
 ## Quality gates
 

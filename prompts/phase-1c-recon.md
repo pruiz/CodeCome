@@ -175,6 +175,22 @@ Prioritize files that contain or strongly influence:
 
 For each high-risk file, include concrete reasons, likely entry points, sources, sinks, trust boundaries, suggested vulnerability classes, suggested skills, and suggested validation methods when inferable.
 
+For `suggested_skills`, include the target-type skill when one applies (for example `c-cpp-security`, `php-security`) and also the **domain companion skills** whose vulnerability classes fit the file. Available domain companions:
+
+- `web-protocol-auth`: HTTP/auth/session/OAuth/CSRF/SSRF/request-handling flaws,
+- `core-attack-classes`: injection, deserialization, path traversal, template and parser abuse,
+- `memory-safety-binary`: memory corruption, integer issues, unsafe native code,
+- `data-isolation-lifecycle`: tenant/account isolation, object lifecycle, state and cleanup flaws,
+- `resource-exhaustion`: unbounded work, memory, storage, or amplification,
+- `protocols-messaging-security`: message brokers, RPC, custom wire protocols, framing,
+- `supply-chain-security`: dependencies, build and release pipelines, update mechanisms,
+- `cloud-deployment-security`: IAM, ingress, secrets, container and deployment configuration,
+- `client-side-security`: browser-side code, DOM, postMessage, client storage,
+- `desktop-mobile-ipc`: desktop/mobile apps, IPC, URL handlers, local privilege boundaries,
+- `ai-llm-security`: prompt injection, tool use, model and agent trust boundaries.
+
+Pick only the companions that clearly apply; do not list all of them by default. Phase 2 prompts load the listed companions alongside the target-type skill.
+
 If CodeQL file signals exist (resolve via `itemdb/codeql/last-run-manifest.yml` → `run_id` → `itemdb/codeql/runs/<run-id>/normalized/file-signals.yml`), incorporate them:
 - Add `external_signals.codeql` blocks to file entries with CodeQL alerts.
 - Boost scores where CodeQL reports high-precision alerts, but cap at 5.

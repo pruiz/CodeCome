@@ -1,6 +1,7 @@
 ---
 id: "CC-0000"
 title: "Short vulnerability title"
+fingerprint: ""
 status: "PENDING"
 capability:
   forbidden: true
@@ -24,6 +25,10 @@ sources: []
 sinks: []
 trust_boundary: "unknown"
 assets_at_risk: []
+needs_validation:
+  blockers: []
+  local_check: ""
+  owner_check: ""
 validation:
   status: "NOT_STARTED"
   methods: []

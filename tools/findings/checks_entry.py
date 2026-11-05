@@ -15,7 +15,12 @@ from findings.constants import (
     FindingsContext,
     ROOT,
 )
-from findings.checks import validate_finding, validate_file_risk_index, iter_all_finding_files
+from findings.checks import (
+    find_duplicate_fingerprints,
+    iter_all_finding_files,
+    validate_file_risk_index,
+    validate_finding,
+)
 
 
 def build_parser():
@@ -76,6 +81,16 @@ def run_frontmatter_validation(
         out.write(C.fail(str(path.relative_to(_root))) + "\n")
         for error in errors:
             out.write(f"  {C.SYM_BULLET} {error}\n")
+
+    duplicates = find_duplicate_fingerprints(paths)
+    for fingerprint, dup_paths in sorted(duplicates.items()):
+        total_errors += 1
+        listed = ", ".join(str(p.relative_to(_root)) for p in dup_paths)
+        out.write(C.fail(f"duplicate fingerprint {fingerprint!r}") + "\n")
+        out.write(
+            f"  {C.SYM_BULLET} shared by live findings: {listed} "
+            "(collapse into one canonical finding and move the rest to DUPLICATE)\n"
+        )
 
     if paths or _risk_index_path.exists():
         if total_errors:

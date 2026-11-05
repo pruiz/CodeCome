@@ -31,6 +31,7 @@ Read:
 - `itemdb/findings/EXPLOITED/`
 - `itemdb/findings/CONFIRMED/`
 - `itemdb/findings/PENDING/`
+- `itemdb/findings/NEEDS_VALIDATION/`
 - `itemdb/findings/REJECTED/`
 - `itemdb/findings/DUPLICATE/`
 - `itemdb/evidence/`
@@ -113,6 +114,8 @@ Use this structure for `itemdb/reports/report.md`:
     # Confirmed findings
 
     # Findings needing validation
+
+    # Leads blocked on external facts (NEEDS_VALIDATION)
 
     # Rejected findings
 
@@ -238,6 +241,26 @@ For findings still under `PENDING`, summarize:
 - what validation is needed,
 - blockers.
 
+## Blocked-leads section (NEEDS_VALIDATION)
+
+For findings under `NEEDS_VALIDATION`, list them separately from `PENDING`
+findings. These are source-grounded leads that cannot be confirmed or
+rejected because the deciding fact lives outside the repository and
+sandbox.
+
+List without severity (severity is provisional and must not appear in
+the heading, table, or ordering). For each lead, include:
+
+- id,
+- title,
+- affected code (`file:line` or symbol),
+- blockers (the external facts that are unknown),
+- local check (what a reviewer can run or inspect once access exists),
+- owner check (the precise question for the system owner).
+
+Do not present these as confirmed vulnerabilities, and do not count
+them in confirmed or exploited totals.
+
 ## Rejected section
 
 For rejected findings, summarize:
@@ -360,6 +383,7 @@ Before finishing a report:
 - exploited findings (with demonstrated impact) are highlighted first,
 - confirmed findings are summarized,
 - open findings are clearly marked as not confirmed,
+- blocked leads (`NEEDS_VALIDATION`) are listed without severity,
 - rejected findings are not presented as vulnerabilities,
 - evidence paths are included,
 - limitations are included,

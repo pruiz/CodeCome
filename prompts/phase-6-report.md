@@ -14,7 +14,7 @@ Read the following files (all paths are relative to the project/workspace root):
 - `.opencode/agents/reporter.md`
 - `.opencode/skills/report-writing/SKILL.md`
 - all relevant files under `itemdb/notes/`
-- all findings under `itemdb/findings/`
+- all findings under `itemdb/findings/` (including `NEEDS_VALIDATION/`)
 - all relevant evidence under `itemdb/evidence/`
 - If present, `itemdb/notes/threat-model.md` — operational threat model from Phase 1b: attacker capabilities and non-capabilities, trust-boundary summary, assets and security objectives, existing controls, and open assumptions. Use to ground Methodology, Scope, and Limitations sections.
 
@@ -53,6 +53,8 @@ Use this structure:
     # Confirmed findings
 
     # Findings needing validation
+
+    # Leads blocked on external facts (NEEDS_VALIDATION)
 
     # Rejected findings
 
@@ -173,6 +175,19 @@ For each open finding, include:
 
 Make clear these are not confirmed vulnerabilities.
 
+## Leads blocked on external facts (NEEDS_VALIDATION)
+
+For each finding under `itemdb/findings/NEEDS_VALIDATION/`, list without severity:
+
+- id,
+- title,
+- affected files or symbols,
+- blockers (the unknown external facts),
+- local check,
+- owner check.
+
+Make clear these are source-grounded leads that could not be confirmed or rejected from the repository and sandbox. Do not present them as confirmed vulnerabilities and do not count them with confirmed or exploited findings.
+
 ## Rejected findings
 
 For rejected findings, include:
@@ -218,6 +233,7 @@ At the end, summarize:
 - number of exploited findings,
 - number of confirmed findings,
 - number of findings needing validation,
+- number of leads blocked on external facts (NEEDS_VALIDATION),
 - number of rejected findings,
 - number of duplicate findings,
 - open questions for the user (same content as in the run summary),

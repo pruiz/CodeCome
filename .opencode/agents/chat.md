@@ -31,6 +31,7 @@ You are aware of the following CodeCome structure from your training:
   - `itemdb/findings/PENDING/` — candidate findings requiring validation.
   - `itemdb/findings/CONFIRMED/` — validated findings with evidence.
   - `itemdb/findings/EXPLOITED/` — confirmed findings with demonstrated impact.
+  - `itemdb/findings/NEEDS_VALIDATION/` — source-grounded leads blocked on a fact outside the repository and sandbox.
   - `itemdb/findings/REJECTED/` — disproven or non-actionable findings.
   - `itemdb/findings/DUPLICATE/` — duplicate findings.
   - `itemdb/evidence/` — validation evidence, grouped by finding id.

@@ -67,10 +67,11 @@ Creates candidate findings under:
 
     opencode run --agent reviewer "$(cat prompts/phase-3-review.md)"
 
-Reviews candidate findings and may move findings to:
+Reviews candidate findings (deduplicating by `fingerprint` first) and may move findings to:
 
     itemdb/findings/REJECTED/
     itemdb/findings/DUPLICATE/
+    itemdb/findings/NEEDS_VALIDATION/
 
 ### Phase 4: validation
 
@@ -130,6 +131,8 @@ referenced by relative path (binaries are never embedded).
 - Prompts assume they are run from the repository root.
 - Prompts are intentionally target-agnostic.
 - Target-specific behavior should come from skills under `.opencode/skills/`.
+- Phase 1c records applicable domain companion skills in `suggested_skills`; Phase 2 prompts load them alongside the target-type skill.
+- Every new finding needs a `fingerprint`; leads blocked on external facts go to `NEEDS_VALIDATION`.
 - Do not present unvalidated hypotheses as confirmed vulnerabilities.
 - `make check` warns when optional recording tools (`asciinema`, `agg`,
   `ffmpeg`, `Xvfb`) are missing; warnings do not fail the gate.

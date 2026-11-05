@@ -15,7 +15,7 @@ Read the following files (all paths are relative to the project/workspace root):
 - all relevant files under `itemdb/notes/`
 - `itemdb/notes/threat-model.md` — operational threat model from Phase 1b: assets, attacker model, trust-boundary summary, existing controls, abuse-path themes, risk calibration, and open assumptions.
 - all candidate findings under `itemdb/findings/PENDING/`
-- related findings under `itemdb/findings/CONFIRMED/`, `REJECTED/`, and `DUPLICATE/`
+- related findings under `itemdb/findings/NEEDS_VALIDATION/`, `CONFIRMED/`, `REJECTED/`, and `DUPLICATE/`
 
 Use additional target-specific skills only if they clearly apply.
 
@@ -55,6 +55,14 @@ For each finding, ask:
 - Is the finding based on an abuse-path theme from Phase 1b, and if so, has it been grounded into a concrete vulnerable path?
 - Is the finding a duplicate of another finding?
 - Is the validation plan actionable?
+
+## Fingerprint-first deduplication
+
+Every finding carries a `fingerprint` (see `.opencode/skills/finding-format/SKILL.md`). Deduplicate in this order:
+
+1. Group all findings by `fingerprint`. Findings sharing a fingerprint have the same root cause: keep one canonical finding (prefer the most complete or the most advanced status), move the others to `DUPLICATE`, and set each duplicate's `fingerprint` to the canonical finding's fingerprint.
+2. For findings with an empty fingerprint (created before the field existed), assign a fingerprint as part of the review.
+3. Then apply the semantic deduplication below to findings with different fingerprints that may still describe the same root cause. If you merge them, unify the fingerprints.
 
 ## Semantic deduplication
 
@@ -126,6 +134,27 @@ Update:
 - `# Counter-analysis`
 - `# Validation result`
 
+### Move to NEEDS_VALIDATION
+
+Use this only when the finding is source-grounded and plausible, but its outcome depends on a fact that lives outside the repository and outside the sandbox (for example ingress or proxy header policy, cloud IAM configuration, a production feature flag, third-party service behaviour). If the issue can be proven or disproven inside the workspace, keep it in `PENDING` instead.
+
+Before moving, populate in the frontmatter:
+
+- `fingerprint`,
+- `needs_validation.blockers`: at least one concrete statement of the unknown external fact,
+- `needs_validation.local_check` and/or `needs_validation.owner_check`: at least one actionable check.
+
+Then move the finding using the CLI tool:
+
+    make findings-move FINDING=<id-or-path> STATUS=NEEDS_VALIDATION
+
+Update:
+
+- `# Counter-analysis`
+- `# Validation plan`
+
+Do not set confidence to `CONFIRMED`.
+
 ### Move to DUPLICATE
 
 Move the finding using the CLI tool:
@@ -133,6 +162,8 @@ Move the finding using the CLI tool:
     make findings-move FINDING=<id-or-path> STATUS=DUPLICATE
 
 Use this when another finding already covers the same root cause.
+
+Set the duplicate's `fingerprint` to the canonical finding's fingerprint.
 
 Update:
 
@@ -199,6 +230,7 @@ At the end, summarize:
 - findings kept in PENDING,
 - findings moved to REJECTED,
 - findings moved to DUPLICATE,
+- findings moved to NEEDS_VALIDATION (with the external blockers),
 - findings weakened or rejected due to attacker non-capabilities or existing controls from `threat-model.md`,
 - findings kept because they cross a documented trust boundary or affect a documented asset,
 - threat-model assumptions that affected counter-analysis,
