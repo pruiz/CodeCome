@@ -42,6 +42,7 @@ For the assigned finding, determine whether it is:
 
 - `CONFIRMED`,
 - `REJECTED`,
+- `NEEDS_VALIDATION` (blocked on a fact the sandbox cannot provide),
 - or still `PENDING`.
 
 **Important Pathing Rule**: Your absolute workspace root is in your `<env>` block (`Workspace root folder`). Always prepend this to relative paths when using tools like `read`, `write`, or `edit`. Do NOT guess or hallucinate the root directory name.
@@ -228,6 +229,19 @@ Update `# Validation result` with the rejection reason.
 
 ## Unresolved findings
 
+If the blocker is a fact the sandbox cannot provide (deployment or ingress
+config, IdP/broker policy, a private dependency that prevents building the
+target, provider behavior) and the source trace still holds, move the finding
+to `NEEDS_VALIDATION` instead, with `fingerprint` and the `needs_validation`
+block filled in (see `.opencode/skills/finding-format/SKILL.md`):
+
+    make findings-move FINDING=<id-or-path> STATUS=NEEDS_VALIDATION
+
+If the assigned finding is already under `NEEDS_VALIDATION`, first check
+whether its blockers are now resolved (new config, credentials, or sandbox
+capability). If so, validate it normally and move it to `CONFIRMED` or
+`REJECTED`; if not, leave it there and record what you checked.
+
 If validation cannot be completed, keep the finding in:
 
     itemdb/findings/PENDING/
@@ -267,7 +281,7 @@ When confirmed:
 
 5. Reference the evidence directory and files.
 
-6. Adjust severity if validation changes impact.
+6. Reclassify capability if validation changes the demonstrated outcome.
 
 ## Validation result format
 

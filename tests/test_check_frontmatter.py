@@ -3,16 +3,35 @@ from __future__ import annotations
 from conftest import load_tool_module
 
 
-VALID_FRONTMATTER = """---
+CAPABILITY_EMPTY = """capability:
+  forbidden: true
+  disposition: ""
+  exposure: ""
+  gate: ""
+  cooperation: ""
+  boundary: ""
+  effect: ""
+  scope: ""
+  durability: ""
+"""
+
+CAPABILITY_FULL = """capability:
+  forbidden: true
+  disposition: live
+  exposure: internet
+  gate: none
+  cooperation: ambient
+  effect: execute-on-host
+  boundary: host
+  scope: fleet
+  durability: once
+"""
+
+VALID_FRONTMATTER = f"""---
 id: "CC-0001"
 title: "Valid finding"
 status: "PENDING"
-severity: "MEDIUM"
-cvss_v4:
-  vector: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N"
-  score: 5.0
-  justification: "Unit-test fixture with medium impact."
-confidence: "LOW"
+{CAPABILITY_EMPTY}confidence: "LOW"
 category: "Test"
 cwe: []
 language: "python"
@@ -33,8 +52,47 @@ exploitation:
   status: "NOT_STARTED"
   impact_demonstrated: ""
   exploit_type: ""
-  severity_before: ""
-  severity_after: ""
+  capability_before: {{}}
+  capability_after: {{}}
+  artifacts_dir: "itemdb/evidence/CC-0001/exploits"
+  summary: ""
+created_at: "2026-01-01"
+updated_at: "2026-01-01"
+---
+
+# Summary
+
+Pending.
+"""
+
+
+CONFIRMED_FRONTMATTER = f"""---
+id: "CC-0001"
+title: "Valid finding"
+status: "CONFIRMED"
+{CAPABILITY_FULL}confidence: "CONFIRMED"
+category: "Test"
+cwe: []
+language: "python"
+target_area: "api"
+files: []
+symbols: []
+entry_points: []
+sources: []
+sinks: []
+trust_boundary: "http"
+assets_at_risk: []
+validation:
+  status: "CONFIRMED"
+  methods: []
+  evidence_dir: "itemdb/evidence/CC-0001"
+  summary: ""
+exploitation:
+  status: "NOT_STARTED"
+  impact_demonstrated: ""
+  exploit_type: ""
+  capability_before: {{}}
+  capability_after: {{}}
   artifacts_dir: "itemdb/evidence/CC-0001/exploits"
   summary: ""
 created_at: "2026-01-01"
@@ -71,11 +129,16 @@ EXPLOITED_FRONTMATTER_TEMPLATE = """---
 id: "CC-0001"
 title: "Exploited finding"
 status: "EXPLOITED"
-severity: "HIGH"
-cvss_v4:
-  vector: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:L/VA:N/SC:N/SI:N/SA:N/E:A"
-  score: 8.0
-  justification: "Unit-test fixture with demonstrated high impact."
+capability:
+  forbidden: true
+  disposition: live
+  exposure: internet
+  gate: none
+  cooperation: ambient
+  effect: execute-on-host
+  boundary: host
+  scope: fleet
+  durability: once
 confidence: "CONFIRMED"
 category: "Test"
 cwe: {cwe}
@@ -97,8 +160,8 @@ exploitation:
   status: "DEMONSTRATED"
   impact_demonstrated: "RCE demonstrated"
   exploit_type: "stack_overflow_rce"
-  severity_before: "HIGH"
-  severity_after: "HIGH"
+  capability_before: {{}}
+  capability_after: {{}}
   artifacts_dir: "itemdb/evidence/CC-0001/exploits"
   summary: ""
 created_at: "2026-01-01"
@@ -191,13 +254,52 @@ def test_validate_frontmatter_confirmed_requires_remediation_code(tmp_path):
     finding = tmp_path / "itemdb" / "findings" / "CONFIRMED" / "CC-0001-no-remediation-code.md"
     finding.parent.mkdir(parents=True)
     finding.write_text(
-        VALID_FRONTMATTER.replace('status: "PENDING"', 'status: "CONFIRMED"')
-        + "\n# Remediation idea\n\nUse a safe call, but no code block.\n",
+        CONFIRMED_FRONTMATTER + "\n# Remediation idea\n\nUse a safe call, but no code block.\n",
         encoding="utf-8",
     )
 
     errors = module.validate_finding(finding)
     assert any("requires #Remediation idea with corrected-code excerpt" in e for e in errors)
+
+
+def test_validate_frontmatter_confirmed_requires_populated_capability(tmp_path):
+    module = load_tool_module("check_frontmatter_capability_required", "tools/check-frontmatter.py")
+    finding = tmp_path / "itemdb" / "findings" / "CONFIRMED" / "CC-0001-empty-capability.md"
+    finding.parent.mkdir(parents=True)
+    finding.write_text(
+        VALID_FRONTMATTER.replace('status: "PENDING"', 'status: "CONFIRMED"')
+        + "\n# Remediation idea\n\n```c\nsafe();\n```\n",
+        encoding="utf-8",
+    )
+
+    errors = module.validate_finding(finding)
+    assert any("requires populated capability." in e for e in errors)
+
+
+def test_validate_frontmatter_rejects_invalid_effect(tmp_path):
+    module = load_tool_module("check_frontmatter_bad_effect", "tools/check-frontmatter.py")
+    finding = tmp_path / "itemdb" / "findings" / "PENDING" / "CC-0001-bad-effect.md"
+    finding.parent.mkdir(parents=True)
+    finding.write_text(
+        VALID_FRONTMATTER.replace('effect: ""', 'effect: "critical"'),
+        encoding="utf-8",
+    )
+
+    errors = module.validate_finding(finding)
+    assert any("capability.effect must be one of" in e for e in errors)
+
+
+def test_validate_frontmatter_allows_forbidden_false(tmp_path):
+    module = load_tool_module("check_frontmatter_permitted", "tools/check-frontmatter.py")
+    finding = tmp_path / "itemdb" / "findings" / "PENDING" / "CC-0001-permitted.md"
+    finding.parent.mkdir(parents=True)
+    finding.write_text(
+        VALID_FRONTMATTER.replace("forbidden: true", "forbidden: false"),
+        encoding="utf-8",
+    )
+
+    errors = module.validate_finding(finding)
+    assert errors == []
 
 
 def test_validate_frontmatter_reports_yaml_parse_error(tmp_path):
@@ -251,9 +353,7 @@ def test_validate_rejects_bare_with_valid_frontmatter(tmp_path):
     finding = tmp_path / "itemdb" / "findings" / "CONFIRMED" / "CC-0003.md"
     finding.parent.mkdir(parents=True)
     finding.write_text(
-        VALID_FRONTMATTER.replace('status: "PENDING"', 'status: "CONFIRMED"').replace(
-            'id: "CC-0001"', 'id: "CC-0003"'
-        )
+        CONFIRMED_FRONTMATTER.replace('id: "CC-0001"', 'id: "CC-0003"')
         + "\n# Remediation idea\n\n```c\nsafe();\n```\n",
         encoding="utf-8",
     )

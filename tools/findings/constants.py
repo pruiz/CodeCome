@@ -26,6 +26,7 @@ DEFAULT_OUTPUT = REPORTS_ROOT / "report.md"
 
 STATUSES = [
     "PENDING",
+    "NEEDS_VALIDATION",
     "CONFIRMED",
     "EXPLOITED",
     "REJECTED",
@@ -42,20 +43,41 @@ FINDING_ID_STRICT_RE = re.compile(r"^CC-\d{4}$")
 FINDING_FILENAME_RE = re.compile(r"^CC-\d{4}-[a-z0-9]+[-_a-z0-9]*\.md$", re.IGNORECASE)
 
 SECTION_RE = re.compile(r"^# (?P<title>.+?)\n(?P<body>.*?)(?=^# |\Z)", re.MULTILINE | re.DOTALL)
-CVSS_V4_VECTOR_RE = re.compile(r"^CVSS:4\.0/")
 
-SEVERITIES = frozenset({"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"})
+# Stable, source-derived root-cause identifier. Same root cause -> same
+# fingerprint in every status and across re-runs. It must not embed a line
+# number, run, agent, severity, or verdict. Example:
+#   "authz:src/api/orders.py#OrderController.get:missing-owner-check"
+FINGERPRINT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+#-]*$")
+FINGERPRINT_MAX_LEN = 200
+
+# Statuses in which a root cause is still "live". Two live findings with the
+# same fingerprint are duplicates and must be collapsed in Phase 3.
+LIVE_STATUSES = frozenset({"PENDING", "NEEDS_VALIDATION", "CONFIRMED", "EXPLOITED"})
+
+REQUIRED_NEEDS_VALIDATION_FIELDS = ["blockers", "local_check", "owner_check"]
+
 CONFIDENCES = frozenset({"LOW", "MEDIUM", "HIGH", "CONFIRMED"})
 
-VALID_SEVERITIES = SEVERITIES
 VALID_CONFIDENCES = CONFIDENCES
+
+REQUIRED_CAPABILITY_FIELDS = [
+    "forbidden",
+    "disposition",
+    "exposure",
+    "gate",
+    "cooperation",
+    "boundary",
+    "effect",
+    "scope",
+    "durability",
+]
 
 REQUIRED_FIELDS = [
     "id",
     "title",
     "status",
-    "severity",
-    "cvss_v4",
+    "capability",
     "confidence",
     "category",
     "cwe",
@@ -74,16 +96,14 @@ REQUIRED_FIELDS = [
     "updated_at",
 ]
 
-REQUIRED_CVSS_V4_FIELDS = ["vector", "score", "justification"]
-
 REQUIRED_VALIDATION_FIELDS = ["status", "methods", "evidence_dir", "summary"]
 
 REQUIRED_EXPLOITATION_FIELDS = [
     "status",
     "impact_demonstrated",
     "exploit_type",
-    "severity_before",
-    "severity_after",
+    "capability_before",
+    "capability_after",
     "artifacts_dir",
     "summary",
 ]

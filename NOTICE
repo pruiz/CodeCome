@@ -45,6 +45,30 @@ Full text of the MIT license that applies to this subtree:
   * templates/sandboxes/LICENSE
 
 
+Third-party: Cloudflare security audit skills
+---------------------------------------------
+
+The following skills under `.opencode/skills/` are derived from the
+Cloudflare security audit skill and are licensed under the MIT License,
+Copyright (c) 2025-2026 Cloudflare, Inc. SPDX expression: `MIT`.
+
+  * ai-llm-security
+  * client-side-security
+  * cloud-deployment-security
+  * core-attack-classes
+  * data-isolation-lifecycle
+  * desktop-mobile-ipc
+  * memory-safety-binary
+  * protocols-messaging-security
+  * resource-exhaustion
+  * supply-chain-security
+  * web-protocol-auth
+
+Full text of the MIT license that applies to these skills:
+
+  * third_party/cloudflare-security-audit-skill/LICENSE
+
+
 Contributions
 -------------
 

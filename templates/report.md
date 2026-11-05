@@ -13,7 +13,7 @@ Include:
 - methodology,
 - number of confirmed findings,
 - number of findings needing validation,
-- highest confirmed severity,
+- highest queued proven capability outcome (service policy),
 - main risks,
 - major limitations,
 - recommended next steps.
@@ -82,9 +82,9 @@ When the threat model is available, include:
 
 # Findings summary
 
-| ID | Status | Severity | Confidence | CWE | Target area | Title | Evidence | Recording |
-|---|---|---|---|---|---|---|---|---|
-| - | - | - | - | - | - | No findings yet. | - | - |
+| ID | Status | Class | Effect | Gate | Exposure | Confidence | CWE | Target area | Title | Evidence | Recording |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| - | - | - | - | - | - | - | - | - | No findings yet. | - | - |
 
 # Exploited findings
 
@@ -95,7 +95,9 @@ For each exploited finding, include:
 ## CC-0000 — Finding title
 
 - Status:
-- Severity: (note if adjusted, e.g., "HIGH (upgraded from MEDIUM)")
+- Class: (effect/boundary; note if reclassified after exploitation)
+- Effect / Gate / Exposure:
+- Outcome sentence:
 - CWE: CWE-NNN
 - Impact demonstrated:
 - Exploit type:
@@ -135,7 +137,8 @@ For each confirmed finding, include:
 ## CC-0000 — Finding title
 
 - Status:
-- Severity:
+- Class:
+- Effect / Gate / Exposure:
 - Confidence:
 - CWE: CWE-NNN (if known)
 - Category:
@@ -173,7 +176,7 @@ For each open finding, include:
 ## CC-0000 — Finding title
 
 - Status:
-- Severity:
+- Class:
 - Confidence:
 - Target area:
 - Required validation:
@@ -221,7 +224,7 @@ Examples:
 - Production systems were not tested.
 - Some target components may not have been built or executed.
 - Some dependencies, credentials, or fixtures may be missing.
-- Threat-model assumptions that may affect severity or exploitability (only when `itemdb/notes/threat-model.md` is present).
+- Threat-model assumptions that may affect capability class or exploitability (only when `itemdb/notes/threat-model.md` is present).
 
 # Recommended next steps
 

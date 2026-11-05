@@ -18,6 +18,7 @@ Important security claims must be written to files under `itemdb/`, not left onl
 - `itemdb/`: file-based finding database, notes, reports, and evidence.
 - `itemdb/notes/`: reconnaissance notes and target model.
 - `itemdb/findings/PENDING/`: candidate findings requiring validation.
+- `itemdb/findings/NEEDS_VALIDATION/`: source-grounded leads blocked on external facts that cannot be checked from the repository or sandbox.
 - `itemdb/findings/CONFIRMED/`: validated findings with evidence.
 - `itemdb/findings/EXPLOITED/`: confirmed findings with demonstrated real-world impact.
 - `itemdb/findings/REJECTED/`: disproven or non-actionable findings.
@@ -131,7 +132,21 @@ Each finding must:
 - explain impact,
 - include validation plan,
 - include counter-analysis placeholder,
+- carry a stable root-cause `fingerprint` (see the `finding-format` skill),
 - avoid generic claims.
+
+Before creating a finding, search all status directories for an existing
+finding with the same `fingerprint`; update or extend it instead of filing
+a duplicate.
+
+Domain companion skills (for example `web-protocol-auth`,
+`core-attack-classes`, `memory-safety-binary`, `data-isolation-lifecycle`,
+`resource-exhaustion`, `protocols-messaging-security`,
+`supply-chain-security`, `cloud-deployment-security`, `client-side-security`,
+`desktop-mobile-ipc`, `ai-llm-security`) supply vulnerability-class checklists
+that complement the target-specific skills. Reconnaissance records which
+apply in `suggested_skills`, and the auditor loads them in addition to the
+target-type skill.
 
 ### Phase 3: Counter-analysis
 
@@ -145,10 +160,14 @@ For each finding under `PENDING`:
 - check trust boundaries,
 - check framework protections,
 - check whether assumptions are false,
-- check for duplicates,
+- check for duplicates (match `fingerprint` first, then semantic fields),
 - lower confidence when needed,
 - move clearly invalid findings to `REJECTED`,
-- move duplicates to `DUPLICATE`.
+- move duplicates to `DUPLICATE`,
+- move source-grounded leads whose outcome depends on facts outside the
+  repository and sandbox (ingress policy, cloud configuration, production
+  flags, third-party behaviour) to `NEEDS_VALIDATION`, with a populated
+  `needs_validation` block.
 
 ### Phase 4: Validation
 
@@ -189,7 +208,7 @@ The exploiter agent:
 - escalates impact (crash to code execution, read to secret exfiltration, bypass to full admin access),
 - produces self-contained, reproducible PoC scripts,
 - writes clear impact narratives,
-- adjusts severity based on demonstrated impact,
+- reclassifies the capability outcome based on demonstrated impact,
 - stores exploitation artifacts under `itemdb/evidence/<finding-id>/exploits/`.
 
 A finding may be moved to `EXPLOITED` only when a working proof-of-concept demonstrates concrete impact beyond the initial validation.
@@ -243,21 +262,55 @@ Use these confidence levels:
 - `HIGH`: strong static evidence exists, but runtime validation is still pending.
 - `CONFIRMED`: validated with evidence.
 
-## Severity levels
+## Capability class
 
-Use these severity levels:
+Do not use Critical, High, Medium, Low, or CVSS.
 
-- `CRITICAL`
-- `HIGH`
-- `MEDIUM`
-- `LOW`
-- `INFO`
+Classify each finding by the forbidden outcome in `capability`:
+
+```yaml
+capability:
+  forbidden: true
+  disposition: live          # not-shipped | dormant | live
+  exposure: internet         # local | adjacent | internet | build
+  gate: any-account          # chained | privileged | any-account | none
+  cooperation: ambient       # aimed | ambient
+  effect: read-sensitive     # see effects below
+  boundary: other-principal  # self | service | other-principal | higher-principal | other-tenant | host
+  scope: tenant              # one-object | one-principal | tenant | cross-tenant | fleet
+  durability: once           # once | persists | reexecutes
+```
+
+Effects, from most power to least:
+
+- `execute-on-host`
+- `execute-in-app`
+- `actuate`
+- `impersonate`
+- `bypass-control`
+- `write-security`
+- `read-secrets`
+- `destroy` — delete or corrupt the source of truth
+- `deny` — availability only
+- `write-data`
+- `read-sensitive`
+- `read-public`
+- `none`
+
+Forgery of a token or signature that the system treats as another identity is `impersonate` (or `write-security` if it changes grants). Do not file it as `write-data`.
+
+The queue order (service or local-program) is a sort policy. It is not stored on the finding.
+
+The remediation decision (`fix-now` vs `plan`) is also a derived policy, not stored on the finding. Roughly: takeover-class effects and shipped code are fix-now; wide `destroy` and mass reachable `read-sensitive` are fix-now; `not-shipped` and milder outcomes are plan. Confidence stays separate.
+
+PENDING findings may leave enum fields empty. CONFIRMED and EXPLOITED findings require a fully populated capability block.
 
 ## Status values
 
 Use only these status values:
 
 - `PENDING`
+- `NEEDS_VALIDATION`
 - `CONFIRMED`
 - `EXPLOITED`
 - `REJECTED`
@@ -350,7 +403,7 @@ Each phase has readiness gates that must be satisfied before it can run:
 ### Phase 4 readiness
 
 - A specific finding ID must be provided (e.g., `CC-0001`).
-- The finding must be in `PENDING` status.
+- The finding must be in `PENDING` status, or in `NEEDS_VALIDATION` status when the blocking external fact has since been supplied (resume).
 
 ### Phase 5 readiness
 

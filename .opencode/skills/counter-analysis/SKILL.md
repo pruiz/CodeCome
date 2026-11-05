@@ -43,6 +43,7 @@ Update the finding in place, or move it to the appropriate status directory.
 Possible outcomes:
 
 - keep in `PENDING/`,
+- move to `NEEDS_VALIDATION/` (source-grounded, but a decisive fact is outside the repository and sandbox; see `finding-format`),
 - move to `REJECTED/`,
 - move to `DUPLICATE/`.
 
@@ -260,7 +261,7 @@ Do not reject just because impact is lower than originally claimed.
 
 Instead:
 
-- lower severity,
+- correct or lower the capability class,
 - lower confidence,
 - document assumptions,
 - improve validation plan.

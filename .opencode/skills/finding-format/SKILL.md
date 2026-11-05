@@ -31,6 +31,11 @@ Exploited findings (confirmed with demonstrated real-world impact):
 
     itemdb/findings/EXPLOITED/
 
+Needs-validation findings (source-grounded leads blocked on external facts
+that cannot be checked from the repository or sandbox):
+
+    itemdb/findings/NEEDS_VALIDATION/
+
 Rejected findings:
 
     itemdb/findings/REJECTED/
@@ -85,12 +90,18 @@ Minimum fields:
     ---
     id: "CC-0001"
     title: "Short vulnerability title"
+    fingerprint: ""
     status: "PENDING"
-    severity: "MEDIUM"
-    cvss_v4:
-      vector: ""
-      score: 0.0
-      justification: ""
+    capability:
+      forbidden: true
+      disposition: ""
+      exposure: ""
+      gate: ""
+      cooperation: ""
+      boundary: ""
+      effect: ""
+      scope: ""
+      durability: ""
     confidence: "LOW"
     category: "Unclassified"
     cwe: []
@@ -103,6 +114,10 @@ Minimum fields:
     sinks: []
     trust_boundary: "unknown"
     assets_at_risk: []
+    needs_validation:
+      blockers: []
+      local_check: ""
+      owner_check: ""
     validation:
       status: "NOT_STARTED"
       methods: []
@@ -112,8 +127,8 @@ Minimum fields:
       status: "NOT_STARTED"
       impact_demonstrated: ""
       exploit_type: ""
-      severity_before: ""
-      severity_after: ""
+      capability_before: {}
+      capability_after: {}
       artifacts_dir: "itemdb/evidence/CC-0001/exploits"
       summary: ""
     created_at: "YYYY-MM-DD"
@@ -125,12 +140,90 @@ Minimum fields:
 Use only:
 
 - `PENDING`
+- `NEEDS_VALIDATION`
 - `CONFIRMED`
 - `EXPLOITED`
 - `REJECTED`
 - `DUPLICATE`
 
 Do not invent additional status values.
+
+## Fingerprint
+
+`fingerprint` is a stable root-cause identifier used to deduplicate findings
+before they are created and during review. Two findings with the same
+root cause must have the same fingerprint, even when they are reached
+through different entry points or described with different words.
+
+Format:
+
+    <class>:<path>#<symbol>[:<qualifier>]
+
+Examples:
+
+    authz:src/api/orders.py#get:missing-owner-check
+    sqli:src/db.py#query
+    memsafety:src/parser/record.c#parse_record:stack-overflow
+
+Rules:
+
+- Use a lowercase vulnerability class token (for example `authz`, `sqli`,
+  `xss`, `ssrf`, `memsafety`, `deser`, `crypto`, `secrets`, `config`).
+- Use the repository-relative path of the file that holds the root cause,
+  and the function, method, route, or configuration key after `#`.
+- Add an optional `:<qualifier>` only to distinguish genuinely different
+  root causes in the same symbol.
+- Do not use whitespace. Keep it short, ASCII, and stable: it must not
+  change when the finding is moved, re-titled, or re-validated.
+- Describe the root cause, not the symptom or the entry point. Several
+  routes that reach the same unsafe sink share one fingerprint.
+- Before creating a finding, search existing findings in every status
+  directory for the same fingerprint. If one exists, update that finding or
+  record the new path as a variant instead of creating a new one.
+- Two live findings (`PENDING`, `NEEDS_VALIDATION`, `CONFIRMED`,
+  `EXPLOITED`) must not share a fingerprint. `REJECTED` and `DUPLICATE`
+  findings may share one with their canonical finding.
+- The field is required for every new finding and mandatory for
+  `NEEDS_VALIDATION`. Findings created before this field existed may leave it
+  empty.
+
+## NEEDS_VALIDATION
+
+`NEEDS_VALIDATION` is for source-grounded leads whose outcome depends on a
+fact that lives outside the repository and outside the sandbox, for
+example ingress or proxy header policy, cloud IAM configuration, a
+production feature flag, a third-party service's behaviour, or a deployment
+secret. The code evidence is real, but the finding can be neither
+confirmed nor rejected without that external fact.
+
+Use it only when the blocker is genuinely external. If the issue can be
+proven or disproven by building, running, or reading code inside the
+workspace, keep it `PENDING` and validate it.
+
+Required frontmatter when `status` is `NEEDS_VALIDATION`:
+
+    fingerprint: "authz:src/api/orders.py#get:missing-owner-check"
+    needs_validation:
+      blockers:
+        - "Whether the ingress strips X-Forwarded-User is not visible in the repository."
+      local_check: ""
+      owner_check: "Ask the platform owner to show the ingress header policy for /api/orders."
+
+Rules:
+
+- `fingerprint` must be populated.
+- `needs_validation.blockers` must contain at least one concrete,
+  specific statement of the external fact that is unknown.
+- At least one of `needs_validation.local_check` (something a reviewer can
+  run or inspect locally once they have access) or
+  `needs_validation.owner_check` (a precise question for the system owner)
+  must be non-empty and actionable. `Pending.` is not acceptable.
+- Do not assign confidence `CONFIRMED`. Severity is provisional and reports
+  list these findings without severity.
+- Keep the normal sections (`# Validation plan`, `# Counter-analysis`,
+  and the rest) filled in.
+- When the external fact becomes known, move the finding back to `PENDING`
+  to resume validation, or directly to `REJECTED` if the fact disproves it.
 
 ## CWE classification
 
@@ -148,28 +241,84 @@ Rules:
 
 - **Required** when the finding is `EXPLOITED`.
 - **Recommended** when the finding is `CONFIRMED`.
-- Optional for `PENDING`, `REJECTED`, `DUPLICATE`.
+- Optional for `PENDING`, `NEEDS_VALIDATION`, `REJECTED`, `DUPLICATE`.
 
 Do not invent CWE ids. Use values from the official MITRE CWE catalog.
 
-## Severity values
+## Capability class
 
-Use only:
+Do not use Critical, High, Medium, Low, or CVSS.
 
-- `CRITICAL`
-- `HIGH`
-- `MEDIUM`
-- `LOW`
-- `INFO`
+Every finding stores the forbidden outcome in `capability`:
 
-Severity must reflect realistic impact, not just theoretical bug class.
-When `cvss_v4.score` is populated, `severity` must match the score band
-defined by the exploit-development skill.
+    capability:
+      forbidden: true
+      disposition: live          # not-shipped | dormant | live
+      exposure: internet         # local | adjacent | internet | build
+      gate: any-account          # chained | privileged | any-account | none
+      cooperation: ambient       # aimed | ambient
+      effect: read-sensitive     # see effects below
+      boundary: other-principal  # self | service | other-principal | higher-principal | other-tenant | host
+      scope: tenant              # one-object | one-principal | tenant | cross-tenant | fleet
+      durability: once           # once | persists | reexecutes
 
-`cvss_v4.vector`, `cvss_v4.score`, and `cvss_v4.justification` are
-required frontmatter fields. They may stay empty or zero for early
-`PENDING` findings, but must be populated when status is `CONFIRMED` or
-`EXPLOITED`.
+Effects, most power to least:
+
+- `execute-on-host`
+- `execute-in-app`
+- `actuate`
+- `impersonate`
+- `bypass-control` — disable or skip auth, MFA, authorization, audit, rate limits, kill-switches, guardrails
+- `write-security`
+- `read-secrets`
+- `destroy` — delete or corrupt the source of truth (not a temporary outage)
+- `deny` — availability only; source of truth may still be intact
+- `write-data`
+- `read-sensitive`
+- `read-public`
+- `none`
+
+Forgery guidance: minting a trusted identity or signature without possessing the secret is `impersonate`. If the outcome is changing grants or the audit record, use `write-security`. Do not file forgery as `write-data`.
+
+Rules:
+
+- The `capability` block is always required.
+- PENDING findings may leave enum fields empty.
+- CONFIRMED and EXPLOITED findings require every enum populated and valid.
+- Confidence stays a separate field. Do not fold certainty into the class.
+- Difficulty, public exploits, and patches are not part of the class.
+- Queue order (service vs local-program) is a sort policy, not stored on the finding.
+- Remediation decision (`fix-now` vs `plan`) is derived by `decision_for()` in
+  `tools/findings/capability/`; do not invent Critical/High labels for it.
+
+### Fix-now vs plan (derived)
+
+Fix now when the finding is forbidden, the code is in the artifact (`live` or
+`dormant`), and any of:
+
+- effect in `execute-on-host`, `execute-in-app`, `actuate`, `impersonate`,
+  `bypass-control`, `write-security`, `read-secrets`
+- `destroy` with scope `tenant`, `cross-tenant`, or `fleet`
+- `read-sensitive` with scope `cross-tenant` or `fleet` and exposure
+  `internet` or `build`
+
+Otherwise plan (including `not-shipped`, ordinary one-object writes/reads,
+and availability-only `deny` unless another fix-now rule matches).
+
+### Classification checklist
+
+1. Running instructions is not a kind of write. Classify the outcome you can show.
+2. A leaked secret is not an ordinary read.
+3. Say whose asset it is (self, service, other principal, higher principal, other tenant, host).
+4. Say what the attacker must already be (none, any-account, privileged, chained).
+5. Shipped-but-unentered is not the same as absent from the release.
+6. The build, install, and CI are a place (`exposure: build`), not offline/dead.
+7. Say how much is affected (one-object through fleet).
+8. Say whether it happens once, persists, or reexecutes.
+9. Record whether each victim must be steered (`aimed` vs `ambient`). Do not demote the outcome for it.
+10. A permitted action is not a vulnerability (`forbidden: false`).
+11. Destroying data is not the same as denying service (`destroy` vs `deny`).
+12. Skipping a security control is `bypass-control`, not an ordinary field write.
 
 ## Confidence values
 
@@ -389,6 +538,7 @@ If a finding is duplicate:
 
 - move it to `itemdb/findings/DUPLICATE/`,
 - set `status: "DUPLICATE"`,
+- set `fingerprint` to the canonical finding's fingerprint,
 - reference the canonical finding id in the body,
 - preserve any useful additional evidence or notes.
 
@@ -436,8 +586,8 @@ If a confirmed finding has a demonstrated proof-of-concept exploit showing real-
 - update `exploitation.status` to `"DEMONSTRATED"`,
 - fill `exploitation.impact_demonstrated` with a description of the impact achieved,
 - fill `exploitation.exploit_type` with the type of exploit (e.g., `buffer_overflow_rce`, `sqli_data_dump`),
-- record `exploitation.severity_before` and `exploitation.severity_after`,
-- adjust `severity` if the demonstrated impact warrants it,
+- record `exploitation.capability_before` and `exploitation.capability_after`,
+- reclassify `capability` if the demonstrated impact warrants it,
 - update `# Exploitation Result` with details of the exploit,
 - update `# Demonstrated Impact` with a plain-language narrative,
 - fill `# Root cause analysis`, `# Data flow` (or `Not applicable.`),

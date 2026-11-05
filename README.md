@@ -138,10 +138,10 @@ There are convenience targets too — `make validate-all`, `make exploit-all`, `
 Six phases. Each one is a `make` target. Each one writes to disk.
 
 1. **Recon (`make phase-1`)** — runs as three subphases: (1a) target profiling and CodeQL plan generation, (1b) sandbox bootstrap (Docker-based sandbox setup), and (1c) CodeQL-assisted reconnaissance using static analysis signals. Writes notes under `itemdb/notes/` including a file-risk-index informed by CodeQL findings.
-2. **Hypothesis (`make phase-2`)** — agent writes candidate findings under `itemdb/findings/PENDING/`. Each one points at specific code, sources, sinks, and a trust boundary.
-3. **Counter-analysis (`make phase-3`)** — a reviewer pass tries to disprove or deduplicate findings. Weak ones move to `REJECTED/`, repeats to `DUPLICATE/`.
+2. **Hypothesis (`make phase-2`)** — agent writes candidate findings under `itemdb/findings/PENDING/`. Each one points at specific code, sources, sinks, and a trust boundary, and carries a stable root-cause `fingerprint` used for deduplication.
+3. **Counter-analysis (`make phase-3`)** — a reviewer pass tries to disprove or deduplicate findings. Weak ones move to `REJECTED/`, repeats (matched by `fingerprint` first) to `DUPLICATE/`, and leads that hinge on facts outside the repo and sandbox (ingress policy, cloud config, production flags) to `NEEDS_VALIDATION/`.
 4. **Validation (`make phase-4 FINDING=CC-XXXX`)** — one finding at a time, in the sandbox. Build the target, write a small PoC, capture evidence, decide CONFIRMED or REJECTED.
-5. **Exploit (`make phase-5 FINDING=CC-XXXX`)** — for confirmed findings worth escalating, build a real PoC that shows concrete impact: code execution, data exfiltration, privilege escalation. Severity gets adjusted based on what you actually demonstrate.
+5. **Exploit (`make phase-5 FINDING=CC-XXXX`)** — for confirmed findings worth escalating, build a real PoC that shows concrete impact: code execution, data exfiltration, privilege escalation. Reclassify the capability outcome based on what you actually demonstrate.
 6. **Reporting (`make phase-6`)** — generate a Markdown report grouping exploited and confirmed findings with evidence references.
 
 The finding lifecycle:
@@ -152,6 +152,9 @@ stateDiagram-v2
     PENDING --> CONFIRMED : evidence captured
     PENDING --> REJECTED : disproved
     PENDING --> DUPLICATE : already filed
+    PENDING --> NEEDS_VALIDATION : blocked on external facts
+    NEEDS_VALIDATION --> PENDING : external fact supplied
+    NEEDS_VALIDATION --> REJECTED : disproved
     CONFIRMED --> EXPLOITED : impact demonstrated
     CONFIRMED --> [*] : not feasible to exploit
     EXPLOITED --> [*]
@@ -199,7 +202,16 @@ Here is what one of those Markdown files actually looks like — trimmed from a 
 id: "CC-0022"
 title: "SQL injection via unvalidated selectRole option in user.get JSON-RPC API"
 status: "EXPLOITED"
-severity: "CRITICAL"
+capability:
+  forbidden: true
+  disposition: live
+  exposure: internet
+  gate: any-account
+  cooperation: ambient
+  effect: read-sensitive
+  boundary: other-principal
+  scope: tenant
+  durability: once
 confidence: "CONFIRMED"
 category: "SQL Injection"
 cwe:
@@ -221,8 +233,8 @@ validation:
   evidence_dir: "itemdb/evidence/CC-0022"
 exploitation:
   status: "DEMONSTRATED"
-  severity_before: "HIGH"
-  severity_after: "CRITICAL"
+  capability_before: {}
+  capability_after: {}
   artifacts_dir: "itemdb/evidence/CC-0022/exploits"
 ---
 
@@ -273,7 +285,7 @@ That single file is the entire interface between the model and you: a hypothesis
 `itemdb/` is the heart of an audit. Everything important lives there:
 
 - `itemdb/notes/` — reconnaissance notes (target profile, attack surface, build model, trust boundaries, …)
-- `itemdb/findings/PENDING|CONFIRMED|EXPLOITED|REJECTED|DUPLICATE/` — findings by status.
+- `itemdb/findings/PENDING|NEEDS_VALIDATION|CONFIRMED|EXPLOITED|REJECTED|DUPLICATE/` — findings by status.
 - `itemdb/evidence/<finding-id>/` — validation evidence and PoCs.
 - `itemdb/reports/` — generated reports.
 
@@ -396,7 +408,7 @@ To run validation across all PENDING findings:
 
     make phase-5 FINDING=CC-0001
 
-Develops a working PoC for one confirmed finding. Artifacts go under `itemdb/evidence/<finding-id>/exploits/`. The exploiter may adjust severity based on demonstrated impact, and may move findings to `EXPLOITED/`.
+Develops a working PoC for one confirmed finding. Artifacts go under `itemdb/evidence/<finding-id>/exploits/`. The exploiter may reclassify the capability outcome based on demonstrated impact, and may move findings to `EXPLOITED/`.
 
 For all confirmed findings that aren't already marked as not-feasible:
 
@@ -411,6 +423,15 @@ A lightweight local report (no agent involved) is also available:
     make report
 
 The default report path is `itemdb/reports/report.md`.
+
+To publish the report (or findings) to Confluence Cloud / Server, set the
+`CONFLUENCE_*` environment variables and run:
+
+    make confluence-export                 # publishes itemdb/reports/report.md
+    make confluence-export-findings        # CONFIRMED + EXPLOITED findings
+    make confluence-export DRY_RUN=1       # preview titles, no network
+
+See [docs/confluence-export.md](docs/confluence-export.md) for auth setup and options.
 
 ## Customizing phase prompts
 
@@ -449,6 +470,8 @@ All three can be combined in a single invocation.
     make hints                                 # print open questions and re-run hints from run summaries
     make index                                 # regenerate finding index
     make report                                # regenerate report
+    make confluence-export                     # publish report.md to Confluence
+    make confluence-export-findings            # publish CONFIRMED/EXPLOITED findings
     make list-risk-files                       # top-scoring risky files from index
     make itemdb-reset                          # reset local audit artifacts
     make sandbox-check                         # sandbox sanity
@@ -627,7 +650,7 @@ The validator and exploiter may freely experiment inside `sandbox/`, but should 
 
 ### The core is target-agnostic
 
-CodeCome adapts to whatever sits under `src/`. Target-specific behavior lives in skills, adapters, notes, or config — not in the core workflow.
+CodeCome adapts to whatever sits under `src/`. Target-specific behavior lives in skills, adapters, notes, or config — not in the core workflow. Domain companion skills (`web-protocol-auth`, `core-attack-classes`, `memory-safety-binary`, `data-isolation-lifecycle`, `resource-exhaustion`, `protocols-messaging-security`, `supply-chain-security`, `cloud-deployment-security`, `client-side-security`, `desktop-mobile-ipc`, `ai-llm-security`) add vulnerability-class checklists on top of the target-type skills; reconnaissance selects the relevant ones.
 
 ## Model selection and rerunning phases
 

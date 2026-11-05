@@ -1,8 +1,9 @@
 # Copyright (C) 2025-2026 Pablo Ruiz García <pablo.ruiz@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later OR AGPL-3.0-or-later
 
-.PHONY: help init venv env-check check status next-id frontmatter check-phase-artifacts tests test-parity itemdb-reset codeql-clean index report
+.PHONY: help init venv env-check check status next-id frontmatter check-phase-artifacts tests test-parity itemdb-reset codeql-clean index report source-version
 .PHONY: findings findings-create findings-move findings-evidence findings-package
+.PHONY: confluence-export confluence-export-findings
 .PHONY: phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 validate-all exploit-all opencode-raw
 .PHONY: sandbox-setup sandbox-check sandbox-up sandbox-down sandbox-shell sandbox-logs sandbox-clean sandbox-reset sandbox-build sandbox-test
 .PHONY: sandbox-list sandbox-inspect sandbox-detect sandbox-bootstrap sandbox-validate sandbox-regenerate sandbox-status show-model
@@ -57,6 +58,7 @@ help:
 	@printf "\n"
 	@printf "    $(BOLD)make init$(RESET)                     Create/update repo-local virtualenv\n"
 	@printf "    $(BOLD)make phase-1$(RESET)                  Run reconnaissance\n"
+	@printf "        $(BOLD)ID_SCHEME=CC-0142$(RESET)           First finding id for this audit\n"
 	@printf "    $(BOLD)make phase-2$(RESET)                  Run hypothesis generation\n"
 	@printf "    $(BOLD)make phase-3$(RESET)                  Run counter-analysis\n"
 	@printf "    $(BOLD)make phase-4 FINDING=CC-0001$(RESET)  Validate one finding\n"
@@ -104,6 +106,8 @@ help:
 	@printf "    $(BOLD)make codeql-clean$(RESET)   Remove generated CodeQL artifacts and cache\n"
 	@printf "    $(BOLD)make index$(RESET)          Regenerate itemdb/index.md\n"
 	@printf "    $(BOLD)make report$(RESET)         Regenerate itemdb/reports/report.md (local, no AI)\n"
+	@printf "    $(BOLD)make confluence-export$(RESET)  Publish Markdown to Confluence (needs CONFLUENCE_* env)\n"
+	@printf "    $(BOLD)make confluence-export-findings$(RESET)  Publish CONFIRMED/EXPLOITED findings\n"
 	@printf "\n"
 	@printf "  $(BOLD)$(CYAN)Finding management:$(RESET)\n"
 	@printf "\n"
@@ -187,7 +191,12 @@ env-check:
 # Workflow phases
 # ---------------------------------------------------------------------------
 
+source-version:
+	@$(PYTHON) tools/record-source-version.py
+
 phase-1: env-check
+	@$(PYTHON) tools/record-source-version.py || true
+	@$(PYTHON) tools/record-id-scheme.py $(if $(ID_SCHEME),--scheme "$(ID_SCHEME)") $(if $(ID_START),--start $(ID_START)) $(if $(ID_LEDGER),--ledger "$(ID_LEDGER)")
 	@$(PYTHON) tools/gate-check.py 1
 	@$(PYTHON) tools/run-agent.py --phase 1 --label "Phase 1: Reconnaissance" --agent recon
 
@@ -298,6 +307,7 @@ itemdb-reset: env-check
 	rm -rf itemdb/evidence/CC-*
 	rm -f itemdb/reports/*.md
 	rm -f itemdb/findings/PENDING/CC-*.md
+	rm -f itemdb/findings/NEEDS_VALIDATION/CC-*.md
 	rm -f itemdb/findings/CONFIRMED/CC-*.md
 	rm -f itemdb/findings/EXPLOITED/CC-*.md
 	rm -f itemdb/findings/REJECTED/CC-*.md
@@ -308,6 +318,7 @@ itemdb-reset: env-check
 	touch itemdb/evidence/.gitkeep
 	touch itemdb/reports/.gitkeep
 	touch itemdb/findings/PENDING/.gitkeep
+	touch itemdb/findings/NEEDS_VALIDATION/.gitkeep
 	touch itemdb/findings/CONFIRMED/.gitkeep
 	touch itemdb/findings/EXPLOITED/.gitkeep
 	touch itemdb/findings/REJECTED/.gitkeep
@@ -329,6 +340,25 @@ hints: env-check
 
 report: env-check
 	$(PYTHON) tools/render-report.py
+
+# Publish Markdown to Confluence. Requires CONFLUENCE_* env vars (see docs/confluence-export.md).
+# Examples:
+#   make confluence-export DRY_RUN=1
+#   make confluence-export FILES='itemdb/reports/*.md' ARGS='--label codecome'
+#   make confluence-export-findings
+#   make confluence-export-findings FILES='itemdb/findings/PENDING/*.md' DRY_RUN=1
+confluence-export: env-check
+	$(PYTHON) tools/confluence-export.py \
+		$(if $(DRY_RUN),--dry-run,) \
+		$(ARGS) \
+		$(or $(FILES),itemdb/reports/report.md)
+
+confluence-export-findings: env-check
+	$(PYTHON) tools/confluence-export.py \
+		--title-template '[{severity}|{status}] {id}: {title}' \
+		$(if $(DRY_RUN),--dry-run,) \
+		$(ARGS) \
+		$(or $(FILES),itemdb/findings/CONFIRMED/*.md itemdb/findings/EXPLOITED/*.md)
 
 findings: env-check
 ifdef STATUS

@@ -453,7 +453,7 @@ runtime behavior. Mark claims without evidence as assumptions.
 ## Attacker model
 
 Document realistic attacker capabilities and explicit non-capabilities.
-Non-capabilities prevent inflated severity judgments in later phases.
+Non-capabilities prevent inflated capability-class judgments in later phases.
 
 ## Existing controls
 

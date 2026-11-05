@@ -15,7 +15,7 @@ def test_render_index_includes_per_finding_rows_with_all_columns():
         {
             "id": "CC-0001",
             "status": "PENDING",
-            "severity": "HIGH",
+            "capability_class": "execute-on-host/host",
             "confidence": "MEDIUM",
             "exploitation_status": "",
             "validation_status": "NOT_STARTED",
@@ -27,7 +27,7 @@ def test_render_index_includes_per_finding_rows_with_all_columns():
         {
             "id": "CC-0002",
             "status": "PENDING",
-            "severity": "LOW",
+            "capability_class": "read-public/service",
             "confidence": "HIGH",
             "exploitation_status": "",
             "validation_status": "NOT_STARTED",
@@ -39,7 +39,7 @@ def test_render_index_includes_per_finding_rows_with_all_columns():
         {
             "id": "CC-0003",
             "status": "CONFIRMED",
-            "severity": "HIGH",
+            "capability_class": "execute-on-host/host",
             "confidence": "CONFIRMED",
             "exploitation_status": "",
             "validation_status": "VALIDATED",
@@ -53,7 +53,7 @@ def test_render_index_includes_per_finding_rows_with_all_columns():
     ctx = render_index_module.FindingsContext.default()
     out = render_index_module.render_index(rows, ctx=ctx)
 
-    assert "| ID | Status | Severity | Confidence | Target area | Title | Finding | Evidence |" in out
+    assert "| ID | Status | Class | Confidence | Target area | Title | Finding | Evidence |" in out
     assert "CC-0001" in out
     assert "CC-0002" in out
     assert "CC-0003" in out

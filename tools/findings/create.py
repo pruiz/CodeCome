@@ -16,10 +16,10 @@ from findings.constants import (
     FINDING_ID_FORMAT_RE,
     ROOT,
     VALID_CONFIDENCES,
-    VALID_SEVERITIES,
 )
 from findings.constants import FindingsContext
 from findings.ids import next_finding_id, slugify
+from findings.scheme import load_id_scheme
 from findings.frontmatter import replace_scalar_frontmatter, replace_nested_value
 
 
@@ -30,19 +30,26 @@ def create_finding(
 ) -> Path:
     ctx = ctx if ctx is not None else FindingsContext.default()
 
-    if args.severity not in VALID_SEVERITIES:
-        raise ValueError(f"Invalid severity: {args.severity}")
-
     if args.confidence not in VALID_CONFIDENCES:
         raise ValueError(f"Invalid confidence: {args.confidence}")
 
     if not ctx.template_path.exists():
         raise FileNotFoundError(f"Template not found: {ctx.template_path}")
 
-    finding_id = args.id or next_finding_id(findings_root=ctx.findings_root)
+    scheme = load_id_scheme(ctx.notes_root)
+    if args.id:
+        if scheme is not None and not scheme.matches(args.id):
+            raise ValueError(
+                f"Invalid finding id format: {args.id!r} "
+                f"(expected {scheme.prefix}- and {scheme.width} digits)"
+            )
+        if scheme is None and not FINDING_ID_FORMAT_RE.fullmatch(args.id):
+            raise ValueError(f"Invalid finding id format: {args.id!r} (expected CC-NNNN)")
 
-    if args.id and not FINDING_ID_FORMAT_RE.fullmatch(args.id):
-        raise ValueError(f"Invalid finding id format: {args.id!r} (expected CC-NNNN)")
+    finding_id = args.id or next_finding_id(
+        findings_root=ctx.findings_root,
+        notes_root=ctx.notes_root,
+    )
     slug = args.slug or slugify(args.title)
     today = date.today().isoformat()
 
@@ -59,7 +66,6 @@ def create_finding(
     content = replace_scalar_frontmatter(content, "id", finding_id)
     content = replace_scalar_frontmatter(content, "title", args.title)
     content = replace_scalar_frontmatter(content, "status", DEFAULT_STATUS)
-    content = replace_scalar_frontmatter(content, "severity", args.severity)
     content = replace_scalar_frontmatter(content, "confidence", args.confidence)
     content = replace_scalar_frontmatter(content, "category", args.category)
     content = replace_scalar_frontmatter(content, "language", args.language)
@@ -99,7 +105,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("title", help="Finding title.")
     parser.add_argument("--id", help="Explicit finding id, for example CC-0007.")
     parser.add_argument("--slug", help="Explicit filename slug.")
-    parser.add_argument("--severity", default="MEDIUM", choices=sorted(VALID_SEVERITIES))
     parser.add_argument("--confidence", default="LOW", choices=sorted(VALID_CONFIDENCES))
     parser.add_argument("--category", default="Unclassified")
     parser.add_argument("--language", default="unknown")

@@ -87,20 +87,38 @@ def colorize(text: str, color: str) -> str:
     return f"{color}{text}{RESET}"
 
 
-# --- Severity / Status coloring -----------------------------------------------
+# --- Capability / Status coloring ---------------------------------------------
 
-_SEVERITY_COLORS = {
-    "CRITICAL": BOLD_RED,
-    "HIGH": RED,
-    "MEDIUM": YELLOW,
-    "LOW": CYAN,
-    "INFO": DIM,
+# Effect-band ranks from findings.capability.taxonomy.BANDS (higher = worse).
+_EFFECT_BAND_COLORS = {
+    4: BOLD_RED,  # execute-on-host
+    3: RED,       # execute-in-app / actuate / impersonate / bypass-control / write-security / read-secrets
+    2: YELLOW,    # destroy / deny / write-data / read-sensitive
+    1: CYAN,      # read-public
+    0: DIM,       # none
+}
+
+_EFFECT_TO_BAND = {
+    "execute-on-host": 4,
+    "execute-in-app": 3,
+    "actuate": 3,
+    "impersonate": 3,
+    "bypass-control": 3,
+    "write-security": 3,
+    "read-secrets": 3,
+    "destroy": 2,
+    "deny": 2,
+    "write-data": 2,
+    "read-sensitive": 2,
+    "read-public": 1,
+    "none": 0,
 }
 
 _STATUS_COLORS = {
     "EXPLOITED": MAGENTA,
     "CONFIRMED": BOLD_GREEN,
     "PENDING": YELLOW,
+    "NEEDS_VALIDATION": CYAN,
     "REJECTED": DIM,
     "DUPLICATE": DIM,
 }
@@ -113,10 +131,16 @@ _CONFIDENCE_COLORS = {
 }
 
 
+def capability_color(label: str, *, effect: str = "") -> str:
+    """Return the colored capability short class (effect/boundary)."""
+    band = _EFFECT_TO_BAND.get(effect, _EFFECT_TO_BAND.get(label.split("/", 1)[0], -1))
+    color = _EFFECT_BAND_COLORS.get(band, "")
+    return colorize(label, color) if label else label
+
+
 def severity_color(severity: str) -> str:
-    """Return the colored severity string."""
-    color = _SEVERITY_COLORS.get(severity, "")
-    return colorize(severity, color)
+    """Deprecated alias: treat input as a capability short class or effect id."""
+    return capability_color(severity)
 
 
 def status_color(status: str) -> str:

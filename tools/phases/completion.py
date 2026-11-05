@@ -331,7 +331,7 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
             evidence_dir = evidence_dir_for(finding)
             evidence_fresh = any(path.stat().st_mtime >= run_start_time for path in _iter_files(evidence_dir))
             finding_is_fresh = False
-            for status in ("PENDING", "CONFIRMED", "REJECTED", "DUPLICATE", "EXPLOITED"):
+            for status in ("PENDING", "NEEDS_VALIDATION", "CONFIRMED", "REJECTED", "DUPLICATE", "EXPLOITED"):
                 if _find_finding_file(finding_status_dir(status), finding, run_start_time):
                     finding_is_fresh = True
                     break
@@ -354,7 +354,7 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
             _append_run_summary_check(failures, f"5-{finding}", run_start_time)
             finding_is_fresh = False
             status_found = None
-            for status in ("PENDING", "CONFIRMED", "REJECTED", "DUPLICATE", "EXPLOITED"):
+            for status in ("PENDING", "NEEDS_VALIDATION", "CONFIRMED", "REJECTED", "DUPLICATE", "EXPLOITED"):
                 if _find_finding_file(finding_status_dir(status), finding, run_start_time):
                     finding_is_fresh = True
                     status_found = status
@@ -397,7 +397,7 @@ def check_phase_graceful_completion(phase: str, finding: str | None, run_start_t
                     )
                 return (len(failures) == 0, failures)
 
-            if status_found in ("REJECTED", "DUPLICATE"):
+            if status_found in ("REJECTED", "DUPLICATE", "NEEDS_VALIDATION"):
                 return (True, [])
 
             failures.append(
@@ -451,6 +451,7 @@ def phase_checklist_lines(phase: str, finding: str | None) -> list[str]:
         return [
             f"Review all candidate findings under {_display_path(FINDINGS_ROOT)}/PENDING/.",
             "Move clearly invalid findings to REJECTED and duplicates to DUPLICATE.",
+            "Move source-grounded findings blocked only on a fact the source cannot show to NEEDS_VALIDATION, with blockers and validation_plan filled in.",
             "Leave surviving findings reviewable, deduplicated, and updated with counter-analysis.",
             f"Write a run summary to runs/phase-3-summary-YYYY-MM-DD-HHMMSS.md using templates/run-summary.md.",
             "Do not stop until the run summary is durable on disk.",

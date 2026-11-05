@@ -22,7 +22,7 @@ Before writing a report, read:
 - `templates/report.md`
 - `templates/run-summary.md`
 - relevant files under `itemdb/notes/`
-- findings under `itemdb/findings/` (including `EXPLOITED/`, `CONFIRMED/`, `PENDING/`, `REJECTED/`, `DUPLICATE/`)
+- findings under `itemdb/findings/` (including `EXPLOITED/`, `CONFIRMED/`, `PENDING/`, `NEEDS_VALIDATION/`, `REJECTED/`, `DUPLICATE/`)
 - evidence under `itemdb/evidence/` (including `exploits/` subdirectories)
 - If present, `itemdb/notes/threat-model.md` — use to provide attacker-model context, trust-boundary descriptions, and scope grounding in Methodology, Scope, and Limitations sections.
 
@@ -105,7 +105,7 @@ Summarize:
 - review date,
 - review method,
 - number of confirmed findings,
-- highest severity confirmed finding,
+- highest queued proven capability outcome (service policy),
 - important unresolved risks,
 - major limitations,
 - recommended next steps.
@@ -157,8 +157,8 @@ When the threat model is available, reference documented trust boundaries, in-sc
 
 Include a summary table:
 
-    | ID | Status | Severity | Confidence | Title | Evidence |
-    |---|---|---|---|---|---|
+    | ID | Status | Class | Effect | Gate | Exposure | Confidence | Title | Evidence |
+    |---|---|---|---|---|---|---|---|---|
 
 Separate confirmed findings from unvalidated findings.
 
@@ -170,7 +170,7 @@ For each exploited finding, include:
 
 - id,
 - title,
-- severity (note if adjusted from original, e.g., "HIGH (upgraded from MEDIUM)"),
+- capability class (note if reclassified after exploitation),
 - impact demonstrated (from exploitation frontmatter),
 - exploit type,
 - affected area,
@@ -188,7 +188,7 @@ For each confirmed finding, include:
 
 - id,
 - title,
-- severity,
+- capability class,
 - confidence,
 - category,
 - affected area,
@@ -209,7 +209,7 @@ For findings still in `PENDING`, include:
 
 - id,
 - title,
-- severity,
+- capability class (if populated),
 - confidence,
 - why it remains plausible,
 - what validation is needed,
@@ -262,7 +262,7 @@ Examples:
 - out-of-scope directories,
 - no production environment tested.
 
-When the threat model is available, include open assumptions from `itemdb/notes/threat-model.md` that may affect severity or exploitability.
+When the threat model is available, include open assumptions from `itemdb/notes/threat-model.md` that may affect capability class or exploitability.
 
 ## Recommended next steps
 

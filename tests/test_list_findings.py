@@ -49,7 +49,16 @@ Broken.
 id: \"CC-9999\"
 title: \"Valid\"
 status: \"CONFIRMED\"
-severity: \"HIGH\"
+capability:
+  forbidden: true
+  disposition: live
+  exposure: internet
+  gate: none
+  cooperation: ambient
+  effect: read-sensitive
+  boundary: other-principal
+  scope: tenant
+  durability: once
 confidence: \"MEDIUM\"
 ---
 
@@ -76,3 +85,4 @@ Valid.
     assert broken_row["title"] == "CC-9998-broken"
     assert valid_row["status"] == "CONFIRMED"
     assert valid_row["title"] == "Valid"
+    assert valid_row["capability_class"] == "read-sensitive/other-principal"

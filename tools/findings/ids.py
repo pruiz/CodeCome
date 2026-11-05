@@ -7,7 +7,8 @@ import re
 from pathlib import Path
 from typing import Iterable, List, Optional
 
-from findings.constants import FINDINGS_ROOT, FINDING_ID_RE, FINDING_ID_STRICT_RE, ROOT, STATUSES
+from findings.constants import FINDINGS_ROOT, FINDING_ID_RE, FINDING_ID_STRICT_RE, NOTES_ROOT, ROOT, STATUSES
+from findings.scheme import IdScheme, allocate_next_id, load_id_scheme
 
 
 def extract_id_from_path(path: Path) -> str:
@@ -25,17 +26,27 @@ def slugify(value: str) -> str:
 def iter_finding_files(
     *,
     findings_root: Optional[Path] = None,
+    notes_root: Optional[Path] = None,
 ) -> List[Path]:
     """Recursive CC-*.md glob, sorted. Used by create (next_id), checks."""
     findings_root = findings_root if findings_root is not None else FINDINGS_ROOT
+    notes = notes_root if notes_root is not None else notes_root_for(findings_root)
     files: List[Path] = []
 
     if not findings_root.exists():
         return files
 
-    for path in findings_root.rglob("CC-*.md"):
-        if path.is_file():
-            files.append(path)
+    patterns = ["CC-*.md"]
+    scheme = _scheme_for(notes)
+    if scheme is not None and scheme.prefix != "CC":
+        patterns.append(f"{scheme.prefix}-*.md")
+
+    seen: set[Path] = set()
+    for pattern in patterns:
+        for path in findings_root.rglob(pattern):
+            if path.is_file() and path not in seen:
+                seen.add(path)
+                files.append(path)
 
     return sorted(files)
 
@@ -56,22 +67,56 @@ def iter_findings(
         if not status_dir.exists():
             continue
 
-        yield from sorted(status_dir.glob("CC-*.md"))
+        patterns = ["CC-*.md"]
+        scheme = _scheme_for(notes_root_for(findings_root))
+        if scheme is not None and scheme.prefix != "CC":
+            patterns.append(f"{scheme.prefix}-*.md")
+        for pattern in patterns:
+            yield from sorted(status_dir.glob(pattern))
+
+
+def notes_root_for(findings_root: Optional[Path]) -> Path:
+    if findings_root is None:
+        return NOTES_ROOT
+    return findings_root.parent / "notes"
+
+
+def _scheme_for(notes_root: Optional[Path]) -> Optional[IdScheme]:
+    return load_id_scheme(notes_root)
+
+
+def issued_numbers(
+    scheme: IdScheme,
+    *,
+    findings_root: Optional[Path] = None,
+    notes_root: Optional[Path] = None,
+) -> List[int]:
+    numbers: List[int] = []
+    pattern = scheme.number_re()
+    notes = notes_root if notes_root is not None else notes_root_for(findings_root)
+    for path in iter_finding_files(findings_root=findings_root, notes_root=notes):
+        match = pattern.search(path.name)
+        if match:
+            numbers.append(int(match.group(1)))
+    return numbers
 
 
 def next_finding_id(
     *,
     findings_root: Optional[Path] = None,
+    notes_root: Optional[Path] = None,
 ) -> str:
-    ids: List[int] = []
+    notes = notes_root if notes_root is not None else notes_root_for(findings_root)
+    scheme = load_id_scheme(notes)
+    if scheme is None:
+        ids: List[int] = []
+        for path in iter_finding_files(findings_root=findings_root, notes_root=notes):
+            match = FINDING_ID_RE.search(path.name)
+            if match:
+                ids.append(int(match.group(1)))
+        return f"CC-{max(ids, default=0) + 1:04d}"
 
-    for path in iter_finding_files(findings_root=findings_root):
-        match = FINDING_ID_RE.search(path.name)
-        if match:
-            ids.append(int(match.group(1)))
-
-    next_id = max(ids, default=0) + 1
-    return f"CC-{next_id:04d}"
+    return allocate_next_id(scheme, issued_numbers(scheme, findings_root=findings_root, notes_root=notes))
 
 
 def find_finding(
@@ -87,7 +132,8 @@ def find_finding(
     if candidate.exists():
         return candidate.resolve()
 
-    if not FINDING_ID_STRICT_RE.fullmatch(identifier):
+    scheme = _scheme_for(notes_root_for(findings_root))
+    if not FINDING_ID_STRICT_RE.fullmatch(identifier) and not (scheme and scheme.matches(identifier)):
         raise FileNotFoundError(f"Invalid finding id or path: {identifier}")
 
     matches = sorted(findings_root.rglob(f"{identifier}-*.md"))

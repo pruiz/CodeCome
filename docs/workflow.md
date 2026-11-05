@@ -37,6 +37,15 @@ Run:
 
     make phase-1
 
+To line finding ids up with an internal tracker, pass the first id you want
+when reconnaissance starts. Later findings continue from that number instead
+of minting another `CC-0001`. The request is saved in
+`itemdb/notes/id-scheme.yml` and reused by `make findings-create` and
+`make next-id`.
+
+    make phase-1 ID_SCHEME=CC-0142
+    make phase-1 ID_SCHEME=INT-0007 ID_LEDGER=$HOME/.codecome/finding-ids.json
+
 `make phase-1` is the recommended automatic path (it runs Phase 1a, CodeQL enrichment, Phase 1b, and Phase 1c). For manual invocation, use the individual subphase prompts:
 
     opencode run --agent recon "$(cat prompts/phase-1a-profile.md)"
@@ -138,6 +147,10 @@ All new findings must have:
 
     status: "PENDING"
 
+New findings must also have a stable root-cause `fingerprint`
+(`<class>:<path>#<symbol>[:<qualifier>]`); search existing findings for the
+same fingerprint before creating one.
+
 New findings must not have:
 
     confidence: "CONFIRMED"
@@ -158,7 +171,11 @@ Expected actions:
 - improve validation plans,
 - lower or raise confidence,
 - move disproven findings to `REJECTED`,
-- move duplicate findings to `DUPLICATE`,
+- move duplicate findings to `DUPLICATE` (match `fingerprint` first, then
+  semantic fields),
+- move source-grounded leads blocked on facts outside the repository and
+  sandbox to `NEEDS_VALIDATION` (requires `fingerprint` and a
+  `needs_validation` block with blockers and a local or owner check),
 - leave plausible findings in `PENDING`.
 
 Phase 3 should not normally mark findings as `CONFIRMED`.
@@ -202,7 +219,11 @@ Possible outcomes:
 
 - move finding to `CONFIRMED`,
 - move finding to `REJECTED`,
+- move finding to `NEEDS_VALIDATION` when the outcome depends on a fact outside the repository and sandbox,
 - keep finding in `PENDING` with unresolved validation notes.
+
+A finding in `NEEDS_VALIDATION` can be revalidated with
+`make phase-4 FINDING=CC-0001` once the external fact is available.
 
 ## Phase 5: Exploit development
 
@@ -253,7 +274,7 @@ Possible outcomes:
 - move finding to `EXPLOITED` (with demonstrated impact),
 - keep finding in `CONFIRMED` (exploitation not feasible).
 
-The exploiter may adjust severity based on demonstrated impact.
+The exploiter may reclassify the capability outcome based on demonstrated impact.
 
 ## Phase 6: Reporting
 
@@ -281,6 +302,13 @@ Phase 6 reports include `CWE` and `Recording` columns in the summary
 table, a short vulnerable-code excerpt and root-cause summary per
 CONFIRMED/EXPLOITED finding, and recording references by relative path.
 Binary blobs (`.gif`, `.mp4`) are never embedded inline.
+
+Optional: publish the report or findings to Confluence (requires
+`CONFLUENCE_*` env vars; see `docs/confluence-export.md`):
+
+    make confluence-export
+    make confluence-export-findings
+    make confluence-export DRY_RUN=1
 
 ## Helper commands
 
@@ -316,6 +344,11 @@ Regenerate report:
 
     make report
 
+Publish to Confluence:
+
+    make confluence-export
+    make confluence-export-findings
+
 Check sandbox:
 
     make sandbox-check
@@ -327,6 +360,7 @@ Open sandbox shell:
 ## Finding lifecycle
 
     PENDING
+        ├── NEEDS_VALIDATION (blocked on external facts; back to PENDING or REJECTED)
         ├── CONFIRMED
         │       └── EXPLOITED
         ├── REJECTED
@@ -342,7 +376,7 @@ Recommended human review points:
 2. After Phase 2, review candidate findings.
 3. After Phase 3, review rejected and duplicate decisions.
 4. After Phase 4, review evidence before trusting confirmed findings.
-5. After Phase 5, review exploit PoCs and severity adjustments.
+5. After Phase 5, review exploit PoCs and capability reclassifications.
 6. Before sharing Phase 6 reports, review language and limitations.
 
 ## Validation worker model
@@ -382,6 +416,14 @@ Examples:
 - .NET apps may use `.opencode/skills/dotnet-security/`.
 - PHP apps may use `.opencode/skills/php-security/`.
 - SQL-heavy code paths may use `.opencode/skills/sql-injection/`.
+
+Domain companion skills complement the target-type skills with
+vulnerability-class checklists: `web-protocol-auth`, `core-attack-classes`,
+`memory-safety-binary`, `data-isolation-lifecycle`, `resource-exhaustion`,
+`protocols-messaging-security`, `supply-chain-security`,
+`cloud-deployment-security`, `client-side-security`, `desktop-mobile-ipc`,
+and `ai-llm-security`. Phase 1c records the applicable ones in
+`suggested_skills`; the Phase 2 prompts load them.
 
 ## Quality gates
 

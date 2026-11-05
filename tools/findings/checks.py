@@ -12,25 +12,27 @@ try:
 except ImportError:
     yaml = None
 
+from findings.capability.taxonomy import ENUM_IDS, STORED_AXES
 from findings.constants import (
     CONFIDENCES,
-    CVSS_V4_VECTOR_RE,
+    FINGERPRINT_MAX_LEN,
+    FINGERPRINT_RE,
+    LIVE_STATUSES,
     FINDING_FILENAME_RE,
     FINDING_ID_FORMAT_RE,
     FINDINGS_ROOT,
     FRONTMATTER_RE,
-    REQUIRED_CVSS_V4_FIELDS,
+    REQUIRED_CAPABILITY_FIELDS,
     REQUIRED_EXPLOITATION_FIELDS,
     REQUIRED_EXPLOITED_SECTIONS,
     REQUIRED_FIELDS,
+    REQUIRED_NEEDS_VALIDATION_FIELDS,
     REQUIRED_VALIDATION_FIELDS,
     ROOT,
     SECTION_RE,
-    SEVERITIES,
     STATUSES,
     STATUSES_SET,
     VALID_CONFIDENCES,
-    VALID_SEVERITIES,
 )
 from findings.frontmatter import load_frontmatter_strict
 
@@ -46,20 +48,6 @@ def has_remediation_code(value: str) -> bool:
     return "```diff" in value or "```patch" in value or "```c" in value or "```" in value
 
 
-def severity_from_cvss_v4_score(score: float) -> str:
-    if score == 0.0:
-        return "INFO"
-    if 0.1 <= score <= 3.9:
-        return "LOW"
-    if 4.0 <= score <= 6.9:
-        return "MEDIUM"
-    if 7.0 <= score <= 8.9:
-        return "HIGH"
-    if 9.0 <= score <= 10.0:
-        return "CRITICAL"
-    return ""
-
-
 def load_sections(path: Path) -> Dict[str, str]:
     content = path.read_text(encoding="utf-8")
     match = FRONTMATTER_RE.match(content)
@@ -73,47 +61,127 @@ def load_sections(path: Path) -> Dict[str, str]:
     return sections
 
 
-def validate_cvss_v4(data: Dict[str, object], status: object, severity: object) -> List[str]:
+def _as_bool(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if value in ("true", "yes"):
+        return True
+    if value in ("false", "no"):
+        return False
+    return None
+
+
+def validate_capability(data: Dict[str, object], status: object) -> List[str]:
     errors: List[str] = []
-    cvss_v4 = data.get("cvss_v4")
+    capability = data.get("capability")
 
-    if not isinstance(cvss_v4, dict):
-        return ["cvss_v4 must be an object"]
+    if not isinstance(capability, dict):
+        return ["capability must be an object"]
 
-    for field in REQUIRED_CVSS_V4_FIELDS:
-        if field not in cvss_v4:
-            errors.append(f"missing cvss_v4 field: cvss_v4.{field}")
+    for field in REQUIRED_CAPABILITY_FIELDS:
+        if field not in capability:
+            errors.append(f"missing capability field: capability.{field}")
 
-    vector = cvss_v4.get("vector")
-    score = cvss_v4.get("score")
-    justification = cvss_v4.get("justification")
+    forbidden = capability.get("forbidden")
+    if "forbidden" in capability and _as_bool(forbidden) is None:
+        errors.append("capability.forbidden must be true or false")
 
-    if vector is not None and not isinstance(vector, str):
-        errors.append("cvss_v4.vector must be a string")
-    if justification is not None and not isinstance(justification, str):
-        errors.append("cvss_v4.justification must be a string")
-    if score is not None and not isinstance(score, (int, float)):
-        errors.append("cvss_v4.score must be a number")
+    for axis in STORED_AXES:
+        if axis not in capability:
+            continue
+        value = capability.get(axis)
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            errors.append(f"capability.{axis} must be a string")
+            continue
+        if value == "":
+            continue
+        allowed = ENUM_IDS.get(axis, frozenset())
+        if value not in allowed:
+            errors.append(
+                f"capability.{axis} must be one of {', '.join(sorted(allowed))}"
+            )
 
     if status in ("CONFIRMED", "EXPLOITED"):
-        if not isinstance(vector, str) or is_placeholder(vector):
-            errors.append(f"{status} status requires populated cvss_v4.vector")
-        elif not CVSS_V4_VECTOR_RE.match(vector):
-            errors.append("cvss_v4.vector must start with 'CVSS:4.0/'")
+        if _as_bool(forbidden) is None:
+            errors.append(f"{status} status requires capability.forbidden as true or false")
 
-        if not isinstance(justification, str) or is_placeholder(justification):
-            errors.append(f"{status} status requires populated cvss_v4.justification")
+        for axis in STORED_AXES:
+            value = capability.get(axis)
+            if not isinstance(value, str) or is_placeholder(value):
+                errors.append(f"{status} status requires populated capability.{axis}")
+            elif value not in ENUM_IDS.get(axis, frozenset()):
+                errors.append(f"{status} status requires valid capability.{axis}")
 
-        if isinstance(score, (int, float)):
-            expected_severity = severity_from_cvss_v4_score(float(score))
-            if not expected_severity:
-                errors.append("cvss_v4.score must be between 0.0 and 10.0")
-            elif severity in SEVERITIES and severity != expected_severity:
-                errors.append(
-                    f"severity {severity!r} does not match cvss_v4.score {score!r} "
-                    f"(expected {expected_severity!r})"
-                )
+    return errors
 
+
+def validate_fingerprint(data: Dict[str, object], status: object) -> List[str]:
+    """Validate the optional ``fingerprint`` field.
+
+    Optional for backwards compatibility with findings written before the
+    field existed; required for NEEDS_VALIDATION, which is new.
+    """
+    fingerprint = data.get("fingerprint")
+    if fingerprint is None or fingerprint == "":
+        if status == "NEEDS_VALIDATION":
+            return ["NEEDS_VALIDATION status requires a populated fingerprint"]
+        return []
+    if not isinstance(fingerprint, str):
+        return ["fingerprint must be a string"]
+    if len(fingerprint) > FINGERPRINT_MAX_LEN:
+        return [f"fingerprint must be at most {FINGERPRINT_MAX_LEN} characters"]
+    if not FINGERPRINT_RE.fullmatch(fingerprint):
+        return [
+            f"invalid fingerprint {fingerprint!r}: use letters, digits and . _ : / @ + # - "
+            "(no spaces), starting with a letter or digit"
+        ]
+    return []
+
+
+def validate_needs_validation(data: Dict[str, object], status: object) -> List[str]:
+    """Validate the ``needs_validation`` block.
+
+    A NEEDS_VALIDATION finding is a source-grounded lead blocked on a fact the
+    repository and sandbox cannot show (deployment config, proxy, IdP policy,
+    private dependency...). It must say exactly what is missing and how to
+    resolve it.
+    """
+    block = data.get("needs_validation")
+    if block is None:
+        if status == "NEEDS_VALIDATION":
+            return ["NEEDS_VALIDATION status requires a needs_validation block"]
+        return []
+    if not isinstance(block, dict):
+        return ["needs_validation must be an object"]
+
+    errors: List[str] = []
+    for field in REQUIRED_NEEDS_VALIDATION_FIELDS:
+        if field not in block:
+            errors.append(f"missing needs_validation field: needs_validation.{field}")
+
+    blockers = block.get("blockers")
+    if blockers is not None and not isinstance(blockers, list):
+        errors.append("needs_validation.blockers must be a list")
+    for key in ("local_check", "owner_check"):
+        value = block.get(key)
+        if value is not None and not isinstance(value, str):
+            errors.append(f"needs_validation.{key} must be a string")
+
+    if status == "NEEDS_VALIDATION":
+        real_blockers = [
+            b for b in (blockers if isinstance(blockers, list) else [])
+            if isinstance(b, str) and not is_placeholder(b)
+        ]
+        if not real_blockers:
+            errors.append("NEEDS_VALIDATION status requires at least one needs_validation.blockers entry")
+        checks = [block.get("local_check"), block.get("owner_check")]
+        if not any(isinstance(c, str) and not is_placeholder(c) for c in checks):
+            errors.append(
+                "NEEDS_VALIDATION status requires needs_validation.local_check "
+                "or needs_validation.owner_check"
+            )
     return errors
 
 
@@ -147,11 +215,7 @@ def validate_finding(path: Path) -> List[str]:
             f"bare CC-XXXX.md names are not allowed (got {filename!r})"
         )
 
-    severity = data.get("severity")
-    if severity not in SEVERITIES:
-        errors.append(f"invalid severity: {severity!r}")
-
-    errors.extend(validate_cvss_v4(data, status, severity))
+    errors.extend(validate_capability(data, status))
 
     confidence = data.get("confidence")
     if confidence not in CONFIDENCES:
@@ -159,6 +223,9 @@ def validate_finding(path: Path) -> List[str]:
 
     if confidence == "CONFIRMED" and status not in ("CONFIRMED", "EXPLOITED"):
         errors.append("confidence CONFIRMED requires status CONFIRMED or EXPLOITED")
+
+    errors.extend(validate_fingerprint(data, status))
+    errors.extend(validate_needs_validation(data, status))
 
     validation = data.get("validation")
     if not isinstance(validation, dict):
@@ -271,6 +338,27 @@ def validate_file_risk_index() -> List[str]:
                     errors.append(f"file-risk-index.yml files[{i}] 'score' must be an integer")
 
     return errors
+
+
+def find_duplicate_fingerprints(paths: List[Path]) -> Dict[str, List[Path]]:
+    """Return fingerprints shared by more than one live finding.
+
+    REJECTED and DUPLICATE findings may legitimately reuse a live finding's
+    fingerprint (that is the point: it records the claim was already decided).
+    """
+    seen: Dict[str, List[Path]] = {}
+    for path in paths:
+        try:
+            data = load_frontmatter_strict(path)
+        except Exception:
+            continue
+        fingerprint = data.get("fingerprint")
+        if not isinstance(fingerprint, str) or not fingerprint:
+            continue
+        if data.get("status") not in LIVE_STATUSES:
+            continue
+        seen.setdefault(fingerprint, []).append(path)
+    return {fp: ps for fp, ps in seen.items() if len(ps) > 1}
 
 
 def iter_all_finding_files() -> List[Path]:

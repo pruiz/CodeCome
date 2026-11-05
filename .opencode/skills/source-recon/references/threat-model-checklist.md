@@ -43,7 +43,7 @@ surfaces or trust boundaries, and evidence anchors.
 ### Attacker model
 
 Document realistic attacker capabilities and explicit non-capabilities.
-Non-capabilities are required to avoid inflated severity.
+Non-capabilities are required to avoid inflated capability class.
 
 ### Existing controls
 

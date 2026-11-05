@@ -14,7 +14,7 @@ Read the following files (all paths are relative to the project/workspace root):
 - `.opencode/agents/reporter.md`
 - `.opencode/skills/report-writing/SKILL.md`
 - all relevant files under `itemdb/notes/`
-- all findings under `itemdb/findings/`
+- all findings under `itemdb/findings/` (including `NEEDS_VALIDATION/`)
 - all relevant evidence under `itemdb/evidence/`
 - If present, `itemdb/notes/threat-model.md` — operational threat model from Phase 1b: attacker capabilities and non-capabilities, trust-boundary summary, assets and security objectives, existing controls, and open assumptions. Use to ground Methodology, Scope, and Limitations sections.
 
@@ -53,6 +53,8 @@ Use this structure:
     # Confirmed findings
 
     # Findings needing validation
+
+    # Leads blocked on external facts (NEEDS_VALIDATION)
 
     # Rejected findings
 
@@ -93,17 +95,18 @@ Use this structure:
   context: summarize the attacker model in Methodology, reference trust
   boundaries and assets in Scope, and note open assumptions in Limitations.
   Do NOT use abuse-path themes or speculative threat-model content to inflate
-  severity or imply impact beyond what confirmed findings and evidence support.
+  capability class or imply impact beyond what confirmed findings and evidence support.
 
 ## Finding summary table
 
 Include a table like:
 
-    | ID | Status | Severity | Confidence | CWE | Target area | Title | Evidence | Recording |
-    |---|---|---|---|---|---|---|---|---|
+    | ID | Status | Class | Effect | Gate | Exposure | Confidence | CWE | Target area | Title | Evidence | Recording |
+    |---|---|---|---|---|---|---|---|---|---|---|---|
 
 Cell rules:
 
+- `Class`: short `effect/boundary` label from capability.
 - `CWE`: list one or more ids (e.g. `CWE-121, CWE-805`); `—` if none.
 - `Recording`: relative path to
   `itemdb/evidence/<id>/exploits/recordings/README.md` (preferred), or
@@ -115,7 +118,7 @@ For each exploited finding, include:
 
 - id,
 - title,
-- severity (note if adjusted from original),
+- capability class (note if reclassified after exploitation),
 - CWE id(s),
 - impact demonstrated,
 - exploit type,
@@ -142,7 +145,7 @@ For each confirmed finding, include:
 
 - id,
 - title,
-- severity,
+- capability class,
 - confidence,
 - CWE id(s) (if known),
 - category,
@@ -164,13 +167,26 @@ For each open finding, include:
 
 - id,
 - title,
-- severity,
+- capability class (if populated),
 - confidence,
 - why it remains plausible,
 - what validation is needed,
 - blockers or assumptions.
 
 Make clear these are not confirmed vulnerabilities.
+
+## Leads blocked on external facts (NEEDS_VALIDATION)
+
+For each finding under `itemdb/findings/NEEDS_VALIDATION/`, list without severity:
+
+- id,
+- title,
+- affected files or symbols,
+- blockers (the unknown external facts),
+- local check,
+- owner check.
+
+Make clear these are source-grounded leads that could not be confirmed or rejected from the repository and sandbox. Do not present them as confirmed vulnerabilities and do not count them with confirmed or exploited findings.
 
 ## Rejected findings
 
@@ -206,7 +222,7 @@ Examples:
 - out-of-scope directories,
 - no production environment tested,
 - exploit demonstrations limited to sandbox environment,
-- threat-model assumptions that may affect severity or exploitability (when
+- threat-model assumptions that may affect capability class or exploitability (when
   `itemdb/notes/threat-model.md` is present).
 
 ## Final response
@@ -217,6 +233,7 @@ At the end, summarize:
 - number of exploited findings,
 - number of confirmed findings,
 - number of findings needing validation,
+- number of leads blocked on external facts (NEEDS_VALIDATION),
 - number of rejected findings,
 - number of duplicate findings,
 - open questions for the user (same content as in the run summary),

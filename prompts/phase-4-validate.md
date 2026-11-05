@@ -16,6 +16,9 @@ Examples:
 
     CC-0001
     itemdb/findings/PENDING/CC-0001-missing-owner-check.md
+    itemdb/findings/NEEDS_VALIDATION/CC-0002-trusted-forwarded-header.md
+
+The finding may be in `PENDING` or in `NEEDS_VALIDATION`.
 
 ## Assigned finding
 
@@ -56,7 +59,7 @@ Do not create unrelated findings.
 
 ## Validation workflow
 
-1. Read the assigned finding completely.
+1. Read the assigned finding completely. If it is in `NEEDS_VALIDATION`, this is a resume: read its `needs_validation` block (`blockers`, `local_check`, `owner_check`) and any operator-provided answers (for example via `PROMPT_EXTRA`), and determine whether the blocking external fact is now known.
 2. Extract the exact vulnerability claim.
 3. Review the existing counter-analysis.
 4. Identify what evidence would confirm or reject the claim.
@@ -174,6 +177,27 @@ Update `# Validation result` with:
 - what remains unknown,
 - what is needed next.
 
+## Needs-validation policy
+
+If validation cannot be completed because the deciding fact lives outside the repository and outside the sandbox (for example ingress header policy, cloud IAM configuration, a production flag, third-party behaviour), and the finding is otherwise source-grounded, move it using the CLI tool:
+
+    make findings-move FINDING=<id-or-path> STATUS=NEEDS_VALIDATION
+
+Populate `fingerprint` and the `needs_validation` block (`blockers` with at least one concrete unknown, plus `local_check` and/or `owner_check`) before moving. Update `# Validation result` with what was attempted and what remains unknown. Do not set confidence to `CONFIRMED`.
+
+Do not use this policy when the issue could be proven or disproven inside the sandbox with more effort; use the unresolved policy instead.
+
+### Resuming from NEEDS_VALIDATION
+
+When the assigned finding is already in `NEEDS_VALIDATION` and the external fact is now supplied:
+
+- If the fact allows validation, perform it, then move the finding to `CONFIRMED` (with evidence) or `REJECTED` using the CLI tool.
+- If the fact is supplied but validation still needs more work, move the finding back to `PENDING`:
+
+      make findings-move FINDING=<id-or-path> STATUS=PENDING
+
+- If the external fact is still unknown, keep it in `NEEDS_VALIDATION` and record what changed in `# Validation result`.
+
 ## Confirmed policy
 
 If confirmed, move the finding using the CLI tool:
@@ -195,7 +219,7 @@ At the end, summarize:
 
 - finding validated,
 - validation method used,
-- result: CONFIRMED / REJECTED / UNRESOLVED,
+- result: CONFIRMED / REJECTED / NEEDS_VALIDATION / UNRESOLVED,
 - evidence files created,
 - finding file moved or updated,
 - threat-model assumptions that materially affected validation strategy or evidence interpretation,

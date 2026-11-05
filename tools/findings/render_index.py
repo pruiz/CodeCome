@@ -7,6 +7,7 @@ from datetime import date
 
 import _colors as C
 
+from findings.capability.classify import short_class
 from findings.constants import FindingsContext
 from findings.frontmatter import load_frontmatter
 from findings.ids import iter_findings, extract_id_from_path
@@ -45,11 +46,14 @@ def load_findings(
                 else:
                     evidence_dir = ed
 
+        capability = frontmatter.get("capability")
+        klass = short_class(capability if isinstance(capability, dict) else None)
+
         rows.append(
             {
                 "id": str(frontmatter.get("id", extract_id_from_path(path))),
                 "status": str(frontmatter.get("status", path.parent.name)),
-                "severity": str(frontmatter.get("severity", "")),
+                "capability_class": klass,
                 "confidence": str(frontmatter.get("confidence", "")),
                 "exploitation_status": exploitation_status,
                 "validation_status": validation_status,
@@ -130,7 +134,7 @@ def render_index(rows: list[dict[str, str]], *, ctx: FindingsContext) -> str:
     lines.append("## Findings")
     lines.append("")
     lines.append(
-        "| ID | Status | Severity | Confidence | Target area | Title | Finding | Evidence |"
+        "| ID | Status | Class | Confidence | Target area | Title | Finding | Evidence |"
     )
     lines.append("|---|---|---|---|---|---|---|---|")
 
@@ -140,7 +144,7 @@ def render_index(rows: list[dict[str, str]], *, ctx: FindingsContext) -> str:
         for row in rows:
             fid = row["id"]
             status = row["status"]
-            severity = row["severity"]
+            klass = row.get("capability_class") or "-"
             confidence = row["confidence"]
             target_area = row.get("target_area", "")
             title = row["title"]
@@ -149,7 +153,7 @@ def render_index(rows: list[dict[str, str]], *, ctx: FindingsContext) -> str:
             evidence_link = f"[evidence]({evidence})" if evidence else "-"
 
             lines.append(
-                f"| {fid} | {status} | {severity} | {confidence} | "
+                f"| {fid} | {status} | {klass} | {confidence} | "
                 f"{target_area} | {title} | [finding]({finding_link}) | {evidence_link} |"
             )
 

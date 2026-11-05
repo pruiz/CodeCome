@@ -73,7 +73,7 @@ This file consolidates the operational risk model. It is not merely a summary of
 - **Scope**: in-scope and out-of-scope components, runtime vs non-runtime separation.
 - **System model**: primary runtime components, data stores, external integrations, entrypoints.
 - **Assets and security objectives**: for each relevant asset, document where observed, why it matters, C/I/A objectives, related attack surfaces, and evidence.
-- **Attacker model**: realistic attacker capabilities and explicit non-capabilities. Non-capabilities are required to avoid inflated severity.
+- **Attacker model**: realistic attacker capabilities and explicit non-capabilities. Non-capabilities are required to avoid inflated capability class.
 - **Trust boundary summary**: for each important boundary, document source/destination, data/control crossing, channel, authn, authz, encryption, validation, rate controls, existing controls, evidence, and uncertainty.
 - **Existing controls**: observed controls with evidence — what the control protects, where enforced, assumptions, gaps.
 - **Abuse-path themes for Phase 2**: review leads, not findings. Each theme includes attacker goal, entrypoint, boundary crossed, impacted asset, existing controls, assumptions, relevant files, and suggested Phase 2 focus.
@@ -174,6 +174,22 @@ Prioritize files that contain or strongly influence:
 - sandbox, policy, or permission enforcement.
 
 For each high-risk file, include concrete reasons, likely entry points, sources, sinks, trust boundaries, suggested vulnerability classes, suggested skills, and suggested validation methods when inferable.
+
+For `suggested_skills`, include the target-type skill when one applies (for example `c-cpp-security`, `php-security`) and also the **domain companion skills** whose vulnerability classes fit the file. Available domain companions:
+
+- `web-protocol-auth`: HTTP/auth/session/OAuth/CSRF/SSRF/request-handling flaws,
+- `core-attack-classes`: injection, deserialization, path traversal, template and parser abuse,
+- `memory-safety-binary`: memory corruption, integer issues, unsafe native code,
+- `data-isolation-lifecycle`: tenant/account isolation, object lifecycle, state and cleanup flaws,
+- `resource-exhaustion`: unbounded work, memory, storage, or amplification,
+- `protocols-messaging-security`: message brokers, RPC, custom wire protocols, framing,
+- `supply-chain-security`: dependencies, build and release pipelines, update mechanisms,
+- `cloud-deployment-security`: IAM, ingress, secrets, container and deployment configuration,
+- `client-side-security`: browser-side code, DOM, postMessage, client storage,
+- `desktop-mobile-ipc`: desktop/mobile apps, IPC, URL handlers, local privilege boundaries,
+- `ai-llm-security`: prompt injection, tool use, model and agent trust boundaries.
+
+Pick only the companions that clearly apply; do not list all of them by default. Phase 2 prompts load the listed companions alongside the target-type skill.
 
 If CodeQL file signals exist (resolve via `itemdb/codeql/last-run-manifest.yml` → `run_id` → `itemdb/codeql/runs/<run-id>/normalized/file-signals.yml`), incorporate them:
 - Add `external_signals.codeql` blocks to file entries with CodeQL alerts.

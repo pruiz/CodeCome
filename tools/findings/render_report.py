@@ -11,6 +11,13 @@ from typing import Dict, Iterable, List, Optional
 
 import _colors as C
 
+from findings.capability.classify import (
+    decision_for,
+    describe_finding,
+    queue_key,
+    short_class,
+    try_finding_class,
+)
 from findings.constants import ROOT, FINDINGS_ROOT, NOTES_ROOT, STATUSES, DEFAULT_OUTPUT
 from findings.frontmatter import load_frontmatter, extract_sections
 from findings.ids import extract_id_from_path
@@ -48,6 +55,16 @@ def load_findings() -> List[Dict[str, str]]:
                 exploitation_impact = str(exploitation.get("impact_demonstrated", ""))
                 exploitation_type = str(exploitation.get("exploit_type", ""))
 
+            nv_block = frontmatter.get("needs_validation")
+            blockers: List[str] = []
+            local_check = owner_check = ""
+            if isinstance(nv_block, dict):
+                raw_blockers = nv_block.get("blockers")
+                if isinstance(raw_blockers, list):
+                    blockers = [str(b) for b in raw_blockers if str(b).strip()]
+                local_check = str(nv_block.get("local_check") or "")
+                owner_check = str(nv_block.get("owner_check") or "")
+
             sections = extract_sections(path)
             files = frontmatter.get("files")
             affected_files = ", ".join(str(item) for item in files) if isinstance(files, list) else ""
@@ -56,11 +73,26 @@ def load_findings() -> List[Dict[str, str]]:
             evidence_root = ROOT / evidence_dir if evidence_dir else None
             recording = find_recording_reference(evidence_root) if evidence_root else ""
 
+            capability = frontmatter.get("capability")
+            capability_obj = capability if isinstance(capability, dict) else {}
+            klass = short_class(capability_obj)
+            effect = str(capability_obj.get("effect") or "")
+            gate = str(capability_obj.get("gate") or "")
+            exposure = str(capability_obj.get("exposure") or "")
+            finding_class = try_finding_class(capability_obj)
+            sentence = describe_finding(finding_class) if finding_class else ""
+            decision = decision_for(finding_class) if finding_class else ""
+
             rows.append(
                 {
                     "id": str(frontmatter.get("id", extract_id_from_path(path))),
                     "status": str(frontmatter.get("status", path.parent.name)),
-                    "severity": str(frontmatter.get("severity", "")),
+                    "capability_class": klass,
+                    "effect": effect,
+                    "gate": gate,
+                    "exposure": exposure,
+                    "decision": decision,
+                    "capability_sentence": sentence,
                     "confidence": str(frontmatter.get("confidence", "")),
                     "cwe": cwe_text,
                     "category": str(frontmatter.get("category", "")),
@@ -84,6 +116,11 @@ def load_findings() -> List[Dict[str, str]]:
                     "demonstrated_impact": sections.get("Demonstrated Impact", "Pending."),
                     "root_cause": sections.get("Root cause analysis", ""),
                     "code_excerpt": vulnerable_code_excerpt(frontmatter, sections),
+                    "_finding_class": finding_class,  # type: ignore[dict-item]
+                    "fingerprint": str(frontmatter.get("fingerprint") or ""),
+                    "blockers": "; ".join(blockers),
+                    "local_check": local_check,
+                    "owner_check": owner_check,
                 }
             )
 
@@ -178,14 +215,31 @@ def summarize_root_cause(text: str) -> str:
     return first_paragraph
 
 
+def _service_queue_sort_key(row: Dict[str, str]):
+    finding_class = row.get("_finding_class")
+    if finding_class is None:
+        return (1, row["id"])
+    # compare_queue is negative when worse; invert for ascending "worst first"
+    return (0, queue_sort_tuple(finding_class), row["id"])
+
+
+def queue_sort_tuple(finding_class) -> tuple:
+    # Higher ranks are worse; negate so worse sorts first under ascending sort.
+    return tuple(-rank for rank in queue_key(finding_class, "service"))
+
+
+def sort_by_service_queue(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    return sorted(rows, key=_service_queue_sort_key)
+
+
 def table_for(rows: List[Dict[str, str]]) -> List[str]:
     lines = [
-        "| ID | Status | Severity | Confidence | CWE | Target area | Title | Evidence | Recording |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "| ID | Status | Decision | Class | Effect | Gate | Exposure | Confidence | CWE | Target area | Title | Evidence | Recording |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
 
     if not rows:
-        lines.append("| - | - | - | - | - | - | None. | - | - |")
+        lines.append("| - | - | - | - | - | - | - | - | - | - | None. | - | - |")
         return lines
 
     for row in rows:
@@ -194,7 +248,11 @@ def table_for(rows: List[Dict[str, str]]) -> List[str]:
         lines.append(
             f"| {row['id']} "
             f"| {row['status']} "
-            f"| {row['severity']} "
+            f"| {row.get('decision') or '-'} "
+            f"| {row.get('capability_class') or '-'} "
+            f"| {row.get('effect') or '-'} "
+            f"| {row.get('gate') or '-'} "
+            f"| {row.get('exposure') or '-'} "
             f"| {row['confidence']} "
             f"| {row['cwe'] or '-'} "
             f"| {row['target_area']} "
@@ -218,7 +276,13 @@ def render_detail_block(title: str, rows: List[Dict[str, str]], exploited: bool 
         lines.append(f"## {row['id']} - {row['title']}")
         lines.append("")
         lines.append(f"- Status: {row['status']}")
-        lines.append(f"- Severity: {row['severity']}")
+        lines.append(f"- Decision: {row.get('decision') or '-'}")
+        lines.append(f"- Class: {row.get('capability_class') or '-'}")
+        lines.append(f"- Effect: {row.get('effect') or '-'}")
+        lines.append(f"- Gate: {row.get('gate') or '-'}")
+        lines.append(f"- Exposure: {row.get('exposure') or '-'}")
+        if row.get("capability_sentence"):
+            lines.append(f"- Outcome: {row['capability_sentence']}")
         lines.append(f"- CWE: {row['cwe'] or '-'}")
         if exploited:
             lines.append(f"- Impact demonstrated: {row['exploitation_impact'] or 'Pending.'}")
@@ -271,10 +335,46 @@ def render_detail_block(title: str, rows: List[Dict[str, str]], exploited: bool 
     return lines
 
 
+def render_needs_validation_block(rows: List[Dict[str, str]]) -> List[str]:
+    """Leads blocked on a fact the source cannot show.
+
+    Deliberately carries no severity column: these are not confirmed
+    vulnerabilities, and a severity next to them reads as one.
+    """
+    lines: List[str] = []
+    lines.append("# Leads blocked on external facts (NEEDS_VALIDATION)")
+    lines.append("")
+    if not rows:
+        lines.append("None.")
+        lines.append("")
+        return lines
+    lines.append(
+        "Source-grounded leads that could not be confirmed or rejected because a "
+        "decisive fact is outside the repository and sandbox. They are not "
+        "confirmed vulnerabilities and carry no severity."
+    )
+    lines.append("")
+    lines.append("| ID | Title | Blocker | Local check | Owner check |")
+    lines.append("|---|---|---|---|---|")
+    for row in rows:
+        cells = [
+            row["id"],
+            row["title"],
+            row.get("blockers", "") or "-",
+            row.get("local_check", "") or "-",
+            row.get("owner_check", "") or "-",
+        ]
+        cells = [c.replace("|", "\\|").replace("\n", " ") for c in cells]
+        lines.append("| " + " | ".join(cells) + " |")
+    lines.append("")
+    return lines
+
+
 def render_report(rows: List[Dict[str, str]]) -> str:
-    exploited = [row for row in rows if row["status"] == "EXPLOITED"]
-    confirmed = [row for row in rows if row["status"] == "CONFIRMED"]
+    exploited = sort_by_service_queue([row for row in rows if row["status"] == "EXPLOITED"])
+    confirmed = sort_by_service_queue([row for row in rows if row["status"] == "CONFIRMED"])
     pending = [row for row in rows if row["status"] == "PENDING"]
+    blocked = [row for row in rows if row["status"] == "NEEDS_VALIDATION"]
     rejected = [row for row in rows if row["status"] == "REJECTED"]
     duplicate = [row for row in rows if row["status"] == "DUPLICATE"]
 
@@ -291,7 +391,8 @@ def render_report(rows: List[Dict[str, str]]) -> str:
         f"This report summarizes the current CodeCome workspace state. "
         f"It includes {len(exploited)} exploited finding(s), "
         f"{len(confirmed)} confirmed finding(s), "
-        f"{len(pending)} finding(s) needing validation, "
+        f"{len(pending)} finding(s) still pending review or validation, "
+        f"{len(blocked)} lead(s) blocked on facts outside the source (NEEDS_VALIDATION), "
         f"{len(rejected)} rejected finding(s), and "
         f"{len(duplicate)} duplicate finding(s)."
     )
@@ -299,9 +400,15 @@ def render_report(rows: List[Dict[str, str]]) -> str:
 
     all_proven = exploited + confirmed
     if all_proven:
-        severity_rank = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
-        highest = min(all_proven, key=lambda r: severity_rank.get(r["severity"], 99))["severity"]
-        lines.append(f"Highest proven severity currently listed: **{highest}**.")
+        top = sort_by_service_queue(all_proven)[0]
+        top_label = top.get("capability_class") or top.get("effect") or top["id"]
+        sentence = top.get("capability_sentence") or ""
+        if sentence:
+            lines.append(
+                f"Highest queued proven outcome (service policy): **{top_label}** — {sentence}"
+            )
+        else:
+            lines.append(f"Highest queued proven outcome (service policy): **{top_label}**.")
     else:
         lines.append("No findings are currently confirmed or exploited.")
     lines.append("")
@@ -353,6 +460,8 @@ def render_report(rows: List[Dict[str, str]]) -> str:
     lines.extend(table_for(pending))
     lines.append("")
 
+    lines.extend(render_needs_validation_block(blocked))
+
     lines.append("# Rejected findings")
     lines.append("")
     lines.extend(table_for(rejected))
@@ -387,7 +496,12 @@ def render_report(rows: List[Dict[str, str]]) -> str:
     lines.append("")
     if pending:
         lines.append("- Validate remaining findings under `itemdb/findings/PENDING/`.")
-    else:
+    if blocked:
+        lines.append(
+            "- Resolve the blockers listed under *Leads blocked on external facts* "
+            "with the named owners, then re-run Phase 4 on those findings."
+        )
+    if not pending and not blocked:
         lines.append("- Run reconnaissance and hypothesis generation to create findings.")
     lines.append("- Review generated findings manually.")
     lines.append("- Improve target-specific sandbox support as needed.")

@@ -31,6 +31,7 @@ Read:
 - `itemdb/findings/EXPLOITED/`
 - `itemdb/findings/CONFIRMED/`
 - `itemdb/findings/PENDING/`
+- `itemdb/findings/NEEDS_VALIDATION/`
 - `itemdb/findings/REJECTED/`
 - `itemdb/findings/DUPLICATE/`
 - `itemdb/evidence/`
@@ -114,6 +115,8 @@ Use this structure for `itemdb/reports/report.md`:
 
     # Findings needing validation
 
+    # Leads blocked on external facts (NEEDS_VALIDATION)
+
     # Rejected findings
 
     # Duplicate findings
@@ -130,9 +133,9 @@ Use this structure for `itemdb/reports/report.md`:
 
 Include a table like:
 
-    | ID | Status | Severity | Confidence | CWE | Target area | Title | Evidence | Recording |
-    |---|---|---|---|---|---|---|---|---|
-    | CC-0001 | EXPLOITED | HIGH | CONFIRMED | CWE-121 | parser | Missing owner check | itemdb/evidence/CC-0001/ | itemdb/evidence/CC-0001/exploits/recordings/README.md |
+    | ID | Status | Class | Effect | Gate | Exposure | Confidence | CWE | Target area | Title | Evidence | Recording |
+    |---|---|---|---|---|---|---|---|---|---|---|---|
+    | CC-0001 | EXPLOITED | execute-on-host/host | execute-on-host | none | internet | CONFIRMED | CWE-121 | parser | Missing owner check | itemdb/evidence/CC-0001/ | itemdb/evidence/CC-0001/exploits/recordings/README.md |
 
 Cell rules:
 
@@ -189,7 +192,7 @@ For each exploited finding, include:
 
 - id,
 - title,
-- severity (note if adjusted from original),
+- capability class (note if reclassified after exploitation),
 - CWE id(s),
 - impact demonstrated,
 - exploit type,
@@ -209,7 +212,7 @@ For each confirmed finding, include:
 
 - id,
 - title,
-- severity,
+- capability class,
 - confidence,
 - CWE id(s) (if known),
 - category,
@@ -237,6 +240,26 @@ For findings still under `PENDING`, summarize:
 - why it remains plausible,
 - what validation is needed,
 - blockers.
+
+## Blocked-leads section (NEEDS_VALIDATION)
+
+For findings under `NEEDS_VALIDATION`, list them separately from `PENDING`
+findings. These are source-grounded leads that cannot be confirmed or
+rejected because the deciding fact lives outside the repository and
+sandbox.
+
+List without severity (severity is provisional and must not appear in
+the heading, table, or ordering). For each lead, include:
+
+- id,
+- title,
+- affected code (`file:line` or symbol),
+- blockers (the external facts that are unknown),
+- local check (what a reviewer can run or inspect once access exists),
+- owner check (the precise question for the system owner).
+
+Do not present these as confirmed vulnerabilities, and do not count
+them in confirmed or exploited totals.
 
 ## Rejected section
 
@@ -308,19 +331,19 @@ over:
 
     This is a critical vulnerability.
 
-## Severity handling
+## Capability handling
 
-Do not inflate severity.
+Do not inflate the capability class. Do not use Critical, High, Medium, Low, or CVSS.
 
-Severity should reflect:
+The class should reflect:
 
-- realistic impact,
-- required privileges,
-- reachability,
-- affected asset,
-- exploit complexity,
-- whether validation confirmed the issue,
-- target context.
+- the forbidden outcome demonstrated or hypothesized (`effect`),
+- whose asset is affected (`boundary`),
+- what the attacker must already be (`gate`),
+- where they can reach it (`exposure`),
+- whether production runs the code (`disposition`),
+- how much is affected (`scope`) and whether it sticks (`durability`),
+- whether validation confirmed the issue (confidence stays separate).
 
 ## Markdown style
 
@@ -360,6 +383,7 @@ Before finishing a report:
 - exploited findings (with demonstrated impact) are highlighted first,
 - confirmed findings are summarized,
 - open findings are clearly marked as not confirmed,
+- blocked leads (`NEEDS_VALIDATION`) are listed without severity,
 - rejected findings are not presented as vulnerabilities,
 - evidence paths are included,
 - limitations are included,

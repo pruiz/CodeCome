@@ -21,6 +21,24 @@ Read the following files (all paths are relative to the project/workspace root):
 
 Use additional target-specific skills only if they clearly apply.
 
+## Domain companion skills
+
+Beyond the target-type skills above, load the domain companion skills that apply. Use `suggested_skills` in `itemdb/notes/file-risk-index.yml` for the target file (and the target-type skills it lists) and the Phase 1 notes to decide which ones are relevant:
+
+- `.opencode/skills/web-protocol-auth/SKILL.md`
+- `.opencode/skills/core-attack-classes/SKILL.md`
+- `.opencode/skills/memory-safety-binary/SKILL.md`
+- `.opencode/skills/data-isolation-lifecycle/SKILL.md`
+- `.opencode/skills/resource-exhaustion/SKILL.md`
+- `.opencode/skills/protocols-messaging-security/SKILL.md`
+- `.opencode/skills/supply-chain-security/SKILL.md`
+- `.opencode/skills/cloud-deployment-security/SKILL.md`
+- `.opencode/skills/client-side-security/SKILL.md`
+- `.opencode/skills/desktop-mobile-ipc/SKILL.md`
+- `.opencode/skills/ai-llm-security/SKILL.md`
+
+Load only the companions that clearly apply to the target; use their checklists to widen the vulnerability classes you consider, not to create findings from labels alone.
+
 ## CodeQL signals (conditional)
 
 If `itemdb/codeql/last-run-manifest.yml` exists, read its `health` block and `run_id`.
@@ -90,6 +108,22 @@ Each finding must include:
 - counter-analysis placeholder,
 - evidence placeholder.
 
+## Fingerprint
+
+Every new finding must set the `fingerprint` frontmatter field to a stable root-cause identifier, as described in `.opencode/skills/finding-format/SKILL.md`:
+
+    <class>:<path>#<symbol>[:<qualifier>]
+
+Example:
+
+    authz:src/api/orders.py#get:missing-owner-check
+
+Before creating a finding, search the `fingerprint` of every finding under `itemdb/findings/` (all status directories). If the same fingerprint already exists, update or extend that finding instead of creating a new one. Two live findings must not share a fingerprint.
+
+## Variant search
+
+When you identify a root cause, search the target for variants of the same pattern (same unsafe sink, same missing check, same trust assumption) in other files, handlers, and entry points. Record variants in the existing finding (`files`, `symbols`, `entry_points`, `# Affected code`) rather than creating a new finding, unless the exploit path, impact, or remediation differs materially.
+
 ## Semantic deduplication metadata
 
 When creating or updating findings, populate existing frontmatter fields as precisely as possible:
@@ -112,7 +146,7 @@ Before creating each finding, check existing findings under:
 
     itemdb/findings/
 
-Avoid duplicate root causes. Create separate findings only when the affected component, exploit path, impact, or remediation differs.
+Avoid duplicate root causes (compare `fingerprint` first, then semantic fields). Create separate findings only when the affected component, exploit path, impact, or remediation differs.
 
 ## Counter-analysis
 
